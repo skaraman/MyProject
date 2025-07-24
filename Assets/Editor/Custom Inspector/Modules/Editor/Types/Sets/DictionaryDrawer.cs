@@ -137,29 +137,20 @@ namespace CustomInspector.Editor
                         return;
                     }
 
-                    if (keys_instantiate.arraySize != values_instantiate.arraySize)
-                    {
-                        int amount;
-                        if (keys_instantiate.arraySize > values_instantiate.arraySize) //more keys
-                        {
-                            amount = keys_instantiate.arraySize - values_instantiate.arraySize;
-                            for (int i = keys_instantiate.arraySize - 1; i >= keys_instantiate.arraySize; i--)
-                            {
-                                keys_instantiate.DeleteArrayElementAtIndex(i);
-                            }
-                        }
-                        else //more values
-                        {
-                            amount = values_instantiate.arraySize - keys_instantiate.arraySize;
-                            for (int i = values_instantiate.arraySize - 1; i >= keys_instantiate.arraySize; i--)
-                            {
-                                values_instantiate.DeleteArrayElementAtIndex(i);
-                            }
+                    if (keys_instantiate.arraySize != values_instantiate.arraySize) {
+                        int diff = keys_instantiate.arraySize - values_instantiate.arraySize;
+                        int trimCount = Mathf.Abs(diff);
+                        int max = Mathf.Max(keys_instantiate.arraySize, values_instantiate.arraySize);
+
+                        if (diff > 0) {
+                            for (int i = max - 1; i >= values_instantiate.arraySize; i--) keys_instantiate.DeleteArrayElementAtIndex(i);
+                        } else {
+                            for (int i = max - 1; i >= keys_instantiate.arraySize; i--) values_instantiate.DeleteArrayElementAtIndex(i);
                         }
 
-                        Debug.LogError($"InternalDictionaryError: keys do not match values." +
-                            $"\n{amount} elements deleted");
+                        Debug.LogWarning($"[DictionaryDrawer] Auto-fixed mismatched keys/values. Trimmed {trimCount} {(diff > 0 ? "keys" : "values")}.");
                     }
+
 
                     Type keyType = fieldInfo.FieldType.GetGenericArguments()[0];
                     Type valueType = fieldInfo.FieldType.GetGenericArguments()[1];

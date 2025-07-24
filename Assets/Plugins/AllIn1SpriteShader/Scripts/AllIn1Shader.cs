@@ -27,7 +27,8 @@ namespace AllIn1SpriteShader
         public ShaderTypes currentShaderType = ShaderTypes.Invalid;
 
         private Material currMaterial, prevMaterial;
-        private bool matAssigned = false, destroyed = false;
+        private bool destroyed = false;
+        private bool matAssigned = false;
         private enum AfterSetAction { Clear, CopyMaterial, Reset};
 
         [Range(1f, 20f)] public float normalStrength = 5f;
@@ -729,15 +730,15 @@ namespace AllIn1SpriteShader
                     "Go to Window -> AllIn1ShaderWindow and set a valid folder", "Ok");
                 return;
             }
-#else
-        computingNormal = false;
-        return;
-#endif
-
+            
             computingNormal = true;
             needToWait = true;
             waitingCycles = 0;
             timesWeWaited = 0;
+#else
+            computingNormal = false;
+            return;
+#endif
         }
 
 #if UNITY_EDITOR

@@ -4,6 +4,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using static AllIn1ShaderImporter;
 
 [InitializeOnLoad]
 public static class AllIn1ShaderImporter
@@ -15,7 +16,7 @@ public static class AllIn1ShaderImporter
 		UNITY_2020 = 2,
 		UNITY_2021 = 3,
 		UNITY_2022 = 4,
-		UNITY_6	= 5,
+		UNITY_6 = 5,
 	}
 
 	public enum RenderPipeline
@@ -26,34 +27,40 @@ public static class AllIn1ShaderImporter
 		HDRP = 2,
 	}
 
+
+	private const string SHADER_FOLDER_PATH = "../../Shaders/LitShaders";
+	private const string FINAL_SHADERS_FOLDER_PATH = "../../Shaders";
+	private const string SHADER_TEMPLATE_NAME = @"{0}_{1}.txt";
+
+	private const string SPRITE_LIT_SHADER_NAME = "AllIn1SpriteShaderLit";
+	private const string SPRITE_LIT_TRANSPARENT_SHADER_NAME = "AllIn1SpriteShaderLitTransparent";
+
+	private const string PIPELINE_SUFFIX_URP_2019 = "BetterShader_URP2019";
+	private const string PIPELINE_SUFFIX_HDRP_2019 = "BetterShader_HDRP2019";
+
+	private const string PIPELINE_SUFFIX_URP_2020 = "BetterShader_URP2020";
+	private const string PIPELINE_SUFFIX_HDRP_2020 = "BetterShader_HDRP2020";
+
+	private const string PIPELINE_SUFFIX_URP_2021 = "BetterShader_URP2021";
+	private const string PIPELINE_SUFFIX_HDRP_2021 = "BetterShader_HDRP2021";
+
+	private const string PIPELINE_SUFFIX_URP_2022 = "BetterShader_URP2022";
+	private const string PIPELINE_SUFFIX_HDRP_2022 = "BetterShader_HDRP2022";
+
+	private const string PIPELINE_SUFFIX_URP_2023 = "BetterShader_URP2023";
+	private const string PIPELINE_SUFFIX_HDRP_2023 = "BetterShader_HDRP2023";
+
+	private const string PIPELINE_SUFFIX_STANDARD = "BetterShader_Standard";
+
 	private const string LIT_SHADER_PIPELINE_KEY = "AllIn1SpriteShader_LitShader_RenderPipeline";
 	private const string LIT_SHADER_UNITY_VERSION_KEY = "AllIn1SpriteShader_LitShader_UnityVersion";
 	private const string LIT_SHADER_FIRST_TIME_PROJECT = "AllIn1SpriteShader_LitShader_FirstTimeProject";
-
-	private const string LIT_SHADER_PATH		= "../../Shaders/AllIn1SpriteShaderLit.shader";
-
-	private const string SHADER_PATH_STANDARD	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_Standard.txt";
-
-	private const string SHADER_PATH_URP_2019	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_URP2019.txt";
-	private const string SHADER_PATH_HDRP_2019	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_HDRP2019.txt";
-
-	private const string SHADER_PATH_URP_2020	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_URP2020.txt";
-	private const string SHADER_PATH_HDRP_2020	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_HDRP2020.txt";
-
-	private const string SHADER_PATH_URP_2021	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_URP2021.txt";
-	private const string SHADER_PATH_HDRP_2021	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_HDRP2021.txt";
-
-	private const string SHADER_PATH_URP_2022	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_URP2022.txt";
-	private const string SHADER_PATH_HDRP_2022	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_HDRP2022.txt";
-
-	private const string SHADER_PATH_URP_2023	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_URP2023.txt";
-	private const string SHADER_PATH_HDRP_2023	= "../../Shaders/LitShaders/AllIn1SpriteShaderLit_BetterShader_HDRP2023.txt";
 
 	static AllIn1ShaderImporter()
 	{
 		EditorApplication.quitting += Quit;
 
-		ConfigureShader();
+		ConfigureShaders();
 	}
 
 	private static void Quit()
@@ -61,62 +68,12 @@ public static class AllIn1ShaderImporter
 		EditorPrefs.DeleteKey(LIT_SHADER_FIRST_TIME_PROJECT);
 	}
 
-	private static void ConfigureShader()
+	private static void ConfigureShaders()
 	{
 		RenderPipelineChecker.RefreshData();
 
-		string shaderPath = string.Empty;
-		
 		UnityVersion unityVersion = GetUnityVersion();
 		RenderPipeline renderPipeline = GetRenderPipeline();
-		
-		if (renderPipeline == RenderPipeline.HDRP)
-		{
-			switch (unityVersion)
-			{
-				case UnityVersion.UNITY_2019:
-					shaderPath = SHADER_PATH_HDRP_2019;
-					break;
-				case UnityVersion.UNITY_2020:
-					shaderPath = SHADER_PATH_HDRP_2020;
-					break;
-				case UnityVersion.UNITY_2021:
-					shaderPath = SHADER_PATH_HDRP_2021;
-					break;
-				case UnityVersion.UNITY_2022:
-					shaderPath = SHADER_PATH_HDRP_2022;
-					break;
-				case UnityVersion.UNITY_6:
-					shaderPath = SHADER_PATH_HDRP_2023;
-					break;
-
-			}
-		}
-		else if (renderPipeline == RenderPipeline.URP)
-		{
-			switch (unityVersion)
-			{
-				case UnityVersion.UNITY_2019:
-					shaderPath = SHADER_PATH_URP_2019;
-					break;
-				case UnityVersion.UNITY_2020:
-					shaderPath = SHADER_PATH_URP_2020;
-					break;
-				case UnityVersion.UNITY_2021:
-					shaderPath = SHADER_PATH_URP_2021;
-					break;
-				case UnityVersion.UNITY_2022:
-					shaderPath = SHADER_PATH_URP_2022;
-					break;
-				case UnityVersion.UNITY_6:
-					shaderPath = SHADER_PATH_URP_2023;
-					break;
-			}
-		}
-		else
-		{
-			shaderPath = SHADER_PATH_STANDARD;
-		}
 
 		RenderPipeline lastRenderPipeline = (RenderPipeline)EditorPrefs.GetInt(LIT_SHADER_PIPELINE_KEY, -1);
 		UnityVersion lastUnityVersion = (UnityVersion)EditorPrefs.GetInt(LIT_SHADER_UNITY_VERSION_KEY, 0);
@@ -128,23 +85,87 @@ public static class AllIn1ShaderImporter
 			EditorPrefs.SetInt(LIT_SHADER_UNITY_VERSION_KEY, (int)unityVersion);
 			EditorPrefs.SetInt(LIT_SHADER_FIRST_TIME_PROJECT, 1);
 
-			try
+			ConfigureShader(SPRITE_LIT_SHADER_NAME);
+			ConfigureShader(SPRITE_LIT_TRANSPARENT_SHADER_NAME);
+		}
+	}
+
+	private static void ConfigureShader(string shaderName)
+	{
+		string pipelineSufix = string.Empty;
+
+		UnityVersion unityVersion = GetUnityVersion();
+		RenderPipeline renderPipeline = GetRenderPipeline();
+
+		if (renderPipeline == RenderPipeline.HDRP)
+		{
+			switch (unityVersion)
 			{
-				var currentFileGUID = AssetDatabase.FindAssets($"t:Script {nameof(AllIn1ShaderImporter)}")[0];
-				string currentFolder = Path.GetDirectoryName(AssetDatabase.GUIDToAssetPath(currentFileGUID));
+				case UnityVersion.UNITY_2019:
+					pipelineSufix = PIPELINE_SUFFIX_HDRP_2019;
+					break;
+				case UnityVersion.UNITY_2020:
+					pipelineSufix = PIPELINE_SUFFIX_HDRP_2020;
+					break;
+				case UnityVersion.UNITY_2021:
+					pipelineSufix = PIPELINE_SUFFIX_HDRP_2021;
+					break;
+				case UnityVersion.UNITY_2022:
+					pipelineSufix = PIPELINE_SUFFIX_HDRP_2022;
+					break;
+				case UnityVersion.UNITY_6:
+					pipelineSufix = PIPELINE_SUFFIX_HDRP_2023;
+					break;
 
-				string newShaderStr = File.ReadAllText(Path.Combine(currentFolder, shaderPath));
-				newShaderStr = newShaderStr.Replace("Shader \"AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader\"", "Shader \"AllIn1SpriteShader/AllIn1SpriteShaderLit\"");
-
-				File.WriteAllText(Path.Combine(currentFolder, LIT_SHADER_PATH), newShaderStr);
-
-				AssetDatabase.SaveAssets();
-				AssetDatabase.Refresh();
 			}
-			catch (Exception e)
+		}
+		else if (renderPipeline == RenderPipeline.URP)
+		{
+			switch (unityVersion)
 			{
-				Debug.LogError("Shader not found: " + e);
+				case UnityVersion.UNITY_2019:
+					pipelineSufix = PIPELINE_SUFFIX_URP_2019;
+					break;
+				case UnityVersion.UNITY_2020:
+					pipelineSufix = PIPELINE_SUFFIX_URP_2020;
+					break;
+				case UnityVersion.UNITY_2021:
+					pipelineSufix = PIPELINE_SUFFIX_URP_2021;
+					break;
+				case UnityVersion.UNITY_2022:
+					pipelineSufix = PIPELINE_SUFFIX_URP_2022;
+					break;
+				case UnityVersion.UNITY_6:
+					pipelineSufix = PIPELINE_SUFFIX_URP_2023;
+					break;
 			}
+		}
+		else
+		{
+			pipelineSufix = PIPELINE_SUFFIX_STANDARD;
+		}
+
+		string templateFileName = string.Format(SHADER_TEMPLATE_NAME, shaderName, pipelineSufix);
+
+		string shaderTemplatePath = SHADER_FOLDER_PATH + "/" + templateFileName;
+		string finalShaderPath = FINAL_SHADERS_FOLDER_PATH + "/" + $"{shaderName}.shader";
+
+		try
+		{
+			var currentFileGUID = AssetDatabase.FindAssets($"t:Script {nameof(AllIn1ShaderImporter)}")[0];
+			string currentFolder = Path.GetDirectoryName(AssetDatabase.GUIDToAssetPath(currentFileGUID));
+
+			string newShaderStr = File.ReadAllText(Path.Combine(currentFolder, shaderTemplatePath));
+			newShaderStr = newShaderStr.Replace($"Shader \"AllIn1SpriteShader/{shaderName}_BetterShader\"", $"Shader \"AllIn1SpriteShader/{shaderName}\"");
+
+			File.WriteAllText(Path.Combine(currentFolder, finalShaderPath), newShaderStr);
+
+			AssetDatabase.SaveAssets();
+			AssetDatabase.Refresh();
+		}
+		catch (Exception e)
+		{
+			Debug.LogError("Shader not found: " + e);
 		}
 	}
 
@@ -200,7 +221,7 @@ public static class AllIn1ShaderImporter
 		EditorPrefs.DeleteKey(LIT_SHADER_UNITY_VERSION_KEY);
 		EditorPrefs.DeleteKey(LIT_SHADER_FIRST_TIME_PROJECT);
 
-		ConfigureShader();
+		ConfigureShaders();
 	}
 }
 #endif

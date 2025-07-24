@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 
-public static class TimeScaleController {
-  public static Dictionary<int, float> TimeScaleFactor = new Dictionary<int, float> { { 1, 1f }, { 2, 1f }, { 3, 1f }, { 4, 1f } };
-}
 public static class EsperanzaGearParts {
   public static Dictionary<string, List<string>> gearParts { get; } = new Dictionary<string, List<string>> {
     { "Aqua_no_Head", new List<string> { "Hair" } },
@@ -247,6 +244,7 @@ public static class EsperanzaAnimations {
     { "WalkToBlock", new AnimData { start = 1046, end = 1056, duration = 175, To = true } },
   };
 }
+
 public static class Interupts {
   public static Dictionary<string, Dictionary<string, string>> interupts { get; } = new Dictionary<string, Dictionary<string, string>> {
     ["Breathe"] = new Dictionary<string, string> {
@@ -341,6 +339,7 @@ public static class Interupts {
     }
   };
 }
+
 public static class BounceAdjustments {
   public static Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, float>>>> adjustments { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, float>>>> {
     ["Base_no_Head"] = new Dictionary<string, Dictionary<string, Dictionary<string, float>>> {
@@ -427,6 +426,7 @@ public static class BounceAdjustments {
     }
   };
 }
+
 public static class Abbreviations {
   public static Dictionary<string, string> all { get; } = new Dictionary<string, string> {
     { "STR", "Strength" }, { "DEX", "Dexterity" }, { "END", "Endurance" }, { "INT", "Intelligence" }, { "LCK", "Luck" }, { "AMP", "Amperage" },
@@ -498,6 +498,7 @@ public static class Abbreviations {
     }
   };
 }
+
 public static class GearNames {
   public static Dictionary<string, Dictionary<string, List<string>>> names { get; } = new Dictionary<string, Dictionary<string, List<string>>> {
     ["STR"] = new Dictionary<string, List<string>> {
@@ -678,6 +679,7 @@ public static class GearNames {
     }
   };
 }
+
 public static class FormStatIncreases {
   public static Dictionary<string, Dictionary<string, Dictionary<string, float>>> increases { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, float>>> {
     ["Base"] = new Dictionary<string, Dictionary<string, float>> {
@@ -724,6 +726,7 @@ public static class FormStatIncreases {
     }
   };
 }
+
 public static class AllStatValues {
   public static Dictionary<string, float> allStats { set; get; } = new Dictionary<string, float> {
     { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "AS", 0 }, { "NRGRG", 0 },
@@ -734,6 +737,7 @@ public static class AllStatValues {
     { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
   };
 }
+
 public static class FormStatsValues {
   public static Dictionary<string, Dictionary<string, int>> values { set; get; } = new Dictionary<string, Dictionary<string, int>> {
     ["Base"] = new Dictionary<string, int> { ["STR"] = 1, ["DEX"] = 1, ["END"] = 1, ["INT"] = 1, ["LCK"] = 1 },
@@ -744,6 +748,7 @@ public static class FormStatsValues {
     ["Dark"] = new Dictionary<string, int> { ["UMB"] = 0, ["VOI"] = 0, ["ABY"] = 0, ["ECL"] = 0, ["LCK"] = 0 }
   };
 }
+
 public static class EsperanzaForms {
   public static Dictionary<string, int> Active { get; set; } = new Dictionary<string, int> { { "Base", 1 }, { "Bolt", 0 }, { "Cold", 0 }, { "Fire", 0 }, { "Aqua", 0 }, { "Dark", 0 } };
   public static Dictionary<string, int> Unlocked { get; set; } = new Dictionary<string, int> { { "Base", 1 }, { "Bolt", 0 }, { "Aqua", 0 }, { "Cold", 0 }, { "Fire", 0 }, { "Dark", 0 } };
@@ -764,6 +769,7 @@ public static class EsperanzaForms {
     return v;
   }
 }
+
 public static class Inventory {
   public static List<GearItem> Gear { set; get; }
   public static List<ConsumeableItem> Consumables { set; get; }
@@ -771,6 +777,7 @@ public static class Inventory {
   public static List<GemItem> Gems { set; get; }
 
 }
+
 public static class EquippedItems {
   public static Dictionary<string, GearItem> Base { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Regular Top", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },

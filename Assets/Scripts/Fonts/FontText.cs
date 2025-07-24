@@ -1,11 +1,13 @@
 using UnityEngine;
 using System.Collections.Generic;
+using CustomInspector;
 
 public class FontText : MonoBehaviour {
   public GameObject characterPrefab;
-  public string font = "Hand";
-  public string content = "hello world";
-  public float size = 1;
+  [Button(nameof(Reset), label = "Reset Text", size = Size.small)]
+  [FixedValues("Hand", "Plate", "Walkway", "Vamp")] public string font = "Hand";
+  public string content = "";
+  public float spaceWidth = 1;
   public float padding = 0;
   public float mono = 0;
   public float maxWidth = -1;
@@ -18,10 +20,9 @@ public class FontText : MonoBehaviour {
 
   private List<GameObject> activeChars = new();
   private Stack<GameObject> charPool = new();
-  private List<RectData> rects = new();
   private List<float> totalWidths = new();
+  private List<float> lineHeights = new();
   private Dictionary<char, float> charWidthCache = new();
-  private Dictionary<char, string> charLabelCache = new();
 
   private int line = 1;
   private float width = 0;
@@ -30,12 +31,6 @@ public class FontText : MonoBehaviour {
   private float actualHeight = 0;
   private float tallest = 0;
 
-  public struct RectData {
-    public GameObject obj;
-    public int line;
-    public float x, y, w, h;
-  }
-
   [ForceUpdate]
   public void Generate() {
     Clear();
@@ -43,23 +38,27 @@ public class FontText : MonoBehaviour {
     height = 0;
     line = 1;
     totalWidths.Add(0);
+    lineHeights.Add(0);
     actualWidth = 0;
     actualHeight = 0;
     tallest = 0;
+
+    float prevHalfWidth = 0;
 
     for (int i = 0; i < content.Length; i++) {
       var c = content[i];
 
       if (c == ' ') {
-        float space = mono > 0 ? mono : Mathf.Max(10, size * 2);
-        if (maxWidth > 0 && width + space > maxWidth) NextLine();
-        width += space;
+        if (maxWidth > 0 && width + spaceWidth > maxWidth) NextLine();
+        width += spaceWidth;
         totalWidths[line - 1] = width;
+        prevHalfWidth = 0;
         continue;
       }
 
       if (c == '\n') {
         NextLine();
+        prevHalfWidth = 0;
         continue;
       }
 
@@ -70,41 +69,32 @@ public class FontText : MonoBehaviour {
       fc.Invoke("UpdateSprite", 0);
 
       var sr = obj.GetComponent<SpriteRenderer>();
-      var sw = GetCharWidth(c, sr);
-      var sh = sr.sprite.bounds.size.y * obj.transform.localScale.y;
+      var fullWidth = GetCharWidth(c, sr);
+      var fullHeight = sr.sprite.bounds.size.y * obj.transform.localScale.y;
 
-      var cwr = sw * size * 0.1f;
-      var chr = sh * size * 0.1f;
+      var halfWidth = fullWidth / 2;
 
-      if (maxWidth > 0 && width + cwr + padding > maxWidth) NextLine();
+      if (maxWidth > 0 && width + prevHalfWidth + halfWidth + padding > maxWidth) {
+        NextLine();
+        prevHalfWidth = 0;
+      }
 
-      var x = width + cwr / 2 + offsetX;
-      var y = height + chr / 2 + offsetY;
+      width += prevHalfWidth;
+      var x = width + offsetX;
+      obj.transform.localPosition = new Vector3(x, 0, 0);
 
-      obj.transform.localPosition = new Vector3(x, y, 0);
-      var w = cwr + marginX;
-      var h = chr + marginY;
-
-      if (tallest < h) tallest = h;
-
-      rects.Add(new RectData {
-        obj = obj,
-        line = line,
-        x = x,
-        y = y,
-        w = w,
-        h = h
-      });
+      if (tallest < fullHeight + marginY) tallest = fullHeight + marginY;
+      if (lineHeights[line - 1] < fullHeight) lineHeights[line - 1] = fullHeight;
 
       activeChars.Add(obj);
-      if (mono > 0) width += mono / 2;
-      else width += cwr + padding;
-
+      width += halfWidth + padding;
       totalWidths[line - 1] = width;
       if (actualWidth < width) actualWidth = width;
+      prevHalfWidth = halfWidth;
     }
 
-    actualHeight += tallest;
+    actualHeight = 0;
+    for (int i = 0; i < lineHeights.Count; i++) actualHeight += lineHeights[i];
     DoAlign();
   }
 
@@ -121,8 +111,21 @@ public class FontText : MonoBehaviour {
       charPool.Push(obj);
     }
     activeChars.Clear();
-    rects.Clear();
     totalWidths.Clear();
+    lineHeights.Clear();
+
+    var allChildren = new List<Transform>();
+    for (int i = 0; i < transform.childCount; i++) {
+      var child = transform.GetChild(i);
+      allChildren.Add(child);
+    }
+
+    foreach (var child in allChildren) {
+      var go = child.gameObject;
+      if (!activeChars.Contains(go) && !charPool.Contains(go)) {
+        DestroyImmediate(go);
+      }
+    }
   }
 
   float GetCharWidth(char c, SpriteRenderer sr) {
@@ -133,17 +136,38 @@ public class FontText : MonoBehaviour {
   }
 
   void DoAlign() {
-    foreach (var r in rects) {
-      var x = r.x;
-      var y = r.y;
+    int currentLine = 0;
+    float yOffset = 0;
+    float currentLineHeight = lineHeights[0];
+    int charIndex = 0;
+    float currentLineWidth = totalWidths[0];
 
-      if (justifyX == "center") x -= totalWidths[r.line - 1] / 2;
-      if (justifyX == "right") x -= totalWidths[r.line - 1];
+    for (int i = 0; i < activeChars.Count; i++) {
+      var obj = activeChars[i];
+      var pos = obj.transform.localPosition;
+      float x = pos.x;
+      float y = yOffset + currentLineHeight / 2;
+
+      if (justifyX == "center") x -= currentLineWidth / 2;
+      if (justifyX == "right") x -= currentLineWidth;
 
       if (justifyY == "center") y -= actualHeight / 2;
       if (justifyY == "top") y -= actualHeight;
 
-      r.obj.transform.localPosition = new Vector3(x, y, 0);
+      obj.transform.localPosition = new Vector3(x, y + offsetY, 0);
+
+      charIndex++;
+      if (charIndex >= activeChars.Count) break;
+
+      var nextX = activeChars[charIndex].transform.localPosition.x;
+      if (nextX < pos.x) {
+        yOffset -= currentLineHeight;
+        currentLine++;
+        if (currentLine < lineHeights.Count) {
+          currentLineHeight = lineHeights[currentLine];
+          currentLineWidth = totalWidths[currentLine];
+        }
+      }
     }
   }
 
@@ -151,9 +175,26 @@ public class FontText : MonoBehaviour {
     height -= tallest;
     line += 1;
     totalWidths.Add(0);
-    actualHeight += tallest;
+    lineHeights.Add(0);
     if (actualWidth < width) actualWidth = width;
     width = 0;
     tallest = 0;
+  }
+
+  public void Reset() {
+    foreach (var obj in activeChars) DestroyImmediate(obj);
+    activeChars.Clear();
+    charPool.Clear();
+
+    var extra = new List<GameObject>();
+    for (int i = 0; i < transform.childCount; i++) {
+      var t = transform.GetChild(i).gameObject;
+      if (!activeChars.Contains(t) && !charPool.Contains(t)) {
+        extra.Add(t);
+      }
+    }
+    foreach (var e in extra) DestroyImmediate(e);
+
+    content = "";
   }
 }

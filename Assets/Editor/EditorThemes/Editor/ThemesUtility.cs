@@ -8,9 +8,9 @@ namespace ThemesPlugin
 { 
     public static class ThemesUtility
     {
-        readonly public static string CustomThemesPath = Application.dataPath + "/EditorThemes/Editor/Themes/";
-        readonly public static string UssFilePath = Application.dataPath + "/EditorThemes/Editor/StyleSheets/Extensions/";
-        readonly public static string PresetsPath = Application.dataPath + "/EditorThemes/Editor/CreatePresets/";
+        readonly public static string CustomThemesPath = Application.dataPath + "/Editor/EditorThemes/Editor/Themes/";
+        readonly public static string UssFilePath = Application.dataPath + "/Editor/EditorThemes/Editor/StyleSheets/Extensions/";
+        readonly public static string PresetsPath = Application.dataPath + "/Editor/EditorThemes/Editor/CreatePresets/";
         readonly public static string Version = "v0.65";
         readonly public static string Enc = ".json";
 
@@ -138,7 +138,7 @@ namespace ThemesPlugin
             File.WriteAllText(Path, ussText);
 
 
-            string Path2 = Application.dataPath + "/EditorThemes/Editor/StyleSheets/Extensions/light.uss";
+            string Path2 = Application.dataPath + "/Editor/EditorThemes/Editor/StyleSheets/Extensions/light.uss";
             DeleteFileWithMeta(Path2);
             
             File.WriteAllText(Path2, ussText);
