@@ -3,9 +3,13 @@ using UnityEngine.InputSystem;
 using System.Collections.Generic;
 
 public class MouseManager : MonoBehaviour {
+  public string defaultMap;
   public static MouseManager Instance;
   GameObject lastHovered;
-  string map = "default";
+  GameObject lastClickedTarget;
+  float clickCacheTimer;
+  const float clickCacheDuration = 0.1f;
+
   string hoverKey;
   string exitKey;
   string clickKey;
@@ -16,25 +20,21 @@ public class MouseManager : MonoBehaviour {
   string middleReleaseKey;
   string scrollUpKey;
   string scrollDownKey;
-  Dictionary<string, (
-    string hover, string exit, string click, string release,
-    string rightclick, string rightrelease, string middleclick, string middlerelease,
-    string scrollUp, string scrollDown
-  )> cachedKeys = new();
-
-  Vector3 lastPos;
+  Vector3 lastScreenPos;
 
   void Awake() {
     Instance = this;
-    Swap("mainMenu");
+    SwitchMap(defaultMap != "" ? defaultMap : "mainMenu");
   }
 
   void Update() {
-    Vector3 screenPos = Mouse.current.position.ReadValue();
-    if (screenPos == lastPos) return;
-    lastPos = screenPos;
+    clickCacheTimer -= Time.unscaledDeltaTime;
 
-    var worldPos = Camera.main.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 1f));
+    var cam = Camera.main;
+    if (!cam) return;
+
+    var screenPos = Mouse.current.position.ReadValue();
+    var worldPos = cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 1f));
     var hit = Physics2D.OverlapPoint(worldPos);
     var target = hit ? hit.gameObject : null;
 
@@ -42,15 +42,43 @@ public class MouseManager : MonoBehaviour {
       if (lastHovered) MessageBus.Send(exitKey, lastHovered);
       if (target) MessageBus.Send(hoverKey, target);
       lastHovered = target;
+    } else if (target) {
+      MessageBus.Send(hoverKey, target);
     }
 
     if (target) {
-      if (Mouse.current.leftButton.wasPressedThisFrame) MessageBus.Send(clickKey, target);
-      if (Mouse.current.leftButton.wasReleasedThisFrame) MessageBus.Send(releaseKey, target);
-      if (Mouse.current.rightButton.wasPressedThisFrame) MessageBus.Send(rightClickKey, target);
-      if (Mouse.current.rightButton.wasReleasedThisFrame) MessageBus.Send(rightReleaseKey, target);
-      if (Mouse.current.middleButton.wasPressedThisFrame) MessageBus.Send(middleClickKey, target);
-      if (Mouse.current.middleButton.wasReleasedThisFrame) MessageBus.Send(middleReleaseKey, target);
+      if (Mouse.current.leftButton.wasPressedThisFrame) {
+        lastClickedTarget = target;
+        clickCacheTimer = clickCacheDuration;
+        MessageBus.Send(clickKey, target);
+        Debug.Log($"[MouseManager] Left Click on: {target.name}");
+      }
+
+      if (Mouse.current.leftButton.wasReleasedThisFrame) {
+        var releaseTarget = clickCacheTimer > 0 ? lastClickedTarget : target;
+        MessageBus.Send(releaseKey, releaseTarget);
+        Debug.Log($"[MouseManager] Left Release on: {releaseTarget?.name}");
+      }
+
+      if (Mouse.current.rightButton.wasPressedThisFrame) {
+        MessageBus.Send(rightClickKey, target);
+        Debug.Log($"[MouseManager] Right Click on: {target.name}");
+      }
+
+      if (Mouse.current.rightButton.wasReleasedThisFrame) {
+        MessageBus.Send(rightReleaseKey, target);
+        Debug.Log($"[MouseManager] Right Release on: {target.name}");
+      }
+
+      if (Mouse.current.middleButton.wasPressedThisFrame) {
+        MessageBus.Send(middleClickKey, target);
+        Debug.Log($"[MouseManager] Middle Click on: {target.name}");
+      }
+
+      if (Mouse.current.middleButton.wasReleasedThisFrame) {
+        MessageBus.Send(middleReleaseKey, target);
+        Debug.Log($"[MouseManager] Middle Release on: {target.name}");
+      }
     }
 
     var scroll = Mouse.current.scroll.ReadValue();
@@ -58,25 +86,17 @@ public class MouseManager : MonoBehaviour {
     else if (scroll.y < 0) MessageBus.Send(scrollDownKey, scroll.y);
   }
 
-  public void Swap(string newMap) {
-    map = newMap;
-    if (!cachedKeys.TryGetValue(map, out var keys)) {
-      keys = ( $"{map}.button.hover", $"{map}.button.exit", $"{map}.button.click", $"{map}.button.release",
-        $"{map}.button.rightClick", $"{map}.button.rightRelease", $"{map}.button.middleClick", $"{map}.button.middleRelease",
-        $"{map}.button.scrollUp", $"{map}.button.scrollDown"
-      );
-      cachedKeys[map] = keys;
-    }
-    hoverKey = keys.hover;
-    exitKey = keys.exit;
-    clickKey = keys.click;
-    releaseKey = keys.release;
-    rightClickKey = keys.rightclick;
-    rightReleaseKey = keys.rightrelease;
-    middleClickKey = keys.middleclick;
-    middleReleaseKey = keys.middlerelease;
-    scrollUpKey = keys.scrollUp;
-    scrollDownKey = keys.scrollDown;
-    Debug.Log($"[MouseManager] Swapped to: {map}");
+  public void SwitchMap(string newMap) {
+    hoverKey = $"{newMap}.hover";
+    exitKey = $"{newMap}.unhover";
+    clickKey = $"{newMap}.click";
+    releaseKey = $"{newMap}.release";
+    rightClickKey = $"{newMap}.rightClick";
+    rightReleaseKey =  $"{newMap}.rightRelease";
+    middleClickKey =  $"{newMap}.middleClick";
+    middleReleaseKey = $"{newMap}.middleRelease";
+    scrollUpKey = $"{newMap}.scrollUp";
+    scrollDownKey = $"{newMap}.scrollDown";
+    Debug.Log($"[MouseManager] Swapped to: {newMap}");
   }
 }

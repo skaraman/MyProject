@@ -692,8 +692,7 @@
                 return o;
             }
 
-           // #include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/CombinedShapeLightShared.hlsl"
-            #include "Assets\Shaders\AllIn1Combined.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/CombinedShapeLightShared.hlsl"
 
 			half3 GetPixel(in int offsetX, in int offsetY, half2 uv, sampler2D tex)
 			{

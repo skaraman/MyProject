@@ -32,20 +32,20 @@ public class SaveSlot : MonoBehaviour
     }
 
     if (PlaytimeText) {
-      PlaytimeText.content = "Playtime: " + playtime;
+      PlaytimeText.content = "Playtime - " + playtime;
       PlaytimeText.Generate();
     }
 
     if (LevelText) {
-      LevelText.content = "Level: " + level;
+      LevelText.content = "Level - " + level;
       LevelText.Generate();
     }
 
     if (LocationText) {
-      LocationText.content = "Location: " + location;
+      LocationText.content = "Location - " + location;
       LocationText.Generate();
     }
 
-    Debug.Log($"[SaveSlot] Updated text fields with saveNumber: {saveNumber}, playtime: {playtime}, level: {level}, location: {location}");
+    Debug.Log($"[SaveSlot] saveNumber: {saveNumber}, playtime: {playtime}, level: {level}, location: {location}");
   }
 }

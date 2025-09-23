@@ -11,11 +11,11 @@ public static class ShaderColors {
     ["Grey"] = new Vector4(.5f, .5f, .5f, 1f),
     ["Red"] = new Vector4(1f, .05f, 0f, 1f),
     ["Blue"] = new Vector4(0f, .52f, 1f, 1f),
-    ["Darkblue"] = new Vector4(.1f, .15f, .55f, 1f),
-    ["Lightblue"] = new Vector4(.15f, .5f, .9f, 1f),
-    ["Shineblue"] = new Vector4(.66f, .7f, .9f, 1f),
+    ["DarkBlue"] = new Vector4(.1f, .15f, .55f, 1f),
+    ["LightBlue"] = new Vector4(.15f, .5f, .9f, 1f),
+    ["ShineBlue"] = new Vector4(.66f, .7f, .9f, 1f),
     ["Purple"] = new Vector4(.45f, 0f, .7f, 1f),
-    ["Darkpurple"] = new Vector4(.1f, 0f, .1f, 1f)
+    ["DarkPurple"] = new Vector4(.1f, 0f, .1f, 1f)
   };
 
   public static Dictionary<string, Dictionary<string, Dictionary<string, string>>> pairs { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, string>>> {
@@ -32,16 +32,16 @@ public static class ShaderColors {
       ["secondary"] = new Dictionary<string, string> { { "stroke", "Yellow" }, { "color", "Red" } }
     },
     ["Cold"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Blue" }, { "color", "Darkblue" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "Darkblue" }, { "color", "Blue" } }
+      ["primary"] = new Dictionary<string, string> { { "stroke", "Blue" }, { "color", "DarkBlue" } },
+      ["secondary"] = new Dictionary<string, string> { { "stroke", "DarkBlue" }, { "color", "Blue" } }
     },
     ["Aqua"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Shineblue" }, { "color", "Lightblue" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "Lightblue" }, { "color", "Shineblue" } }
+      ["primary"] = new Dictionary<string, string> { { "stroke", "ShineBlue" }, { "color", "LightBlue" } },
+      ["secondary"] = new Dictionary<string, string> { { "stroke", "LightBlue" }, { "color", "ShineBlue" } }
     },
     ["Dark"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Purple" }, { "color", "Darkpurple" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "Darkpurple" }, { "color", "Purple" } }
+      ["primary"] = new Dictionary<string, string> { { "stroke", "Purple" }, { "color", "DarkPurple" } },
+      ["secondary"] = new Dictionary<string, string> { { "stroke", "DarkPurple" }, { "color", "Purple" } }
     },
   };
 }

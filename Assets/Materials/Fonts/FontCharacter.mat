@@ -12,8 +12,8 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - ALPHAOUTLINE_ON
   - BLURISHD_ON
-  - OUTBASE_ON
   - POSTERIZEOUTLINE_ON
   - SHADOW_ON
   m_InvalidKeywords:
@@ -82,7 +82,7 @@ Material:
     m_Floats:
     - _Alpha: 1
     - _AlphaCutoffValue: 0.342
-    - _AlphaOutlineBlend: 1
+    - _AlphaOutlineBlend: 0.393
     - _AlphaOutlineGlow: 1
     - _AlphaOutlineMinAlpha: 0
     - _AlphaOutlinePower: 0.18
@@ -240,7 +240,7 @@ Material:
     - _ZoomUvAmount: 0.5
     m_Colors:
     - _AlphaOutlineColor: {r: 0, g: 0, b: 0, a: 1}
-    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Color: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
     - _ColorChangeNewCol: {r: 0, g: 1, b: 0.5922203, a: 1}
     - _ColorChangeNewCol2: {r: 1, g: 1, b: 0, a: 1}
     - _ColorChangeNewCol3: {r: 1, g: 1, b: 0, a: 1}

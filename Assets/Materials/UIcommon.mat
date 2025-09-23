@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: UIcommon
+  m_Name: UICommon
   m_Shader: {fileID: 4800000, guid: 79ee6cefbc672a44e97359d4d14ea301, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -17,7 +17,6 @@ Material:
   - OUTBASEPIXELPERF_ON
   - OUTDIST_ON
   - POSTERIZEOUTLINE_ON
-  - ZOOMUV_ON
   m_InvalidKeywords:
   - NORMALMAP_ON
   - _BLURHD_ON
@@ -125,7 +124,7 @@ Material:
     - _DistortAmount: 0.05
     - _DistortTexXSpeed: 1
     - _DistortTexYSpeed: 0.9
-    - _EditorDrawers: 14
+    - _EditorDrawers: 10
     - _FadeAmount: -0.1
     - _FadeBurnGlow: 2
     - _FadeBurnTransition: 0.075
@@ -186,7 +185,7 @@ Material:
     - _MyDstMode: 10
     - _MySrcMode: 5
     - _NegativeAmount: 1
-    - _NormalStrength: 2.38
+    - _NormalStrength: 2.01
     - _OffsetUvX: 0
     - _OffsetUvY: 0
     - _OnlyInnerOutline: 0
@@ -199,7 +198,7 @@ Material:
     - _OutlineDistortToggle: 0
     - _OutlineGlow: 3.3
     - _OutlineIsPixel: 0
-    - _OutlinePixelWidth: 3
+    - _OutlinePixelWidth: 1
     - _OutlineTexGrey: 0
     - _OutlineTexToggle: 0
     - _OutlineTexXSpeed: 10

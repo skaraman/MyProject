@@ -5,6 +5,8 @@ using CustomInspector;
 public class FontText : MonoBehaviour {
   public GameObject characterPrefab;
   [Button(nameof(Reset), label = "Reset Text", size = Size.small)]
+  [Button(nameof(Generate), label = "Force Text", size = Size.small)]
+
   [FixedValues("Hand", "Plate", "Walkway", "Vamp")] public string font = "Hand";
   public string content = "";
   public float spaceWidth = 1;
@@ -22,6 +24,7 @@ public class FontText : MonoBehaviour {
   private Stack<GameObject> charPool = new();
   private List<float> totalWidths = new();
   private List<float> lineHeights = new();
+  private List<int> lineCharCounts = new(); // Track chars per line
   private Dictionary<char, float> charWidthCache = new();
 
   private int line = 1;
@@ -30,6 +33,14 @@ public class FontText : MonoBehaviour {
   private float actualWidth = 0;
   private float actualHeight = 0;
   private float tallest = 0;
+  private string prevContent = "";
+
+  void Update() {
+    if (content != prevContent) {
+      prevContent = content;
+      Generate();
+    }
+  }
 
   [ForceUpdate]
   public void Generate() {
@@ -39,26 +50,25 @@ public class FontText : MonoBehaviour {
     line = 1;
     totalWidths.Add(0);
     lineHeights.Add(0);
+    lineCharCounts.Add(0);
     actualWidth = 0;
     actualHeight = 0;
     tallest = 0;
-
-    float prevHalfWidth = 0;
 
     for (int i = 0; i < content.Length; i++) {
       var c = content[i];
 
       if (c == ' ') {
-        if (maxWidth > 0 && width + spaceWidth > maxWidth) NextLine();
+        if (maxWidth > 0 && width + spaceWidth > maxWidth) {
+          NextLine();
+        }
         width += spaceWidth;
         totalWidths[line - 1] = width;
-        prevHalfWidth = 0;
         continue;
       }
 
       if (c == '\n') {
         NextLine();
-        prevHalfWidth = 0;
         continue;
       }
 
@@ -69,33 +79,37 @@ public class FontText : MonoBehaviour {
       fc.Invoke("UpdateSprite", 0);
 
       var sr = obj.GetComponent<SpriteRenderer>();
-      var fullWidth = GetCharWidth(c, sr);
-      var fullHeight = sr.sprite.bounds.size.y * obj.transform.localScale.y;
+      var charWidth = GetCharWidth(c, sr);
+      var charHeight = sr.sprite.bounds.size.y * obj.transform.localScale.y;
 
-      var halfWidth = fullWidth / 2;
-
-      if (maxWidth > 0 && width + prevHalfWidth + halfWidth + padding > maxWidth) {
+      // Check if character fits on current line
+      if (maxWidth > 0 && width + charWidth > maxWidth && lineCharCounts[line - 1] > 0) {
         NextLine();
-        prevHalfWidth = 0;
       }
 
-      width += prevHalfWidth;
-      var x = width + offsetX;
+      // Position character at current width position
+      var x = width + charWidth * 0.5f + offsetX; // Center the character
       obj.transform.localPosition = new Vector3(x, 0, 0);
 
-      if (tallest < fullHeight + marginY) tallest = fullHeight + marginY;
-      if (lineHeights[line - 1] < fullHeight) lineHeights[line - 1] = fullHeight;
+      // Update line statistics
+      if (tallest < charHeight + marginY) tallest = charHeight + marginY;
+      if (lineHeights[line - 1] < charHeight) lineHeights[line - 1] = charHeight;
 
       activeChars.Add(obj);
-      width += halfWidth + padding;
+      lineCharCounts[line - 1]++;
+
+      // Advance width for next character
+      width += charWidth + padding;
       totalWidths[line - 1] = width;
       if (actualWidth < width) actualWidth = width;
-      prevHalfWidth = halfWidth;
     }
 
     actualHeight = 0;
     for (int i = 0; i < lineHeights.Count; i++) actualHeight += lineHeights[i];
     DoAlign();
+    if (gameObject.GetComponent<ComponentPropagator>() != null) {
+      gameObject.GetComponent<ComponentPropagator>().ForcePropagation();
+    }
   }
 
   GameObject GetCharFromPool() {
@@ -113,6 +127,7 @@ public class FontText : MonoBehaviour {
     activeChars.Clear();
     totalWidths.Clear();
     lineHeights.Clear();
+    lineCharCounts.Clear();
 
     var allChildren = new List<Transform>();
     for (int i = 0; i < transform.childCount; i++) {
@@ -138,35 +153,31 @@ public class FontText : MonoBehaviour {
   void DoAlign() {
     int currentLine = 0;
     float yOffset = 0;
-    float currentLineHeight = lineHeights[0];
-    int charIndex = 0;
-    float currentLineWidth = totalWidths[0];
+    int charsProcessedInLine = 0;
 
     for (int i = 0; i < activeChars.Count; i++) {
       var obj = activeChars[i];
       var pos = obj.transform.localPosition;
       float x = pos.x;
-      float y = yOffset + currentLineHeight / 2;
+      float y = yOffset + lineHeights[currentLine] / 2;
 
-      if (justifyX == "center") x -= currentLineWidth / 2;
-      if (justifyX == "right") x -= currentLineWidth;
+      // Apply horizontal justification
+      if (justifyX == "center") x -= totalWidths[currentLine] / 2;
+      if (justifyX == "right") x -= totalWidths[currentLine];
 
+      // Apply vertical justification
       if (justifyY == "center") y -= actualHeight / 2;
       if (justifyY == "top") y -= actualHeight;
 
       obj.transform.localPosition = new Vector3(x, y + offsetY, 0);
 
-      charIndex++;
-      if (charIndex >= activeChars.Count) break;
-
-      var nextX = activeChars[charIndex].transform.localPosition.x;
-      if (nextX < pos.x) {
-        yOffset -= currentLineHeight;
+      charsProcessedInLine++;
+      
+      // Check if we've processed all characters in current line
+      if (currentLine < lineCharCounts.Count && charsProcessedInLine >= lineCharCounts[currentLine]) {
+        yOffset -= lineHeights[currentLine];
         currentLine++;
-        if (currentLine < lineHeights.Count) {
-          currentLineHeight = lineHeights[currentLine];
-          currentLineWidth = totalWidths[currentLine];
-        }
+        charsProcessedInLine = 0;
       }
     }
   }
@@ -176,6 +187,7 @@ public class FontText : MonoBehaviour {
     line += 1;
     totalWidths.Add(0);
     lineHeights.Add(0);
+    lineCharCounts.Add(0);
     if (actualWidth < width) actualWidth = width;
     width = 0;
     tallest = 0;

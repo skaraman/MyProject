@@ -1,55 +1,65 @@
 using UnityEngine;
 using System.Collections.Generic;
-using System.Linq;
+using System;
+
 public class CharacterState : MonoBehaviour {
-  public Dictionary<string, Dictionary<string, int>> formStats;
-  public Dictionary<string, float> allStats;
-  public Dictionary<string, Dictionary<string, GearItem>> equippedGear;
-  public LocationTracker locationTracker = new LocationTracker();
+  public LocationTracker locationTracker = new();
   public int level = 0;
-  //public Loader loader = new Loader();
 
-  public void RefreshSave() {
-    //loader.LoadForms();
-    //loader.LoadEquip();
-    // if (forms == null && SaveData.ValueExists("EsperStats"))
-    // {
-    //   forms = SaveData.GetValue<Dictionary<string, Dictionary<string, int>>>("EsperStats");
-    // }
-    // else
-    // {
-    //   forms = new FormStatsValues().GetValues();
-    // }
+  private SaveData gameData = new();
+  private Action offLoadGame;
+  GearController gearController;
+
+  void Start() {
+    offLoadGame = MessageBus.On("loadGame", o => LoadState());
+    gearController = GetComponent<GearController>();
   }
 
-  public void UnlockForm(string v) {
-    EsperanzaForms.Unlocked[v] = 1;
-    //loader.SaveForms();
+  void OnDestroy() {
+    offLoadGame?.Invoke();
   }
 
-  public void SetForm(string v) {
-    EsperanzaForms.SetActive(v);
-    //loader.SaveForms();
-  }
-
-  public Dictionary<string, Dictionary<string, int>> GetStats() {
-    return formStats;
+  public void LoadState() {
+    var loadedForms = SaveSlotManager.Load("forms");
+    var loadedStats = SaveSlotManager.Load("stats");
+    if (loadedForms.Keys.Count != 0) {
+      EsperanzaForms.SetActive((string)loadedForms["activeForm"]);
+      foreach (var item in (Dictionary<string, int>)loadedForms["unlockedForms"]) {
+        if (item.Value == 1) EsperanzaForms.UnlockForm(item.Key);
+      }
+    }
+    if (loadedStats.Keys.Count != 0) {
+      foreach (var form in (Dictionary<string, Dictionary<string, int>>)loadedStats["formStats"]) {
+        foreach (var stat in form.Value) {
+          FormStatsValues.values[form.Key][stat.Key] = stat.Value;
+        }
+      }
+    }
+    gearController.LoadGear();
+    GatherAllStatValues();
   }
 
   public void AddStats(string form, string stat, int amount) {
     // float oldAmount = stats[form][stat];
-    formStats[form][stat] += amount;
-    GatherALlStatValues();
+    FormStatsValues.values[form][stat] += amount;
+    GatherAllStatValues();
+    gameData.SetComplex("formStats", FormStatsValues.values);
+    SaveSlotManager.Save("stats", gameData);
   }
 
-  public void GatherALlStatValues() {
+  public void GatherAllStatValues() {
     level = 0;
+    AllStatValues.allStats.Clear();
     foreach (var form in FormStatIncreases.increases) {
       foreach (var majorStat in form.Value) {
         foreach (var minorStat in majorStat.Value) {
-          allStats[minorStat.Key] += minorStat.Value * formStats[form.Key][majorStat.Key];
-          level += formStats[form.Key][majorStat.Key];
+          AllStatValues.allStats[minorStat.Key] += minorStat.Value * FormStatsValues.values[form.Key][majorStat.Key];
         }
+      }
+    }
+    foreach (var form in FormStatsValues.values) {
+      foreach (var majorStat in form.Value) {
+        level += majorStat.Value;
       }
     }
   }

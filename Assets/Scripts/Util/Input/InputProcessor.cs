@@ -5,13 +5,14 @@ using System.Reflection;
 
 public class InputProcessor : MonoBehaviour {
   public TestActions input;
-  public string activeMap;
+  public string defaultMap;
+  private string activeMap;
   Dictionary<InputAction, string> cachedNames = new();
 
   void OnEnable() {
     input = new TestActions();
     SetupAllCalls();
-    SwitchMap("mainMenu");
+    SwitchMap(defaultMap != "" ? defaultMap : "mainMenu");
   }
 
   void OnDisable() {
@@ -23,7 +24,7 @@ public class InputProcessor : MonoBehaviour {
     activeMap = mapName ?? activeMap;
     var map = input.asset.FindActionMap(activeMap);
     map?.Enable();
-    Debug.Log($"[InputProcessor] Switched to: {activeMap}");
+    //Debug.Log($"[InputProcessor] Switched to: {activeMap}");
   }
 
   void DisableAllMaps() {
@@ -46,7 +47,7 @@ public class InputProcessor : MonoBehaviour {
       cachedNames[ctx.action] = name;
     }
 
-    Debug.Log($"[InputProcessor] {name} = {value}");
+    //Debug.Log($"[InputProcessor] {name} = {value}");
     MessageBus.Send(name, value);
   }
 
@@ -54,18 +55,20 @@ public class InputProcessor : MonoBehaviour {
     foreach (var map in input.asset.actionMaps) {
       foreach (var action in map.actions) {
         action.performed += Process;
+        action.canceled += Process;
       }
     }
-    Debug.Log("[InputProcessor] SetupAllCalls finished");
+    //Debug.Log("[InputProcessor] SetupAllCalls finished");
   }
 
   private void RemoveAllCalls() {
     foreach (var map in input.asset.actionMaps) {
       foreach (var action in map.actions) {
+        action.canceled -= Process;
         action.performed -= Process;
       }
     }
-    Debug.Log("[InputProcessor] RemoveAllCalls finished");
+    //Debug.Log("[InputProcessor] RemoveAllCalls finished");
   }
 
   public void Rebind(string mapName, string actionName, List<string> bindings) {

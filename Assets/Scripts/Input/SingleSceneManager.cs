@@ -5,6 +5,7 @@ using UnityEngine;
 
 public class SingleSceneManager : MonoBehaviour {
   public InputProcessor inputProcessor;
+  public MouseManager mouseManager;
   public GameObject Blackscreen;
   private All1AnimatorScript blackscreen;
 
@@ -12,6 +13,7 @@ public class SingleSceneManager : MonoBehaviour {
   public GameObject LoadMenu;
   public GameObject SettingsMenu;
   public GameObject GameplayInterface;
+  public GameObject PauseMenu;
 
   public AutoSaver autoSaver;
   public SaveSlotView saveSlotView;
@@ -25,18 +27,17 @@ public class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("openLoadMenu", o => OpenLoadMenu()));
     actions.Add(MessageBus.On("openSettingsMenu", o => OpenSettingsMenu()));
     actions.Add(MessageBus.On("backToMainMenu", o => OpenMainMenu()));
+
+    actions.Add(MessageBus.On("closePauseMenu", o => OpenGameplay()));
+    actions.Add(MessageBus.On("openPauseMenu", o => OpenPauseMenu()));
+    
     Blackscreen.SetActive(true);
     MainMenu.SetActive(true);
-    inputProcessor.SwitchMap("mainMenu");
+    _SwitchMap("mainMenu");
 
     blackscreen = Blackscreen.GetComponent<All1AnimatorScript>();
     blackscreen.AddFloatAnim("alphaIn", "_Alpha", 0f, 1f, 2f);
     blackscreen.AddFloatAnim("alphaOut", "_Alpha", 1f, 0f, 2f);
-
-    // controller.Play("glowWide");
-    // controller.Play("glowPulse");
-    // controller.Stop("glowPulse");
-    // controller.Restart("glowWide");
 
   }
 
@@ -47,37 +48,73 @@ public class SingleSceneManager : MonoBehaviour {
     }
   }
 
+
+
   void StartGame() {
-    // Save Slot Checker
-    if (saveSlotView.SavesCount > 0) {
+    if (!_isNewGame()) {
       var loaded = SaveSlotManager.Load("slot");
-      autoSaver.SetPlaytime((float)loaded["playtime"]);
+      autoSaver.SetPlaytime((int)loaded["playtimeHours"], (int)loaded["playtimeMinutes"], (int)loaded["playtimeSeconds"]);
     }
     autoSaver.enableTimeTracking = true;
-
-    // Scene Change Animations
+    _SwitchMap("none");
+    
     blackscreen.Play("alphaIn");
-    inputProcessor.SwitchMap("gameplay");
+
     AsyncCoroutine.RunAfterDelay(2, () => {
-      MainMenu.SetActive(false);
       blackscreen.Play("alphaOut");
+      MainMenu.SetActive(false);
+      GameplayInterface.SetActive(true);
+      LoadMenu.SetActive(false);
+      _SwitchMap("gameplay");
     });
   }
 
   void OpenLoadMenu() {
-    // Scene Change Animations
-    inputProcessor.SwitchMap("loadMenu");
+    _SwitchMap("loadMenu");
+    MainMenu.SetActive(false);
+    SettingsMenu.SetActive(false);
     LoadMenu.SetActive(true);
   }
 
   void OpenSettingsMenu() {
+    _SwitchMap("settingsMenu");
+
+    MainMenu.SetActive(false);
     SettingsMenu.SetActive(true);
+    GameplayInterface.SetActive(false);
+  }
+
+  void OpenGameplay() {
+    _SwitchMap("gameplay");
+
+    MainMenu.SetActive(false);
+    SettingsMenu.SetActive(false);
+    GameplayInterface.SetActive(true);
+    PauseMenu.SetActive(false);
   }
 
   void OpenMainMenu() {
+    _SwitchMap("mainMenu");
+
     SettingsMenu.SetActive(false);
     LoadMenu.SetActive(false);
+    MainMenu.SetActive(true);
+  }
+
+  void OpenPauseMenu() {
+    _SwitchMap("pauseMenu");
+
+    PauseMenu.SetActive(true);
+    GameplayInterface.SetActive(false);
 
   }
 
+  private void _SwitchMap(string map) {
+    inputProcessor.SwitchMap(map);
+    mouseManager.SwitchMap(map);   
+  }
+
+  private bool _isNewGame() {
+    return SaveSlotManager.slot > saveSlotView.SavesCount;
+  }
 }

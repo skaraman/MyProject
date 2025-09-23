@@ -6,13 +6,13 @@ public static class EsperanzaGearParts {
     { "Aqua_no_Head", new List<string> { "Hair" } },
     { "Aqua_aa_Chest", new List<string> { "Torso" } },
     { "Aqua_aa_Legs", new List<string> { "Pelvis", "ThighRight", "ThighLeft" } },
-    { "Aqua_ab_Arms", new List<string> { "ArmRight", "ArmLeft", "ForearmLeft", "ForearmRigh" } },
+    { "Aqua_ab_Arms", new List<string> { "ArmRight", "ArmLeft", "ForearmLeft", "ForearmRight" } },
     { "Aqua_ab_Chest", new List<string> { "Torso" } },
     { "Aqua_ab_Feet", new List<string> { "FootRight", "FootLeft", "CalfLeft", "CalfRight" } },
     { "Aqua_ab_Head", new List<string> { "Head", "Hair" } },
     { "Aqua_ab_Legs", new List<string> { "Pelvis", "ThighRight", "ThighLeft" } },
     { "Aqua_ab_Shoulders", new List<string> { "Cape" } },
-    { "Aqua_ac_Arms", new List<string> { "HandRight", "HandLeft", "ForearmLeft", "ForearmRigh" } },
+    { "Aqua_ac_Arms", new List<string> { "HandRight", "HandLeft", "ForearmLeft", "ForearmRight" } },
     { "Aqua_ac_Chest", new List<string> { "Torso", "ArmRight", "ArmLeft", "Neck" } },
     { "Aqua_ac_Feet", new List<string> { "FootRight", "FootLeft", "CalfLeft", "CalfRight" } },
     { "Aqua_ac_Head", new List<string> { "Head", "Hair" } },
@@ -22,17 +22,17 @@ public static class EsperanzaGearParts {
     { "Base_aa_Feet", new List<string> { "FootLeft", "CalfLeft", "FootRight", "CalfRight" } },
     { "Base_aa_Legs", new List<string> { "ThighRight", "ThighLeft", "Pelvis" } },
     { "Base_aa_Chest", new List<string> { "ArmRight", "ArmLeft", "Torso" } },
-    { "Base_ab_Arms", new List<string> { "HandRight", "HandLeft", "ForearmLeft", "ForearmRigh" } },
+    { "Base_ab_Arms", new List<string> { "HandRight", "HandLeft", "ForearmLeft", "ForearmRight" } },
     { "Base_ab_Chest", new List<string> { "Torso", "ArmRight", "ArmLeft", "Neck" } },
     { "Base_ab_Feet", new List<string> { "FootRight", "FootLeft", "CalfLeft", "CalfRight" } },
     { "Base_ab_Head", new List<string> { "Hair" } },
     { "Base_ab_Legs", new List<string> { "Pelvis", "ThighRight", "ThighLeft" } },
-    { "Base_ac_Arms", new List<string> { "HandRight", "HandLeft", "ForearmLeft", "ForearmRigh" } },
+    { "Base_ac_Arms", new List<string> { "HandRight", "HandLeft", "ForearmLeft", "ForearmRight" } },
     { "Base_ac_Chest", new List<string> { "Torso", "ArmRight", "ArmLeft" } },
     { "Base_ac_Feet", new List<string> { "FootRight", "FootLeft" } },
     { "Base_ac_Head", new List<string> { "haB", "Hair", "HairLeft" } },
     { "Base_ac_Legs", new List<string> { "Pelvis", "ThighRight", "ThighLeft", "CalfLeft", "CalfRight" } },
-    { "Base_ad_Arms", new List<string> { "ArmRight", "ArmLeft", "ForearmLeft", "ForearmRigh" } },
+    { "Base_ad_Arms", new List<string> { "ArmRight", "ArmLeft", "ForearmLeft", "ForearmRight" } },
     { "Base_ad_Belt", new List<string> { "Belt", "FlapFront", "FlapLeft", "FlapRight" } },
     { "Base_ad_Chest", new List<string> { "Torso" } },
     { "Base_ad_Feet", new List<string> { "FootRight", "FootLeft", "CalfLeft", "CalfRight" } },
@@ -44,7 +44,7 @@ public static class EsperanzaGearParts {
     { "Bolt_aa_Chest", new List<string> { "Torso" } },
     { "Bolt_aa_Feet", new List<string> { "FootRight", "FootLeft" } },
     { "Bolt_aa_Legs", new List<string> { "Pelvis", "ThighRight", "ThighLeft", "CalfLeft", "CalfRight" } },
-    { "Bolt_ab_Arms", new List<string> { "ForearmLeft", "ForearmRigh" } },
+    { "Bolt_ab_Arms", new List<string> { "ForearmLeft", "ForearmRight" } },
     { "Bolt_ab_Belt", new List<string> { "Belt", "FlapLeft", "FlapRight" } },
     { "Bolt_ab_Chest", new List<string> { "Torso" } },
     { "Bolt_ab_Feet", new List<string> { "FootRight", "FootLeft", "CalfLeft", "CalfRight" } },
@@ -127,7 +127,7 @@ public static class EsperanzaAnimations {
     { "Walk", new AnimData { start = 1, end = 65, duration = 1000, loop = true } },
     { "Run", new AnimData { start = 1, end = 45, duration = 700, loop = true } },
     { "Sprint", new AnimData { start = 1, end = 49, duration = 500, loop = true } },
-    { "Dance", new AnimData { start = 1, end = 599, duration = 6000, loop = true } },
+    { "Dance", new AnimData { start = 1, end = 480, duration = 6000, loop = true } },
     { "Block", new AnimData { start = 1, end = 42, duration = 500 } },
     { "Dodge", new AnimData { start = 1, end = 58, duration = 250 } },
     { "Stance", new AnimData { start = 1, end = 59, duration = 1000,pingPong = true } },
@@ -152,9 +152,9 @@ public static class EsperanzaAnimations {
     { "BreatheToPunchRight", new AnimData { start = 101, end = 109, duration = 175, To = true } },
     { "BreatheToRun", new AnimData { start = 110, end = 121, duration = 175, To = true } },
     { "BreatheToSprint", new AnimData { start = 122, end = 133, duration = 175, To = true } },
-    { "BreatheToWalk", new AnimData { start = 134, end = 145, duration = 175, To = true } },
+    { "BreatheToWalk", new AnimData { start = 134, end = 144, duration = 175, To = true } },
 
-    { "DanceToBreathe", new AnimData { start = 146, end = 157, duration = 175, To = true } },
+    { "DanceToBreathe", new AnimData { start = 145, end = 157, duration = 175, To = true } },
     { "DanceToBlock", new AnimData { start = 158, end = 169, duration = 175, To = true } },
     { "DanceToDodge", new AnimData { start = 170, end = 181, duration = 175, To = true } },
     { "DanceToJump", new AnimData { start = 182, end = 193, duration = 175, To = true } },
@@ -171,12 +171,9 @@ public static class EsperanzaAnimations {
     { "JumpToJumpDouble", new AnimData { start = 290, end = 300, duration = 175, To = true } },
     { "JumpToJumpFalling", new AnimData { start = 302, end = 313, duration = 175, To = true } },
     { "JumpToJumpLanding", new AnimData { start = 314, end = 325, duration = 175, To = true } },
-
     { "JumpDoubleToJumpFalling", new AnimData { start = 326, end = 337, duration = 175, To = true } },
     { "JumpDoubleToJumpLanding", new AnimData { start = 338, end = 349, duration = 175, To = true } },
-
     { "JumpFallingToJumpLanding", new AnimData { start = 350, end = 361, duration = 175, To = true } },
-
     { "JumpLandingToStance", new AnimData { start = 362, end = 373, duration = 175, To = true } },
 
     { "KickLeftToKickRight", new AnimData { start = 374, end = 385, duration = 175, To = true } },
@@ -245,8 +242,192 @@ public static class EsperanzaAnimations {
   };
 }
 
-public static class Interupts {
-  public static Dictionary<string, Dictionary<string, string>> interupts { get; } = new Dictionary<string, Dictionary<string, string>> {
+
+
+public class BounceFrame {
+  public float x;
+  public float y;
+  public float offset;
+  public float duration;
+
+  public BounceFrame(float x, float y, float duration = 0.17f, float offset = 1 ) {
+    this.x = x;
+    this.y = y;
+    this.offset = offset;
+    this.duration = duration;
+  }
+}
+
+public static class BounceAdjustments {
+  public static Dictionary<string, List<BounceFrame>> Hair { get; } = new Dictionary<string, List<BounceFrame>> {
+    ["Breathe"] = new List<BounceFrame> { new(0, 0) },
+    ["BreatheToWalk"] = new List<BounceFrame> { new(.6f, 0) },
+    ["BreatheToRun"] = new List<BounceFrame> { new(.4f, -.05f) },
+    ["BreatheToSprint"] = new List<BounceFrame> { new(.81f, -1.33f) },
+    ["BreatheToBlock"] = new List<BounceFrame> { new(-.13f, -.67f) },
+    ["BreatheToDance"] = new List<BounceFrame> { new(.49f, .12f) },
+    ["BreatheToDodge"] = new List<BounceFrame> { new(.33f, -.61f) },
+    ["BreatheToJump"] = new List<BounceFrame> { new(.12f, -.61f) },
+    ["BreatheToKickLeft"] = new List<BounceFrame> { new(.67f, -.35f) },
+    ["BreatheToKickRight"] = new List<BounceFrame> { new(-.17f, -.45f) },
+    ["BreatheToPunchLeft"] = new List<BounceFrame> { new(.77f, -.27f) },
+    ["BreatheToPunchRight"] = new List<BounceFrame> { new(.92f, -.23f) },
+
+    ["Walk"] = new List<BounceFrame> { new(.4f, -.05f, .4f), new(.66f, -.05f, .6f) },
+    ["WalkToBreathe"] = new List<BounceFrame> { new(0, 0) },
+    ["WalkToRun"] = new List<BounceFrame> { new(.5f, -.03f) },
+    ["WalkToSprint"] = new List<BounceFrame> { new(.7f, -1.2f) },
+    ["WalkToPunchRight"] = new List<BounceFrame> { new(.91f, -.16f) },
+    ["WalkToPunchLeft"] = new List<BounceFrame> { new(.77f, -.33f) },
+    ["WalkToKickLeft"] = new List<BounceFrame> { new(.2f, -.4f) },
+    ["WalkToKickRight"] = new List<BounceFrame> { new(-.81f, -.33f) },
+    ["WalkToJump"] = new List<BounceFrame> { new(.11f, -.74f) },
+    ["WalkToDodge"] = new List<BounceFrame> { new(.33f, -.58f) },
+    ["WalkToBlock"] = new List<BounceFrame> { new(.04f, -.59f) },
+
+    ["Run"] = new List<BounceFrame> { new(.44f, -.04f, .17f), new(.46f, -.09f, .17f), new(.44f, -.01f, .17f), new(.46f, -.09f, .17f) },
+    ["RunToBreathe"] = new List<BounceFrame> { new(0, 0) },
+    ["RunToWalk"] = new List<BounceFrame> { new(.5f, -.03f) },
+    ["RunToSprint"] = new List<BounceFrame> { new(.7f, -1.2f) },
+    ["RunToPunchRight"] = new List<BounceFrame> { new(.83f, -.2f) },
+    ["RunToPunchLeft"] = new List<BounceFrame> { new(.84f, -.32f) },
+    ["RunToKickLeft"] = new List<BounceFrame> { new(.15f, -.36f) },
+    ["RunToKickRight"] = new List<BounceFrame> { new(.7f, -.27f) },
+    ["RunToJump"] = new List<BounceFrame> { new(.06f, -.62f) },
+    ["RunToDodge"] = new List<BounceFrame> { new(.3f, -.66f) },
+    ["RunToBlock"] = new List<BounceFrame> { new(-.18f, -.52f) },
+
+    ["Sprint"] = new List<BounceFrame> { new(.83f, -1.36f, .01f, 1), new(.85f, -1.6f, .05f, 1),
+        new(.74f, -1.69f, .09f, 1), new(.66f, -1.51f, .11f, 1), new(.77f, -1.62f, .06f, 1),
+        new(.66f, -1.36f, .07f, 1), new(.77f, -1.5f, .06f, 1), new(.83f, -1.36f, .03f, 1) },
+    ["SprintToBreathe"] = new List<BounceFrame> { new(0, 0) },
+    ["SprintToWalk"] = new List<BounceFrame> { new(.6f, -.06f) },
+    ["SprintToRun"] = new List<BounceFrame> { new(.4f, -.15f) },
+    ["SprintToPunchRight"] = new List<BounceFrame> { new(.85f, -.22f) },
+    ["SprintToPunchLeft"] = new List<BounceFrame> { new(.73f, -.34f) },
+    ["SprintToKickLeft"] = new List<BounceFrame> { new(.16f, -.37f) },
+    ["SprintToKickRight"] = new List<BounceFrame> { new(.74f, -.3f) },
+    ["SprintToJump"] = new List<BounceFrame> { new(.04f, -.59f) },
+    ["SprintToDodge"] = new List<BounceFrame> { new(.32f, -.57f) },
+    ["SprintToBlock"] = new List<BounceFrame> { new(.39f, -.98f) },
+
+    ["Dance"] = new List<BounceFrame> {
+        new(.26f, .25f, .03f, -1), new(.44f, -.04f, .1f, -1), new(.42f, -.14f, .1f, -1), // 25
+        new(.03f, -.09f, .01f, 1), new(-.24f, .35f, .11f, 1), new(-.47f, -.23f, .15f, 1), // 52
+        new(-.03f, -.24f, .01f, -1), new(.15f, .27f, .17f, -1), new(.29f, -.3f, .18f, -1), // 88
+        new(.03f, .29f, .14f, -1), new(-.11f, -.24f, .17f, -1), new(.16f, .16f, .19f, -1), // 138
+        new(.28f, -.04f, .13f, -1), new(.1f, -.12f, .19f, -1), new(.23f, 0, .09f, -1), // 179
+        new(.24f, -.15f, .15f, -1), new(.08f, -.17f, .16f, -1), new(.21f, -.15f, .07f, -1), // 220
+        new(.02f, -.21f, .01f, 1), new(-.05f, -.28f, .14f, 1), new(.2f, -.21f, .01f, -1), // 239
+        new(.02f, -.06f, .08f, -1), // 246
+        new(.07f, -.05f, .03f, -1), new(-.12f, -.33f, .11f, -1), new(.02f, -.1f, .13f, -1), //273
+        new(-.38f, -.05f, .01f, 1), new(-.15f, -.07f, .1f, 1), new(-.11f, -.21f, .04f, 1), // 288
+        new(-.24f, -.01f, .08f, 1), new(.01f, -.08f, .01f, -1), new(0, -.14f, .11f, -1), // 313
+        new(.12f, -.09f, .05f, -1), new(.19f, -.3f, .16f, -1), new(-.01f, -.03f, .16f, -1), // 350
+        new(-.14f, 0.01f, .06f, -1), new(-.16f, -.18f, .06f, -1), new(.03f, .12f, .19f, -1), // 381
+        new(.19f, -.08f, .09f, -1), new(-.04f, -.26f, .01f, 1), new(-.02f, -.22f, .11f, 1), // 405
+        new(-.09f, .05f, .1f, 1), new(.11f, .01f, .01f, -1), new(.14f, -.02f, .11f, -1), // 427
+        new(.28f, .12f, .11f, -1), new(-.02f, .14f, .01f, 1), new(-.04f, 0, .09f, 1), // 448
+        new(-.04f, 0, .06f, 1), new(.14f, .1f, .01f, -1), new(-.01f, .23f, .07f, -1), // 462
+        new(-.07f, .14f, .07f, -1), new(.09f, .37f, .08f, -1), new(.26f, .22f, .08f, -1), // 485
+        new(.06f, .42f, .14f, -1), new(.12f, .3f, .04f, -1), new(-.07f, .23f, .05f, -1), // 508
+        new(.08f, .28f, .07f, -1), new(.17f, .17f, .05f, -1), new(.09f, .26f, .1f, -1), // 530
+        new(-.02f, .14f, .1f, -1), new(.1f, .06f, .12f, -1), new(.23f, .01f, .07f, -1), // 
+        new(.12f, .11f, .09f, -1), new(0, -.02f, .07f, -1), new(.023f, -.13f, .12f, -1), //
+        new(.16f, .19f, .06f, -1) // 
+      },
+    ["DanceToBlock"] = new List<BounceFrame> { new(.167f, -.66f, .17f, -1) },
+    ["DanceToBreathe"] = new List<BounceFrame> { new(.1f, -.04f, .17f, -1) },
+    ["DanceToDodge"] = new List<BounceFrame> { new(.55f, -.43f, .17f, -1) },
+    ["DanceToJump"] = new List<BounceFrame> { new(.34f, -.57f, .17f, -1) },
+    ["DanceToKickRight"] = new List<BounceFrame> { new(.83f, .07f, .17f, -1) },
+    ["DanceToKickLeft"] = new List<BounceFrame> { new(.44f, -.34f, .17f, -1) },
+    ["DanceToPunchLeft"] = new List<BounceFrame> { new(1.0f, -.33f, .17f, -1) },
+    ["DanceToPunchRight"] = new List<BounceFrame> { new(1.07f, -.15f, .17f, -1) },
+    ["DanceToRun"] = new List<BounceFrame> { new(.63f, -.03f, .17f, -1) },
+    ["DanceToSprint"] = new List<BounceFrame> { new(.97f, -1.34f, .17f, -1) },
+    ["DanceToWalk"] = new List<BounceFrame> { new(.84f, -.01f, .17f, -1) },
+
+    ["Dodge"] = new List<BounceFrame> { new(.31f, -.56f, .01f, 1), new(.42f, -.74f, .24f, 1) },
+    ["DodgeToStance"] = new List<BounceFrame> { new(-.32f, -.41f) },
+
+    ["Block"] = new List<BounceFrame> { new(.16f, .19f, .02f, 1) },
+    ["BlockToStance"] = new List<BounceFrame> { new(-.18f, -.59f) },
+
+    ["Stance"] = new List<BounceFrame> { new(-.3f, -.43f) },
+    ["StanceToBlock"] = new List<BounceFrame> { new(-.08f, -.59f) },
+    ["StanceToWalk"] = new List<BounceFrame> { new(.69f, 0f) },
+    ["StanceToSprint"] = new List<BounceFrame> { new(.81f, -1.38f) },
+    ["StanceToRun"] = new List<BounceFrame> { new(-.46f, -.07f) },
+    ["StanceToPunchRight"] = new List<BounceFrame> { new(.87f, -.15f) },
+    ["StanceToPunchLeft"] = new List<BounceFrame> { new(.82f, -.38f) },
+    ["StanceToKickLeft"] = new List<BounceFrame> { new(.27f, -.26f) },
+    ["StanceToKickRight"] = new List<BounceFrame> { new(.73f, -.23f) },
+    ["StanceToJump"] = new List<BounceFrame> { new(.1f, -.55f) },
+    ["StanceToDodge"] = new List<BounceFrame> { new(.35f, -.59f) },
+    ["StanceToBreathe"] = new List<BounceFrame> { new(.03f, .03f) },
+
+    ["Jump"] = new List<BounceFrame> { new(.08f, -.72f, .01f, 1), new(.16f,-1.32f, .06f, 1),
+    new(.03f, -.53f, .06f, 1), new(.2f, -1.21f, .13f, 1), new(.46f, -1.6f, .17f, 1)  },
+    ["JumpDouble"] = new List<BounceFrame> { new(-.01f, -.54f, .01f, 1), new(.14f, -1.25f, .18f, 1),
+      new(.13f, -1.23f, .09f, 1), new(-.28f, -.75f, .02f, 1)  },
+    ["JumpFalling"] = new List<BounceFrame> { new(-.38f, -.62f, .01f, 1), new(-.32f, -.48f, .05f, 1),
+      new(-.32f, -.48f, .09f, 1),  },
+    ["JumpLanding"] = new List<BounceFrame> { new(-.22f, -.48f, .01f, 1), new(-.39f, -.7f, .2f, 1),
+    new(-.14f, -1.33f, .14f, 1), new(-.27f, -.69f,  .15f, 1), new(-.32f, -.58f, .02f, 1) },
+    ["JumpToJumpDouble"] = new List<BounceFrame> { new(.02f, -.58f) },
+    ["JumpToJumpFalling"] = new List<BounceFrame> { new(-.34f, -.6f) },
+    ["JumpToJumpLanding"] = new List<BounceFrame> { new(-.15f, -.45f) },
+    ["JumpDoubleToJumpFalling"] = new List<BounceFrame> { new(-.34f, -.61f) },
+    ["JumpDoubleToJumpLanding"] = new List<BounceFrame> { new(-.2f, -.49f) },
+    ["JumpFallingToJumpLanding"] = new List<BounceFrame> { new(-.17f, -.45f) },
+    ["JumpLandingToStance"] = new List<BounceFrame> { new(-.31f, -.45f) },
+
+    ["KickLeft"] = new List<BounceFrame> { new(.2f, -.44f, .01f, 1), new(.32f, -.64f, .06f, 1),
+      new(-.06f, -.47f, .07f, 1), new(-.66f, -.67f, .08f, 1), new(-.29f, -.39f, .04f, 1),
+      new(-.71f, -.14f, .04f, 1), new(-1.19f, -.47f, .05f, 1), new(-1.16f, -.21f, .03f, 1),
+       new(-1, -.11f, .13f,1) },
+    ["KickRight"] = new List<BounceFrame> { new(.42f, -.29f, .01f, 1), new(-.49f, -.35f, .13f, 1),
+     new(-.63f, -.71f, .1f, 1), new(.17f, -.3f, .06f, 1)},
+    ["PunchLeft"] = new List<BounceFrame> { new(.86f, -.31f, .01f, 1), new(1.15f, -.26f, .05f, 1),
+     new(.67f, -.41f, .09f, 1), new(.62f, -.4f, .02f, 1) },
+    ["PunchRight"] = new List<BounceFrame> { new(.95f, -.17f, .01f, -1), new(.97f, -.12f, .02f, 1),
+    new(.99f, -.14f, .02f, 1), new(.91f, -.21f, .04f, 1), new(1.1f, -.34f, .05f, 1),
+    new(1.08f, -.33f, .01f, 1)  },
+
+    ["KickLeftToKickRight"] = new List<BounceFrame> { new(.74f, -.26f) },
+    ["KickLeftToPunchLeft"] = new List<BounceFrame> { new(.78f, -.26f) },
+    ["KickLeftToPunchRight"] = new List<BounceFrame> { new(1f, -.14f) },
+    ["KickLeftToStance"] = new List<BounceFrame> { new(-.31f, -.5f) },
+    ["KickRightToKickLeft"] = new List<BounceFrame> { new(.28f, -.38f) },
+    ["KickRightToPunchLeft"] = new List<BounceFrame> { new(.82f, -.28f) },
+    ["KickRightToPunchRight"] = new List<BounceFrame> { new(.94f, -.23f) },
+    ["KickRightToStance"] = new List<BounceFrame> { new(-.31f, -.47f) },
+
+    ["PunchLeftToPunchRight"] = new List<BounceFrame> { new(.92f, -.2f) },
+    ["PunchLeftToKickRight"] = new List<BounceFrame> { new(.74f, -.21f) },
+    ["PunchLeftToKickLeft"] = new List<BounceFrame> { new(.42f, -.35f) },
+    ["PunchLeftToStance"] = new List<BounceFrame> { new(-.26f, -.45f) },
+    ["PunchRightToPunchLeft"] = new List<BounceFrame> { new(.81f, -.3f) },
+    ["PunchRightToKickLeft"] = new List<BounceFrame> { new(.18f, -.39f) },
+    ["PunchRightToKickRight"] = new List<BounceFrame> { new(.75f, -.28f) },
+    ["PunchRightToStance"] = new List<BounceFrame> { new(-.33f, -.42f) }
+  };
+  public static Dictionary<string, Dictionary<string, List<BounceFrame>>> adjustments { get; } = new Dictionary<string, Dictionary<string, List<BounceFrame>>> {
+    ["HairRight"] = Hair,
+    ["Hair"] = Hair,
+    ["HairBack"] = Hair,
+    ["HairLeft"] = Hair,
+    ["BeltFlap"] = Hair,
+    ["FlapFront"] = Hair,
+    ["FlapRight"] = Hair,
+    ["FlapLeft"] = Hair,
+    ["Cape"] = Hair
+  };
+}
+
+public static class Interrupts {
+  public static Dictionary<string, Dictionary<string, string>> interrupts { get; } = new Dictionary<string, Dictionary<string, string>> {
     ["Breathe"] = new Dictionary<string, string> {
       { "Block", "BreatheToBlock" }, { "Dance", "BreatheToDance" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "PunchRight", "BreatheToPunchRight" }, { "Walk", "BreatheToWalk" }, { "Run", "BreatheToRun" }, { "Sprint", "BreatheToSprint" }
     },
@@ -260,7 +441,7 @@ public static class Interupts {
       { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "Block", "SprintToBlock" }, { "Dodge", "SprintToDodge" }, { "Jump", "SprintToJump" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" },
     },
     ["BreatheToDance"] = new Dictionary<string, string> {
-      { "Block", "DanceToBlock" }, { "Dance", "DanceToDance" }, { "Dodge", "DanceToDodge" }, { "Jump", "DanceToJump" }, { "KickLeft", "DanceToKickLeft" }, { "KickRight", "DanceToKickRight" }, { "PunchLeft", "DanceToPunchLeft" }, { "PunchRight", "DanceToPunchRight" }, { "Walk", "DanceToWalk" }, { "Run", "DanceToRun" }, { "Sprint", "DanceToSprint" }
+      { "Block", "DanceToBlock" }, { "Dodge", "DanceToDodge" }, { "Jump", "DanceToJump" }, { "KickLeft", "DanceToKickLeft" }, { "KickRight", "DanceToKickRight" }, { "PunchLeft", "DanceToPunchLeft" }, { "PunchRight", "DanceToPunchRight" }, { "Walk", "DanceToWalk" }, { "Run", "DanceToRun" }, { "Sprint", "DanceToSprint" }
     },
     ["Walk"] = new Dictionary<string, string> {
       { "Breathe", "WalkToBreathe" }, { "Run", "WalkToRun" }, { "Sprint", "WalkToSprint" }, { "PunchRight", "WalkToPunchRight" }, { "PunchLeft", "WalkToPunchLeft" }, { "KickLeft", "WalkToKickLeft" }, { "KickRight", "WalkToKickRight" }, { "Jump", "WalkToJump" }, { "Dodge", "WalkToDodge" }, { "Block", "WalkToBlock" }
@@ -287,7 +468,7 @@ public static class Interupts {
       { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "Block", "SprintToBlock" }, { "Dodge", "SprintToDodge" }, { "Jump", "SprintToJump" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" },
     },
     ["Sprint"] = new Dictionary<string, string> {
-      { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "PunchRight", "" }, { "PunchLeft", "" }, { "KickLeft", "" }, { "KickRight", "" }, { "Jump", "" }, { "Dodge", "" }, { "Block", "" },
+      { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" }, { "Jump", "SprintToJump" }, { "Dodge", "SprintToDodge" }, { "Block", "SprintToBlock" },
     },
     ["SprintToBreathe"] = new Dictionary<string, string> {
       { "Run", "BreatheToRun" }, { "Walk", "BreatheToWalk" }, { "Sprint", "BreatheToSprint" }, { "Block", "BreatheToBlock" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "PunchRight", "BreatheToPunchRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" },
@@ -299,7 +480,7 @@ public static class Interupts {
       { "Breathe", "RunToBreathe" }, { "Walk", "RunToWalk" }, { "Sprint", "RunToSprint" }, { "Block", "RunToBlock" }, { "Dodge", "RunToDodge" }, { "Jump", "RunToJump" }, { "PunchRight", "RunToPunchRight" }, { "PunchLeft", "RunToPunchLeft" }, { "KickLeft", "RunToKickLeft" }, { "KickRight", "RunToKickRight" },
     },
     ["Dance"] = new Dictionary<string, string> {
-        { "Block", "" }, { "Dodge", "" }, { "Jump", "" }, { "KickRight", "" }, { "KickLeft", "" }, { "PunchLeft", "" }, { "PunchRight", "" }, { "Run", "" }, { "Sprint", "" }, { "Walk", "" },
+        { "Block", "DanceToBlock" }, { "Dodge", "DanceToDodge" }, { "Jump", "DanceToJump" }, { "KickRight", "DanceToKickRight" }, { "KickLeft", "DanceToKickLeft" }, { "PunchLeft", "DanceToPunchLeft" }, { "PunchRight", "DanceToPunchRight" }, { "Run", "DanceToRun" }, { "Sprint", "DanceToSprint" }, { "Walk", "DanceToWalk" },
     },
     ["DanceToBreathe"] = new Dictionary<string, string> {
       { "Block", "BreatheToBlock" }, { "Dance", "BreatheToDance" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "PunchRight", "BreatheToPunchRight" }, { "Walk", "BreatheToWalk" }, { "Run", "BreatheToRun" }, { "Sprint", "BreatheToSprint" }
@@ -340,93 +521,6 @@ public static class Interupts {
   };
 }
 
-public static class BounceAdjustments {
-  public static Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, float>>>> adjustments { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, Dictionary<string, float>>>> {
-    ["Base_no_Head"] = new Dictionary<string, Dictionary<string, Dictionary<string, float>>> {
-      ["Hair"] = new Dictionary<string, Dictionary<string, float>> {
-        ["Breathe"] = new Dictionary<string, float> { { "x", 0 }, { "y", 0 }, { "offset", 0.1f } },
-        ["BreatheToWalk"] = new Dictionary<string, float> { { "x", -3 }, { "y", -22 }, { "offset", -25 } },
-        ["BreatheToRun"] = new Dictionary<string, float> { { "x", .3f }, { "y", 0 }, { "offset", -.5f } },
-        ["BreatheToSprint"] = new Dictionary<string, float> { { "x", 11 }, { "y", -40 }, { "offset", -35 } },
-
-        ["Walk"] = new Dictionary<string, float> { { "x", 0 }, { "y", -25 }, { "offset", -40 } },
-        ["WalkToBreathe"] = new Dictionary<string, float> { { "x", -7 }, { "y", -23 }, { "offset", -20 } },
-        ["WalkToRun"] = new Dictionary<string, float> { { "y", -23 }, { "x", 2 }, { "offset", -40 } },
-        ["WalkToSprint"] = new Dictionary<string, float> { { "y", -55 }, { "x", 5 }, { "offset", -45 } },
-
-        ["Run"] = new Dictionary<string, float> { { "x", .45f }, { "y", 0 }, { "offset", -1 } },
-        ["RunToBreathe"] = new Dictionary<string, float> { { "y", 0 }, { "x", .3f }, { "offset", -.5f } },
-        ["RunToWalk"] = new Dictionary<string, float> { { "y", -23 }, { "offset", -35 } },
-        ["RunToSprint"] = new Dictionary<string, float> { { "y", -50 }, { "x", 5 }, { "offset", -45 } },
-
-        ["Sprint"] = new Dictionary<string, float> { { "y", -75 }, { "x", 10 }, { "offset", -57 } },
-        ["SprintToBreathe"] = new Dictionary<string, float> { { "x", -3 }, { "y", -45 }, { "offset", -35 } },
-        ["SprintToWalk"] = new Dictionary<string, float> { { "x", 5 }, { "y", -48 }, { "offset", -45 } },
-        ["SprintToRun"] = new Dictionary<string, float> { { "x", 3 }, { "y", -48 }, { "offset", -40 } },
-      },
-      ["HairBack"] = new Dictionary<string, Dictionary<string, float>> {
-        ["Breathe"] = new Dictionary<string, float> { { "x", 0 }, { "y", 0 }, { "offset", 0.1f } },
-        ["BreatheToWalk"] = new Dictionary<string, float> { { "x", -3 }, { "y", -22 }, { "offset", -25 } },
-        ["BreatheToRun"] = new Dictionary<string, float> { { "x", .3f }, { "y", 0 }, { "offset", -.5f } },
-        ["BreatheToSprint"] = new Dictionary<string, float> { { "x", 11 }, { "y", -40 }, { "offset", -35 } },
-
-        ["Walk"] = new Dictionary<string, float> { { "x", 0 }, { "y", -25 }, { "offset", -40 } },
-        ["WalkToBreathe"] = new Dictionary<string, float> { { "x", -7 }, { "y", -23 }, { "offset", -20 } },
-        ["WalkToRun"] = new Dictionary<string, float> { { "y", -23 }, { "x", 2 }, { "offset", -40 } },
-        ["WalkToSprint"] = new Dictionary<string, float> { { "y", -55 }, { "x", 5 }, { "offset", -45 } },
-
-        ["Run"] = new Dictionary<string, float> { { "x", .45f }, { "y", 0 }, { "offset", -1 } },
-        ["RunToBreathe"] = new Dictionary<string, float> { { "y", 0 }, { "x", .3f }, { "offset", -.5f } },
-        ["RunToWalk"] = new Dictionary<string, float> { { "y", -23 }, { "offset", -35 } },
-        ["RunToSprint"] = new Dictionary<string, float> { { "y", -50 }, { "x", 5 }, { "offset", -45 } },
-
-        ["Sprint"] = new Dictionary<string, float> { { "y", -75 }, { "x", 10 }, { "offset", -60 } },
-        ["SprintToBreathe"] = new Dictionary<string, float> { { "x", -3 }, { "y", -45 }, { "offset", -35 } },
-        ["SprintToWalk"] = new Dictionary<string, float> { { "x", 5 }, { "y", -48 }, { "offset", -45 } },
-        ["SprintToRun"] = new Dictionary<string, float> { { "x", 3 }, { "y", -48 }, { "offset", -40 } },
-      }
-    },
-    ["Bolt_no_Head"] = new Dictionary<string, Dictionary<string, Dictionary<string, float>>> {
-      ["Hair"] = new Dictionary<string, Dictionary<string, float>> {
-        ["Breathe"] = new Dictionary<string, float> { { "x", -16 }, { "y", -25 }, { "offset", -1 } },
-        ["BreatheToWalk"] = new Dictionary<string, float> { { "x", -3 }, { "y", -22 }, { "offset", -25 } },
-        ["BreatheToRun"] = new Dictionary<string, float> { { "x", -3 }, { "y", -22 }, { "offset", -12 } },
-        ["BreatheToSprint"] = new Dictionary<string, float> { { "x", 11 }, { "y", -40 }, { "offset", -35 } },
-        ["Walk"] = new Dictionary<string, float> { { "x", 0 }, { "y", -25 }, { "offset", -40 } },
-        ["WalkToBreathe"] = new Dictionary<string, float> { { "x", -7 }, { "y", -23 }, { "offset", -20 } },
-        ["WalkToRun"] = new Dictionary<string, float> { { "y", -23 }, { "x", 2 }, { "offset", -40 } },
-        ["WalkToSprint"] = new Dictionary<string, float> { { "y", -55 }, { "x", 5 }, { "offset", -45 } },
-        ["Run"] = new Dictionary<string, float> { { "x", -3 }, { "y", -25 }, { "offset", -30 } },
-        ["RunToBreathe"] = new Dictionary<string, float> { { "y", -22 }, { "x", -3 }, { "offset", -20 } },
-        ["RunToWalk"] = new Dictionary<string, float> { { "y", -23 }, { "offset", -35 } },
-        ["RunToSprint"] = new Dictionary<string, float> { { "y", -50 }, { "x", 5 }, { "offset", -45 } },
-        ["Sprint"] = new Dictionary<string, float> { { "y", -75 }, { "x", 10 }, { "offset", -57 } },
-        ["SprintToBreathe"] = new Dictionary<string, float> { { "x", -3 }, { "y", -45 }, { "offset", -35 } },
-        ["SprintToWalk"] = new Dictionary<string, float> { { "x", 5 }, { "y", -48 }, { "offset", -45 } },
-        ["SprintToRun"] = new Dictionary<string, float> { { "x", 3 }, { "y", -48 }, { "offset", -40 } },
-      },
-      ["HairLeft"] = new Dictionary<string, Dictionary<string, float>> {
-        ["Breathe"] = new Dictionary<string, float> { { "x", -16 }, { "y", -25 }, { "offset", -1 } },
-        ["BreatheToWalk"] = new Dictionary<string, float> { { "x", -3 }, { "y", -22 }, { "offset", -25 } },
-        ["BreatheToRun"] = new Dictionary<string, float> { { "x", -3 }, { "y", -22 }, { "offset", -12 } },
-        ["BreatheToSprint"] = new Dictionary<string, float> { { "x", 11 }, { "y", -40 }, { "offset", -35 } },
-        ["Walk"] = new Dictionary<string, float> { { "x", 0 }, { "y", -25 }, { "offset", -40 } },
-        ["WalkToBreathe"] = new Dictionary<string, float> { { "x", -7 }, { "y", -23 }, { "offset", -20 } },
-        ["WalkToRun"] = new Dictionary<string, float> { { "y", -23 }, { "x", 2 }, { "offset", -40 } },
-        ["WalkToSprint"] = new Dictionary<string, float> { { "y", -55 }, { "x", 5 }, { "offset", -45 } },
-        ["Run"] = new Dictionary<string, float> { { "x", -3 }, { "y", -25 }, { "offset", -30 } },
-        ["RunToBreathe"] = new Dictionary<string, float> { { "y", -22 }, { "x", -3 }, { "offset", -20 } },
-        ["RunToWalk"] = new Dictionary<string, float> { { "y", -23 }, { "offset", -35 } },
-        ["RunToSprint"] = new Dictionary<string, float> { { "y", -50 }, { "x", 5 }, { "offset", -45 } },
-        ["Sprint"] = new Dictionary<string, float> { { "y", -75 }, { "x", 10 }, { "offset", -57 } },
-        ["SprintToBreathe"] = new Dictionary<string, float> { { "x", -3 }, { "y", -45 }, { "offset", -35 } },
-        ["SprintToWalk"] = new Dictionary<string, float> { { "x", 5 }, { "y", -48 }, { "offset", -45 } },
-        ["SprintToRun"] = new Dictionary<string, float> { { "x", 3 }, { "y", -48 }, { "offset", -40 } },
-      }
-    }
-  };
-}
-
 public static class Abbreviations {
   public static Dictionary<string, string> all { get; } = new Dictionary<string, string> {
     { "STR", "Strength" }, { "DEX", "Dexterity" }, { "END", "Endurance" }, { "INT", "Intelligence" }, { "LCK", "Luck" }, { "AMP", "Amperage" },
@@ -436,12 +530,12 @@ public static class Abbreviations {
     { "NRGRG", "Energy Regeneration" }, { "DCHC", "Direct Chance" }, { "DDMG", "Direct Damage" }, { "CCHC", "Critical Chance" },
     { "CDMG", "Critical Damage" }, { "LCHC", "Lucky Chance" }, { "LDMG", "Lucky Damage" }, { "HEAL", "Healing" }, { "BNS", "Bonus" },
     { "CDST", "Closing Distance" }, { "LDSC", "Lightning Discharge" }, { "FDMG", "Flame Damage" }, { "AREA", "Area" }, { "DUR", "Duration" },
-    { "AFT", "After Effect" }, { "EVD", "Evade" }, { "CLN", "Cleanse" }, { "FEAR", "Fear" }, { "SPEC", "Specral" }, { "PEN", "Penetration" },
+    { "AFT", "After Effect" }, { "EVD", "Evade" }, { "CLN", "Cleanse" }, { "FEAR", "Fear" }, { "SPEC", "Spectral" }, { "PEN", "Penetration" },
     { "MVSP", "Movement Speed" }, { "RK", "Right Kick" }, { "LK", "Left Kick" }, { "RP", "Right Punch" }, { "LP", "Left Punch" },
     { "BK", "Block" }, { "DO", "Dodge" }, { "JP", "Jump" }, { "SP", "Super Punch" }, { "SK", "Super Kick" }, { "SH", "Shock" },
     { "CL", "Chain Lighting" }, { "ST", "Static" }, { "LB", "Lightning Bolt" }, { "ID", "Instant Dodge" }, { "DD", "Double Dodge" },
     { "DJ", "Double Jump" }, { "TB", "Thunder Bolt" }, { "OR", "Orbit" }, { "FT", "Flamethrower" }, { "BW", "Burning Wall" }, { "BZ", "Blaze" },
-    { "PL", "Pyre Light" }, { "FS", "Flame Shield" }, { "BD", "Burning Dodge" }, { "FW", "Flame Wings" }, { "MT", "Meteor" }, { "FI", "Fizzure" },
+    { "PL", "Pyre Light" }, { "FS", "Flame Shield" }, { "BD", "Burning Dodge" }, { "FW", "Flame Wings" }, { "MT", "Meteor" }, { "FI", "Fissure" },
     { "FC", "Frost Cloud" }, { "IB", "Ice Blast" }, { "IT", "Iceclitite" }, { "IM", "Iceclimite" }, { "IS", "Ice Shield" }, { "SL", "Slide" },
     { "FF", "Frost Float" }, { "AV", "Avalanche" }, { "BL", "Blizzard" }, { "WB", "Water Blast" }, { "CH", "Crushing Hydro" },
     { "WS", "Water Sphere" }, { "PD", "Pressure Deluge" }, { "BB", "Bubble" }, { "VD", "Vapor Dash" }, { "DV", "Diving Vortex" },
@@ -511,7 +605,7 @@ public static class GearNames {
     },
     ["END"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Tenacious", "Resolute", "Tolerant", "Continuing", },
-      ["suffix"] = new List<string> { "Fortitude", "Vitality", "Mettle", "Withstanding", "Forebearance", "Endurance", },
+      ["suffix"] = new List<string> { "Fortitude", "Vitality", "Mettle", "Withstanding", "Forbearance", "Endurance", },
     },
     ["INT"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Brilliant", "Clever", "Alert", "Bright", "Savvy" },
@@ -631,7 +725,7 @@ public static class GearNames {
     },
     ["CDST"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Zipping", },
-      ["suffix"] = new List<string> { "Snaping", },
+      ["suffix"] = new List<string> { "Snapping", },
     },
     ["LDSC"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Static", },
@@ -657,7 +751,7 @@ public static class GearNames {
       ["prefix"] = new List<string> { "Evasive", },
       ["suffix"] = new List<string> { "Evasion", },
     },
-    ["CLNS"] = new Dictionary<string, List<string>> {
+    ["CLN"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Cleansing", },
       ["suffix"] = new List<string> { "Cleaning", },
     },
@@ -768,11 +862,16 @@ public static class EsperanzaForms {
     }
     return v;
   }
+  public static void UnlockForm(string v) {
+    if (Unlocked.ContainsKey(v)) {
+      Unlocked[v] = 1;
+    }
+  }
 }
 
 public static class Inventory {
   public static List<GearItem> Gear { set; get; }
-  public static List<ConsumeableItem> Consumables { set; get; }
+  public static List<ConsumableItem> Consumables { set; get; }
   public static List<QuestItem> Quest { set; get; }
   public static List<GemItem> Gems { set; get; }
 
@@ -783,51 +882,59 @@ public static class EquippedItems {
     { "Chest", new GearItem { type = "Normal", name = "Regular Top", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Regular Bottoms", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },
     { "Feet", new GearItem { type = "Normal", name = "Regular Boots", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },
-    { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null }, { "Head", null }, { "Ring1", null }, { "Ring2", null },
-    { "Ring3", null }, { "Ring4", null }, { "Ring5", null }, { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
+    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
+    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
+    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
   public static Dictionary<string, GearItem> Aqua { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Wetsuit Top", gearId = "Aqua_aa", gearColor = "Lightblue", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Wetsuit Bottoms", gearId = "Aqua_aa", gearColor = "Lightblue", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Feet", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null }, { "Ring1", null },
-    { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null }, { "Ring6", null }, { "Ring7", null }, { "Ring8", null },
-    { "Ring9", null }, { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
+    { "Chest", new GearItem { type = "Normal", name = "Wetsuit Top", gearId = "Aqua_aa", gearColor = "LightBlue", boosts = new List<BoostEntry>() } },
+    { "Legs", new GearItem { type = "Normal", name = "Wetsuit Bottoms", gearId = "Aqua_aa", gearColor = "LightBlue", boosts = new List<BoostEntry>() } },
+    { "Head", null }, { "Feet", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
+    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
+    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
+    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
   public static Dictionary<string, GearItem> Bolt { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Anti-Static Top", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Anti-Static Pants", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
     { "Feet", new GearItem { type = "Normal", name = "Anti-static Boots", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null }, { "Ring1", null }, { "Ring2", null },
-    { "Ring3", null }, { "Ring4", null }, { "Ring5", null }, { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
+    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
+    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
+    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
   public static Dictionary<string, GearItem> Cold { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Warm Top", gearId = "Cold_aa", gearColor = "Darkblue", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Warm Bottoms", gearId = "Cold_aa", gearColor = "Darkblue", boosts  = new List<BoostEntry>() } },
-    { "Feet", new GearItem { type = "Normal", name = "Warm Footies", gearId = "Cold_aa", gearColor = "Darkblue", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null }, { "Ring1", null }, { "Ring2", null },
-    { "Ring3", null }, { "Ring4", null }, { "Ring5", null }, { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
+    { "Chest", new GearItem { type = "Normal", name = "Warm Top", gearId = "Cold_aa", gearColor = "DarkBlue", boosts = new List<BoostEntry>() } },
+    { "Legs", new GearItem { type = "Normal", name = "Warm Bottoms", gearId = "Cold_aa", gearColor = "DarkBlue", boosts  = new List<BoostEntry>() } },
+    { "Feet", new GearItem { type = "Normal", name = "Warm Footies", gearId = "Cold_aa", gearColor = "DarkBlue", boosts = new List<BoostEntry>() } },
+    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
+    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
+    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
   public static Dictionary<string, GearItem> Fire { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Sheer Top", gearId = "Fire_aa", gearColor = "Yellow", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Skimmies", gearId = "Fire_aa", gearColor = "Yellow", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Feet", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null }, { "Ring1", null },
-    { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null }, { "Ring6", null }, { "Ring7", null }, { "Ring8", null },
-    { "Ring9", null }, { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
+    { "Head", null }, { "Feet", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
+    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
+    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
+    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
   public static Dictionary<string, GearItem> Dark { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Void Shirt", gearId = "Dark_aa", gearColor = "Darkpurple", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Void Pants", gearId = "Dark_aa", gearColor = "Darkpurple", boosts = new List<BoostEntry>() } },
-    { "Feet", new GearItem { type = "Normal", name = "Void Footies", gearId = "Dark_aa", gearColor = "Darkpurple", boosts = new List<BoostEntry>() } },
-    { "Arms", new GearItem { type = "Normal", name = "Void Gloves", gearId = "Dark_aa", gearColor = "Darkpurple", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Belt", null }, { "Zemi", null }, { "Ring1", null }, { "Ring2", null }, { "Ring3", null },
-    { "Ring4", null }, { "Ring5", null }, { "Ring6", null }, { "Ring7", null }, { "Ring8", null },
-    { "Ring9", null }, { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
+    { "Chest", new GearItem { type = "Normal", name = "Void Shirt", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
+    { "Legs", new GearItem { type = "Normal", name = "Void Pants", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
+    { "Feet", new GearItem { type = "Normal", name = "Void Footies", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
+    { "Arms", new GearItem { type = "Normal", name = "Void Gloves", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
+    { "Head", null }, { "Shoulders", null }, { "Belt", null }, { "Zemi", null },
+    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
+    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
+    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
   public static Dictionary<string, Dictionary<string, GearItem>> AllGearForms { get; } = new Dictionary<string, Dictionary<string, GearItem>> {
     { "Base", Base }, { "Aqua", Aqua }, { "Bolt", Bolt }, { "Cold", Cold }, { "Fire", Fire }, { "Dark", Dark }
   };
 
 }
+
+
