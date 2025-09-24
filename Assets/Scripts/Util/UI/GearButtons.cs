@@ -33,6 +33,8 @@ public class GearButtons : ButtonGroup {
       var shaderAnimator = button.GetComponent<AllIn1AnimatorInspector>();
       var newColor = ShaderColors.myColors[slot.Value.gearColor];
       shaderAnimator.SetKeyword("GLOW_ON", true);
+      shaderAnimator.ResetActive();
+      shaderAnimator.Reset();
       shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f);
       shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f);
       shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f);

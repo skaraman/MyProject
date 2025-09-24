@@ -107,9 +107,9 @@ public class FontText : MonoBehaviour {
     actualHeight = 0;
     for (int i = 0; i < lineHeights.Count; i++) actualHeight += lineHeights[i];
     DoAlign();
-    if (gameObject.GetComponent<ComponentPropagator>() != null) {
-      gameObject.GetComponent<ComponentPropagator>().ForcePropagation();
-    }
+    // if (gameObject.GetComponent<ComponentPropagator>() != null) {
+    //   gameObject.GetComponent<ComponentPropagator>().ForcePropagation();
+    // }
   }
 
   GameObject GetCharFromPool() {

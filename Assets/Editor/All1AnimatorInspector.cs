@@ -124,6 +124,18 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     activeVectorAnimations.Clear();
   }
 
+  public void Reset() {
+    floatAnimations.Clear();
+    colorAnimations.Clear();
+    vectorAnimations.Clear();
+    keywordToggles.Clear();
+    textureAssignments.Clear();
+    floatAnimDict.Clear();
+    colorAnimDict.Clear();
+    vectorAnimDict.Clear();
+    keywordDict.Clear();
+  }
+
   void CacheAllHashes() {
     foreach (var a in floatAnimations) a.CacheHash();
     foreach (var a in colorAnimations) a.CacheHash();

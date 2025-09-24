@@ -49,7 +49,11 @@ public class CharacterState : MonoBehaviour {
 
   public void GatherAllStatValues() {
     level = 0;
-    AllStatValues.allStats.Clear();
+    var keys = new List<string>(AllStatValues.allStats.Keys);
+    for (int i = 0; i < keys.Count; i++) {
+      var key = keys[i];
+      AllStatValues.allStats[key] = 0f;
+    }
     foreach (var form in FormStatIncreases.increases) {
       foreach (var majorStat in form.Value) {
         foreach (var minorStat in majorStat.Value) {

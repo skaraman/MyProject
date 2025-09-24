@@ -116,6 +116,8 @@ public class GearController : MonoBehaviour {
             if (spriteWithNormals != null) spriteWithNormals.labelPrefix = equip.Value.gearId;
             else Debug.LogWarning($"GameObject {go.name} does not have a SpriteWithNormals component attached.");
             if (shaderAnimator != null) {
+              shaderAnimator.ResetActive();
+              shaderAnimator.Reset();
               var newColor = ShaderColors.myColors[equip.Value.gearColor];
               shaderAnimator.SetKeyword("GLOW_ON", true);
               shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f);
@@ -137,6 +139,8 @@ public class GearController : MonoBehaviour {
             var shaderAnimator = child.gameObject.GetComponent<AllIn1AnimatorInspector>();
             if (shaderAnimator != null && equip.Value != null || gearId == activeForm + "_no_Head") {
               var gearColor = "";
+              shaderAnimator.ResetActive();
+              shaderAnimator.Reset();
               if (gearId == activeForm + "_no_Head") {
                 gearColor = ShaderColors.pairs[activeForm]["primary"]["color"];
                 HairSkin.GetComponent<SpriteRenderer>().color = ShaderColors.myColors[gearColor];

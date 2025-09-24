@@ -9,7 +9,7 @@ public class UIRefresher : MonoBehaviour {
 
   void Update() {
     // Ensure all renderers on this GameObject and its children are not culled
-    var renderers = GetComponentsInChildren<Renderer>();
+    var renderers = GetComponents<Renderer>();
     foreach (var r in renderers) {
       r.forceRenderingOff = false;
       // Optionally, ensure the renderer's layer is visible to the camera
