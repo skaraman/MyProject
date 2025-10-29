@@ -14,6 +14,7 @@ public class GearController : MonoBehaviour {
   public GameObject[] HairObjects;
   public GameObject[] OtherBounceGearObjects;
   public GameObject[] SkinObjects;
+  public GameObject[] HBoxObjects;
   private GameObject[] combinedBounces;
   public GameObject HairSkin;
   public Dictionary<string, Dictionary<string, GearItem>> lastGear = new Dictionary<string, Dictionary<string, GearItem>>();
@@ -28,11 +29,17 @@ public class GearController : MonoBehaviour {
   public bool needsFlip = false;
   private Vector3 scaleVector = new Vector3(1, 1, 1);
   private SaveData gameData = new();
-  
+
   private Dictionary<GameObject, List<int>> bounceTweens = new Dictionary<GameObject, List<int>>();
+  private Dictionary<GameObject, Coroutine> bounceCoroutines = new Dictionary<GameObject, Coroutine>();
+
+  void Awake() {
+    LeanTween.init(4000);
+  }
 
   void Start() {
     combinedBounces = HairObjects.Concat(OtherBounceGearObjects).ToArray();
+    SetBounces();
   }
 
   public void LoadGear() {
@@ -46,16 +53,18 @@ public class GearController : MonoBehaviour {
   }
 
   private void CancelAllBounceTweens() {
+    // Cancel all LeanTween tweens on each bounce parent and stop stored coroutines
     foreach (var kvp in bounceTweens) {
-      foreach (int tweenId in kvp.Value) {
-        LeanTween.cancel(tweenId);
+      var go = kvp.Key;
+      if (go != null) {
+        LeanTween.cancel(go); // cancels all tweens for that GameObject and frees pool slots
       }
-      if (kvp.Key != null) {
-        StopCoroutine(PlayBounceSequence(kvp.Key, null));
-        StopAllCoroutines(); 
+      if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
+        StopCoroutine(bounceCoroutines[go]);
       }
     }
     bounceTweens.Clear();
+    bounceCoroutines.Clear();
   }
 
   public void GetSavedGearState() {
@@ -258,6 +267,7 @@ public class GearController : MonoBehaviour {
         currentFrame = anim.start - 1;
         pingPong = false;
         _animationTimer = 0f;
+        SetBounces();
       }
     }
     if (needsFlip) {
@@ -286,33 +296,46 @@ public class GearController : MonoBehaviour {
   public void SetBounces() {
     CancelAllBounceTweens();
     foreach (KeyValuePair<string, Dictionary<string, List<BounceFrame>>> partPair in BounceAdjustments.adjustments) {
-      string partKey = partPair.Key; // e.g., "Hair", "HairBack", "HairLeft"
-      var animationDict = partPair.Value; // Dictionary of animations for this part
+      string partKey = partPair.Key;
+      var animationDict = partPair.Value;
       if (!animationDict.ContainsKey(currentAnimation)) continue;
       var frameSequence = animationDict[currentAnimation];
       foreach (GameObject bounceParent in combinedBounces) {
         if (!isPlaying) break;
         if (bounceParent.name.Equals(partKey)) {
-          StartCoroutine(PlayBounceSequence(bounceParent, frameSequence));
-          break; // Found the matching bounce parent, no need to continue this inner loop
+          // cancel any existing tweens on this parent before starting new sequence
+          LeanTween.cancel(bounceParent);
+          if (bounceCoroutines.ContainsKey(bounceParent) && bounceCoroutines[bounceParent] != null) {
+            StopCoroutine(bounceCoroutines[bounceParent]);
+          }
+          var coro = StartCoroutine(PlayBounceSequence(bounceParent, frameSequence));
+          bounceCoroutines[bounceParent] = coro;
+          break;
         }
-        
       }
     }
+    SetHBoxes();
   }
 
   private IEnumerator PlayBounceSequence(GameObject bounceParent, List<BounceFrame> sequence) {
     if (!bounceTweens.ContainsKey(bounceParent)) {
       bounceTweens[bounceParent] = new List<int>();
     }
+    var fSlowDown = slowDown ? 10f : 1f;
     foreach (BounceFrame frame in sequence) {
       if (!isPlaying) break;
-      var fSlowDown = slowDown ? 10f : 1f;
       Vector3 targetPos = new Vector3(frame.x, frame.y, bounceParent.transform.localPosition.z);
-      int tweenId = LeanTween.moveLocal(bounceParent, targetPos, frame.duration * fSlowDown)
-        .setEase(LeanTweenType.linear).id;
-      int tweenId2 = LeanTween.scaleX(bounceParent, frame.offset, frame.duration * fSlowDown)
-        .setEase(LeanTweenType.linear).id;
+      // start move tween and remove id on complete
+      var moveDescr = LeanTween.moveLocal(bounceParent, targetPos, frame.duration * fSlowDown).setEase(LeanTweenType.linear);
+      int tweenId = moveDescr.id;
+      moveDescr.setOnComplete(() => {
+        if (bounceTweens.ContainsKey(bounceParent)) bounceTweens[bounceParent].Remove(tweenId);
+      });
+      var scaleDescr = LeanTween.scaleX(bounceParent, frame.offset, frame.duration * fSlowDown).setEase(LeanTweenType.linear);
+      int tweenId2 = scaleDescr.id;
+      scaleDescr.setOnComplete(() => {
+        if (bounceTweens.ContainsKey(bounceParent)) bounceTweens[bounceParent].Remove(tweenId2);
+      });
       bounceTweens[bounceParent].Add(tweenId);
       bounceTweens[bounceParent].Add(tweenId2);
       yield return new WaitForSeconds(frame.duration * fSlowDown);
@@ -320,9 +343,68 @@ public class GearController : MonoBehaviour {
     if (bounceTweens.ContainsKey(bounceParent)) {
       bounceTweens[bounceParent].Clear();
     }
+    if (bounceCoroutines.ContainsKey(bounceParent)) bounceCoroutines.Remove(bounceParent);
     if (slowDown) {
-      Debug.Log("Toggling pause after bounce sequence");
+      //Debug.Log("Toggling pause after bounce sequence");
       TogglePause("true");
+    }
+  }
+
+  public void SetHBoxes() {
+    foreach (var kvp in EsperHBoxes.all) {
+      string partKey = kvp.Key;
+      var animDict = kvp.Value;
+      if (!animDict.ContainsKey(currentAnimation)) continue;
+      var hboxList = animDict[currentAnimation];
+      foreach (GameObject go in HBoxObjects) {
+        if (go == null || !go.name.Equals(partKey)) continue;
+        var poly = go.GetComponent<PolygonCollider2D>();
+        if (poly == null) continue;
+        // Support either List<Vector2> (single path) or List<List<Vector2>> (sequence of paths)
+        if (hboxList is List<HBox> multiSeq) {
+          StartCoroutine(AnimateHBox(poly, multiSeq));
+        }
+        else {
+          // If your anim data type differs, ensure it produces List<List<Vector2>> or List<Vector2>.
+          Debug.LogWarning($"HBox sequence for {partKey} has unexpected type: {hboxList?.GetType()}");
+        }
+      }
+    }
+  }
+
+  // Coroutine to animate PolygonCollider2D paths (each target is a List<Vector2>)
+  private IEnumerator AnimateHBox(PolygonCollider2D collider, List<HBox> sequence) {
+    var fSlowDown = slowDown ? 10f : 1f;
+    foreach (var targetPath in sequence) {
+      // ensure collider has at least one path
+      if (collider.pathCount == 0) collider.pathCount = 1;
+      Vector2[] startPoints = collider.GetPath(0);
+      Vector2[] endPoints = targetPath.points.ToArray();
+      // If no end points provided, skip
+      if (endPoints.Length == 0) continue;
+      int startLen = startPoints?.Length ?? 0;
+      int endLen = endPoints.Length;
+      int len = Math.Max(1, Math.Max(startLen, endLen));
+      // Normalize start and end arrays to same length by repeating indices when necessary
+      Vector2[] s = new Vector2[len];
+      Vector2[] e = new Vector2[len];
+      for (int i = 0; i < len; i++) {
+        s[i] = (startLen > 0) ? startPoints[i % startLen] : endPoints[i % endLen];
+        e[i] = endPoints[i % endLen];
+      }
+      float duration = (targetPath.d > 0 ? targetPath.d : 0.2f) * fSlowDown; // default duration per frame (no per-target duration provided)
+      float elapsed = 0f;
+      while (elapsed < duration) {
+        float t = duration <= 0f ? 1f : (elapsed / duration);
+        Vector2[] lerped = new Vector2[len];
+        for (int i = 0; i < len; i++) {
+          lerped[i] = Vector2.Lerp(s[i], e[i], t);
+        }
+        collider.SetPath(0, lerped);
+        elapsed += Time.deltaTime;
+        yield return null;
+      }
+      collider.SetPath(0, e);
     }
   }
 }

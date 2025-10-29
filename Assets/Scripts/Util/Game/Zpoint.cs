@@ -1,23 +1,17 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class Zpoint : MonoBehaviour
 {
-  private SpriteRenderer spriteR;
-  
-  void Start() {
-    spriteR = GetComponent<SpriteRenderer>();
-  }
+  public SortingGroup sortingGroup;
 
   void Update() {
-    if (spriteR != null) {
-      Vector3 pos = spriteR.transform.position;
+    if (sortingGroup != null) {
+      Vector3 pos = transform.position;
       Vector3 screenPoint = Camera.main.WorldToScreenPoint(pos);
-      Debug.Log($"Screen Point: {screenPoint}, ID: {gameObject.transform.name}");
-
+      //Debug.Log($"Screen Point: {screenPoint}, ID: {gameObject.transform.name}");
       // Adjust to control the effect
-
-
-      spriteR.transform.position = pos;
+      sortingGroup.sortingOrder = -(int)screenPoint.y;
     }
   }
 
