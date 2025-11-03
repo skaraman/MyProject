@@ -33,13 +33,14 @@ public class GearController : MonoBehaviour {
   private Dictionary<GameObject, List<int>> bounceTweens = new Dictionary<GameObject, List<int>>();
   private Dictionary<GameObject, Coroutine> bounceCoroutines = new Dictionary<GameObject, Coroutine>();
 
-  void Awake() {
-    LeanTween.init(4000);
-  }
-
-  void Start() {
+  void Start() {    
+    if (Application.isPlaying) {
+      LeanTween.reset();
+      LeanTween.init(4000);
+    }
     combinedBounces = HairObjects.Concat(OtherBounceGearObjects).ToArray();
     SetBounces();
+
   }
 
   public void LoadGear() {
@@ -53,14 +54,24 @@ public class GearController : MonoBehaviour {
   }
 
   private void CancelAllBounceTweens() {
-    // Cancel all LeanTween tweens on each bounce parent and stop stored coroutines
+    // Cancel all LeanTween tweens on each tracked GameObject and stop stored coroutines
     foreach (var kvp in bounceTweens) {
       var go = kvp.Key;
       if (go != null) {
-        LeanTween.cancel(go); // cancels all tweens for that GameObject and frees pool slots
+        LeanTween.cancel(go);
       }
       if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
         StopCoroutine(bounceCoroutines[go]);
+      }
+    }
+    // Also ensure any HBox objects in HBoxObjects are cancelled/stopped
+    if (HBoxObjects != null) {
+      foreach (var go in HBoxObjects) {
+        if (go == null) continue;
+        LeanTween.cancel(go);
+        if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
+          StopCoroutine(bounceCoroutines[go]);
+        }
       }
     }
     bounceTweens.Clear();
@@ -84,7 +95,6 @@ public class GearController : MonoBehaviour {
     SaveSlotManager.Save("equippedGear", gameData);
   }
 
-  //[ForceUpdate]
   public void RefreshGear() {
     UnequipGear();
     EquipGear();
@@ -195,7 +205,7 @@ public class GearController : MonoBehaviour {
   }
 
   public void PlayAnimation(string anim) {
-    if (currentAnimation == anim) return; // TODO potentially a conflict, check for animations that can play on themselves
+    if (currentAnimation == anim) return;
     if (currentAnimation == null) {
       currentAnimation = anim;
       nextAnimation = null;
@@ -237,7 +247,6 @@ public class GearController : MonoBehaviour {
       currentFrame = anim.start + frameOffset;
       if (currentFrame >= anim.end) {
         if (!string.IsNullOrEmpty(nextAnimation)) {
-          //Debug.Log(nextAnimation);
           currentAnimation = null;
           PlayAnimation(nextAnimation);
           return;
@@ -271,7 +280,7 @@ public class GearController : MonoBehaviour {
       }
     }
     if (needsFlip) {
-      var direction = 1; // right
+      var direction = 1;
       needsFlip = false;
       if (isFacingRight) {
         isFacingRight = false;
@@ -303,7 +312,6 @@ public class GearController : MonoBehaviour {
       foreach (GameObject bounceParent in combinedBounces) {
         if (!isPlaying) break;
         if (bounceParent.name.Equals(partKey)) {
-          // cancel any existing tweens on this parent before starting new sequence
           LeanTween.cancel(bounceParent);
           if (bounceCoroutines.ContainsKey(bounceParent) && bounceCoroutines[bounceParent] != null) {
             StopCoroutine(bounceCoroutines[bounceParent]);
@@ -325,7 +333,6 @@ public class GearController : MonoBehaviour {
     foreach (BounceFrame frame in sequence) {
       if (!isPlaying) break;
       Vector3 targetPos = new Vector3(frame.x, frame.y, bounceParent.transform.localPosition.z);
-      // start move tween and remove id on complete
       var moveDescr = LeanTween.moveLocal(bounceParent, targetPos, frame.duration * fSlowDown).setEase(LeanTweenType.linear);
       int tweenId = moveDescr.id;
       moveDescr.setOnComplete(() => {
@@ -345,7 +352,6 @@ public class GearController : MonoBehaviour {
     }
     if (bounceCoroutines.ContainsKey(bounceParent)) bounceCoroutines.Remove(bounceParent);
     if (slowDown) {
-      //Debug.Log("Toggling pause after bounce sequence");
       TogglePause("true");
     }
   }
@@ -360,51 +366,67 @@ public class GearController : MonoBehaviour {
         if (go == null || !go.name.Equals(partKey)) continue;
         var poly = go.GetComponent<PolygonCollider2D>();
         if (poly == null) continue;
-        // Support either List<Vector2> (single path) or List<List<Vector2>> (sequence of paths)
         if (hboxList is List<HBox> multiSeq) {
-          StartCoroutine(AnimateHBox(poly, multiSeq));
+          LeanTween.cancel(go);
+          if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
+            StopCoroutine(bounceCoroutines[go]);
+          }
+          var coro = StartCoroutine(AnimateHBox(go, poly, multiSeq));
+          bounceCoroutines[go] = coro;
         }
         else {
-          // If your anim data type differs, ensure it produces List<List<Vector2>> or List<Vector2>.
           Debug.LogWarning($"HBox sequence for {partKey} has unexpected type: {hboxList?.GetType()}");
         }
       }
     }
   }
 
-  // Coroutine to animate PolygonCollider2D paths (each target is a List<Vector2>)
-  private IEnumerator AnimateHBox(PolygonCollider2D collider, List<HBox> sequence) {
+  private IEnumerator AnimateHBox(GameObject go, PolygonCollider2D collider, List<HBox> sequence) {
+    if (!bounceTweens.ContainsKey(go)) {
+      bounceTweens[go] = new List<int>();
+    }
     var fSlowDown = slowDown ? 10f : 1f;
     foreach (var targetPath in sequence) {
-      // ensure collider has at least one path
+      if (!isPlaying) break;
       if (collider.pathCount == 0) collider.pathCount = 1;
       Vector2[] startPoints = collider.GetPath(0);
       Vector2[] endPoints = targetPath.points.ToArray();
-      // If no end points provided, skip
       if (endPoints.Length == 0) continue;
       int startLen = startPoints?.Length ?? 0;
       int endLen = endPoints.Length;
       int len = Math.Max(1, Math.Max(startLen, endLen));
-      // Normalize start and end arrays to same length by repeating indices when necessary
       Vector2[] s = new Vector2[len];
       Vector2[] e = new Vector2[len];
       for (int i = 0; i < len; i++) {
         s[i] = (startLen > 0) ? startPoints[i % startLen] : endPoints[i % endLen];
         e[i] = endPoints[i % endLen];
       }
-      float duration = (targetPath.d > 0 ? targetPath.d : 0.2f) * fSlowDown; // default duration per frame (no per-target duration provided)
-      float elapsed = 0f;
-      while (elapsed < duration) {
-        float t = duration <= 0f ? 1f : (elapsed / duration);
+      float duration = (targetPath.d > 0 ? targetPath.d : 0.2f) * fSlowDown;
+
+      LTDescr descr = LeanTween.value(go, 0f, 1f, duration).setEase(LeanTweenType.linear);
+      int tweenId = descr.id;
+      bounceTweens[go].Add(tweenId);
+      descr.setOnUpdate((float v) => {
         Vector2[] lerped = new Vector2[len];
         for (int i = 0; i < len; i++) {
-          lerped[i] = Vector2.Lerp(s[i], e[i], t);
+          lerped[i] = Vector2.Lerp(s[i], e[i], v);
         }
         collider.SetPath(0, lerped);
-        elapsed += Time.deltaTime;
-        yield return null;
-      }
-      collider.SetPath(0, e);
+      });
+      descr.setOnComplete(() => {
+        collider.SetPath(0, e);
+        if (bounceTweens.ContainsKey(go)) bounceTweens[go].Remove(tweenId);
+      });
+
+      yield return new WaitForSeconds(duration);
+      if (!isPlaying) break;
+    }
+    if (bounceTweens.ContainsKey(go)) {
+      bounceTweens[go].Clear();
+    }
+    if (bounceCoroutines.ContainsKey(go)) bounceCoroutines.Remove(go);
+    if (slowDown) {
+      TogglePause("true");
     }
   }
 }

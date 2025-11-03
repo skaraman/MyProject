@@ -243,6 +243,22 @@ public static class EsperanzaAnimations {
   };
 }
 
+public static class ImpAnimations {
+  public static Dictionary<string, AnimData> animations { get; } = new Dictionary<string, AnimData> {
+    { "Run", new AnimData { } },
+    { "Jump", new AnimData { } },
+    { "Hurt", new AnimData { } }
+  };
+}
+
+public static class LesserDevilAnimations {
+  public static Dictionary<string, AnimData> animations { get; } = new Dictionary<string, AnimData> {
+    { "Run", new AnimData { } },
+    { "Jump", new AnimData { } },
+    { "Hurt", new AnimData { } }
+  };
+}
+
 public class HBox {
   public List<Vector2> points = new List<Vector2>();
   public float d;
@@ -460,24 +476,85 @@ public static class EsperHBoxes {
 
   };
     
-  public static Dictionary<string, List<HBox>> hit { get; } = new Dictionary<string, List<HBox>> {
+  public static Dictionary<string, List<HBox>> hit1 { get; } = new Dictionary<string, List<HBox>> {
     ["Breathe"] = new List<HBox> {
-      new(0.01f, new List<Vector2>{ new(-0.48f, -0.54f), new(-0.25f, 0.24f), new(0.46f, 0.07f), new(0.33f, -0.59f), new(0.69f, -1.00f), new(0.62f, -1.37f), new(1.08f, -2.71f), new(0.71f, -2.88f), new(0.17f, -4.74f), new(0.70f, -5.03f), new(0.68f, -5.26f), new(-0.03f, -5.20f), new(-0.49f, -5.31f), new(-0.49f, -4.79f), new(-0.72f, -2.69f), new(-0.86f, -1.05f)})
+      new(.01f, new List<Vector2>{ new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
     },
+    ["Walk"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Run"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Sprint"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Dance"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Stance"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Sprint"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Jump"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["JumpDouble"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["JumpFalling"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["JumpLanding"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["PunchLeft"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.08f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.01f, new List<Vector2> { new(1.98f, -0.60f), new(1.89f, -0.99f), new(2.18f, -1.06f), new(2.32f, -0.84f), new(2.21f, -0.60f) }),
+      new(.035f, new List<Vector2> { new(2.40f, -0.68f), new(2.45f, -1.04f), new(2.73f, -1.03f), new(2.92f, -0.91f), new(2.76f, -0.58f) })
+    },
+    ["PunchRight"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)}),
+      new(.02f, new List<Vector2> { new(1.53f, -0.67f), new(1.59f, -1.00f), new(1.81f, -1.08f), new(2.07f, -0.77f), new(1.85f, -0.53f) }),
+      new(.02f, new List<Vector2> { new(2.35f, -0.73f), new(2.39f, -1.13f), new(2.79f, -1.11f), new(2.92f, -0.77f), new(2.71f, -0.63f) }),
+    },
+    ["KickLeft"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.26f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.01f, new List<Vector2> { new(2.19f, -1.97f), new(1.88f, -2.10f), new(2.09f, -2.58f), new(2.39f, -2.54f), new(2.57f, -2.19f) }),
+      new(.02f, new List<Vector2> { new(3.07f, -1.41f), new(2.51f, -1.62f), new(2.41f, -2.04f), new(2.79f, -2.10f), new(3.43f, -1.62f) }),
+      new(.05f, new List<Vector2> { new(3.14f, -1.07f), new(2.26f, -0.93f), new(2.22f, -1.60f), new(2.86f, -1.48f), new(3.27f, -1.34f) }),
+      new(.08f, new List<Vector2> { new(1.75f, -2.93f), new(1.75f, -2.93f), new(1.75f, -2.93f), new(1.75f, -2.93f), new(1.75f, -2.93f) })
+    },
+    ["KickRight"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.12f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.01f, new List<Vector2> { new(1.94f, -2.90f), new(1.36f, -2.71f), new(1.03f, -3.06f), new(1.26f, -3.27f), new(1.68f, -3.31f) }),
+      new(.14f, new List<Vector2> { new(1.06f, -4.33f), new(0.71f, -4.02f), new(0.33f, -4.40f), new(0.69f, -4.78f), new(1.16f, -4.69f) }),
+      new(.01f, new List<Vector2> { new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f) })
+    }
   };
 
   public static Dictionary<string, Dictionary<string, List<HBox>>> all = new Dictionary<string, Dictionary<string, List<HBox>>> {
-    { "hurt", hurt }, { "hit", hit }
+    { "hurt", hurt }, { "hit1", hit1 }
   };
 }
 
+public static class ImpHBoxes {
+  
+}
+
+            // TODO changes to EsperBounces
 public class BounceFrame {
   public float x;
   public float y;
   public float offset;
   public float duration;
 
-  public BounceFrame(float x, float y, float duration = 0.17f, float offset = 1 ) {
+  public BounceFrame(float x, float y, float duration = 0.17f, float offset = 1) {
     this.x = x;
     this.y = y;
     this.offset = offset;
@@ -485,6 +562,7 @@ public class BounceFrame {
   }
 }
 
+// EsperBounceAdjs
 public static class BounceAdjustments {
   public static Dictionary<string, List<BounceFrame>> Hair { get; } = new Dictionary<string, List<BounceFrame>> {
     ["Breathe"] = new List<BounceFrame> { new(0, 0) },
@@ -618,7 +696,7 @@ public static class BounceAdjustments {
      new(-.63f, -.71f, .1f, 1), new(.17f, -.3f, .06f, 1)},
     ["PunchLeft"] = new List<BounceFrame> { new(.86f, -.31f, .01f, 1), new(1.15f, -.26f, .05f, 1),
      new(.67f, -.41f, .09f, 1), new(.62f, -.4f, .02f, 1) },
-    ["PunchRight"] = new List<BounceFrame> { new(.95f, -.17f, .01f, -1), new(.97f, -.12f, .02f, 1),
+    ["PunchRight"] = new List<BounceFrame> { new(.95f, -.17f, .01f, 1), new(.97f, -.12f, .02f, 1),
     new(.99f, -.14f, .02f, 1), new(.91f, -.21f, .04f, 1), new(1.1f, -.34f, .05f, 1),
     new(1.08f, -.33f, .01f, 1)  },
 
@@ -653,6 +731,7 @@ public static class BounceAdjustments {
   };
 }
 
+// EsperInterrupts
 public static class Interrupts {
   public static Dictionary<string, Dictionary<string, string>> interrupts { get; } = new Dictionary<string, Dictionary<string, string>> {
     ["Breathe"] = new Dictionary<string, string> {
@@ -747,6 +826,7 @@ public static class Interrupts {
     }
   };
 }
+
 
 public static class Abbreviations {
   public static Dictionary<string, string> all { get; } = new Dictionary<string, string> {
@@ -1048,6 +1128,17 @@ public static class FormStatIncreases {
   };
 }
 
+public static class FormStatsValues {
+  public static Dictionary<string, Dictionary<string, int>> values { set; get; } = new Dictionary<string, Dictionary<string, int>> {
+    ["Base"] = new Dictionary<string, int> { ["STR"] = 1, ["DEX"] = 1, ["END"] = 1, ["INT"] = 1, ["LCK"] = 1 },
+    ["Bolt"] = new Dictionary<string, int> { ["DEX"] = 0, ["END"] = 0, ["AMP"] = 0, ["VLT"] = 0, ["LCK"] = 0 },
+    ["Fire"] = new Dictionary<string, int> { ["STR"] = 0, ["END"] = 0, ["PYR"] = 0, ["EMB"] = 0, ["LCK"] = 0 },
+    ["Cold"] = new Dictionary<string, int> { ["END"] = 0, ["INT"] = 0, ["CHL"] = 0, ["ICI"] = 0, ["LCK"] = 0 },
+    ["Aqua"] = new Dictionary<string, int> { ["INT"] = 0, ["DEX"] = 0, ["VAP"] = 0, ["MOI"] = 0, ["LCK"] = 0 },
+    ["Dark"] = new Dictionary<string, int> { ["UMB"] = 0, ["VOI"] = 0, ["ABY"] = 0, ["ECL"] = 0, ["LCK"] = 0 }
+  };
+}
+
 public static class AllStatValues {
   public static Dictionary<string, float> allStats { set; get; } = new Dictionary<string, float> {
     { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "AS", 0 }, { "NRGRG", 0 },
@@ -1059,16 +1150,7 @@ public static class AllStatValues {
   };
 }
 
-public static class FormStatsValues {
-  public static Dictionary<string, Dictionary<string, int>> values { set; get; } = new Dictionary<string, Dictionary<string, int>> {
-    ["Base"] = new Dictionary<string, int> { ["STR"] = 1, ["DEX"] = 1, ["END"] = 1, ["INT"] = 1, ["LCK"] = 1 },
-    ["Bolt"] = new Dictionary<string, int> { ["DEX"] = 0, ["END"] = 0, ["AMP"] = 0, ["VLT"] = 0, ["LCK"] = 0 },
-    ["Fire"] = new Dictionary<string, int> { ["STR"] = 0, ["END"] = 0, ["PYR"] = 0, ["EMB"] = 0, ["LCK"] = 0 },
-    ["Cold"] = new Dictionary<string, int> { ["END"] = 0, ["INT"] = 0, ["CHL"] = 0, ["ICI"] = 0, ["LCK"] = 0 },
-    ["Aqua"] = new Dictionary<string, int> { ["INT"] = 0, ["DEX"] = 0, ["VAP"] = 0, ["MOI"] = 0, ["LCK"] = 0 },
-    ["Dark"] = new Dictionary<string, int> { ["UMB"] = 0, ["VOI"] = 0, ["ABY"] = 0, ["ECL"] = 0, ["LCK"] = 0 }
-  };
-}
+
 
 public static class EsperanzaForms {
   public static Dictionary<string, int> Active { get; set; } = new Dictionary<string, int> { { "Base", 1 }, { "Bolt", 0 }, { "Cold", 0 }, { "Fire", 0 }, { "Aqua", 0 }, { "Dark", 0 } };
