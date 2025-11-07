@@ -45,9 +45,8 @@ public class SpriteWithNormals : MonoBehaviour {
   public void UpdateSpriteAndNormal(int _frame) {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     var currentLabel = GetLabel(_frame);
-    var objectName = gameObject.name;
     if (colorLibrary == null || normalLibrary == null) {
-      Debug.LogError("Sprite libraries are not assigned! " + objectName + " " + gameObject.transform.parent?.name);
+      Debug.LogError("Sprite libraries are not assigned! " + gameObject.name + " " + gameObject.transform.parent?.name);
       return;
     }
     var colorSprite = colorLibrary.GetSprite(category, currentLabel);
@@ -55,11 +54,11 @@ public class SpriteWithNormals : MonoBehaviour {
     //Debug.Log($"[SpriteWithNormals] Fetching sprites for category: '{category}' and label: '{currentLabel}'");
     if (colorSprite == null) {
       // This gear piece doesn't have gear image
-      //Debug.LogWarning($"[SpriteWithNormals] {objectName} Color sprite is null");
+      //Debug.LogWarning($"[SpriteWithNormals] {gameObject.name} Color sprite is null");
       return;
     }
     if (normalSprite == null) {
-      Debug.LogError($"Normal sprite not found for category '{category}' with label '{currentLabel}' " + objectName);
+      Debug.LogError($"Normal sprite not found for category '{category}' with label '{currentLabel}' " + gameObject.name);
       //return;
     }
     _renderer.sprite = colorSprite;
@@ -69,13 +68,13 @@ public class SpriteWithNormals : MonoBehaviour {
       _mpb.SetTexture("_NormalMap", normalSprite.texture);
     }
     else {
-      Debug.LogError("Normal sprite found, but its texture is missing. " + objectName);
+      Debug.LogError("Normal sprite found, but its texture is missing. " + gameObject.name);
     }
     _renderer.SetPropertyBlock(_mpb);
   }
 
   public void FlipSprite(bool flip) {
-    SpriteRenderer spriteRenderer = gameObject.GetComponent<SpriteRenderer>();
-    spriteRenderer.flipX = flip;
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    _renderer.flipX = flip;
   }
 }

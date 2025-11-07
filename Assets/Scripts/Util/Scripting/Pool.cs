@@ -8,6 +8,7 @@ public class Pool : MonoBehaviour {
 
   Queue<GameObject> pool = new Queue<GameObject>();
   List<GameObject> active = new List<GameObject>();
+  HashSet<GameObject> activeSet = new HashSet<GameObject>();
   Transform container;
 
   public void Initialize() {
@@ -19,6 +20,7 @@ public class Pool : MonoBehaviour {
 
     pool.Clear();
     active.Clear();
+    activeSet.Clear();
 
     for (int i = 0; i < poolSize; i++) {
       var go = Instantiate(prefab, container);
@@ -42,20 +44,23 @@ public class Pool : MonoBehaviour {
     else {
       obj = active[0];
       active.RemoveAt(0);
+      activeSet.Remove(obj);
       Debug.Log($"[Pool] Reusing oldest object from active list");
     }
 
     obj.transform.SetPositionAndRotation(position, rotation);
     obj.SetActive(true);
     active.Add(obj);
+    activeSet.Add(obj);
     return obj;
   }
 
   public void Despawn(GameObject obj) {
-    if (!active.Contains(obj)) return;
+    if (!activeSet.Contains(obj)) return;
     obj.SetActive(false);
     obj.transform.SetParent(container);
     active.Remove(obj);
+    activeSet.Remove(obj);
     pool.Enqueue(obj);
   }
 }

@@ -31,6 +31,10 @@ public class AnimateFields : MonoBehaviour {
   private float stepDuration;
   private AnimationCurve currentEasing;
   public SerializableSortedDictionary<string, string> fromValues = new();
+  
+  // Cache reflection data to avoid repeated lookups
+  private Type cachedTargetType;
+  private Dictionary<string, MemberInfo> memberCache = new();
 
   public interface IFieldAnimation {
     void Update(float t, float eased);
@@ -72,18 +76,38 @@ public class AnimateFields : MonoBehaviour {
     }
   }
 
+  MemberInfo GetCachedMember(string key) {
+    if (cachedTargetType == null || cachedTargetType != target.GetType()) {
+      cachedTargetType = target.GetType();
+      memberCache.Clear();
+    }
+    
+    if (!memberCache.TryGetValue(key, out var member)) {
+      var field = cachedTargetType.GetField(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+      if (field != null) {
+        member = field;
+      } else {
+        var prop = cachedTargetType.GetProperty(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        if (prop != null) member = prop;
+      }
+      memberCache[key] = member;
+    }
+    return member;
+  }
+
   void GenerateAnimationFromStep(SequenceStep step, bool isFirstStep) {
     fieldAnimations.Clear();
     if (!hasValidTarget) return;
     stepDuration = step.duration + UnityEngine.Random.Range(0f, step.randomDuration);
     currentEasing = step.easing;
-    var typeRef = target.GetType();
 
     foreach (var kvp in step.props) {
       var key = kvp.key;
       var strVal = kvp.value;
-      var field = typeRef.GetField(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-      var prop = field == null ? typeRef.GetProperty(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) : null;
+      var member = GetCachedMember(key);
+      FieldInfo field = member as FieldInfo;
+      PropertyInfo prop = member as PropertyInfo;
+      
       object baseVal = null;
 
       if (isFirstStep && fromValues.TryGetValue(key, out var fromOverride)) {
@@ -129,12 +153,15 @@ public class AnimateFields : MonoBehaviour {
   public void Restart() {
     timer = 0f;
     sequenceIt = 0;
-    var typeRef = target.GetType();
+    if (cachedTargetType == null && target != null) cachedTargetType = target.GetType();
+    
     foreach (var kvp in fromValues) {
       var key = kvp.key;
       var val = kvp.value;
-      var field = typeRef.GetField(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-      var prop = field == null ? typeRef.GetProperty(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) : null;
+      var member = GetCachedMember(key);
+      FieldInfo field = member as FieldInfo;
+      PropertyInfo prop = member as PropertyInfo;
+      
       object parsed = val;
       if (float.TryParse(val, out var f)) parsed = f;
       else if (int.TryParse(val, out var i)) parsed = i;
@@ -145,14 +172,17 @@ public class AnimateFields : MonoBehaviour {
 
   public void Reset() {
     if (!hasValidTarget) return;
-    var typeRef = target.GetType();
+    if (cachedTargetType == null) cachedTargetType = target.GetType();
+    
     fromValues.Clear();
     foreach (var step in sequence) {
       foreach (var kvp in step.props) {
         var key = kvp.key;
         if (fromValues.ContainsKey(key)) continue;
-        var field = typeRef.GetField(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        var prop = field == null ? typeRef.GetProperty(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) : null;
+        var member = GetCachedMember(key);
+        FieldInfo field = member as FieldInfo;
+        PropertyInfo prop = member as PropertyInfo;
+        
         object val = field != null ? field.GetValue(target) : prop != null && prop.CanRead && prop.CanWrite ? prop.GetValue(target) : null;
         if (val is float || val is int || val is string) fromValues[key] = val.ToString();
       }
@@ -168,6 +198,7 @@ public class AnimateFields : MonoBehaviour {
   void OnDestroy() {
     triggerOff?.Invoke();
     triggerOff = null;
+    memberCache.Clear();
   }
 
   public void Play() {
