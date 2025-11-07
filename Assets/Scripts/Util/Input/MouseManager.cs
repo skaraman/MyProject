@@ -21,20 +21,27 @@ public class MouseManager : MonoBehaviour {
   string scrollUpKey;
   string scrollDownKey;
   Vector3 lastScreenPos;
+  
+  private Camera mainCamera;
+  private Mouse mouse;
 
   void Awake() {
     Instance = this;
     SwitchMap(defaultMap != "" ? defaultMap : "mainMenu");
   }
 
+  void Start() {
+    mainCamera = Camera.main;
+    mouse = Mouse.current;
+  }
+
   void Update() {
     clickCacheTimer -= Time.unscaledDeltaTime;
 
-    var cam = Camera.main;
-    if (!cam) return;
+    if (!mainCamera || mouse == null) return;
 
-    var screenPos = Mouse.current.position.ReadValue();
-    var worldPos = cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 1f));
+    var screenPos = mouse.position.ReadValue();
+    var worldPos = mainCamera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 1f));
     var hit = Physics2D.OverlapPoint(worldPos);
     var target = hit ? hit.gameObject : null;
 
@@ -47,41 +54,41 @@ public class MouseManager : MonoBehaviour {
     }
 
     if (target) {
-      if (Mouse.current.leftButton.wasPressedThisFrame) {
+      if (mouse.leftButton.wasPressedThisFrame) {
         lastClickedTarget = target;
         clickCacheTimer = clickCacheDuration;
         MessageBus.Send(clickKey, target);
         Debug.Log($"[MouseManager] Left Click on: {target.name}");
       }
 
-      if (Mouse.current.leftButton.wasReleasedThisFrame) {
+      if (mouse.leftButton.wasReleasedThisFrame) {
         var releaseTarget = clickCacheTimer > 0 ? lastClickedTarget : target;
         MessageBus.Send(releaseKey, releaseTarget);
         Debug.Log($"[MouseManager] Left Release on: {releaseTarget?.name}");
       }
 
-      if (Mouse.current.rightButton.wasPressedThisFrame) {
+      if (mouse.rightButton.wasPressedThisFrame) {
         MessageBus.Send(rightClickKey, target);
         Debug.Log($"[MouseManager] Right Click on: {target.name}");
       }
 
-      if (Mouse.current.rightButton.wasReleasedThisFrame) {
+      if (mouse.rightButton.wasReleasedThisFrame) {
         MessageBus.Send(rightReleaseKey, target);
         Debug.Log($"[MouseManager] Right Release on: {target.name}");
       }
 
-      if (Mouse.current.middleButton.wasPressedThisFrame) {
+      if (mouse.middleButton.wasPressedThisFrame) {
         MessageBus.Send(middleClickKey, target);
         Debug.Log($"[MouseManager] Middle Click on: {target.name}");
       }
 
-      if (Mouse.current.middleButton.wasReleasedThisFrame) {
+      if (mouse.middleButton.wasReleasedThisFrame) {
         MessageBus.Send(middleReleaseKey, target);
         Debug.Log($"[MouseManager] Middle Release on: {target.name}");
       }
     }
 
-    var scroll = Mouse.current.scroll.ReadValue();
+    var scroll = mouse.scroll.ReadValue();
     if (scroll.y > 0) MessageBus.Send(scrollUpKey, scroll.y);
     else if (scroll.y < 0) MessageBus.Send(scrollDownKey, scroll.y);
   }
