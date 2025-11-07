@@ -5,7 +5,7 @@ public static class MessageBus {
   private static Dictionary<string, Action<object>> _messageTable =
       new Dictionary<string, Action<object>>();
   
-  // Cache for frequently used message keys to avoid repeated string allocations
+  // Track registered keys for efficient cleanup during scene transitions
   private static HashSet<string> registeredKeys = new HashSet<string>();
 
   public static Action On(string message, Action<object> callback) {

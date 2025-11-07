@@ -86,11 +86,14 @@ public class AnimateFields : MonoBehaviour {
       var field = cachedTargetType.GetField(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
       if (field != null) {
         member = field;
+        memberCache[key] = member;
       } else {
         var prop = cachedTargetType.GetProperty(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        if (prop != null) member = prop;
+        if (prop != null) {
+          member = prop;
+          memberCache[key] = member;
+        }
       }
-      memberCache[key] = member;
     }
     return member;
   }
