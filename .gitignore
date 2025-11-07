@@ -9,7 +9,6 @@
 /[Bb]uild/
 /[Bb]uilds/
 /[Ll]ogs/
-/[Uu]ser[Ss]ettings/
 *.log
 .DS_Store*
 Thumbs.db
@@ -79,8 +78,6 @@ mono_crash.*
 # Crashlytics generated file
 crashlytics-build.properties
 
-# TestRunner generated files
-InitTestScene*.unity*
 
 # Addressables default ignores, before user customizations
 /ServerData
@@ -98,5 +95,3 @@ InitTestScene*.unity*
 /[Aa]ssets/Unity.VisualScripting.Generated/VisualScripting.Core/Property Providers
 /[Aa]ssets/Unity.VisualScripting.Generated/VisualScripting.Core/Property Providers.meta
 
-# Auto-generated scenes by play mode tests
-/[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
