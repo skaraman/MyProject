@@ -2,15 +2,19 @@ using UnityEngine;
 
 public class UIRefresher : MonoBehaviour {
   public Camera cam;
+  private Renderer[] renderers;
 
   void Start() {
     cam = Camera.main;
+    renderers = GetComponents<Renderer>();
   }
 
   void Update() {
     // Ensure all renderers on this GameObject and its children are not culled
-    var renderers = GetComponents<Renderer>();
+    if (renderers == null || renderers.Length == 0) return;
+    
     foreach (var r in renderers) {
+      if (r == null) continue;
       r.forceRenderingOff = false;
       // Optionally, ensure the renderer's layer is visible to the camera
       if (cam != null && (cam.cullingMask & (1 << r.gameObject.layer)) == 0) {

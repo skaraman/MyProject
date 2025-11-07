@@ -5,11 +5,13 @@ using UnityEngine;
 public class TransformWrapper : TimeScaledTransform {
   public float x, y, z, rx, ry, rz, sx, sy, sz;
   private Vector3 lastPos, lastRot, lastScale;
+  private Transform cachedTransform;
 
   void Start() {
-    lastPos = transform.localPosition;
-    lastRot = transform.localRotation.eulerAngles;
-    lastScale = transform.localScale;
+    cachedTransform = transform;
+    lastPos = cachedTransform.localPosition;
+    lastRot = cachedTransform.localRotation.eulerAngles;
+    lastScale = cachedTransform.localScale;
     x = lastPos.x; y = lastPos.y; z = lastPos.z;
     rx = lastRot.x; ry = lastRot.y; rz = lastRot.z;
     sx = lastScale.x; sy = lastScale.y; sz = lastScale.z;
@@ -17,11 +19,13 @@ public class TransformWrapper : TimeScaledTransform {
 
   [ForceUpdate]
   void Update() {
+    if (cachedTransform == null) cachedTransform = transform;
+    
     var targetPos = new Vector3(x, y, z);
-    var currentPos = transform.localPosition;
+    var currentPos = cachedTransform.localPosition;
     if (targetPos != lastPos || currentPos != lastPos) {
       if (targetPos != lastPos) {
-        transform.localPosition = targetPos;
+        cachedTransform.localPosition = targetPos;
         lastPos = targetPos;
       }
       else {
@@ -31,10 +35,10 @@ public class TransformWrapper : TimeScaledTransform {
     }
 
     var targetRot = new Vector3(rx, ry, rz);
-    var currentRot = transform.localRotation.eulerAngles;
+    var currentRot = cachedTransform.localRotation.eulerAngles;
     if (targetRot != lastRot || currentRot != lastRot) {
       if (targetRot != lastRot) {
-        transform.localRotation = Quaternion.Euler(targetRot);
+        cachedTransform.localRotation = Quaternion.Euler(targetRot);
         lastRot = targetRot;
       }
       else {
@@ -44,10 +48,10 @@ public class TransformWrapper : TimeScaledTransform {
     }
 
     var targetScale = new Vector3(sx, sy, sz);
-    var currentScale = transform.localScale;
+    var currentScale = cachedTransform.localScale;
     if (targetScale != lastScale || currentScale != lastScale) {
       if (targetScale != lastScale) {
-        transform.localScale = targetScale;
+        cachedTransform.localScale = targetScale;
         lastScale = targetScale;
       }
       else {
@@ -63,20 +67,23 @@ public class TimeScaledTransform : MonoBehaviour {
   Vector3 prevPosition;
   Vector3 prevRotation;
   Vector3 prevScale;
+  private Transform cachedTransform;
 
   void Start() {
-    prevPosition = transform.position;
-    prevRotation = transform.eulerAngles;
-    prevScale = transform.localScale;
+    cachedTransform = transform;
+    prevPosition = cachedTransform.position;
+    prevRotation = cachedTransform.eulerAngles;
+    prevScale = cachedTransform.localScale;
   }
 
   void LateUpdate() {
+    if (cachedTransform == null) cachedTransform = transform;
     if (!TimeScale.Factors.ContainsKey(timeScaleIndex)) return;
     var factor = TimeScale.Factors[timeScaleIndex];
 
-    var posDiff = transform.position - prevPosition;
-    var rotDiff = transform.eulerAngles - prevRotation;
-    var scaleDiff = transform.localScale - prevScale;
+    var posDiff = cachedTransform.position - prevPosition;
+    var rotDiff = cachedTransform.eulerAngles - prevRotation;
+    var scaleDiff = cachedTransform.localScale - prevScale;
 
     var newPos = prevPosition + posDiff * factor;
     var newRot = prevRotation + rotDiff * factor;
@@ -84,9 +91,9 @@ public class TimeScaledTransform : MonoBehaviour {
 
     //Debug.Log($"[TimeScale] Index: {timeScaleIndex}, Factor: {factor}, PosDiff: {posDiff}, NewPos: {newPos}");
 
-    transform.position = newPos;
-    transform.eulerAngles = newRot;
-    transform.localScale = newScale;
+    cachedTransform.position = newPos;
+    cachedTransform.eulerAngles = newRot;
+    cachedTransform.localScale = newScale;
 
     prevPosition = newPos;
     prevRotation = newRot;

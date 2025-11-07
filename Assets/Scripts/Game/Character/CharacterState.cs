@@ -9,6 +9,9 @@ public class CharacterState : MonoBehaviour {
   private SaveData gameData = new();
   private Action offLoadGame;
   GearController gearController;
+  
+  // Cache list to avoid allocations
+  private List<string> cachedKeys = new List<string>();
 
   void Start() {
     offLoadGame = MessageBus.On("loadGame", o => LoadState());
@@ -49,9 +52,12 @@ public class CharacterState : MonoBehaviour {
 
   public void GatherAllStatValues() {
     level = 0;
-    var keys = new List<string>(AllStatValues.allStats.Keys);
-    for (int i = 0; i < keys.Count; i++) {
-      var key = keys[i];
+    // Reuse cached list instead of creating new one
+    cachedKeys.Clear();
+    cachedKeys.AddRange(AllStatValues.allStats.Keys);
+    
+    for (int i = 0; i < cachedKeys.Count; i++) {
+      var key = cachedKeys[i];
       AllStatValues.allStats[key] = 0f;
     }
     foreach (var form in FormStatIncreases.increases) {
