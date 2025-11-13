@@ -33,7 +33,7 @@ public class GearController : MonoBehaviour {
   private Dictionary<GameObject, List<int>> bounceTweens = new Dictionary<GameObject, List<int>>();
   private Dictionary<GameObject, Coroutine> bounceCoroutines = new Dictionary<GameObject, Coroutine>();
 
-  void Start() {    
+  void Start() {
     if (Application.isPlaying) {
       LeanTween.reset();
       LeanTween.init(4000);
@@ -210,8 +210,8 @@ public class GearController : MonoBehaviour {
       currentAnimation = anim;
       nextAnimation = null;
     }
-    else if (Interrupts.interrupts.ContainsKey(currentAnimation) && Interrupts.interrupts[currentAnimation].ContainsKey(anim)) {
-      currentAnimation = Interrupts.interrupts[currentAnimation][anim];
+    else if (Interrupts.Esperanza.ContainsKey(currentAnimation) && Interrupts.Esperanza[currentAnimation].ContainsKey(anim)) {
+      currentAnimation = Interrupts.Esperanza[currentAnimation][anim];
       nextAnimation = anim;
     }
     else {
@@ -219,7 +219,7 @@ public class GearController : MonoBehaviour {
     }
     CancelAllBounceTweens();
     var category = currentAnimation;
-    if (EsperanzaAnimations.animations[currentAnimation].To) {
+    if (Animations.Esperanza[currentAnimation].To) {
       category = "To";
     }
     foreach (GameObject go in GearObjects) {
@@ -228,7 +228,7 @@ public class GearController : MonoBehaviour {
     foreach (GameObject go in SkinObjects) {
       go.GetComponent<SpriteWithNormals>().SetAnimation(category);
     }
-    currentFrame = EsperanzaAnimations.animations[currentAnimation].start - 1;
+    currentFrame = Animations.Esperanza[currentAnimation].start - 1;
     _animationTimer = 0f;
     pingPong = false;
     isPlaying = true;
@@ -237,8 +237,8 @@ public class GearController : MonoBehaviour {
 
   void FixedUpdate() {
     if (!isPlaying || currentAnimation == null) return;
-    if (!EsperanzaAnimations.animations.ContainsKey(currentAnimation)) return;
-    var anim = EsperanzaAnimations.animations[currentAnimation];
+    if (!Animations.Esperanza.ContainsKey(currentAnimation)) return;
+    var anim = Animations.Esperanza[currentAnimation];
     var fSlowDown = slowDown ? 10f : 1f;
     _animationTimer += (Time.deltaTime * 1000f) / fSlowDown;
     float normalTime = _animationTimer / anim.duration;
@@ -304,7 +304,7 @@ public class GearController : MonoBehaviour {
 
   public void SetBounces() {
     CancelAllBounceTweens();
-    foreach (KeyValuePair<string, Dictionary<string, List<BounceFrame>>> partPair in BounceAdjustments.adjustments) {
+    foreach (KeyValuePair<string, Dictionary<string, List<BounceFrame>>> partPair in BounceAdjustments.Esperanza) {
       string partKey = partPair.Key;
       var animationDict = partPair.Value;
       if (!animationDict.ContainsKey(currentAnimation)) continue;
@@ -357,7 +357,7 @@ public class GearController : MonoBehaviour {
   }
 
   public void SetHBoxes() {
-    foreach (var kvp in EsperHBoxes.all) {
+    foreach (var kvp in HBoxes.Esperanza) {
       string partKey = kvp.Key;
       var animDict = kvp.Value;
       if (!animDict.ContainsKey(currentAnimation)) continue;

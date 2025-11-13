@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System;
 
 public class CharacterState : MonoBehaviour {
-  public LocationTracker locationTracker = new();
   public int level = 0;
 
   private SaveData gameData = new();
   private Action offLoadGame;
   GearController gearController;
-  
+
   // Cache list to avoid allocations
   private List<string> cachedKeys = new List<string>();
 
@@ -54,16 +53,16 @@ public class CharacterState : MonoBehaviour {
     level = 0;
     // Reuse cached list instead of creating new one
     cachedKeys.Clear();
-    cachedKeys.AddRange(AllStatValues.allStats.Keys);
-    
+    cachedKeys.AddRange(AllStatValues.Esperanza.Keys);
+
     for (int i = 0; i < cachedKeys.Count; i++) {
       var key = cachedKeys[i];
-      AllStatValues.allStats[key] = 0f;
+      AllStatValues.Esperanza[key] = 0f;
     }
     foreach (var form in FormStatIncreases.increases) {
       foreach (var majorStat in form.Value) {
         foreach (var minorStat in majorStat.Value) {
-          AllStatValues.allStats[minorStat.Key] += minorStat.Value * FormStatsValues.values[form.Key][majorStat.Key];
+          AllStatValues.Esperanza[minorStat.Key] += minorStat.Value * FormStatsValues.values[form.Key][majorStat.Key];
         }
       }
     }

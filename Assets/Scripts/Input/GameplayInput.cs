@@ -69,13 +69,13 @@ public class GameplayInput : MonoBehaviour {
       isJumping = true;
       isFalling = false;
       erb.linearVelocity = new Vector2(erb.linearVelocity.x, 0); // Reset vertical velocity before jump
-      erb.AddForce(new Vector2(0, 400f + AllStatValues.allStats["MVSP"] * 20f));
+      erb.AddForce(new Vector2(0, 400f + AllStatValues.Esperanza["MVSP"] * 20f));
       yield return new WaitForSeconds(1);
       isGrounded = true;
       isJumping = false;
       gearController.PlayAnimation("JumpLanding");
       yield return new WaitForSeconds(
-        EsperanzaAnimations.animations[gearController.currentAnimation].duration / 1000
+        Animations.Esperanza[gearController.currentAnimation].duration / 1000
       );
       stanceTimer = 0f;
     }
@@ -128,8 +128,8 @@ public class GameplayInput : MonoBehaviour {
   void _ProcessMovementVelocity() {
     if (gearController.currentAnimation == "Dance") return;
     if (gearController.currentAnimation == "Stance") return;
-    erb.linearVelocityY = yVelocity * (10 + AllStatValues.allStats["MVSP"]) * sprintShift;
-    erb.linearVelocityX = xVelocity * (10 + AllStatValues.allStats["MVSP"]) * sprintShift;
+    erb.linearVelocityY = yVelocity * (10 + AllStatValues.Esperanza["MVSP"]) * sprintShift;
+    erb.linearVelocityX = xVelocity * (10 + AllStatValues.Esperanza["MVSP"]) * sprintShift;
     if ((xVelocity < 0 && gearController.isFacingRight) ||
     (xVelocity > 0 && !gearController.isFacingRight)) {
       gearController.needsFlip = true;

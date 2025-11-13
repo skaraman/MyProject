@@ -115,15 +115,18 @@ public static class EsperanzaGearParts {
     { "Fire_ac_Legs", new List<string> { "Belt", "Pelvis", "ThighLeft", "ThighRight" } },
     { "Fire_ac_Shoulders", new List<string> { "ShoulderLeft", "ShoulderRight" } },
   };
+
   public static bool ContainsKey(string v) {
     return gearParts.ContainsKey(v);
   }
 }
+
 public class AnimData {
   public int start; public int end; public float duration; public bool loop; public bool To; public bool pingPong;
 }
-public static class EsperanzaAnimations {
-  public static Dictionary<string, AnimData> animations { get; } = new Dictionary<string, AnimData> {
+
+public static class Animations {
+  public static Dictionary<string, AnimData> Esperanza { get; } = new Dictionary<string, AnimData> {
     { "Breathe", new AnimData { start = 1, end = 92, duration = 1750, pingPong = true } },
     { "Walk", new AnimData { start = 1, end = 65, duration = 1000, loop = true } },
     { "Run", new AnimData { start = 1, end = 45, duration = 700, loop = true } },
@@ -241,18 +244,14 @@ public static class EsperanzaAnimations {
     { "WalkToBreathe", new AnimData { start = 1034, end = 1045, duration = 175, To = true } },
     { "WalkToBlock", new AnimData { start = 1046, end = 1056, duration = 175, To = true } },
   };
-}
 
-public static class ImpAnimations {
-  public static Dictionary<string, AnimData> animations { get; } = new Dictionary<string, AnimData> {
-    { "Run", new AnimData { } },
-    { "Jump", new AnimData { } },
-    { "Hurt", new AnimData { } }
+  public static Dictionary<string, AnimData> Imp { get; } = new Dictionary<string, AnimData> {
+    { "Run", new AnimData { start = 1, end = 46, duration = 1000 } },
+    { "Jump", new AnimData { start = 1, end = 196, duration = 1750 } },
+    { "Hurt", new AnimData { start = 1, end = 60, duration = 175 } }
   };
-}
 
-public static class LesserDevilAnimations {
-  public static Dictionary<string, AnimData> animations { get; } = new Dictionary<string, AnimData> {
+  public static Dictionary<string, AnimData> LesserDevil { get; } = new Dictionary<string, AnimData> {
     { "Run", new AnimData { } },
     { "Jump", new AnimData { } },
     { "Hurt", new AnimData { } }
@@ -269,9 +268,8 @@ public class HBox {
   }
 }
 
-public static class EsperHBoxes {
-
-  public static Dictionary<string, List<HBox>> hurt { get; } = new Dictionary<string, List<HBox>> {
+public static class HBoxes {
+  public static Dictionary<string, List<HBox>> EsperanzaHurt { get; } = new Dictionary<string, List<HBox>> {
     ["Breathe"] = new List<HBox> {
       new(0.01f, new List<Vector2>{ new(-0.48f, -0.54f), new(-0.25f, 0.24f), new(0.46f, 0.07f), new(0.33f, -0.59f), new(0.69f, -1.00f), new(0.62f, -1.37f), new(1.08f, -2.71f), new(0.71f, -2.88f), new(0.17f, -4.74f), new(0.70f, -5.03f), new(0.68f, -5.26f), new(-0.03f, -5.20f), new(-0.49f, -5.31f), new(-0.49f, -4.79f), new(-0.72f, -2.69f), new(-0.86f, -1.05f)})
     },
@@ -475,8 +473,8 @@ public static class EsperHBoxes {
     //     ["PunchRightToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
 
   };
-    
-  public static Dictionary<string, List<HBox>> hit1 { get; } = new Dictionary<string, List<HBox>> {
+
+  public static Dictionary<string, List<HBox>> EsperanzaHit1 { get; } = new Dictionary<string, List<HBox>> {
     ["Breathe"] = new List<HBox> {
       new(.01f, new List<Vector2>{ new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
     },
@@ -538,16 +536,284 @@ public static class EsperHBoxes {
     }
   };
 
-  public static Dictionary<string, Dictionary<string, List<HBox>>> all = new Dictionary<string, Dictionary<string, List<HBox>>> {
-    { "hurt", hurt }, { "hit1", hit1 }
+  public static Dictionary<string, Dictionary<string, List<HBox>>> Esperanza = new Dictionary<string, Dictionary<string, List<HBox>>> {
+    { "hurt", EsperanzaHurt }, { "hit1", EsperanzaHit1 }
   };
+
+  // TODO change values for Imp
+  public static Dictionary<string, List<HBox>> ImpHurt { get; } = new Dictionary<string, List<HBox>> {
+    ["Breathe"] = new List<HBox> {
+      new(0.01f, new List<Vector2>{ new(-0.48f, -0.54f), new(-0.25f, 0.24f), new(0.46f, 0.07f), new(0.33f, -0.59f), new(0.69f, -1.00f), new(0.62f, -1.37f), new(1.08f, -2.71f), new(0.71f, -2.88f), new(0.17f, -4.74f), new(0.70f, -5.03f), new(0.68f, -5.26f), new(-0.03f, -5.20f), new(-0.49f, -5.31f), new(-0.49f, -4.79f), new(-0.72f, -2.69f), new(-0.86f, -1.05f)})
+    },
+
+    ["Walk"] = new List<HBox> {
+      new(.01f, new List<Vector2> {new(0.19f, -0.36f), new(0.38f, 0.22f), new(1.05f, 0.06f), new(0.89f, -0.65f), new(1.17f, -1.05f), new(0.94f, -1.59f), new(0.83f, -2.25f), new(1.02f, -3.60f), new(0.19f, -4.61f), new(0.67f, -5.24f), new(-0.31f, -5.19f), new(-0.47f, -4.71f), new(-0.08f, -3.63f), new(-0.38f, -2.49f), new(-0.27f, -1.43f), new(-0.32f, -0.81f) }),
+      new(.29f, new List<Vector2> { new(0.10f, -0.34f), new(0.28f, 0.22f), new(0.91f, -0.07f), new(0.72f, -0.77f), new(0.89f, -1.18f), new(0.88f, -1.59f), new(1.56f, -2.44f), new(0.91f, -3.69f), new(1.68f, -5.22f), new(0.67f, -5.24f), new(-1.11f, -5.30f), new(-1.73f, -4.53f), new(-0.68f, -3.66f), new(-0.70f, -2.61f), new(-0.65f, -1.61f), new(-0.47f, -0.83f) }),
+      new(.17f, new List<Vector2> { new(0.13f, -0.47f), new(0.36f, 0.22f), new(1.02f, -0.10f), new(0.82f, -0.73f), new(1.11f, -1.11f), new(0.92f, -1.73f), new(1.48f, -2.32f), new(1.20f, -3.79f), new(1.73f, -5.23f), new(0.70f, -5.15f), new(-0.64f, -5.36f), new(-1.37f, -4.80f), new(-0.51f, -3.78f), new(-0.31f, -2.78f), new(-0.32f, -2.19f), new(-0.20f, -0.87f) }),
+      new(.24f, new List<Vector2> { new(0.18f, -0.45f), new(0.31f, 0.25f), new(1.03f, -0.02f), new(0.88f, -0.61f), new(1.08f, -1.03f), new(0.94f, -1.80f), new(1.54f, -2.40f), new(1.29f, -2.62f), new(1.18f, -3.62f), new(1.66f, -5.26f), new(-0.31f, -5.19f), new(-0.62f, -5.44f), new(-1.27f, -4.78f), new(-0.37f, -2.67f), new(-0.35f, -1.37f), new(-0.07f, -0.67f) }),
+    },
+
+    ["Run"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(-0.01f, -0.43f), new(0.28f, 0.24f), new(0.98f, 0.07f), new(0.85f, -0.82f), new(0.95f, -1.24f), new(1.24f, -2.17f), new(0.61f, -2.48f), new(0.77f, -3.68f), new(-0.20f, -4.37f), new(-0.02f, -4.87f), new(-0.73f, -5.14f), new(-1.32f, -4.66f), new(-0.78f, -3.41f), new(-0.52f, -2.60f), new(-0.47f, -1.75f), new(-0.52f, -0.86f) }),
+      new(0.19f, new List<Vector2> {new(-0.10f, -0.45f), new(0.28f, 0.20f), new(0.98f, -0.06f), new(0.84f, -0.79f), new(1.24f, -0.97f), new(1.94f, -0.76f), new(0.75f, -2.28f), new(1.17f, -3.41f), new(1.66f, -5.08f), new(0.58f, -4.86f), new(0.21f, -3.63f), new(-2.29f, -3.80f), new(-2.35f, -2.87f), new(-0.83f, -3.03f), new(-1.21f, -2.19f), new(-1.14f, -0.93f) }),
+      new(0.18f, new List<Vector2> { new(0.06f, -0.43f), new(0.28f, 0.20f), new(0.98f, -0.06f), new(0.75f, -0.77f), new(0.92f, -1.21f), new(0.93f, -1.88f), new(0.55f, -2.69f), new(0.43f, -3.92f), new(0.25f, -5.36f), new(-0.65f, -5.13f), new(-0.67f, -4.88f), new(-0.73f, -4.68f), new(-1.30f, -3.86f), new(-0.44f, -3.21f), new(-0.61f, -2.37f), new(-0.25f, -1.10f) }),
+      new(0.2f, new List<Vector2> { new(0.06f, -0.48f), new(0.27f, 0.16f), new(0.94f, 0.08f), new(0.75f, -0.72f), new(1.58f, -0.01f), new(1.93f, -0.25f), new(0.54f, -2.33f), new(1.11f, -3.49f), new(2.16f, -4.79f), new(1.21f, -5.14f), new(0.26f, -3.74f), new(-2.16f, -3.93f), new(-2.10f, -3.06f), new(-0.74f, -2.82f), new(-1.32f, -1.99f), new(-1.28f, -0.47f) } ),
+      new(.2f, new List<Vector2> { new(0.13f, -0.44f), new(0.31f, 0.16f), new(0.93f, -0.09f), new(0.73f, -0.72f), new(0.96f, -1.25f), new(0.87f, -1.97f), new(0.54f, -2.33f), new(0.39f, -3.62f), new(0.05f, -4.67f), new(0.35f, -5.15f), new(-0.70f, -4.79f), new(-1.30f, -3.91f), new(-0.40f, -3.23f), new(-0.55f, -2.50f), new(-0.39f, -1.90f), new(-0.30f, -0.76f) })
+    },
+
+    ["Sprint"] = new List<HBox> {
+      new(0.02f, new List<Vector2> { new(0.46f, -1.77f), new(0.80f, -1.18f), new(1.29f, -1.54f), new(1.00f, -2.14f), new(1.15f, -2.64f), new(0.32f, -2.81f), new(0.43f, -3.60f), new(0.29f, -4.83f), new(0.76f, -5.10f), new(-0.25f, -5.17f), new(-0.67f, -4.17f), new(-2.70f, -4.31f), new(-2.34f, -3.42f), new(-1.27f, -3.48f), new(-1.02f, -2.65f), new(0.11f, -1.62f) }),
+      new(0.1f, new List<Vector2> { new(0.46f, -1.87f), new(0.69f, -1.30f), new(1.27f, -1.73f), new(1.03f, -2.31f), new(0.81f, -2.77f), new(1.41f, -3.05f), new(0.64f, -3.71f), new(-0.52f, -4.21f), new(-0.53f, -4.69f), new(-0.99f, -5.32f), new(-1.52f, -5.05f), new(-1.93f, -4.80f), new(-1.10f, -3.67f), new(-0.94f, -2.83f), new(-0.43f, -2.00f), new(0.02f, -1.75f) }),
+      new(0.08f, new List<Vector2> { new(0.44f, -1.95f), new(0.59f, -1.34f), new(1.23f, -1.62f), new(0.98f, -2.23f), new(0.77f, -2.60f), new(1.58f, -2.52f), new(0.85f, -3.61f), new(0.39f, -4.40f), new(0.74f, -4.88f), new(-1.00f, -4.54f), new(-2.36f, -4.90f), new(-2.58f, -4.06f), new(-1.43f, -3.53f), new(-1.04f, -2.78f), new(-0.65f, -2.30f), new(-0.01f, -1.83f) }),
+      new(0.09f, new List<Vector2> {  new(0.41f, -1.90f), new(0.59f, -1.34f), new(1.15f, -1.55f), new(0.95f, -2.19f), new(0.69f, -2.70f), new(0.88f, -3.32f), new(0.12f, -3.31f), new(0.12f, -4.02f), new(0.21f, -5.22f), new(-0.73f, -5.07f), new(-2.28f, -4.09f), new(-1.94f, -3.23f), new(-1.14f, -3.27f), new(-1.10f, -2.70f), new(-0.80f, -1.73f), new(-0.25f, -1.52f) }),
+      new(0.1f, new List<Vector2> { new(0.27f, -1.55f), new(0.59f, -1.12f), new(1.12f, -1.44f), new(0.98f, -1.97f), new(0.71f, -2.49f), new(0.27f, -2.92f), new(0.44f, -3.63f), new(-0.20f, -4.52f), new(0.04f, -5.13f), new(-0.80f, -4.74f), new(-0.98f, -4.48f), new(-2.39f, -5.12f), new(-2.62f, -4.29f), new(-1.45f, -3.85f), new(-0.92f, -2.56f), new(-0.28f, -1.69f) }),
+      new(0.1f, new List<Vector2> { new(0.44f, -1.58f), new(0.71f, -1.17f), new(1.21f, -1.42f), new(1.10f, -2.08f), new(1.13f, -2.57f), new(0.23f, -2.90f), new(0.57f, -3.39f), new(0.48f, -4.65f), new(0.94f, -5.09f), new(-0.12f, -5.04f), new(-0.30f, -4.06f), new(-2.82f, -4.40f), new(-2.74f, -3.56f), new(-1.50f, -3.35f), new(-0.84f, -2.35f), new(-0.06f, -1.69f) })
+
+    },
+    ["Dance"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(-0.19f, -0.38f), new(-0.23f, 0.30f), new(0.48f, 0.37f), new(0.55f, -0.37f), new(0.81f, -0.88f), new(0.75f, -2.45f), new(0.51f, -2.75f), new(0.38f, -3.82f), new(0.28f, -4.65f), new(0.18f, -4.97f), new(-0.24f, -4.98f), new(-0.55f, -4.91f), new(-0.52f, -4.48f), new(-0.52f, -3.36f), new(-0.67f, -2.11f), new(-0.62f, -0.52f) }),
+      new(0.54f, new List<Vector2> { new(-0.58f, -0.84f), new(-0.53f, -0.11f), new(0.23f, -0.12f), new(0.36f, -0.76f), new(0.71f, -1.04f), new(0.65f, -2.15f), new(0.45f, -2.61f), new(0.23f, -3.55f), new(0.03f, -4.36f), new(-0.09f, -4.97f), new(-0.38f, -5.09f), new(-0.74f, -5.00f), new(-0.83f, -4.52f), new(-0.79f, -3.31f), new(-1.60f, -2.58f), new(-0.87f, -1.66f) }),
+      new(0.61f, new List<Vector2> { new(-0.32f, -0.58f), new(-0.25f, 0.24f), new(0.46f, 0.07f), new(0.41f, -0.59f), new(0.69f, -1.00f), new(0.73f, -1.47f), new(1.08f, -2.40f), new(0.59f, -2.66f), new(0.42f, -3.55f), new(0.50f, -4.48f), new(0.50f, -4.89f), new(-0.17f, -4.91f), new(-0.97f, -4.71f), new(-0.78f, -3.67f), new(-0.67f, -2.43f), new(-0.86f, -1.05f) }),
+      new(1.46f, new List<Vector2> { new(-0.52f, -0.85f), new(-0.55f, -0.20f), new(-0.03f, -0.19f), new(0.10f, -0.71f), new(0.64f, -1.05f), new(0.81f, -1.55f), new(1.68f, -1.48f), new(1.76f, -1.75f), new(0.66f, -1.99f), new(0.44f, -2.70f), new(0.15f, -4.65f), new(-0.17f, -4.91f), new(-0.75f, -4.71f), new(-0.72f, -2.83f), new(-1.69f, -1.59f), new(-1.05f, -1.31f) }),
+      new(0.17f, new List<Vector2> { new(-0.41f, -0.72f), new(-0.44f, -0.11f), new(0.15f, -0.03f), new(0.34f, -0.71f), new(0.64f, -1.05f), new(0.61f, -1.57f), new(0.54f, -1.90f), new(0.47f, -2.26f), new(0.49f, -2.76f), new(0.40f, -3.41f), new(0.17f, -4.84f), new(-0.17f, -4.91f), new(-0.75f, -4.71f), new(-0.80f, -2.52f), new(-0.69f, -1.97f), new(-0.91f, -1.11f)}),
+      new(0.44f, new List<Vector2> { new(-0.41f, -0.72f), new(-0.42f, -0.09f), new(0.28f, -0.05f), new(0.36f, -0.71f), new(0.81f, -1.22f), new(1.62f, -1.35f), new(0.51f, -1.79f), new(0.52f, -2.47f), new(0.49f, -3.37f), new(0.29f, -4.80f), new(-0.11f, -4.91f), new(-0.52f, -4.76f), new(-0.66f, -2.66f), new(-0.57f, -1.86f), new(-1.49f, -1.30f), new(-0.77f, -1.09f) }),
+      new(0.4f, new List<Vector2> { new(-0.62f, -0.17f), new(-0.42f, -0.09f), new(0.28f, -0.05f), new(0.61f, -0.55f), new(1.53f, -0.36f), new(1.25f, -1.26f), new(0.51f, -1.79f), new(0.52f, -2.47f), new(0.34f, -3.60f), new(0.33f, -4.96f), new(-0.20f, -4.97f), new(-0.69f, -4.84f), new(-0.66f, -2.66f), new(-0.57f, -1.86f), new(-1.10f, -1.44f), new(-0.94f, -0.17f) }),
+      new(0.31f, new List<Vector2> { new(-0.34f, -0.59f), new(-0.28f, 0.05f), new(0.28f, -0.05f), new(0.45f, -0.54f), new(0.98f, -0.84f), new(1.17f, -1.55f), new(1.05f, -2.43f), new(0.72f, -2.63f), new(0.60f, -3.56f), new(0.44f, -5.05f), new(-0.16f, -5.07f), new(-0.66f, -5.01f), new(-0.68f, -3.70f), new(-0.66f, -2.50f), new(-1.24f, -1.97f), new(-0.84f, -0.89f) }),
+      new(0.31f, new List<Vector2> { new(-0.34f, -0.59f), new(-0.28f, 0.05f), new(0.28f, -0.05f), new(0.45f, -0.54f), new(0.98f, -0.84f), new(1.17f, -1.55f), new(1.05f, -2.43f), new(0.72f, -2.63f), new(0.60f, -3.56f), new(0.44f, -5.05f), new(-0.16f, -5.07f), new(-0.66f, -5.01f), new(-0.68f, -3.70f), new(-0.66f, -2.50f), new(-1.24f, -1.97f), new(-0.84f, -0.89f) }),
+      new(0.57f, new List<Vector2> { new(-0.39f, -0.19f), new(-0.27f, 0.60f), new(0.43f, 0.52f), new(0.43f, -0.32f), new(0.91f, -0.84f), new(1.12f, -1.53f), new(0.62f, -2.01f), new(0.59f, -2.77f), new(0.73f, -3.65f), new(0.73f, -5.21f), new(-0.28f, -5.19f), new(-1.34f, -5.19f), new(-1.19f, -3.77f), new(-0.85f, -2.17f), new(-1.27f, -0.95f), new(-0.79f, -0.45f) }),
+      new(0.19f, new List<Vector2> { new(-0.39f, -0.19f), new(-0.27f, 0.60f), new(0.43f, 0.52f), new(0.43f, -0.32f), new(1.38f, -0.42f), new(1.36f, -1.33f), new(0.65f, -1.68f), new(0.59f, -2.77f), new(0.73f, -3.65f), new(0.88f, -5.31f), new(-0.28f, -5.19f), new(-1.22f, -4.95f), new(-0.92f, -2.36f), new(-2.34f, -1.37f), new(-1.27f, -0.95f), new(-0.79f, -0.45f) }),
+      new(0.18f, new List<Vector2> { new(-0.57f, 0.49f), new(-0.27f, 0.60f), new(0.43f, 0.52f), new(0.43f, -0.32f), new(2.24f, 0.11f), new(2.50f, -0.36f), new(0.72f, -1.33f), new(0.59f, -1.91f), new(0.70f, -3.13f), new(0.85f, -5.13f), new(-0.35f, -5.21f), new(-1.19f, -5.04f), new(-0.70f, -2.30f), new(-1.44f, -0.79f), new(-1.82f, 0.54f), new(-1.14f, 0.59f) }),
+      new(0.57f, new List<Vector2> { new(-0.66f, -0.20f), new(-0.30f, 0.33f), new(0.37f, 0.20f), new(0.43f, -0.32f), new(1.19f, -0.26f), new(1.58f, -0.45f), new(1.13f, -1.54f), new(0.67f, -1.65f), new(0.61f, -3.33f), new(0.73f, -5.01f), new(-0.14f, -5.00f), new(-0.93f, -4.80f), new(-0.67f, -2.40f), new(-1.18f, -1.43f), new(-1.04f, -0.91f), new(-0.94f, -0.38f) }),
+      new(0.22f, new List<Vector2> { new(-0.27f, -0.35f), new(-0.19f, 0.37f), new(0.48f, 0.36f), new(0.43f, -0.41f), new(0.81f, -1.05f), new(0.72f, -2.22f), new(0.83f, -2.58f), new(0.56f, -2.93f), new(0.47f, -4.25f), new(0.35f, -4.90f), new(-0.14f, -4.94f), new(-0.60f, -4.90f), new(-0.69f, -3.60f), new(-0.87f, -2.51f), new(-0.75f, -1.83f), new(-0.79f, -0.80f) }),
+
+    },
+
+    ["Block"] = new List<HBox> {
+      new(0.22f, new List<Vector2> { new(-0.30f, -0.92f), new(-0.25f, -0.54f), new(0.40f, -0.55f), new(0.28f, -1.18f), new(0.76f, -1.65f), new(1.22f, -2.67f), new(1.28f, -2.93f), new(1.21f, -3.38f), new(1.54f, -4.57f), new(1.99f, -5.11f), new(-0.31f, -5.15f), new(-1.40f, -5.26f), new(-1.57f, -4.72f), new(-0.93f, -2.65f), new(-1.46f, -1.38f), new(-0.96f, -0.83f) })
+    },
+
+    ["Dodge"] = new List<HBox> {
+      new(0.02f, new List<Vector2> { new(-0.06f, -0.82f), new(0.16f, -0.46f), new(0.90f, -0.56f), new(0.65f, -1.23f), new(0.90f, -1.57f), new(1.21f, -1.70f), new(1.09f, -2.15f), new(1.25f, -3.35f), new(1.71f, -4.58f), new(1.77f, -4.83f), new(0.71f, -4.83f), new(-1.04f, -5.21f), new(-1.10f, -4.94f), new(-0.76f, -3.58f), new(-0.81f, -2.53f), new(-0.90f, -1.43f) })
+
+    },
+    ["Stance"] = new List<HBox> {
+      new(0.02f, new List<Vector2> { new(-0.64f, -0.89f), new(-0.55f, -0.26f), new(0.07f, -0.39f), new(0.04f, -1.00f), new(1.23f, -1.10f), new(1.33f, -1.30f), new(0.17f, -2.28f), new(0.66f, -3.35f), new(1.18f, -4.86f), new(1.05f, -5.05f), new(0.18f, -4.96f), new(-1.57f, -5.33f), new(-1.85f, -4.92f), new(-1.21f, -3.46f), new(-1.04f, -2.25f), new(-1.08f, -1.03f) })
+    },
+
+    ["Jump"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(-0.31f, -1.07f), new(-0.07f, -0.41f), new(0.54f, -0.52f), new(0.40f, -1.11f), new(0.78f, -1.40f), new(0.77f, -2.06f), new(1.42f, -2.68f), new(0.71f, -2.97f), new(1.00f, -5.12f), new(0.86f, -5.20f), new(-0.11f, -4.93f), new(-0.93f, -5.36f), new(-1.19f, -5.19f), new(-0.61f, -3.67f), new(-1.14f, -2.21f), new(-0.68f, -1.42f) }),
+      new(0.05f, new List<Vector2> {new(-0.18f, -1.83f), new(0.03f, -1.15f), new(0.58f, -1.37f), new(0.58f, -1.90f), new(0.90f, -2.91f), new(1.52f, -3.14f), new(1.19f, -3.55f), new(1.02f, -4.11f), new(1.21f, -4.79f), new(0.76f, -5.04f), new(0.27f, -5.19f), new(-0.61f, -5.38f), new(-1.09f, -5.31f), new(-0.63f, -4.21f), new(-1.21f, -3.11f), new(-0.56f, -2.03f) }),
+      new(0.08f, new List<Vector2> {new(-0.27f, -0.98f), new(-0.12f, -0.35f), new(0.46f, -0.40f), new(0.44f, -1.06f), new(0.74f, -1.66f), new(1.31f, -1.50f), new(0.62f, -2.46f), new(0.64f, -3.56f), new(0.34f, -4.45f), new(0.31f, -5.05f), new(0.18f, -5.23f), new(-0.16f, -5.14f), new(-0.24f, -4.11f), new(-0.48f, -2.76f), new(-0.92f, -2.00f), new(-0.81f, -1.38f) }),
+      new(0.16f, new List<Vector2> { new(-0.08f, -1.47f), new(0.06f, -1.07f), new(0.73f, -1.28f), new(0.61f, -1.81f), new(0.70f, -2.26f), new(1.14f, -2.53f), new(0.66f, -2.86f), new(0.66f, -3.29f), new(0.57f, -4.10f), new(-0.13f, -4.82f), new(-0.12f, -5.23f), new(-0.46f, -5.19f), new(-0.67f, -4.06f), new(-0.89f, -2.92f), new(-1.04f, -2.10f), new(-0.64f, -1.59f) }),
+      new(0.1f, new List<Vector2> {new(-0.02f, -1.63f), new(0.31f, -1.27f), new(0.89f, -1.64f), new(0.64f, -2.15f), new(0.61f, -2.44f), new(0.92f, -2.53f), new(0.76f, -2.92f), new(0.77f, -3.19f), new(0.80f, -3.60f), new(-0.24f, -4.31f), new(-0.10f, -4.68f), new(-0.62f, -4.72f), new(-0.88f, -4.00f), new(-0.97f, -2.99f), new(-1.01f, -2.03f), new(-0.51f, -1.69f) })
+
+    },
+    ["JumpDouble"] = new List<HBox> {
+      new(0.01f, new List<Vector2> {new(-0.37f, -0.82f), new(-0.26f, -0.28f), new(0.40f, -0.51f), new(0.26f, -1.03f), new(0.48f, -1.44f), new(0.88f, -1.85f), new(0.88f, -2.78f), new(0.16f, -3.80f), new(0.23f, -4.14f), new(-0.01f, -4.22f), new(-0.15f, -5.17f), new(-0.55f, -5.17f), new(-0.67f, -4.36f), new(-0.70f, -3.54f), new(-1.33f, -1.49f), new(-0.84f, -0.89f)}),
+      new(0.3f, new List<Vector2> { new(-0.64f, -0.08f), new(-0.35f, -0.29f), new(0.07f, -0.44f), new(0.59f, -0.40f), new(0.57f, -1.45f), new(-0.02f, -2.07f), new(0.22f, -2.68f), new(0.41f, -3.62f), new(0.36f, -4.02f), new(-0.40f, -4.69f), new(-0.43f, -4.96f), new(-0.66f, -4.96f), new(-1.01f, -4.13f), new(-1.09f, -2.79f), new(-1.33f, -1.13f), new(-0.95f, -0.24f) }),
+    },
+    ["JumpFalling"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(-0.85f, 0.37f), new(-0.36f, 0.21f), new(0.08f, 0.14f), new(0.42f, 0.16f), new(0.85f, -1.04f), new(0.03f, -1.98f), new(0.28f, -2.81f), new(0.39f, -3.85f), new(0.29f, -4.19f), new(0.03f, -4.38f), new(-0.33f, -5.09f), new(-0.66f, -5.12f), new(-0.97f, -4.11f), new(-0.83f, -3.35f), new(-1.09f, -2.53f), new(-1.17f, -0.96f)}),
+    },
+    ["JumpLanding"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(-0.70f, 0.41f), new(-0.26f, 0.33f), new(0.09f, 0.26f), new(0.48f, 0.27f), new(0.73f, -0.89f), new(-0.03f, -1.73f), new(0.29f, -2.50f), new(0.40f, -3.59f), new(0.29f, -3.97f), new(-0.31f, -4.66f), new(-0.32f, -4.93f), new(-0.57f, -4.96f), new(-0.85f, -4.21f), new(-0.74f, -3.36f), new(-1.02f, -2.49f), new(-1.11f, -0.43f) }),
+      new(0.34f, new List<Vector2> { new(-0.53f, -1.64f), new(-0.40f, -1.09f), new(0.33f, -1.12f), new(0.26f, -1.83f), new(0.49f, -2.34f), new(1.34f, -3.10f), new(0.66f, -3.52f), new(0.82f, -4.06f), new(0.82f, -4.83f), new(0.13f, -5.09f), new(-0.44f, -4.92f), new(-1.19f, -5.35f), new(-1.52f, -5.20f), new(-0.89f, -4.07f), new(-1.65f, -3.54f), new(-0.90f, -1.93f) }),
+      new(0.15f, new List<Vector2> { new(-0.59f, -1.00f), new(-0.53f, -0.45f), new(0.07f, -0.39f), new(0.06f, -1.01f), new(0.67f, -2.44f), new(1.05f, -2.81f), new(0.48f, -3.08f), new(0.48f, -4.08f), new(0.82f, -4.99f), new(0.28f, -5.19f), new(-0.44f, -4.92f), new(-1.10f, -5.22f), new(-1.52f, -5.24f), new(-1.19f, -3.75f), new(-1.76f, -2.57f), new(-0.99f, -1.23f) })
+    },
+    ["KickLeft"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(-0.19f, -0.86f), new(0.13f, -0.31f), new(0.73f, -0.51f), new(0.43f, -1.05f), new(1.38f, -1.21f), new(1.66f, -1.42f), new(0.67f, -3.04f), new(1.21f, -3.85f), new(0.81f, -4.93f), new(0.46f, -5.03f), new(-0.39f, -4.62f), new(-1.37f, -4.94f), new(-1.58f, -4.65f), new(-1.04f, -3.57f), new(-0.66f, -2.55f), new(-0.61f, -1.05f) }),
+      new(0.15f, new List<Vector2> { new(-0.51f, -1.19f), new(-0.73f, -0.55f), new(-0.04f, -0.40f), new(0.33f, 0.10f), new(0.73f, -0.06f), new(1.04f, -0.72f), new(0.73f, -2.44f), new(2.07f, -3.29f), new(2.43f, -5.12f), new(2.09f, -5.24f), new(0.69f, -4.53f), new(-1.37f, -4.94f), new(-1.85f, -4.28f), new(-0.65f, -3.60f), new(-0.19f, -2.57f), new(-0.72f, -1.68f) }),
+      new(0.14f, new List<Vector2> { new(-0.73f, -0.55f), new(-0.79f, 0.08f), new(-0.10f, -0.03f), new(-0.06f, -0.60f), new(2.06f, -0.06f), new(2.15f, -0.48f), new(0.81f, -1.51f), new(3.35f, -1.58f), new(2.89f, -2.20f), new(0.79f, -2.61f), new(0.63f, -5.14f), new(-0.06f, -5.22f), new(-0.15f, -4.58f), new(-0.19f, -2.27f), new(-1.05f, -1.72f), new(-1.42f, -1.02f) }),
+      new(0.08f, new List<Vector2> { new(-1.50f, -0.64f), new(-1.22f, -0.10f), new(-0.66f, -0.22f), new(-0.19f, -0.44f), new(-0.07f, -1.52f), new(1.05f, -1.04f), new(2.80f, -1.95f), new(2.82f, -2.17f), new(1.01f, -1.80f), new(0.04f, -2.44f), new(-0.31f, -5.18f), new(-0.94f, -5.37f), new(-0.87f, -4.39f), new(-0.98f, -2.14f), new(-1.63f, -1.57f), new(-1.87f, -1.06f) }),
+      new(0.12f, new List<Vector2> { new(-1.30f, -0.63f), new(-1.18f, -0.01f), new(-0.51f, -0.07f), new(-0.63f, -0.82f), new(1.27f, -1.01f), new(0.02f, -1.96f), new(0.94f, -2.88f), new(1.19f, -4.79f), new(0.48f, -4.33f), new(-0.27f, -3.13f), new(-1.13f, -5.25f), new(-1.65f, -5.35f), new(-1.38f, -3.77f), new(-1.06f, -2.20f), new(-1.69f, -1.54f), new(-1.82f, -0.93f) })
+    },
+    ["KickRight"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(0.33f, -0.46f), new(0.53f, -0.02f), new(1.19f, -0.17f), new(1.08f, -0.67f), new(2.33f, -0.19f), new(0.81f, -2.07f), new(1.86f, -3.19f), new(2.17f, -4.82f), new(1.45f, -4.84f), new(0.56f, -3.25f), new(-1.02f, -5.24f), new(-1.51f, -5.27f), new(-1.45f, -4.62f), new(-0.48f, -3.10f), new(-0.06f, -2.24f), new(0.01f, -1.17f) }),
+      new(0.09f, new List<Vector2> { new(-0.60f, -0.65f), new(-0.45f, -0.05f), new(0.14f, -0.20f), new(0.20f, -0.68f), new(1.43f, -0.11f), new(0.16f, -2.05f), new(0.94f, -2.88f), new(0.60f, -4.57f), new(1.01f, -4.91f), new(0.28f, -5.03f), new(0.16f, -4.31f), new(-0.05f, -3.46f), new(-0.74f, -2.82f), new(-1.10f, -1.93f), new(-1.03f, -1.27f), new(-0.81f, -0.85f) }),
+      new(0.09f, new List<Vector2> { new(-0.86f, -0.82f), new(-0.76f, -0.23f), new(-0.11f, -0.40f), new(-0.17f, -1.04f), new(0.12f, -1.64f), new(0.87f, -2.10f), new(2.23f, -2.55f), new(2.22f, -2.95f), new(1.22f, -2.98f), new(-0.10f, -3.31f), new(-0.10f, -5.00f), new(-0.88f, -5.00f), new(-0.99f, -3.73f), new(-1.03f, -2.48f), new(-1.37f, -1.91f), new(-1.28f, -1.23f) }),
+      new(0.11f, new List<Vector2> { new(-0.16f, -0.57f), new(0.02f, -0.08f), new(0.56f, -0.34f), new(0.48f, -1.03f), new(1.53f, -1.87f), new(1.19f, -2.16f), new(0.53f, -2.42f), new(0.96f, -3.58f), new(0.71f, -4.40f), new(0.85f, -4.88f), new(0.35f, -4.73f), new(-0.33f, -4.74f), new(-1.16f, -4.87f), new(-0.85f, -2.80f), new(-0.62f, -1.97f), new(-0.66f, -1.06f) })
+    },
+    ["PunchLeft"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(0.44f, -0.66f), new(0.55f, -0.08f), new(1.21f, -0.25f), new(1.18f, -0.68f), new(1.92f, -0.76f), new(1.53f, -1.92f), new(0.81f, -2.23f), new(1.57f, -3.31f), new(1.33f, -4.61f), new(1.71f, -4.94f), new(0.10f, -4.78f), new(-1.40f, -5.32f), new(-1.61f, -4.91f), new(-0.80f, -3.79f), new(-0.09f, -1.94f), new(-0.08f, -1.01f) }),
+      new(0.13f, new List<Vector2> { new(0.40f, -0.75f), new(0.63f, -0.14f), new(1.29f, -0.43f), new(1.35f, -0.88f), new(2.74f, -0.82f), new(1.28f, -1.51f), new(1.04f, -2.31f), new(1.84f, -3.29f), new(2.14f, -4.62f), new(2.61f, -4.90f), new(0.10f, -4.78f), new(-1.43f, -5.25f), new(-1.64f, -4.80f), new(-0.65f, -3.72f), new(-0.02f, -1.85f), new(-0.08f, -0.96f) }),
+      new(0.05f, new List<Vector2> { new(0.29f, -0.70f), new(0.44f, -0.24f), new(0.98f, -0.34f), new(1.19f, -0.88f), new(2.34f, -0.82f), new(1.28f, -1.51f), new(0.77f, -2.23f), new(1.58f, -3.10f), new(1.65f, -4.51f), new(2.18f, -4.87f), new(0.10f, -4.78f), new(-1.43f, -5.25f), new(-1.64f, -4.80f), new(-0.70f, -3.70f), new(-0.15f, -1.88f), new(-0.21f, -1.02f) })
+    },
+    ["PunchRight"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(0.66f, -0.57f), new(0.72f, -0.06f), new(1.39f, -0.20f), new(1.81f, -0.71f), new(1.46f, -1.70f), new(1.05f, -1.75f), new(1.12f, -2.57f), new(1.81f, -3.07f), new(1.97f, -4.43f), new(2.60f, -4.77f), new(0.31f, -4.77f), new(-1.33f, -5.26f), new(-1.55f, -4.80f), new(-0.48f, -3.71f), new(0.09f, -2.06f), new(0.06f, -0.84f) }),
+      new(0.06f, new List<Vector2> { new(0.58f, -0.65f), new(0.78f, -0.01f), new(1.35f, -0.17f), new(1.34f, -0.80f), new(2.84f, -0.71f), new(2.79f, -1.10f), new(1.34f, -1.41f), new(0.97f, -2.40f), new(1.70f, -3.11f), new(2.26f, -4.82f), new(1.33f, -4.84f), new(-1.02f, -5.26f), new(-1.43f, -4.83f), new(-0.34f, -3.86f), new(-0.09f, -2.58f), new(-0.04f, -1.06f) }),
+      new(0.08f, new List<Vector2> { new(0.61f, -0.70f), new(0.88f, -0.07f), new(1.47f, -0.25f), new(1.37f, -0.90f), new(2.72f, -0.88f), new(2.74f, -1.29f), new(1.45f, -1.53f), new(1.34f, -2.60f), new(1.85f, -3.08f), new(2.20f, -4.79f), new(1.41f, -4.85f), new(-1.18f, -5.27f), new(-1.49f, -4.73f), new(-0.46f, -3.83f), new(-0.04f, -2.38f), new(0.22f, -0.95f) })
+    },
+
+    //     ["WalkToSprint"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToRun"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToJump"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToDodge"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToBreathe"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["WalkToBlock"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["RunToSprint"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToWalk"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToJump"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToDodge"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToBreathe"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["RunToBlock"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["SprintToWalk"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToRun"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToJump"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToDodge"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToBreathe"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["SprintToBlock"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["StanceToWalk"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToSprint"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToRun"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToJump"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToDodge"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToBreathe"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["StanceToBlock"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["BlockToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DodgeToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["BreatheToBlock"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToDance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToDodge"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToJump"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToRun"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToSprint"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["BreatheToWalk"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["DanceToBreathe"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToBlock"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToDodge"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToJump"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToRun"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToSprint"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["DanceToWalk"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["JumpToJumpDouble"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["JumpToJumpFalling"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["JumpToJumpLanding"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["JumpDoubleToJumpFalling"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["JumpDoubleToJumpLanding"] = new List<HBox> { new(0.22f, 0, 0, 0, 0) },
+
+    //     ["JumpFallingToJumpLanding"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["JumpLandingToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["KickLeftToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["KickLeftToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["KickLeftToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["KickLeftToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["KickRightToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["KickRightToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["KickRightToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["KickRightToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+    //     ["PunchLeftToPunchRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchLeftToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchLeftToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchLeftToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchRightToPunchLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchRightToKickLeft"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchRightToKickRight"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+    //     ["PunchRightToStance"] = new List<HBox> {  new(0.01f, new List<Vector2> {}), },
+
+  };
+
+  public static Dictionary<string, List<HBox>> ImpHit1 { get; } = new Dictionary<string, List<HBox>> {
+    ["Breathe"] = new List<HBox> {
+      new(.01f, new List<Vector2>{ new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Walk"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Run"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Sprint"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Dance"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Stance"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Sprint"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["Jump"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["JumpDouble"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["JumpFalling"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["JumpLanding"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)})
+    },
+    ["PunchLeft"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.08f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.01f, new List<Vector2> { new(1.98f, -0.60f), new(1.89f, -0.99f), new(2.18f, -1.06f), new(2.32f, -0.84f), new(2.21f, -0.60f) }),
+      new(.035f, new List<Vector2> { new(2.40f, -0.68f), new(2.45f, -1.04f), new(2.73f, -1.03f), new(2.92f, -0.91f), new(2.76f, -0.58f) })
+    },
+    ["PunchRight"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)}),
+      new(.02f, new List<Vector2> { new(1.53f, -0.67f), new(1.59f, -1.00f), new(1.81f, -1.08f), new(2.07f, -0.77f), new(1.85f, -0.53f) }),
+      new(.02f, new List<Vector2> { new(2.35f, -0.73f), new(2.39f, -1.13f), new(2.79f, -1.11f), new(2.92f, -0.77f), new(2.71f, -0.63f) }),
+    },
+    ["KickLeft"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.26f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.01f, new List<Vector2> { new(2.19f, -1.97f), new(1.88f, -2.10f), new(2.09f, -2.58f), new(2.39f, -2.54f), new(2.57f, -2.19f) }),
+      new(.02f, new List<Vector2> { new(3.07f, -1.41f), new(2.51f, -1.62f), new(2.41f, -2.04f), new(2.79f, -2.10f), new(3.43f, -1.62f) }),
+      new(.05f, new List<Vector2> { new(3.14f, -1.07f), new(2.26f, -0.93f), new(2.22f, -1.60f), new(2.86f, -1.48f), new(3.27f, -1.34f) }),
+      new(.08f, new List<Vector2> { new(1.75f, -2.93f), new(1.75f, -2.93f), new(1.75f, -2.93f), new(1.75f, -2.93f), new(1.75f, -2.93f) })
+    },
+    ["KickRight"] = new List<HBox> {
+      new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.12f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.01f, new List<Vector2> { new(1.94f, -2.90f), new(1.36f, -2.71f), new(1.03f, -3.06f), new(1.26f, -3.27f), new(1.68f, -3.31f) }),
+      new(.14f, new List<Vector2> { new(1.06f, -4.33f), new(0.71f, -4.02f), new(0.33f, -4.40f), new(0.69f, -4.78f), new(1.16f, -4.69f) }),
+      new(.01f, new List<Vector2> { new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f) })
+    }
+  };
+
+  public static Dictionary<string, Dictionary<string, List<HBox>>> Imp = new Dictionary<string, Dictionary<string, List<HBox>>> {
+    { "hurt", ImpHurt }, { "hit1", ImpHit1 }
+  };
+
 }
 
-public static class ImpHBoxes {
-  
-}
-
-            // TODO changes to EsperBounces
 public class BounceFrame {
   public float x;
   public float y;
@@ -562,9 +828,8 @@ public class BounceFrame {
   }
 }
 
-// EsperBounceAdjs
 public static class BounceAdjustments {
-  public static Dictionary<string, List<BounceFrame>> Hair { get; } = new Dictionary<string, List<BounceFrame>> {
+  public static Dictionary<string, List<BounceFrame>> EsperHair { get; } = new Dictionary<string, List<BounceFrame>> {
     ["Breathe"] = new List<BounceFrame> { new(0, 0) },
     ["BreatheToWalk"] = new List<BounceFrame> { new(.6f, 0) },
     ["BreatheToRun"] = new List<BounceFrame> { new(.4f, -.05f) },
@@ -617,30 +882,30 @@ public static class BounceAdjustments {
     ["SprintToBlock"] = new List<BounceFrame> { new(.39f, -.98f) },
 
     ["Dance"] = new List<BounceFrame> {
-        new(.26f, .25f, .03f, -1), new(.44f, -.04f, .1f, -1), new(.42f, -.14f, .1f, -1), // 25
-        new(.03f, -.09f, .01f, 1), new(-.24f, .35f, .11f, 1), new(-.47f, -.23f, .15f, 1), // 52
-        new(-.03f, -.24f, .01f, -1), new(.15f, .27f, .17f, -1), new(.29f, -.3f, .18f, -1), // 88
-        new(.03f, .29f, .14f, -1), new(-.11f, -.24f, .17f, -1), new(.16f, .16f, .19f, -1), // 138
-        new(.28f, -.04f, .13f, -1), new(.1f, -.12f, .19f, -1), new(.23f, 0, .09f, -1), // 179
-        new(.24f, -.15f, .15f, -1), new(.08f, -.17f, .16f, -1), new(.21f, -.15f, .07f, -1), // 220
-        new(.02f, -.21f, .01f, 1), new(-.05f, -.28f, .14f, 1), new(.2f, -.21f, .01f, -1), // 239
-        new(.02f, -.06f, .08f, -1), // 246
-        new(.07f, -.05f, .03f, -1), new(-.12f, -.33f, .11f, -1), new(.02f, -.1f, .13f, -1), //273
-        new(-.38f, -.05f, .01f, 1), new(-.15f, -.07f, .1f, 1), new(-.11f, -.21f, .04f, 1), // 288
-        new(-.24f, -.01f, .08f, 1), new(.01f, -.08f, .01f, -1), new(0, -.14f, .11f, -1), // 313
-        new(.12f, -.09f, .05f, -1), new(.19f, -.3f, .16f, -1), new(-.01f, -.03f, .16f, -1), // 350
-        new(-.14f, 0.01f, .06f, -1), new(-.16f, -.18f, .06f, -1), new(.03f, .12f, .19f, -1), // 381
-        new(.19f, -.08f, .09f, -1), new(-.04f, -.26f, .01f, 1), new(-.02f, -.22f, .11f, 1), // 405
-        new(-.09f, .05f, .1f, 1), new(.11f, .01f, .01f, -1), new(.14f, -.02f, .11f, -1), // 427
-        new(.28f, .12f, .11f, -1), new(-.02f, .14f, .01f, 1), new(-.04f, 0, .09f, 1), // 448
-        new(-.04f, 0, .06f, 1), new(.14f, .1f, .01f, -1), new(-.01f, .23f, .07f, -1), // 462
-        new(-.07f, .14f, .07f, -1), new(.09f, .37f, .08f, -1), new(.26f, .22f, .08f, -1), // 485
-        new(.06f, .42f, .14f, -1), new(.12f, .3f, .04f, -1), new(-.07f, .23f, .05f, -1), // 508
-        new(.08f, .28f, .07f, -1), new(.17f, .17f, .05f, -1), new(.09f, .26f, .1f, -1), // 530
-        new(-.02f, .14f, .1f, -1), new(.1f, .06f, .12f, -1), new(.23f, .01f, .07f, -1), // 
-        new(.12f, .11f, .09f, -1), new(0, -.02f, .07f, -1), new(.023f, -.13f, .12f, -1), //
-        new(.16f, .19f, .06f, -1) // 
-      },
+      new(.26f, .25f, .03f, -1), new(.44f, -.04f, .1f, -1), new(.42f, -.14f, .1f, -1), // 25
+      new(.03f, -.09f, .01f, 1), new(-.24f, .35f, .11f, 1), new(-.47f, -.23f, .15f, 1), // 52
+      new(-.03f, -.24f, .01f, -1), new(.15f, .27f, .17f, -1), new(.29f, -.3f, .18f, -1), // 88
+      new(.03f, .29f, .14f, -1), new(-.11f, -.24f, .17f, -1), new(.16f, .16f, .19f, -1), // 138
+      new(.28f, -.04f, .13f, -1), new(.1f, -.12f, .19f, -1), new(.23f, 0, .09f, -1), // 179
+      new(.24f, -.15f, .15f, -1), new(.08f, -.17f, .16f, -1), new(.21f, -.15f, .07f, -1), // 220
+      new(.02f, -.21f, .01f, 1), new(-.05f, -.28f, .14f, 1), new(.2f, -.21f, .01f, -1), // 239
+      new(.02f, -.06f, .08f, -1), // 246
+      new(.07f, -.05f, .03f, -1), new(-.12f, -.33f, .11f, -1), new(.02f, -.1f, .13f, -1), //273
+      new(-.38f, -.05f, .01f, 1), new(-.15f, -.07f, .1f, 1), new(-.11f, -.21f, .04f, 1), // 288
+      new(-.24f, -.01f, .08f, 1), new(.01f, -.08f, .01f, -1), new(0, -.14f, .11f, -1), // 313
+      new(.12f, -.09f, .05f, -1), new(.19f, -.3f, .16f, -1), new(-.01f, -.03f, .16f, -1), // 350
+      new(-.14f, 0.01f, .06f, -1), new(-.16f, -.18f, .06f, -1), new(.03f, .12f, .19f, -1), // 381
+      new(.19f, -.08f, .09f, -1), new(-.04f, -.26f, .01f, 1), new(-.02f, -.22f, .11f, 1), // 405
+      new(-.09f, .05f, .1f, 1), new(.11f, .01f, .01f, -1), new(.14f, -.02f, .11f, -1), // 427
+      new(.28f, .12f, .11f, -1), new(-.02f, .14f, .01f, 1), new(-.04f, 0, .09f, 1), // 448
+      new(-.04f, 0, .06f, 1), new(.14f, .1f, .01f, -1), new(-.01f, .23f, .07f, -1), // 462
+      new(-.07f, .14f, .07f, -1), new(.09f, .37f, .08f, -1), new(.26f, .22f, .08f, -1), // 485
+      new(.06f, .42f, .14f, -1), new(.12f, .3f, .04f, -1), new(-.07f, .23f, .05f, -1), // 508
+      new(.08f, .28f, .07f, -1), new(.17f, .17f, .05f, -1), new(.09f, .26f, .1f, -1), // 530
+      new(-.02f, .14f, .1f, -1), new(.1f, .06f, .12f, -1), new(.23f, .01f, .07f, -1), // 
+      new(.12f, .11f, .09f, -1), new(0, -.02f, .07f, -1), new(.023f, -.13f, .12f, -1), //
+      new(.16f, .19f, .06f, -1) // 
+    },
     ["DanceToBlock"] = new List<BounceFrame> { new(.167f, -.66f, .17f, -1) },
     ["DanceToBreathe"] = new List<BounceFrame> { new(.1f, -.04f, .17f, -1) },
     ["DanceToDodge"] = new List<BounceFrame> { new(.55f, -.43f, .17f, -1) },
@@ -691,14 +956,14 @@ public static class BounceAdjustments {
     ["KickLeft"] = new List<BounceFrame> { new(.2f, -.44f, .01f, 1), new(.32f, -.64f, .06f, 1),
       new(-.06f, -.47f, .07f, 1), new(-.66f, -.67f, .08f, 1), new(-.29f, -.39f, .04f, 1),
       new(-.71f, -.14f, .04f, 1), new(-1.19f, -.47f, .05f, 1), new(-1.16f, -.21f, .03f, 1),
-       new(-1, -.11f, .13f,1) },
+      new(-1, -.11f, .13f,1) },
     ["KickRight"] = new List<BounceFrame> { new(.42f, -.29f, .01f, 1), new(-.49f, -.35f, .13f, 1),
-     new(-.63f, -.71f, .1f, 1), new(.17f, -.3f, .06f, 1)},
+      new(-.63f, -.71f, .1f, 1), new(.17f, -.3f, .06f, 1)},
     ["PunchLeft"] = new List<BounceFrame> { new(.86f, -.31f, .01f, 1), new(1.15f, -.26f, .05f, 1),
-     new(.67f, -.41f, .09f, 1), new(.62f, -.4f, .02f, 1) },
+      new(.67f, -.41f, .09f, 1), new(.62f, -.4f, .02f, 1) },
     ["PunchRight"] = new List<BounceFrame> { new(.95f, -.17f, .01f, 1), new(.97f, -.12f, .02f, 1),
-    new(.99f, -.14f, .02f, 1), new(.91f, -.21f, .04f, 1), new(1.1f, -.34f, .05f, 1),
-    new(1.08f, -.33f, .01f, 1)  },
+      new(.99f, -.14f, .02f, 1), new(.91f, -.21f, .04f, 1), new(1.1f, -.34f, .05f, 1),
+      new(1.08f, -.33f, .01f, 1)  },
 
     ["KickLeftToKickRight"] = new List<BounceFrame> { new(.74f, -.26f) },
     ["KickLeftToPunchLeft"] = new List<BounceFrame> { new(.78f, -.26f) },
@@ -718,22 +983,22 @@ public static class BounceAdjustments {
     ["PunchRightToKickRight"] = new List<BounceFrame> { new(.75f, -.28f) },
     ["PunchRightToStance"] = new List<BounceFrame> { new(-.33f, -.42f) }
   };
-  public static Dictionary<string, Dictionary<string, List<BounceFrame>>> adjustments { get; } = new Dictionary<string, Dictionary<string, List<BounceFrame>>> {
-    ["HairRight"] = Hair,
-    ["Hair"] = Hair,
-    ["HairBack"] = Hair,
-    ["HairLeft"] = Hair,
-    ["BeltFlap"] = Hair,
-    ["FlapFront"] = Hair,
-    ["FlapRight"] = Hair,
-    ["FlapLeft"] = Hair,
-    ["Cape"] = Hair
+
+  public static Dictionary<string, Dictionary<string, List<BounceFrame>>> Esperanza { get; } = new Dictionary<string, Dictionary<string, List<BounceFrame>>> {
+    ["HairRight"] = EsperHair,
+    ["Hair"] = EsperHair,
+    ["HairBack"] = EsperHair,
+    ["HairLeft"] = EsperHair,
+    ["BeltFlap"] = EsperHair,
+    ["FlapFront"] = EsperHair,
+    ["FlapRight"] = EsperHair,
+    ["FlapLeft"] = EsperHair,
+    ["Cape"] = EsperHair
   };
 }
 
-// EsperInterrupts
 public static class Interrupts {
-  public static Dictionary<string, Dictionary<string, string>> interrupts { get; } = new Dictionary<string, Dictionary<string, string>> {
+  public static Dictionary<string, Dictionary<string, string>> Esperanza { get; } = new Dictionary<string, Dictionary<string, string>> {
     ["Breathe"] = new Dictionary<string, string> {
       { "Block", "BreatheToBlock" }, { "Dance", "BreatheToDance" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "PunchRight", "BreatheToPunchRight" }, { "Walk", "BreatheToWalk" }, { "Run", "BreatheToRun" }, { "Sprint", "BreatheToSprint" }
     },
@@ -849,11 +1114,13 @@ public static class Abbreviations {
     { "RN", "Rain Needles" }, { "TS", "Tsunami Strike" }, { "RP", "Rip" }, { "TR", "Tear" }, { "RW", "Raging Whisper" }, { "SE", "Seethe" },
     { "CK", "Corrupt Kinesis" }, { "SW", "Shadow Walk" }, { "AC", "Abyssal Call" }, { "SS", "Soul Siphon" }, { "SI", "Soul Infection" }
   };
+
   public static Dictionary<string, List<string>> structure { get; } = new Dictionary<string, List<string>> {
     ["Major"] = new List<string> { "STR", "DEX", "END", "INT", "LCK", "AMP", "VLT", "PYR", "EMB", "CHL", "ICI", "VAP", "MOI", "UMB", "VOI", "ABY", "ECL", },
     ["Minor"] = new List<string> { "HP", "HPRG", "ARM", "DMG", "AKSP", "NRG", "NRGRG", "DCHC", "DDMG", "CCHC", "CDMG", "LCHC", "LDMG", "HEAL", "BNS", "CDST", "LDSC", "FDMG", "AREA", "DUR", "AFT", "EVD", "CLN", "FEAR", "SPEC", "PEN", "MVSP" },
     ["Ability"] = new List<string> { "RK", "LK", "RP", "LP", "BK", "DO", "JP", "SP", "SK", "SH", "CL", "ST", "LB", "ID", "DD", "DJ", "TB", "OR", "FT", "BW", "BZ", "PL", "FS", "BD", "FW", "MT", "FI", "FC", "IB", "IT", "IM", "IS", "SL", "FF", "AV", "BL", "WB", "CH", "WS", "PD", "BB", "VD", "DV", "RN", "TS", "RP", "TR", "RW", "SE", "CK", "SW", "AC", "SS", "SI" },
   };
+
   public static Dictionary<string, Dictionary<string, List<string>>> FormMajorMinor { get; } = new Dictionary<string, Dictionary<string, List<string>>> {
     ["Base"] = new Dictionary<string, List<string>> {
       ["STR"] = new List<string> { "HP", "DMG", "DCHC", },
@@ -1139,21 +1406,9 @@ public static class FormStatsValues {
   };
 }
 
-public static class AllStatValues {
-  public static Dictionary<string, float> allStats { set; get; } = new Dictionary<string, float> {
-    { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "AS", 0 }, { "NRGRG", 0 },
-    { "CDMG", 0 }, { "NRG", 0 }, { "HPRG", 0 }, { "ARM", 0 }, { "HEAL", 0 },
-    { "CCHC", 0 }, { "LDMG", 0 }, { "LCHC", 0 }, { "DDMG", 0 }, { "BONUS", 0 },
-    { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "LDSC", 0 }, { "FDMG", 0 },
-    { "AREA", 0 }, { "DUR", 0 }, { "AFT", 0 }, { "EVD", 0 }, { "CLN", 0 },
-    { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
-  };
-}
-
-
-
 public static class EsperanzaForms {
   public static Dictionary<string, int> Active { get; set; } = new Dictionary<string, int> { { "Base", 1 }, { "Bolt", 0 }, { "Cold", 0 }, { "Fire", 0 }, { "Aqua", 0 }, { "Dark", 0 } };
+
   public static Dictionary<string, int> Unlocked { get; set; } = new Dictionary<string, int> { { "Base", 1 }, { "Bolt", 0 }, { "Aqua", 0 }, { "Cold", 0 }, { "Fire", 0 }, { "Dark", 0 } };
 
   public static void SetActive(string v) {
@@ -1162,6 +1417,7 @@ public static class EsperanzaForms {
       else { Unlocked[item.Key] = 0; }
     }
   }
+
   public static string GetActive() {
     var v = "";
     foreach (var item in Active) {
@@ -1171,6 +1427,7 @@ public static class EsperanzaForms {
     }
     return v;
   }
+
   public static void UnlockForm(string v) {
     if (Unlocked.ContainsKey(v)) {
       Unlocked[v] = 1;
@@ -1196,6 +1453,7 @@ public static class EquippedItems {
     { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
+
   public static Dictionary<string, GearItem> Aqua { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Wetsuit Top", gearId = "Aqua_aa", gearColor = "LightBlue", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Wetsuit Bottoms", gearId = "Aqua_aa", gearColor = "LightBlue", boosts = new List<BoostEntry>() } },
@@ -1204,6 +1462,7 @@ public static class EquippedItems {
     { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
+
   public static Dictionary<string, GearItem> Bolt { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Anti-Static Top", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Anti-Static Pants", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
@@ -1213,6 +1472,7 @@ public static class EquippedItems {
     { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
+
   public static Dictionary<string, GearItem> Cold { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Warm Top", gearId = "Cold_aa", gearColor = "DarkBlue", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Warm Bottoms", gearId = "Cold_aa", gearColor = "DarkBlue", boosts  = new List<BoostEntry>() } },
@@ -1222,6 +1482,7 @@ public static class EquippedItems {
     { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
+
   public static Dictionary<string, GearItem> Fire { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Sheer Top", gearId = "Fire_aa", gearColor = "Yellow", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Skimmies", gearId = "Fire_aa", gearColor = "Yellow", boosts = new List<BoostEntry>() } },
@@ -1230,6 +1491,7 @@ public static class EquippedItems {
     { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
+
   public static Dictionary<string, GearItem> Dark { set; get; } = new Dictionary<string, GearItem> {
     { "Chest", new GearItem { type = "Normal", name = "Void Shirt", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
     { "Legs", new GearItem { type = "Normal", name = "Void Pants", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
@@ -1240,10 +1502,50 @@ public static class EquippedItems {
     { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
     { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
   };
+
   public static Dictionary<string, Dictionary<string, GearItem>> AllGearForms { get; } = new Dictionary<string, Dictionary<string, GearItem>> {
     { "Base", Base }, { "Aqua", Aqua }, { "Bolt", Bolt }, { "Cold", Cold }, { "Fire", Fire }, { "Dark", Dark }
   };
 
+}
+
+public static class AllStatValues {
+  public static Dictionary<string, float> Esperanza { set; get; } = new Dictionary<string, float> {
+    { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "AS", 0 }, { "NRGRG", 0 }, { "CDMG", 0 }, { "NRG", 0 }, { "HPRG", 0 }, { "ARM", 0 }, { "HEAL", 0 },
+    { "CCHC", 0 }, { "LDMG", 0 }, { "LCHC", 0 }, { "DDMG", 0 }, { "BONUS", 0 }, { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "LDSC", 0 }, { "FDMG", 0 },
+    { "AREA", 0 }, { "DUR", 0 }, { "AFT", 0 }, { "EVD", 0 }, { "CLN", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
+  };
+
+  public static Dictionary<string, float> Imp { set; get; } = new Dictionary<string, float> {
+    { "DMG", 0 }, { "HP", 0 }, { "AS", 0 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
+  };
+}
+
+public class LocationInfo {
+  public string name;
+  public List<string> enemies;
+  public int maxEnemies;
+  public float spawnInterval;
+  public int finalKillCount;
+
+  public LocationInfo(string name, List<string> enemies, int maxEnemies, float spawnInterval, int finalKillCount) {
+    this.name = name;
+    this.enemies = enemies;
+    this.maxEnemies = maxEnemies;
+    this.spawnInterval = spawnInterval;
+    this.finalKillCount = finalKillCount;
+  }
+
+}
+
+public static class LocationEnemyData {
+  public static Dictionary<string, LocationInfo> zones { get; } = new Dictionary<string, LocationInfo> {
+    { "DomeCity", new LocationInfo("DomeCity", new List<string> { "Imp" }, 1, 2.0f, 3) },
+  };
+
+  public static Dictionary<string, int> totalKills { get; } = new Dictionary<string, int> {
+    { "Imp", 0 },
+  };
 }
 
 
