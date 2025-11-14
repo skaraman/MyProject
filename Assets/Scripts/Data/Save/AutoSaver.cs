@@ -7,7 +7,7 @@ public class AutoSaver : MonoBehaviour {
   public FontText scenePlaytimeTracker;
 
   private List<Action> actions = new();
-  
+
   public bool enableTimeTracking = false;
   private int playtimeHours;
   private int playtimeMinutes;
@@ -41,7 +41,7 @@ public class AutoSaver : MonoBehaviour {
         secondTracker = 0;
         SaveAll();
       }
-      var newHours =  $"{playtimeHours}";
+      var newHours = $"{playtimeHours}";
       var newMinutes = $"{playtimeMinutes}";
       var newSeconds = $"{playtimeSeconds}";
       if (playtimeHours < 10) newHours = $"0{playtimeHours}";
@@ -75,7 +75,7 @@ public class AutoSaver : MonoBehaviour {
     gameData["playtimeMinutes"] = playtimeMinutes;
     gameData["playtimeSeconds"] = playtimeSeconds;
     gameData["level"] = characterState.level;
-    gameData["location"] = characterState.locationTracker.location;
+    gameData["location"] = LocationTracker.currentLocation;
     SaveSlotManager.Save("slot", gameData);
   }
 }

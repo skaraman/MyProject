@@ -5,45 +5,69 @@ using CustomInspector;
 
 public class Spawner : MonoBehaviour {
   public SerializableSortedDictionary<string, GameObject> enemyPrefabs;
+  public GameObject ParentHolder;
 
-  public float spawnInterval = 5f;
-  public int maxEnemies = 10;
+  private Camera mainCamera;
+  private float offset = 5f;
   private float timer = 0f;
-
-  private List<GameObject> spawnedEnemies = new();
   private bool canSpawn = false;
+  private Dictionary<string, Pool> EnemyPools = new();
+  private LocationInfo ZoneData;
 
   private List<Action> actions = new();
 
   void Start() {
-    actions.Add(MessageBus.On("ReadyForSpawns", (o) => { canSpawn = true; }));
+    actions.Add(MessageBus.On("ReadyForSpawns", (o) => { InitZone(); }));
+
+  }
+
+  void InitZone() {
+    ZoneData = LocationEnemyData.zones[LocationTracker.currentLocation];
+    canSpawn = true;
+    foreach (var enemyType in ZoneData.enemies) {
+      if (!EnemyPools.ContainsKey(enemyType)) {
+        var pool = new Pool();
+        pool.Initialize(enemyPrefabs[enemyType], ParentHolder.transform, poolSize: ZoneData.maxEnemies);
+        EnemyPools[enemyType] = pool;
+      }
+    }
   }
 
   void Update() {
     if (!canSpawn) return;
-
     timer += Time.deltaTime;
-
-    // TODO
-    if (timer >= spawnInterval && spawnedEnemies.Count < maxEnemies) {
+    if (timer >= ZoneData.spawnInterval) {
       SpawnEnemy();
       timer = 0f;
     }
   }
 
-
-
   private void SpawnEnemy() {
-
-    var ZoneData = LocationEnemyData.zones[LocationTracker.currentLocation];
     var rndEnemyIndex = UnityEngine.Random.Range(0, ZoneData.enemies.Count);
     GameObject enemyPrefab = enemyPrefabs[ZoneData.enemies[rndEnemyIndex]];
+    bool chooseA = UnityEngine.Random.value > 0.5f;
+    Vector3 spawnPosition = GetSpawnPosition(chooseA);
 
-    Vector3 spawnPosition = transform.position;
-    Quaternion spawnRotation = Quaternion.identity;
 
-    GameObject newEnemy = Instantiate(enemyPrefab, spawnPosition, spawnRotation);
     spawnedEnemies.Add(newEnemy);
+  }
+
+  public void DespawnEnemy(GameObject enemy) {
+    var enemyType = enemy.GetComponent<EnemyInfo>().enemyType;
+    EnemyPools[enemyType].Despawn(enemy);
+
+  }
+
+  public Vector3 GetSpawnPosition(bool rightSide) {
+    if (mainCamera == null) mainCamera = Camera.main;
+    var viewZ = Mathf.Abs(mainCamera.transform.position.z - transform.position.z);
+    var worldLeft = mainCamera.ViewportToWorldPoint(new Vector3(0, 0.5f, viewZ)).x;
+    var worldRight = mainCamera.ViewportToWorldPoint(new Vector3(1, 0.5f, viewZ)).x;
+    var y = transform.position.y;
+    var x = rightSide ? worldRight + offset : worldLeft - offset;
+    var spawnPosition = new Vector3(x, y, transform.position.z);
+    Debug.Log($"[OffscreenSpawner] rightSide={rightSide}, worldLeft={worldLeft}, worldRight={worldRight}, offset={offset}, spawn={spawnPosition}");
+    return spawnPosition;
   }
 
 }

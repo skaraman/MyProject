@@ -1517,8 +1517,9 @@ public static class AllStatValues {
   };
 
   public static Dictionary<string, float> Imp { set; get; } = new Dictionary<string, float> {
-    { "DMG", 0 }, { "HP", 0 }, { "AS", 0 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
+    { "DMG", 1 }, { "HP", 10 }, { "AS", 1 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 1 }, { "AKSP", 1 }, { "CDST", 1 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
   };
+
 }
 
 public class LocationInfo {
