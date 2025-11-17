@@ -48,8 +48,8 @@ public class Spawner : MonoBehaviour {
     bool chooseA = UnityEngine.Random.value > 0.5f;
     Vector3 spawnPosition = GetSpawnPosition(chooseA);
 
+    EnemyPools[enemyPrefab.GetComponent<EnemyInfo>().enemyType].Spawn(spawnPosition, Quaternion.identity);
 
-    spawnedEnemies.Add(newEnemy);
   }
 
   public void DespawnEnemy(GameObject enemy) {
