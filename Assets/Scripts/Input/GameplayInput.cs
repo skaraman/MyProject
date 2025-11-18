@@ -106,7 +106,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void Update() {
-    if (erb == null) return;
+    if (erb == null || gearController == null) return;
     _CameraFollow();
 
     if (isJumping) return;

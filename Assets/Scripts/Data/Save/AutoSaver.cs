@@ -29,6 +29,7 @@ public class AutoSaver : MonoBehaviour {
   void OnDestroy() {
     foreach (var unsub in actions) unsub();
     actions.Clear();
+    enableTimeTracking = false;
   }
 
   void FixedUpdate() {

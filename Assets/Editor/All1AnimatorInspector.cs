@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using CustomInspector;
 
-[ExecuteAlways]
 [RequireComponent(typeof(Renderer))]
 public class AllIn1AnimatorInspector : MonoBehaviour {
   [System.Serializable]
@@ -166,7 +165,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
 
   public void Update() {
     if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
-    if (_renderer == null)  _renderer = GetComponent<Renderer>();
+    if (_renderer == null) _renderer = GetComponent<Renderer>();
     _renderer.GetPropertyBlock(_propBlock);
     changed = false;
     deltaTime = Time.deltaTime;
@@ -273,7 +272,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   [ForceUpdate]
   public void ApplyAllProperties(bool force) {
     if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
-    if (_renderer == null)  _renderer = GetComponent<Renderer>();
+    if (_renderer == null) _renderer = GetComponent<Renderer>();
     _renderer.GetPropertyBlock(_propBlock);
     ToggleKeywords();
     foreach (var anim in floatAnimations) if (anim.sequences.Count > 0) _propBlock.SetFloat(anim.propHash, anim.sequences[0].from);

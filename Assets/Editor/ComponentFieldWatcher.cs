@@ -27,6 +27,7 @@ public static class ComponentFieldWatcher {
   }
 
   static void OnPlayModeStateChanged(PlayModeStateChange state) {
+    CleanupCache();
     switch (state) {
       case PlayModeStateChange.ExitingEditMode:
         StoreOriginalValues();
@@ -44,13 +45,14 @@ public static class ComponentFieldWatcher {
   static void OnEditorUpdate() {
     if (EditorApplication.timeSinceStartup - lastUpdateTime < UPDATE_INTERVAL)
       return;
-    
+
     lastUpdateTime = EditorApplication.timeSinceStartup;
 
     if (!Application.isPlaying) {
       MonitorEditModeChanges();
-    } else {
-     // MonitorPlayModeInspectorChanges();
+    }
+    else {
+      // MonitorPlayModeInspectorChanges();
     }
   }
 
@@ -81,10 +83,10 @@ public static class ComponentFieldWatcher {
 
   static void MonitorPlayModeInspectorChanges() {
     var allMonoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
-    
+
     foreach (var obj in allMonoBehaviours) {
       if (!ShouldMonitorObject(obj)) continue;
-      
+
       // Initialize cache for new objects
       if (!playModeInspectorCache.ContainsKey(obj)) {
         playModeInspectorCache[obj] = GetFieldSnapshot(obj);
@@ -105,12 +107,12 @@ public static class ComponentFieldWatcher {
           // Check if this is likely an inspector change vs script change
           if (IsLikelyInspectorChange(obj, field, previous[field], current[field])) {
             Debug.Log($"[Inspector Change] {obj.name}.{obj.GetType().Name}.{field.Name} changed from {previous[field]} to {current[field]}");
-            
+
             // Invoke ALL ForceUpdate methods
             InvokeAllForceUpdateMethods(obj);
             anyChanged = true;
           }
-          
+
           previous[field] = current[field];
         }
       }
@@ -130,40 +132,40 @@ public static class ComponentFieldWatcher {
     // If the inspector is currently focused and the object is selected, more likely inspector change
     if (Selection.activeObject == obj || (obj is Component comp && Selection.activeGameObject == comp.gameObject)) {
       // Additional heuristics can be added here:
-      
+
       // 1. Check if we're in a frame where no FixedUpdate/Update would typically run
       // (This is a simple approximation - you might want more sophisticated detection)
-      
+
       // 2. Type-specific heuristics
       if (field.FieldType == typeof(bool)) {
         // Boolean toggles are very common inspector changes
         return true;
       }
-      
+
       if (field.FieldType == typeof(float) || field.FieldType == typeof(int)) {
         // Numeric changes when object is selected are likely inspector changes
         return true;
       }
-      
+
       if (field.FieldType == typeof(string)) {
         // String changes are typically inspector changes
         return true;
       }
-      
+
       if (field.FieldType.IsSubclassOf(typeof(UnityEngine.Object))) {
         // Reference changes (drag & drop) are typically inspector changes
         return true;
       }
-      
-      if (field.FieldType == typeof(Vector3) || field.FieldType == typeof(Vector2) || 
+
+      if (field.FieldType == typeof(Vector3) || field.FieldType == typeof(Vector2) ||
           field.FieldType == typeof(Color) || field.FieldType == typeof(Quaternion)) {
         // These are commonly changed via inspector
         return true;
       }
-      
+
       return true; // Default to true if object is selected
     }
-    
+
     return false; // Likely a script change if object is not selected
   }
 
@@ -188,7 +190,7 @@ public static class ComponentFieldWatcher {
         if (!Equals(current[field], previous[field])) {
           Debug.Log($"[Edit Mode] {obj.name}.{obj.GetType().Name}.{field.Name} changed from {previous[field]} to {current[field]}");
           previous[field] = current[field];
-          
+
           // Invoke ALL ForceUpdate methods
           InvokeAllForceUpdateMethods(obj);
           anyChanged = true;
@@ -206,11 +208,11 @@ public static class ComponentFieldWatcher {
       .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
       .Where(m => m.GetCustomAttribute<ForceUpdateAttribute>() != null)
       .ToArray();
-    
+
     foreach (var method in forceUpdateMethods) {
       var parameters = method.GetParameters();
       var args = new object[parameters.Length];
-      
+
       // Initialize default values for parameters
       for (int i = 0; i < parameters.Length; i++) {
         var paramType = parameters[i].ParameterType;
@@ -219,11 +221,12 @@ public static class ComponentFieldWatcher {
         }
         // Reference types will remain null, which is fine for most cases
       }
-      
+
       try {
         method.Invoke(obj, args);
         Debug.Log($"Invoked ForceUpdate method: {obj.GetType().Name}.{method.Name}()");
-      } catch (Exception e) {
+      }
+      catch (Exception e) {
         Debug.LogWarning($"Failed to invoke ForceUpdate method {method.Name} on {obj.GetType().Name}: {e.Message}");
       }
     }

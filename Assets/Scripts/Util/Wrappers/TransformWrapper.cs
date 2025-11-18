@@ -1,17 +1,16 @@
 //using System.Numerics;
 using UnityEngine;
 
-[ExecuteAlways]
 public class TransformWrapper : TimeScaledTransform {
   public float x, y, z, rx, ry, rz, sx, sy, sz;
   private Vector3 lastPos, lastRot, lastScale;
-  private Transform cachedTransform;
+  private Transform cachedLocalTransform;
 
   void Start() {
-    cachedTransform = transform;
-    lastPos = cachedTransform.localPosition;
-    lastRot = cachedTransform.localRotation.eulerAngles;
-    lastScale = cachedTransform.localScale;
+    cachedLocalTransform = transform;
+    lastPos = cachedLocalTransform.localPosition;
+    lastRot = cachedLocalTransform.localRotation.eulerAngles;
+    lastScale = cachedLocalTransform.localScale;
     x = lastPos.x; y = lastPos.y; z = lastPos.z;
     rx = lastRot.x; ry = lastRot.y; rz = lastRot.z;
     sx = lastScale.x; sy = lastScale.y; sz = lastScale.z;
@@ -19,13 +18,13 @@ public class TransformWrapper : TimeScaledTransform {
 
   [ForceUpdate]
   void Update() {
-    if (cachedTransform == null) cachedTransform = transform;
-    
+    if (cachedLocalTransform == null) cachedLocalTransform = transform;
+
     var targetPos = new Vector3(x, y, z);
-    var currentPos = cachedTransform.localPosition;
+    var currentPos = cachedLocalTransform.localPosition;
     if (targetPos != lastPos || currentPos != lastPos) {
       if (targetPos != lastPos) {
-        cachedTransform.localPosition = targetPos;
+        cachedLocalTransform.localPosition = targetPos;
         lastPos = targetPos;
       }
       else {
@@ -35,10 +34,10 @@ public class TransformWrapper : TimeScaledTransform {
     }
 
     var targetRot = new Vector3(rx, ry, rz);
-    var currentRot = cachedTransform.localRotation.eulerAngles;
+    var currentRot = cachedLocalTransform.localRotation.eulerAngles;
     if (targetRot != lastRot || currentRot != lastRot) {
       if (targetRot != lastRot) {
-        cachedTransform.localRotation = Quaternion.Euler(targetRot);
+        cachedLocalTransform.localRotation = Quaternion.Euler(targetRot);
         lastRot = targetRot;
       }
       else {
@@ -48,10 +47,10 @@ public class TransformWrapper : TimeScaledTransform {
     }
 
     var targetScale = new Vector3(sx, sy, sz);
-    var currentScale = cachedTransform.localScale;
+    var currentScale = cachedLocalTransform.localScale;
     if (targetScale != lastScale || currentScale != lastScale) {
       if (targetScale != lastScale) {
-        cachedTransform.localScale = targetScale;
+        cachedLocalTransform.localScale = targetScale;
         lastScale = targetScale;
       }
       else {
