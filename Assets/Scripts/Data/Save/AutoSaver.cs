@@ -74,7 +74,9 @@ public class AutoSaver : MonoBehaviour {
     gameData["playtimeHours"] = playtimeHours;
     gameData["playtimeMinutes"] = playtimeMinutes;
     gameData["playtimeSeconds"] = playtimeSeconds;
-    gameData["level"] = characterState.level;
+    if (characterState != null) {
+      gameData["level"] = characterState.level;
+    }
     gameData["location"] = LocationTracker.currentLocation;
     SaveSlotManager.Save("slot", gameData);
   }

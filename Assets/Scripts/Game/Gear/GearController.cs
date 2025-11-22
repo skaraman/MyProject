@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using CustomInspector;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using System.Collections;
 
 [ExecuteAlways]
@@ -29,6 +32,7 @@ public class GearController : MonoBehaviour {
   public bool needsFlip = false;
   private Vector3 scaleVector = new Vector3(1, 1, 1);
   private SaveData gameData = new();
+  private bool hasResetLeanTween;
 
   private Dictionary<GameObject, List<int>> bounceTweens = new Dictionary<GameObject, List<int>>();
   private Dictionary<GameObject, Coroutine> bounceCoroutines = new Dictionary<GameObject, Coroutine>();
@@ -50,7 +54,24 @@ public class GearController : MonoBehaviour {
   }
 
   void OnDestroy() {
+    CleanupLeanTween(!Application.isPlaying);
+#if UNITY_EDITOR
+    if (!Application.isPlaying) {
+      Selection.activeObject = null;
+    }
+#endif
+  }
+
+  void OnDisable() {
+    CleanupLeanTween(!Application.isPlaying);
+  }
+
+  private void CleanupLeanTween(bool resetLeanTweenManager) {
     CancelAllBounceTweens();
+    if (resetLeanTweenManager && !hasResetLeanTween) {
+      LeanTween.reset();
+      hasResetLeanTween = true;
+    }
   }
 
   private void CancelAllBounceTweens() {

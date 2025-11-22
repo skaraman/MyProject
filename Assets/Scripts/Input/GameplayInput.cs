@@ -63,25 +63,31 @@ public class GameplayInput : MonoBehaviour {
   void dodge() { }
 
   System.Collections.IEnumerator jump() {
-    if (isGrounded) {
-      gearController.PlayAnimation("Jump");
-      isGrounded = false;
-      isJumping = true;
-      isFalling = false;
-      erb.linearVelocity = new Vector2(erb.linearVelocity.x, 0); // Reset vertical velocity before jump
-      erb.AddForce(new Vector2(0, 400f + AllStatValues.Esperanza["MVSP"] * 20f));
-      yield return new WaitForSeconds(1);
-      isGrounded = true;
-      isJumping = false;
-      gearController.PlayAnimation("JumpLanding");
-      yield return new WaitForSeconds(
-        Animations.Esperanza[gearController.currentAnimation].duration / 1000
-      );
-      stanceTimer = 0f;
+    if (!isGrounded || gearController == null) {
+      yield break;
     }
+    gearController.PlayAnimation("Jump");
+    isGrounded = false;
+    isJumping = true;
+    isFalling = false;
+    erb.linearVelocity = new Vector2(erb.linearVelocity.x, 0); // Reset vertical velocity before jump
+    erb.AddForce(new Vector2(0, 400f + AllStatValues.Esperanza["MVSP"] * 20f));
+    yield return new WaitForSeconds(1);
+    isGrounded = true;
+    isJumping = false;
+    if (gearController == null) {
+      stanceTimer = 0f;
+      yield break;
+    }
+    gearController.PlayAnimation("JumpLanding");
+    if (Animations.Esperanza.TryGetValue(gearController.currentAnimation, out var landingAnim)) {
+      yield return new WaitForSeconds(landingAnim.duration / 1000f);
+    }
+    stanceTimer = 0f;
   }
 
   void dance() {
+    if (gearController == null) return;
     gearController.PlayAnimation("Dance");
   }
 
@@ -126,6 +132,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _ProcessMovementVelocity() {
+    if (gearController == null) return;
     if (gearController.currentAnimation == "Dance") return;
     if (gearController.currentAnimation == "Stance") return;
     erb.linearVelocityY = yVelocity * (10 + AllStatValues.Esperanza["MVSP"]) * sprintShift;
@@ -137,6 +144,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _ProcessMovementAnimation() {
+    if (gearController == null) return;
     var input = math.abs(xVelocity) + math.abs(yVelocity);
     stanceTimer += Time.deltaTime;
     if (input == 0) {

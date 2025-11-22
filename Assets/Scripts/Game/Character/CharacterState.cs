@@ -1,6 +1,9 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class CharacterState : MonoBehaviour {
   public int level = 0;
@@ -19,6 +22,11 @@ public class CharacterState : MonoBehaviour {
 
   void OnDestroy() {
     offLoadGame?.Invoke();
+#if UNITY_EDITOR
+    if (!Application.isPlaying) {
+      Selection.activeObject = null;
+    }
+#endif
   }
 
   public void LoadState() {
