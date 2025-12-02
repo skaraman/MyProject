@@ -80,7 +80,7 @@ public class GameplayInput : MonoBehaviour {
       yield break;
     }
     gearController.PlayAnimation("JumpLanding");
-    if (Animations.Esperanza.TryGetValue(gearController.currentAnimation, out var landingAnim)) {
+    if (Animations.Esperanza.TryGetValue(gearController.CurrentAnimation, out var landingAnim)) {
       yield return new WaitForSeconds(landingAnim.duration / 1000f);
     }
     stanceTimer = 0f;
@@ -133,12 +133,12 @@ public class GameplayInput : MonoBehaviour {
 
   void _ProcessMovementVelocity() {
     if (gearController == null) return;
-    if (gearController.currentAnimation == "Dance") return;
-    if (gearController.currentAnimation == "Stance") return;
+    if (gearController.CurrentAnimation == "Dance") return;
+    if (gearController.CurrentAnimation == "Stance") return;
     erb.linearVelocityY = yVelocity * (10 + AllStatValues.Esperanza["MVSP"]) * sprintShift;
     erb.linearVelocityX = xVelocity * (10 + AllStatValues.Esperanza["MVSP"]) * sprintShift;
-    if ((xVelocity < 0 && gearController.isFacingRight) ||
-    (xVelocity > 0 && !gearController.isFacingRight)) {
+    if ((xVelocity < 0 && gearController.IsFacingRight) ||
+    (xVelocity > 0 && !gearController.IsFacingRight)) {
       gearController.needsFlip = true;
     }
   }
@@ -156,7 +156,7 @@ public class GameplayInput : MonoBehaviour {
       }
     }
     else {
-      if (stanceTimer > 2f || gearController.currentAnimation == "Breathe") {
+      if (stanceTimer > 2f || gearController.CurrentAnimation == "Breathe") {
         if (sprintShift > 1) {
           gearController.PlayAnimation("Sprint");
         }

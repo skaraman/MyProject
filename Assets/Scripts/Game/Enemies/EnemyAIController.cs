@@ -67,7 +67,7 @@ public class EnemyAIController : MonoBehaviour {
       if (wait <= 0f) wait = 0.5f;
       yield return new WaitForSeconds(wait);
     }
-    enemyController.PlayAnimation(enemyController.fallbackAnimation);
+    enemyController.PlayAnimation(enemyController.defaultAnimation);
   }
 
   private IEnumerator RepositionSequence() {
@@ -103,7 +103,7 @@ public class EnemyAIController : MonoBehaviour {
       yield break;
     }
     yield return MoveForDuration(moveDir, duration, speedMultiplier);
-    enemyController.PlayAnimation(enemyController.fallbackAnimation);
+    enemyController.PlayAnimation(enemyController.defaultAnimation);
   }
 
   private IEnumerator MoveForDuration(Vector2 direction, float duration, float speedMultiplier) {

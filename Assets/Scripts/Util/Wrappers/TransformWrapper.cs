@@ -5,7 +5,6 @@ using UnityEngine;
 public class TransformWrapper : TimeScaledTransform {
   public float x, y, z, rx, ry, rz, sx, sy, sz;
   private Vector3 lastPos, lastRot, lastScale;
-  private Transform cachedTransform;
 
   void Start() {
     cachedTransform = transform;
@@ -67,7 +66,7 @@ public class TimeScaledTransform : MonoBehaviour {
   Vector3 prevPosition;
   Vector3 prevRotation;
   Vector3 prevScale;
-  private Transform cachedTransform;
+  protected Transform cachedTransform;
 
   void Start() {
     cachedTransform = transform;

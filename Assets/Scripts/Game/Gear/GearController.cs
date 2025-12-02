@@ -6,45 +6,69 @@ using CustomInspector;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
-using System.Collections;
 
 [ExecuteAlways]
 public class GearController : MonoBehaviour {
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
+  public string defaultAnimation = "Breathe";
 
   public GameObject[] GearObjects;
   public GameObject[] HairObjects;
   public GameObject[] OtherBounceGearObjects;
   public GameObject[] SkinObjects;
   public GameObject[] HBoxObjects;
-  private GameObject[] combinedBounces;
   public GameObject HairSkin;
   public Dictionary<string, Dictionary<string, GearItem>> lastGear = new Dictionary<string, Dictionary<string, GearItem>>();
-
-  public string currentAnimation = "Breathe";
-  private string nextAnimation;
-  private int currentFrame;
-  public float _animationTimer = 0f;
-  private bool pingPong = false;
-  private bool isPlaying = true;
-  public bool isFacingRight = true;
-  public bool needsFlip = false;
-  private Vector3 scaleVector = new Vector3(1, 1, 1);
+  public bool needsFlip;
+  private GameObject[] combinedBounces;
   private SaveData gameData = new();
-  private bool hasResetLeanTween;
+  private AnimationController animationController = new();
 
-  private Dictionary<GameObject, List<int>> bounceTweens = new Dictionary<GameObject, List<int>>();
-  private Dictionary<GameObject, Coroutine> bounceCoroutines = new Dictionary<GameObject, Coroutine>();
+  public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
+
+  void Awake() {
+    combinedBounces = (HairObjects ?? Array.Empty<GameObject>()).Concat(OtherBounceGearObjects ?? Array.Empty<GameObject>()).ToArray();
+    ConfigureAnimationController();
+  }
 
   void Start() {
     if (Application.isPlaying) {
       LeanTween.reset();
       LeanTween.init(4000);
     }
-    combinedBounces = HairObjects.Concat(OtherBounceGearObjects).ToArray();
-    SetBounces();
+    animationController.PlayAnimation(defaultAnimation, true);
+  }
 
+  void Update() {
+    if (animationController == null) return;
+    animationController.SlowDown = slowDown;
+    animationController.ForceLoop = forceLoop;
+    if (needsFlip) {
+      animationController.QueueFlip();
+      needsFlip = false;
+    }
+  }
+
+  void FixedUpdate() {
+    animationController?.Tick(Time.deltaTime);
+  }
+
+  private void ConfigureAnimationController() {
+    if (animationController == null) return;
+    var spriteTargets = (GearObjects ?? Array.Empty<GameObject>()).Concat(SkinObjects ?? Array.Empty<GameObject>());
+    animationController.Initialize(
+      transform,
+      spriteTargets,
+      combinedBounces,
+      HBoxObjects,
+      Animations.Esperanza,
+      Interrupts.Esperanza,
+      BounceAdjustments.Esperanza,
+      HBoxes.Esperanza,
+      defaultAnimation,
+      false
+    );
   }
 
   public void LoadGear() {
@@ -54,49 +78,16 @@ public class GearController : MonoBehaviour {
   }
 
   void OnDestroy() {
-    CleanupLeanTween(!Application.isPlaying);
 #if UNITY_EDITOR
     if (!Application.isPlaying) {
       Selection.activeObject = null;
     }
 #endif
+    animationController?.Cleanup(!Application.isPlaying);
   }
 
   void OnDisable() {
-    CleanupLeanTween(!Application.isPlaying);
-  }
-
-  private void CleanupLeanTween(bool resetLeanTweenManager) {
-    CancelAllBounceTweens();
-    if (resetLeanTweenManager && !hasResetLeanTween) {
-      LeanTween.reset();
-      hasResetLeanTween = true;
-    }
-  }
-
-  private void CancelAllBounceTweens() {
-    // Cancel all LeanTween tweens on each tracked GameObject and stop stored coroutines
-    foreach (var kvp in bounceTweens) {
-      var go = kvp.Key;
-      if (go != null) {
-        LeanTween.cancel(go);
-      }
-      if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
-        StopCoroutine(bounceCoroutines[go]);
-      }
-    }
-    // Also ensure any HBox objects in HBoxObjects are cancelled/stopped
-    if (HBoxObjects != null) {
-      foreach (var go in HBoxObjects) {
-        if (go == null) continue;
-        LeanTween.cancel(go);
-        if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
-          StopCoroutine(bounceCoroutines[go]);
-        }
-      }
-    }
-    bounceTweens.Clear();
-    bounceCoroutines.Clear();
+    animationController?.Cleanup(false);
   }
 
   public void GetSavedGearState() {
@@ -201,253 +192,24 @@ public class GearController : MonoBehaviour {
     }
   }
 
+  public string CurrentAnimation => animationController != null ? animationController.CurrentAnimation : null;
+
   public void _TogglePause() {
     TogglePause();
   }
 
   public void TogglePause(string forcePause = null) {
-    isPlaying = forcePause != null ? false : !isPlaying;
-    foreach (var kvp in bounceTweens) {
-      foreach (int tweenId in kvp.Value) {
-        if (isPlaying) {
-          LeanTween.resume(tweenId);
-        }
-        else {
-          LeanTween.pause(tweenId);
-        }
-      }
-    }
+    animationController?.TogglePause(forcePause);
   }
 
   public void ForceAnimation() {
-    string temp = currentAnimation;
-    currentAnimation = null;
-    PlayAnimation(temp);
+    if (animationController == null) return;
+    animationController.ForceAnimation(defaultAnimation);
   }
 
   public void PlayAnimation(string anim) {
-    if (currentAnimation == anim) return;
-    if (currentAnimation == null) {
-      currentAnimation = anim;
-      nextAnimation = null;
-    }
-    else if (Interrupts.Esperanza.ContainsKey(currentAnimation) && Interrupts.Esperanza[currentAnimation].ContainsKey(anim)) {
-      currentAnimation = Interrupts.Esperanza[currentAnimation][anim];
-      nextAnimation = anim;
-    }
-    else {
-      return;
-    }
-    CancelAllBounceTweens();
-    var category = currentAnimation;
-    if (Animations.Esperanza[currentAnimation].To) {
-      category = "To";
-    }
-    foreach (GameObject go in GearObjects) {
-      go.GetComponent<SpriteWithNormals>().SetAnimation(category);
-    }
-    foreach (GameObject go in SkinObjects) {
-      go.GetComponent<SpriteWithNormals>().SetAnimation(category);
-    }
-    currentFrame = Animations.Esperanza[currentAnimation].start - 1;
-    _animationTimer = 0f;
-    pingPong = false;
-    isPlaying = true;
-    SetBounces();
+    animationController?.PlayAnimation(anim);
   }
 
-  void FixedUpdate() {
-    if (!isPlaying || currentAnimation == null) return;
-    if (!Animations.Esperanza.ContainsKey(currentAnimation)) return;
-    var anim = Animations.Esperanza[currentAnimation];
-    var fSlowDown = slowDown ? 10f : 1f;
-    _animationTimer += (Time.deltaTime * 1000f) / fSlowDown;
-    float normalTime = _animationTimer / anim.duration;
-    if (!pingPong) {
-      int frameOffset = Mathf.FloorToInt((float)(anim.end - anim.start) * normalTime);
-      currentFrame = anim.start + frameOffset;
-      if (currentFrame >= anim.end) {
-        if (!string.IsNullOrEmpty(nextAnimation)) {
-          currentAnimation = null;
-          PlayAnimation(nextAnimation);
-          return;
-        }
-        if (anim.loop || forceLoop) {
-          currentFrame = anim.start;
-          pingPong = false;
-          _animationTimer = 0f;
-          SetBounces();
-        }
-        else {
-          currentFrame = anim.end;
-          isPlaying = false;
-          if (anim.pingPong) {
-            _animationTimer = 0f;
-            isPlaying = true;
-            pingPong = true;
-          }
-        }
-      }
-    }
-    else {
-      int frameOffset = Mathf.FloorToInt((float)(anim.end - anim.start) * normalTime);
-      currentFrame = anim.end - frameOffset;
-      if (currentFrame <= anim.start) {
-        isPlaying = true;
-        currentFrame = anim.start - 1;
-        pingPong = false;
-        _animationTimer = 0f;
-        SetBounces();
-      }
-    }
-    if (needsFlip) {
-      var direction = 1;
-      needsFlip = false;
-      if (isFacingRight) {
-        isFacingRight = false;
-        direction = -1;
-      }
-      else {
-        isFacingRight = true;
-        direction = 1;
-      }
-      scaleVector.x = direction;
-      gameObject.transform.localScale = scaleVector;
-      SetBounces();
-    }
-    foreach (GameObject go in GearObjects) {
-      go.GetComponent<SpriteWithNormals>().UpdateSpriteAndNormal(currentFrame);
-    }
-    foreach (GameObject go in SkinObjects) {
-      go.GetComponent<SpriteWithNormals>().UpdateSpriteAndNormal(currentFrame);
-    }
-  }
-
-  public void SetBounces() {
-    CancelAllBounceTweens();
-    foreach (KeyValuePair<string, Dictionary<string, List<BounceFrame>>> partPair in BounceAdjustments.Esperanza) {
-      string partKey = partPair.Key;
-      var animationDict = partPair.Value;
-      if (!animationDict.ContainsKey(currentAnimation)) continue;
-      var frameSequence = animationDict[currentAnimation];
-      foreach (GameObject bounceParent in combinedBounces) {
-        if (!isPlaying) break;
-        if (bounceParent.name.Equals(partKey)) {
-          LeanTween.cancel(bounceParent);
-          if (bounceCoroutines.ContainsKey(bounceParent) && bounceCoroutines[bounceParent] != null) {
-            StopCoroutine(bounceCoroutines[bounceParent]);
-          }
-          var coro = StartCoroutine(PlayBounceSequence(bounceParent, frameSequence));
-          bounceCoroutines[bounceParent] = coro;
-          break;
-        }
-      }
-    }
-    SetHBoxes();
-  }
-
-  private IEnumerator PlayBounceSequence(GameObject bounceParent, List<BounceFrame> sequence) {
-    if (!bounceTweens.ContainsKey(bounceParent)) {
-      bounceTweens[bounceParent] = new List<int>();
-    }
-    var fSlowDown = slowDown ? 10f : 1f;
-    foreach (BounceFrame frame in sequence) {
-      if (!isPlaying) break;
-      Vector3 targetPos = new Vector3(frame.x, frame.y, bounceParent.transform.localPosition.z);
-      var moveDescr = LeanTween.moveLocal(bounceParent, targetPos, frame.duration * fSlowDown).setEase(LeanTweenType.linear);
-      int tweenId = moveDescr.id;
-      moveDescr.setOnComplete(() => {
-        if (bounceTweens.ContainsKey(bounceParent)) bounceTweens[bounceParent].Remove(tweenId);
-      });
-      var scaleDescr = LeanTween.scaleX(bounceParent, frame.offset, frame.duration * fSlowDown).setEase(LeanTweenType.linear);
-      int tweenId2 = scaleDescr.id;
-      scaleDescr.setOnComplete(() => {
-        if (bounceTweens.ContainsKey(bounceParent)) bounceTweens[bounceParent].Remove(tweenId2);
-      });
-      bounceTweens[bounceParent].Add(tweenId);
-      bounceTweens[bounceParent].Add(tweenId2);
-      yield return new WaitForSeconds(frame.duration * fSlowDown);
-    }
-    if (bounceTweens.ContainsKey(bounceParent)) {
-      bounceTweens[bounceParent].Clear();
-    }
-    if (bounceCoroutines.ContainsKey(bounceParent)) bounceCoroutines.Remove(bounceParent);
-    if (slowDown) {
-      TogglePause("true");
-    }
-  }
-
-  public void SetHBoxes() {
-    foreach (var kvp in HBoxes.Esperanza) {
-      string partKey = kvp.Key;
-      var animDict = kvp.Value;
-      if (!animDict.ContainsKey(currentAnimation)) continue;
-      var hboxList = animDict[currentAnimation];
-      foreach (GameObject go in HBoxObjects) {
-        if (go == null || !go.name.Equals(partKey)) continue;
-        var poly = go.GetComponent<PolygonCollider2D>();
-        if (poly == null) continue;
-        if (hboxList is List<HBox> multiSeq) {
-          LeanTween.cancel(go);
-          if (bounceCoroutines.ContainsKey(go) && bounceCoroutines[go] != null) {
-            StopCoroutine(bounceCoroutines[go]);
-          }
-          var coro = StartCoroutine(AnimateHBox(go, poly, multiSeq));
-          bounceCoroutines[go] = coro;
-        }
-        else {
-          Debug.LogWarning($"HBox sequence for {partKey} has unexpected type: {hboxList?.GetType()}");
-        }
-      }
-    }
-  }
-
-  private IEnumerator AnimateHBox(GameObject go, PolygonCollider2D collider, List<HBox> sequence) {
-    if (!bounceTweens.ContainsKey(go)) {
-      bounceTweens[go] = new List<int>();
-    }
-    var fSlowDown = slowDown ? 10f : 1f;
-    foreach (var targetPath in sequence) {
-      if (!isPlaying) break;
-      if (collider.pathCount == 0) collider.pathCount = 1;
-      Vector2[] startPoints = collider.GetPath(0);
-      Vector2[] endPoints = targetPath.points.ToArray();
-      if (endPoints.Length == 0) continue;
-      int startLen = startPoints?.Length ?? 0;
-      int endLen = endPoints.Length;
-      int len = Math.Max(1, Math.Max(startLen, endLen));
-      Vector2[] s = new Vector2[len];
-      Vector2[] e = new Vector2[len];
-      for (int i = 0; i < len; i++) {
-        s[i] = (startLen > 0) ? startPoints[i % startLen] : endPoints[i % endLen];
-        e[i] = endPoints[i % endLen];
-      }
-      float duration = (targetPath.d > 0 ? targetPath.d : 0.2f) * fSlowDown;
-
-      LTDescr descr = LeanTween.value(go, 0f, 1f, duration).setEase(LeanTweenType.linear);
-      int tweenId = descr.id;
-      bounceTweens[go].Add(tweenId);
-      descr.setOnUpdate((float v) => {
-        Vector2[] lerped = new Vector2[len];
-        for (int i = 0; i < len; i++) {
-          lerped[i] = Vector2.Lerp(s[i], e[i], v);
-        }
-        collider.SetPath(0, lerped);
-      });
-      descr.setOnComplete(() => {
-        collider.SetPath(0, e);
-        if (bounceTweens.ContainsKey(go)) bounceTweens[go].Remove(tweenId);
-      });
-
-      yield return new WaitForSeconds(duration);
-      if (!isPlaying) break;
-    }
-    if (bounceTweens.ContainsKey(go)) {
-      bounceTweens[go].Clear();
-    }
-    if (bounceCoroutines.ContainsKey(go)) bounceCoroutines.Remove(go);
-    if (slowDown) {
-      TogglePause("true");
-    }
-  }
+  public AnimationController Controller => animationController;
 }
