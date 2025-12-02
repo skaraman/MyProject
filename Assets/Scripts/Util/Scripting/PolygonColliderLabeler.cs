@@ -5,7 +5,6 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
-[ExecuteAlways]
 [RequireComponent(typeof(PolygonCollider2D))]
 public class PolygonPointLabeler : MonoBehaviour {
   public Camera cam;
@@ -37,7 +36,7 @@ public class PolygonPointLabeler : MonoBehaviour {
     cam = cam == null ? Camera.main : cam;
     LoadPoints();
     //Debug.Log($"[PolygonPointLabeler] Enabled. HasCollider={(poly!=null)}, Paths={poly.pathCount}, UsingPath={pathIndex}");
-   // Debug.Log($"[PolygonPointLabeler] LoadedPoints={localPoints.Length}");
+    // Debug.Log($"[PolygonPointLabeler] LoadedPoints={localPoints.Length}");
   }
 
   [ForceUpdate]
@@ -107,7 +106,7 @@ public class PolygonPointLabeler : MonoBehaviour {
       if (nearestIndex >= 0 && d <= hoverRadius) {
         pinnedIndex = nearestIndex;
         MessageBus.Send(clickEvent, pinnedIndex);
-       // Debug.Log($"[PolygonPointLabeler] PinnedIndex={pinnedIndex}");
+        // Debug.Log($"[PolygonPointLabeler] PinnedIndex={pinnedIndex}");
       }
     }
     if (clickToPin && Input.GetKeyDown(unpinKey)) {
@@ -122,7 +121,8 @@ public class PolygonPointLabeler : MonoBehaviour {
     if (pinnedIndex >= 0) {
       if (showAllWhenPinned) {
         for (int i = 0; i < worldPoints.Count; i++) DrawLabelFor(i, "(pinned)");
-      } else {
+      }
+      else {
         DrawLabelFor(pinnedIndex, "(pinned)");
       }
       return;
@@ -201,9 +201,11 @@ public class PolygonPointLabeler : MonoBehaviour {
             // highlight only if this is the selected path and matches nearest/pinned index
             if (p == pathIndex && i == nearestIndex && nearestDist <= hoverRadius) {
               Handles.color = Color.yellow;
-            } else if (p == pathIndex && i == pinnedIndex) {
+            }
+            else if (p == pathIndex && i == pinnedIndex) {
               Handles.color = Color.yellow;
-            } else {
+            }
+            else {
               Handles.color = Color.white;
             }
             Handles.Label(worldPos, $"#{i}");

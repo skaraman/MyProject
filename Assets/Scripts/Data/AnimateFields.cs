@@ -4,7 +4,6 @@ using UnityEngine;
 using CustomInspector;
 using System.Reflection;
 
-[ExecuteAlways]
 [Serializable]
 public class AnimateFields : MonoBehaviour {
   [Button(nameof(Play), label = "Play", size = Size.small)]
@@ -31,7 +30,7 @@ public class AnimateFields : MonoBehaviour {
   private float stepDuration;
   private AnimationCurve currentEasing;
   public SerializableSortedDictionary<string, string> fromValues = new();
-  
+
   // Cache reflection data to avoid repeated lookups
   private Type cachedTargetType;
   private Dictionary<string, MemberInfo> memberCache = new();
@@ -71,7 +70,8 @@ public class AnimateFields : MonoBehaviour {
     if (!Application.isPlaying) return;
     if (!string.IsNullOrEmpty(trigger)) {
       triggerOff = MessageBus.On(trigger, (o) => Play());
-    } else {
+    }
+    else {
       Play();
     }
   }
@@ -81,13 +81,14 @@ public class AnimateFields : MonoBehaviour {
       cachedTargetType = target.GetType();
       memberCache.Clear();
     }
-    
+
     if (!memberCache.TryGetValue(key, out var member)) {
       var field = cachedTargetType.GetField(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
       if (field != null) {
         member = field;
         memberCache[key] = member;
-      } else {
+      }
+      else {
         var prop = cachedTargetType.GetProperty(key, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         if (prop != null) {
           member = prop;
@@ -110,14 +111,15 @@ public class AnimateFields : MonoBehaviour {
       var member = GetCachedMember(key);
       FieldInfo field = member as FieldInfo;
       PropertyInfo prop = member as PropertyInfo;
-      
+
       object baseVal = null;
 
       if (isFirstStep && fromValues.TryGetValue(key, out var fromOverride)) {
         if (float.TryParse(fromOverride, out var fVal)) baseVal = fVal;
         else if (int.TryParse(fromOverride, out var iVal)) baseVal = iVal;
         else baseVal = fromOverride;
-      } else {
+      }
+      else {
         if (field != null) baseVal = field.GetValue(target);
         else if (prop != null && prop.CanRead && prop.CanWrite) baseVal = prop.GetValue(target);
       }
@@ -137,7 +139,8 @@ public class AnimateFields : MonoBehaviour {
           to = to,
           setter = setter
         });
-      } else if (baseVal is int i1 && int.TryParse(strVal, out var i2)) {
+      }
+      else if (baseVal is int i1 && int.TryParse(strVal, out var i2)) {
         var randomized = i2 + Mathf.FloorToInt(UnityEngine.Random.Range(0f, randomRange));
         var from = i1;
         var to = typeIsBy ? i1 + randomized : randomized;
@@ -157,14 +160,14 @@ public class AnimateFields : MonoBehaviour {
     timer = 0f;
     sequenceIt = 0;
     if (cachedTargetType == null && target != null) cachedTargetType = target.GetType();
-    
+
     foreach (var kvp in fromValues) {
       var key = kvp.key;
       var val = kvp.value;
       var member = GetCachedMember(key);
       FieldInfo field = member as FieldInfo;
       PropertyInfo prop = member as PropertyInfo;
-      
+
       object parsed = val;
       if (float.TryParse(val, out var f)) parsed = f;
       else if (int.TryParse(val, out var i)) parsed = i;
@@ -176,7 +179,7 @@ public class AnimateFields : MonoBehaviour {
   public void Reset() {
     if (!hasValidTarget) return;
     if (cachedTargetType == null) cachedTargetType = target.GetType();
-    
+
     fromValues.Clear();
     foreach (var step in sequence) {
       foreach (var kvp in step.props) {
@@ -185,17 +188,17 @@ public class AnimateFields : MonoBehaviour {
         var member = GetCachedMember(key);
         FieldInfo field = member as FieldInfo;
         PropertyInfo prop = member as PropertyInfo;
-        
+
         object val = field != null ? field.GetValue(target) : prop != null && prop.CanRead && prop.CanWrite ? prop.GetValue(target) : null;
         if (val is float || val is int || val is string) fromValues[key] = val.ToString();
       }
     }
 
-  #if UNITY_EDITOR
+#if UNITY_EDITOR
     if (!Application.isPlaying && fromValues.Count == 0) {
       fromValues[" "] = " "; // force Unity to serialize it
     }
-  #endif
+#endif
   }
 
   void OnDestroy() {
@@ -244,10 +247,12 @@ public class AnimateFields : MonoBehaviour {
       callback?.Invoke();
       if (loop) {
         Play();
-      } else {
+      }
+      else {
         Stop();
       }
-    } else {
+    }
+    else {
       GenerateAnimationFromStep(sequence[sequenceIt], false);
     }
   }

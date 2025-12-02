@@ -7,7 +7,6 @@ using CustomInspector;
 using UnityEditor;
 #endif
 
-[ExecuteAlways]
 public class GearController : MonoBehaviour {
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
