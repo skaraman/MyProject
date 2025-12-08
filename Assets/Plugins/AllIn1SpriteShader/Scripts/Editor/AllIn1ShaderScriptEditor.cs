@@ -300,8 +300,8 @@ namespace AllIn1SpriteShader
             else
             {
                 Graphic img = myScript.GetComponent<Graphic>();
-                if(img.material == null) return;
-                if (img != null) shaderName = img.material.shader.name;
+                if (img != null && img.material != null) shaderName = img.material.shader.name;
+                else return;
             }
             shaderName = shaderName.Replace("AllIn1SpriteShader/", "");
 
