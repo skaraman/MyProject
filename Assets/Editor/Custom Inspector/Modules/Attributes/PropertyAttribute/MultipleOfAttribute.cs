@@ -1,30 +1,26 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class MultipleOfAttribute : PropertyAttribute
+    public class MultipleOfAttribute : ComparablePropertyAttribute
     {
         public readonly string stepPath = null;
         public readonly double step = 1;
 
+        protected override object[] GetParameters() => new object[] { stepPath, step };
 
-        private MultipleOfAttribute()
-        {
-            order = -10;
-        }
         /// <param name="stepPath">The name or path to a number, relative in current class</param>
         public MultipleOfAttribute(string stepPath)
-        : this()
         {
+            order = -10;
             this.stepPath = stepPath;
         }
         public MultipleOfAttribute(double value)
-        : this()
         {
+            order = -10;
             this.step = value;
         }
         public MultipleOfAttribute(float value)

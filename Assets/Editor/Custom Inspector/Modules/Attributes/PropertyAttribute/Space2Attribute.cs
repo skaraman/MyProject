@@ -9,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class Space2Attribute : PropertyAttribute
+    public class Space2Attribute : ComparablePropertyAttribute
     {
         /// <summary>The distance in pixel</summary>
         public readonly float pixels;
@@ -17,9 +17,11 @@ namespace CustomInspector
         {
             order = -10;
         }
-        public Space2Attribute(float pixel) : this()
+        public Space2Attribute(float pixels) : this()
         {
-            this.pixels = Mathf.Max(pixel, 0);
+            this.pixels = Mathf.Max(pixels, 0);
         }
+
+        protected override object[] GetParameters() => new object[] { pixels };
     }
 }

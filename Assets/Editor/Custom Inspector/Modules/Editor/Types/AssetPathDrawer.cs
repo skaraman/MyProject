@@ -1,4 +1,5 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,8 +14,15 @@ namespace CustomInspector.Editor
     [CustomPropertyDrawer(typeof(AssetPath))]
     [CustomPropertyDrawer(typeof(FilePath))]
     [CustomPropertyDrawer(typeof(FolderPath))]
-    public class AssetPathDrawer : PropertyDrawer
+    public class AssetPathDrawer : TypedPropertyDrawer
     {
+        public AssetPathDrawer() : base(nameof(AssetPathAttribute) + " can only be used on CustomInspector asset-paths",
+        typeof(AssetPath),
+        typeof(FilePath),
+        typeof(FolderPath)
+        )
+        { }
+
 #if UNITY_EDITOR
         //1: path full with. 0.5f: path and object picker is half half width
         [Range(0, 1)] const float pathToObjectRatio = 0.7f;
@@ -30,13 +38,8 @@ namespace CustomInspector.Editor
         {
             label = PropertyValues.ValidateLabel(label, property);
 
-            //Check type
-            if (!fieldInfo.FieldType.IsSubclassOf(typeof(AssetPath)))
-            {
-                EditorGUI.HelpBox(position, "AssetPathAttribute only valid on FilePath or FolderPath", MessageType.Error);
+            if (!TryOnGUI(position, property, label))
                 return;
-            }
-
 
             position.height = EditorGUIUtility.singleLineHeight;
 
@@ -244,11 +247,8 @@ namespace CustomInspector.Editor
         Texture FolderIcon { get { if (folderIcon == null) folderIcon = AssetPreview.GetMiniThumbnail(AssetDatabase.LoadAssetAtPath<Object>("Assets")); return folderIcon; } }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            //Check type
-            if (!fieldInfo.FieldType.IsSubclassOf(typeof(AssetPath)))
-            {
-                return EditorGUIUtility.singleLineHeight;
-            }
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
 
             SerializedProperty path = property.FindPropertyRelative("path");
             DirtyValue dv = new(property);

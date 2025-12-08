@@ -22,6 +22,7 @@ namespace AllIn1SpriteShader
             MaskedUI = 2,
             Urp2dRenderer = 3,
 			Lit = 5,
+			SRPBatcher = 6,
             Invalid = 4,
         }
         public ShaderTypes currentShaderType = ShaderTypes.Invalid;
@@ -89,12 +90,14 @@ namespace AllIn1SpriteShader
         private string GetStringFromShaderType()
         {
             currentShaderType = ShaderTypes.Default;
-            if(currentShaderType == ShaderTypes.Default) return"AllIn1SpriteShader";
-            else if(currentShaderType == ShaderTypes.ScaledTime) return"AllIn1SpriteShaderScaledTime";
-            else if(currentShaderType == ShaderTypes.MaskedUI) return"AllIn1SpriteShaderUiMask";
-            else if(currentShaderType == ShaderTypes.Urp2dRenderer) return"AllIn1Urp2dRenderer";
-            else if(currentShaderType == ShaderTypes.Lit) return"AllIn1SpriteShaderLit";
-            else return "AllIn1SpriteShader";
+			if (currentShaderType == ShaderTypes.Default) return "AllIn1SpriteShader";
+			else if (currentShaderType == ShaderTypes.ScaledTime) return "AllIn1SpriteShaderScaledTime";
+			else if (currentShaderType == ShaderTypes.MaskedUI) return "AllIn1SpriteShaderUiMask";
+			else if (currentShaderType == ShaderTypes.Urp2dRenderer) return "AllIn1Urp2dRenderer";
+			else if (currentShaderType == ShaderTypes.Lit) return "AllIn1SpriteShaderLit";
+			else if (currentShaderType == ShaderTypes.SRPBatcher) return "AllIn1SpriteShaderSRPBatch";
+
+			else return "AllIn1SpriteShader";
         }
 
         private bool SetMaterial(AfterSetAction action, bool getShaderTypeFromPrefs, string shaderName)
@@ -105,10 +108,11 @@ namespace AllIn1SpriteShader
             {
                 int shaderVariant = PlayerPrefs.GetInt("allIn1DefaultShader");
                 currentShaderType = (ShaderTypes)shaderVariant;
-                if (shaderVariant == 1) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderScaledTime");
-                else if (shaderVariant == 2) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderUiMask");
-                else if (shaderVariant == 3) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1Urp2dRenderer");
-                else if (shaderVariant == 5) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderLit");
+				if (shaderVariant == 1) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderScaledTime");
+				else if (shaderVariant == 2) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderUiMask");
+				else if (shaderVariant == 3) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1Urp2dRenderer");
+				else if (shaderVariant == 5) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderLit");
+				else if (shaderVariant == 6) allIn1Shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderSRPBatch");
 			}
 
             if (!Application.isPlaying && Application.isEditor && allIn1Shader != null)
@@ -689,7 +693,7 @@ namespace AllIn1SpriteShader
 
             normalMapSr = GetComponent<SpriteRenderer>();
             normalMapRenderer = GetComponent<Renderer>();
-            Debug.LogError($"NORMALMAP_ON: {normalMapRenderer.sharedMaterial.IsKeywordEnabled("NORMALMAP_ON")}  -t:{Time.time}");
+            //Debug.LogError($"NORMALMAP_ON: {normalMapRenderer.sharedMaterial.IsKeywordEnabled("NORMALMAP_ON")}  -t:{Time.time}");
             if (normalMapSr != null)
             {
                 isSpriteRenderer = true;

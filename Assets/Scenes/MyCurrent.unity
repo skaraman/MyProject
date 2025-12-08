@@ -9113,8 +9113,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 3.3980116e-13
   m_SpriteKey: 0
   m_SpriteHash: 392476590
 --- !u!114 &69482240
@@ -9304,8 +9304,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 1.2985474e-36
   m_SpriteKey: 0
   m_SpriteHash: 1040650907
 --- !u!114 &70486554
@@ -14658,6 +14658,54 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   spriteResolver: {fileID: 123122033}
+--- !u!1 &124839487
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 124839488}
+  - component: {fileID: 124839489}
+  m_Layer: 6
+  m_Name: head
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &124839488
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 124839487}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 616698015}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &124839489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 124839487}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
+  colorLibrary: {fileID: 0}
+  normalLibrary: {fileID: 0}
+  category: Breathe
+  labelPrefix: 
 --- !u!1 &125745292
 GameObject:
   m_ObjectHideFlags: 0
@@ -25656,6 +25704,7 @@ Material:
     - _GhostTransparency: 0
     - _GlitchAmount: 3
     - _GlitchSize: 1
+    - _GlitchSpeed: 20
     - _Glow: 10
     - _GlowGlobal: 1
     - _GradBlend: 1
@@ -61001,8 +61050,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 1.2985474e-36
   m_SpriteKey: 0
   m_SpriteHash: 1040650907
 --- !u!114 &484400243
@@ -74099,6 +74148,7 @@ Material:
     - _GhostTransparency: 0
     - _GlitchAmount: 3
     - _GlitchSize: 1
+    - _GlitchSpeed: 20
     - _Glow: 10
     - _GlowGlobal: 1
     - _GradBlend: 1
@@ -92474,6 +92524,38 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   spriteResolver: {fileID: 616411702}
+--- !u!1 &616698014
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 616698015}
+  m_Layer: 6
+  m_Name: PIECES
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &616698015
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 616698014}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 124839488}
+  m_Father: {fileID: 1849304724}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &618178195
 GameObject:
   m_ObjectHideFlags: 0
@@ -101236,8 +101318,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.1084466e-13
   m_SpriteKey: 0
   m_SpriteHash: 381666984
 --- !u!114 &705980734
@@ -104569,8 +104651,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &732766575
@@ -129705,8 +129787,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &966972017
@@ -180263,8 +180345,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &1178634506
@@ -189585,8 +189667,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 5.2479913e-30
   m_SpriteKey: 0
   m_SpriteHash: 856629102
 --- !u!114 &1280202968
@@ -194526,8 +194608,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 4.1652613e-36
   m_SpriteKey: 0
   m_SpriteHash: 963303042
 --- !u!114 &1332076231
@@ -252454,6 +252536,7 @@ Material:
     - _GhostTransparency: 0
     - _GlitchAmount: 3
     - _GlitchSize: 1
+    - _GlitchSpeed: 20
     - _Glow: 10
     - _GlowGlobal: 1
     - _GradBlend: 1
@@ -275499,8 +275582,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &1782029401
@@ -283125,6 +283208,7 @@ Transform:
   - {fileID: 562414044}
   - {fileID: 426642809}
   - {fileID: 203820469}
+  - {fileID: 616698015}
   m_Father: {fileID: 2046747574}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1849304725
@@ -295373,6 +295457,7 @@ Material:
     - _GhostTransparency: 0
     - _GlitchAmount: 3
     - _GlitchSize: 1
+    - _GlitchSpeed: 20
     - _Glow: 10
     - _GlowGlobal: 1
     - _GradBlend: 1
@@ -320000,8 +320085,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 1.2985474e-36
   m_SpriteKey: 0
   m_SpriteHash: 1040650907
 --- !u!114 &2100229471
@@ -330483,6 +330568,7 @@ Material:
     - _GhostTransparency: 0
     - _GlitchAmount: 3
     - _GlitchSize: 1
+    - _GlitchSpeed: 20
     - _Glow: 10
     - _GlowGlobal: 1
     - _GradBlend: 1

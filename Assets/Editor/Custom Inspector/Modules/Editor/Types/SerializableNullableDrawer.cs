@@ -1,17 +1,25 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
 using UnityEditor;
 using UnityEngine;
 
 namespace CustomInspector.Editor
 {
-    [CustomPropertyDrawer(typeof(CustomInspector.SerializableNullable<>))]
+    [CustomPropertyDrawer(typeof(SerializableNullable<>))]
     [CustomPropertyDrawer(typeof(NullableAttribute))]
-    public class SerializableNullableDrawer : PropertyDrawer
+    public class SerializableNullableDrawer : TypedPropertyDrawer
     {
+        public SerializableNullableDrawer() : base(nameof(NullableAttribute) + " can only be used on SerializableNullable",
+            typeof(SerializableNullable<>)
+            )
+        { }
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
+
+            if (!TryOnGUI(position, property, label))
+                return;
 
             SerializedProperty hasValueProp = property.FindPropertyRelative("hasValue");
             SerializedProperty valueProp = property.FindPropertyRelative("value");
@@ -42,6 +50,9 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
+
             SerializedProperty hasValueProp = property.FindPropertyRelative("hasValue");
             SerializedProperty valueProp = property.FindPropertyRelative("value");
 

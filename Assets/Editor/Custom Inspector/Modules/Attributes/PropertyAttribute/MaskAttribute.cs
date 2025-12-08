@@ -1,13 +1,12 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class MaskAttribute : PropertyAttribute
+    public class MaskAttribute : ComparablePropertyAttribute
     {
         public readonly int bitsAmount = 3;
         public readonly string[] bitNames = null;
@@ -28,9 +27,12 @@ namespace CustomInspector
         /// <summary>
         /// Used to label the single bits. The bitAmount equals the amount of names given
         /// </summary>
-        public MaskAttribute(params string[] bitNames) : this(bitNames.Length)
+        public MaskAttribute(params string[] bitNames)
         {
             this.bitNames = bitNames;
+            this.bitsAmount = bitNames.Length;
         }
+
+        protected override object[] GetParameters() => new object[] { bitsAmount, bitNames };
     }
 }

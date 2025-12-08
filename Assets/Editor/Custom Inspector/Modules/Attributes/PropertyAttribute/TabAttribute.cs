@@ -1,7 +1,6 @@
 using CustomInspector.Extensions;
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class TabAttribute : PropertyAttribute
+    public class TabAttribute : ComparablePropertyAttribute
     {
         public readonly string groupName = null;
 
@@ -26,5 +25,7 @@ namespace CustomInspector
         {
             groupName = icon.ToInternalIconName();
         }
+
+        protected override object[] GetParameters() => new object[] { groupName };
     }
 }

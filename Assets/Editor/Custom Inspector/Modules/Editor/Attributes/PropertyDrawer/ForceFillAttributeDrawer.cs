@@ -107,12 +107,12 @@ namespace CustomInspector.Editor
             public object[] Invalids { get; private set; }
 
             public PropInfo() { }
-            public void Initialize(SerializedProperty property, PropertyAttribute attr, FieldInfo fieldInfo)
+            public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
-                ForceFillAttribute attribute = (ForceFillAttribute)attr;
+                ForceFillAttribute attr = (ForceFillAttribute)attribute;
 
                 //if no given invalids, we take default value
-                if ((attribute.notAllowed?.Length ?? 0) < 1)
+                if ((attr.notAllowed?.Length ?? 0) < 1)
                 {
                     Type propSystemType = property.propertyType.ToSystemType();
                     if (propSystemType == null)
@@ -146,7 +146,7 @@ namespace CustomInspector.Editor
                 {
                     List<object> invalids = new();
                     //add given invalids
-                    foreach (var item in attribute.notAllowed)
+                    foreach (var item in attr.notAllowed)
                     {
                         if (property.propertyType == SerializedPropertyType.String //unity auto converts null-string to empty-string
                             && item == null)

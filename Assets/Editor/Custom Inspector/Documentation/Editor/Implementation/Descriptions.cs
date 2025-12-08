@@ -28,6 +28,14 @@ namespace CustomInspector.Documentation
             "\nThe attribute needs a reference to an Animator or an AnimatorController."
             , true) },
 
+            { NewPropertyD.ArrayContainer,
+            ("Same behaviour as an array but applies attributes differently:" +
+            "\nAll Attributes on it are applied to the whole array INSTEAD of to all elements of the array." +
+            "\nThis is the array equivalent to ListContainer and the default List.\n" +
+            "\nHint1: Since int[][] is not serializable in the inspector, you can use ArrayContainer<int>[] instead." +
+            "\nHint2: ArrayContainer and Array are casting to each other implicitly, so you can still treat ArrayContainer as it would be of type Array."
+            , true) },
+
             { NewPropertyD.AsButtonAttribute,
             ("Displays a bool, int, string or InspectorButtonState as a clickable button in the inspector." +
             "\nUse the 'staysPressed' parameter to specify if the button should remain pressed after being clicked."
@@ -76,7 +84,7 @@ namespace CustomInspector.Documentation
             , true) },
 
             { NewPropertyD.DisplayAutoPropertyAttribute,
-            ("Obsolete: This attribute is absolete.\nYou can access fields of autoproperties by adding \"field:\" in front of the attribute: e.g. [field: SerializeField]."
+            ("Obsolete: This attribute is obsolete.\nYou can access fields of autoproperties by adding \"field:\" in front of the attribute: e.g. [field: SerializeField]."
             + "\n\nNote: All further attributes must also be applied to the field with the \"field:\" keyword."
             , true) },
 
@@ -202,7 +210,7 @@ namespace CustomInspector.Documentation
 
             { NewPropertyD.SelfFillAttribute,
             ("If you have components where you know they are on your own object and don't want to write GetComponent every time, you can now write [SelfFill] in front of it. " +
-            "With this attribute, the fields are already filled and saved in the editor through the inspector. " +
+            "With this attribute, the fields are already filled and saved if you open the associated inspector. " +
             "\nThe fields will hide if they are filled if you set the parameter hideIfFilled=true (they will still show an error if they didnt find themselves a suitable component). " +
             "\nModes (mode=OwnerMode...):\n\tSelf (default): on current gameObject\n\tChildren: on all children\n\tParent: on transforms parent\n\tRoot: on transforms root" +
             "\n\tDirectChildren: on children of transform, but not on children of children\n\tParents: Transform's parent, parent of parent, ..., up to transforms root" +
@@ -211,7 +219,7 @@ namespace CustomInspector.Documentation
             , false) },
 
             { NewPropertyD.ShowAssetReferenceAttribute,
-            ("Provides a way to quickly locate and edit references to generic C# classes" +
+            ("Provides a way to quickly locate files of C# classes" +
             "\nIf the file-name does not match the type of your generic class, you can insert a custom fileName to locate the file"
             , true) },
 
@@ -469,6 +477,14 @@ namespace CustomInspector.Documentation
             ("Unity Documentation:\n" +
             "\"When this attribute is used, the float, int, or text field will not return a new value " +
             "until the user has pressed enter or focus is moved away from the field.\""
+            , true) },
+
+            { NewPropertyD.FormerlySerializedAsAttribute,
+            ("Applies a serialized value of another member B (searched by string) on the current member A.\n" +
+            "The applying happens only when the current member A is firstly being registered " +
+            "and member B did exist on previous recompile.\n" +
+            "\nUnity Documentation:\n" +
+            "\"Use this attribute to rename a field without losing its serialized value. [...]\""
             , true) },
 
             { NewPropertyD.HeaderAttribute,

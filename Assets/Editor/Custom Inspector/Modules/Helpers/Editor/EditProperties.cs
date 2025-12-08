@@ -23,11 +23,9 @@ namespace CustomInspector.Extensions
             switch (property.propertyType)
             {
                 case SerializedPropertyType.Enum: // using intValue has better performance than: property.enumValueIndex = Math.Max(0, Array.IndexOf(Enum.GetValues(value.GetType()), value)); break; //max 0 to prevent -1
-                case SerializedPropertyType.Integer: property.intValue = Convert.ToInt32(value); break; // this can also be a long instead of int
+                case SerializedPropertyType.Integer: SetFullNumbers(value); break; // this can also be a long instead of int
                 case SerializedPropertyType.Boolean: property.boolValue = (bool)value; break;
-                case SerializedPropertyType.Float: //and double value
-                    if (value is float f) property.floatValue = f;
-                    else property.doubleValue = (double)value; break;
+                case SerializedPropertyType.Float: SetFloatingNumbers(value); break; //and double value
                 case SerializedPropertyType.String: property.stringValue = (string)value; break;
                 case SerializedPropertyType.Character: property.intValue = Convert.ToInt32((char)value); break;
                 case SerializedPropertyType.Color: property.colorValue = (Color)value; break;
@@ -47,7 +45,36 @@ namespace CustomInspector.Extensions
                 case SerializedPropertyType.Quaternion: property.quaternionValue = (Quaternion)value; break;
                 case SerializedPropertyType.Generic: SetGeneric(value); break;
                 default: UnityEngine.Debug.LogError($"{property.propertyType} not supported"); break;
-            };
+            }
+            ;
+
+            void SetFullNumbers(object value)
+            {
+                if (value is long l)
+                    property.longValue = l;
+                else if (value is ulong ul)
+#if UNITY_2022_1_OR_NEWER
+                    property.ulongValue = ul;
+                else if (value is uint ui)
+                    property.uintValue = ui;
+#else
+                    property.longValue = Convert.ToInt64(Math.Min(long.MaxValue, ul));
+                else if (value is uint ui)
+                    property.intValue = Convert.ToInt32(Math.Min(int.MaxValue, ui));
+#endif
+                else // int or short or byte ....
+                    property.intValue = Convert.ToInt32(value);
+            }
+
+            void SetFloatingNumbers(object value)
+            {
+                if (value is float f)
+                    property.floatValue = f;
+                else if (value is double d)
+                    property.doubleValue = d;
+                else
+                    Debug.LogError($"NotImplemented number type '{value.GetType().Name}'");
+            }
 
             void SetGeneric(object value)
             {

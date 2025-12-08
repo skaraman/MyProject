@@ -233,6 +233,8 @@
     	_OverlayTextureScrollXSpeed("Speed X Axis", Range(-5, 5)) = 0.25 //170
 		_OverlayTextureScrollYSpeed("Speed Y Axis", Range(-5, 5)) = 0.25 //171
 
+    	_GlitchSpeed("Glitch Speed", Range(0.0, 100)) = 20 //172
+
         _ZTestMode ("Z Test Mode", Float) = 4
     	_CullingOption ("Culling Option", float) = 0
 
@@ -551,7 +553,7 @@
 			#endif
 
 			#if GLITCH_ON
-			half _GlitchAmount, _GlitchSize;
+			half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 			#endif
 
 			#if FLICKER_ON
@@ -871,9 +873,9 @@
 				#if GLITCH_ON
 				half2 uvGlitch = uvRect;
 				uvGlitch.y -= 0.5;
-				half lineNoise = pow(rand2CustomTime(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, globalUnscaledTime), 3.0) * _GlitchAmount
-					* pow(rand2CustomTime(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, globalUnscaledTime), 3.0);
-				col = tex2D(_MainTex, i.uv + half2(lineNoise * 0.02 * rand2CustomTime(half2(2.0, 1), randomSeed, globalUnscaledTime), 0)) * i.color;
+				half lineNoise = pow(rand2CustomTime(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, globalUnscaledTime, _GlitchSpeed), 3.0) * _GlitchAmount
+					* pow(rand2CustomTime(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, globalUnscaledTime, _GlitchSpeed), 3.0);
+				col = tex2D(_MainTex, i.uv + half2(lineNoise * 0.02 * rand2CustomTime(half2(2.0, 1), randomSeed, globalUnscaledTime, _GlitchSpeed), 0)) * i.color;
 				#endif
 
 				#if CHROMABERR_ON
@@ -1041,7 +1043,7 @@
 				#endif
 
 				#if OVERLAY_ON
-            	half2 overlayUvs = i.uv;
+            	half2 overlayUvs = uvRect;
             	overlayUvs.x += (((globalUnscaledTime * 20) + randomSeed) * _OverlayTextureScrollXSpeed) % 1;
 				overlayUvs.y += (((globalUnscaledTime * 20) + randomSeed) * _OverlayTextureScrollYSpeed) % 1;
 				half4 overlayCol = tex2D(_OverlayTex, TRANSFORM_TEX(overlayUvs, _OverlayTex));
@@ -1064,12 +1066,10 @@
 					#endif
 
 					#if OUTDIST_ON
-					i.uvOutDistTex.x += ((globalUnscaledTime + randomSeed) * _OutlineDistortTexXSpeed) % 1;
-					i.uvOutDistTex.y += ((globalUnscaledTime + randomSeed) * _OutlineDistortTexYSpeed) % 1;
-					#if ATLAS_ON
-					i.uvOutDistTex = half2((i.uvOutDistTex.x - _MinXUV) / (_MaxXUV - _MinXUV), (i.uvOutDistTex.y - _MinYUV) / (_MaxYUV - _MinYUV));
-					#endif
-					half outDistortAmnt = (tex2D(_OutlineDistortTex, i.uvOutDistTex).r - 0.5) * 0.2 * _OutlineDistortAmount;
+					half2 uvOutDist = uvRect;
+					uvOutDist.x += ((globalUnscaledTime + randomSeed) * _OutlineDistortTexXSpeed) % 1;
+					uvOutDist.y += ((globalUnscaledTime + randomSeed) * _OutlineDistortTexYSpeed) % 1;
+					half outDistortAmnt = (tex2D(_OutlineDistortTex, TRANSFORM_TEX(uvOutDist, _OutlineDistortTex)).r - 0.5) * 0.2 * _OutlineDistortAmount;
 					destUv.x += outDistortAmnt;
 					destUv.y += outDistortAmnt;
 					#endif

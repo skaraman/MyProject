@@ -1,13 +1,12 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
 
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class InspectorIconAttribute : PropertyAttribute
+    public class InspectorIconAttribute : ComparablePropertyAttribute
     {
         public readonly InspectorIcon icon;
         public readonly bool appendAtEnd;
@@ -17,5 +16,7 @@ namespace CustomInspector
             this.icon = icon;
             this.appendAtEnd = appendAtEnd;
         }
+
+        protected override object[] GetParameters() => new object[] { icon, appendAtEnd };
     }
 }

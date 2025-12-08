@@ -27,7 +27,7 @@ namespace CustomInspector.Editor
                 {
                     index = 0;
                     property.stringValue = sceneNames[0];
-                    property.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                    property.serializedObject.ApplyModifiedProperties();
                 }
 
                 EditorGUI.BeginChangeCheck();

@@ -125,6 +125,7 @@ namespace AllIn1SpriteShader
                                 else if (myScript.currentShaderType == AllIn1Shader.ShaderTypes.MaskedUI) sr.sharedMaterial.shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderUiMask");
                                 else if (myScript.currentShaderType == AllIn1Shader.ShaderTypes.Urp2dRenderer) sr.sharedMaterial.shader = AllIn1ShaderWindow.FindShader("AllIn1Urp2dRenderer");
                                 else if (myScript.currentShaderType == AllIn1Shader.ShaderTypes.Lit) sr.sharedMaterial.shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderLit");
+								else if(myScript.currentShaderType == AllIn1Shader.ShaderTypes.SRPBatcher) sr.sharedMaterial.shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderSRPBatch");
 								else SetCurrentShaderType(myScript);
                                 sr.sharedMaterial.renderQueue = renderingQueue;
 
@@ -146,7 +147,7 @@ namespace AllIn1SpriteShader
                         }
                         else
                         {
-                            Graphic img = myScript.GetComponent<Graphic>();
+							Graphic img = myScript.GetComponent<Graphic>();
                             if (img != null && img.material != null)
                             {
                                 int renderingQueue = img.material.renderQueue;
@@ -155,6 +156,7 @@ namespace AllIn1SpriteShader
                                 else if (myScript.currentShaderType == AllIn1Shader.ShaderTypes.MaskedUI) img.material.shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderUiMask");
                                 else if (myScript.currentShaderType == AllIn1Shader.ShaderTypes.Urp2dRenderer) img.material.shader = AllIn1ShaderWindow.FindShader("AllIn1Urp2dRenderer");
                                 else if (myScript.currentShaderType == AllIn1Shader.ShaderTypes.Lit) img.material.shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderLit");
+								else if(myScript.currentShaderType == AllIn1Shader.ShaderTypes.SRPBatcher) img.material.shader = AllIn1ShaderWindow.FindShader("AllIn1SpriteShaderSRPBatch");
 								else SetCurrentShaderType(myScript);
                                 img.material.renderQueue = renderingQueue;
                             }
@@ -308,6 +310,7 @@ namespace AllIn1SpriteShader
             else if (shaderName.Equals("AllIn1SpriteShaderUiMask")) myScript.currentShaderType = AllIn1Shader.ShaderTypes.MaskedUI;
             else if (shaderName.Equals("AllIn1Urp2dRenderer")) myScript.currentShaderType = AllIn1Shader.ShaderTypes.Urp2dRenderer;
 			else if(shaderName.Equals("AllIn1SpriteShaderLit")) myScript.currentShaderType = AllIn1Shader.ShaderTypes.Lit;
+			else if(shaderName.Equals("AllIn1SpriteShaderSRPBatch")) myScript.currentShaderType = AllIn1Shader.ShaderTypes.SRPBatcher;
 		}
 
         private void DrawLine(Color color, int thickness = 2, int padding = 10)

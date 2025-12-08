@@ -1,12 +1,11 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class TooltipBoxAttribute : PropertyAttribute
+    public class TooltipBoxAttribute : ComparablePropertyAttribute
     {
         public readonly string content;
         public TooltipBoxAttribute(string content)
@@ -14,5 +13,7 @@ namespace CustomInspector
             order = -6;
             this.content = content;
         }
+
+        protected override object[] GetParameters() => new object[] { content };
     }
 }

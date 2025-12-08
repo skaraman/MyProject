@@ -1,12 +1,11 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class ShowAssetReferenceAttribute : PropertyAttribute
+    public class ShowAssetReferenceAttribute : ComparablePropertyAttribute
     {
         public readonly string fileName = null;
 
@@ -14,5 +13,7 @@ namespace CustomInspector
         {
             this.fileName = fileName;
         }
+
+        protected override object[] GetParameters() => new object[] { fileName };
     }
 }

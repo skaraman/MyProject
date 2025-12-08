@@ -5,13 +5,22 @@ using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
 {
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
+    [Conditional("UNITY_EDITOR")]
+    public class InterfaceAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
+
     [System.Serializable]
     public class SerializableInterface<T> : ISerializationCallbackReceiver
                                   where T : class
     {
-        [MessageBox("You are overriding the default drawer of SerializableInterface. Please add the [Interface]-attribute to the property.")]
-        [ReadOnly]
-        [SerializeField] MonoBehaviour serializedReference = null; // MonoBehaviour, because UnityEngine.Object or Component bugs
+        [MessageBox("You are overriding the default drawer of SerializableInterface. " +
+        "Please add the [Interface]-attribute to the property.")]
+
+        [SerializeField, ReadOnly]
+        MonoBehaviour serializedReference = null; // MonoBehaviour, because UnityEngine.Object or Component bugs
 
         public T Value
         {
@@ -25,6 +34,7 @@ namespace CustomInspector
                 else
                     throw new ArgumentException($"Unity Serialization only supports classes derived from {typeof(MonoBehaviour).FullName}." +
                                                 $"\n{value.GetType().FullName} does not derive from it.");
+                castedReference = value;
             }
         }
         private T castedReference = null;
@@ -36,8 +46,13 @@ namespace CustomInspector
                 throw new ArgumentException($"SerializableInterface is only valid on Interfaces. " +
                                             $"T({typeof(T).FullName}) is not an Interface");
         }
-        public SerializableInterface(MonoBehaviour value)
-        : this()
+
+        public SerializableInterface(T value) : this()
+        {
+            Value = value;
+        }
+
+        public SerializableInterface(MonoBehaviour value) : this()
         {
             if (value == null)
                 return;
@@ -52,6 +67,10 @@ namespace CustomInspector
                 throw new ArgumentException($"Could not set value: value is not type of {typeof(T).FullName}");
             }
         }
+
+        // Casting | Type compatibility
+        public static implicit operator T(SerializableInterface<T> sInterface) => sInterface?.Value;
+        public static explicit operator SerializableInterface<T>(T value) => new(value);
 
         //serialization
         void ISerializationCallbackReceiver.OnBeforeSerialize()
@@ -76,7 +95,4 @@ namespace CustomInspector
             }
         }
     }
-
-    [Conditional("UNITY_EDITOR")]
-    public class InterfaceAttribute : PropertyAttribute { }
 }

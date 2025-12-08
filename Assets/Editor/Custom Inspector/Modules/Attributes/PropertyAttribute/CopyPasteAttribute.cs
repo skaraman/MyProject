@@ -1,13 +1,12 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class CopyPasteAttribute : PropertyAttribute
+    public class CopyPasteAttribute : ComparablePropertyAttribute
     {
         public readonly bool previewClipboard;
 
@@ -16,5 +15,7 @@ namespace CustomInspector
             order = -10;
             this.previewClipboard = previewClipboard;
         }
+
+        protected override object[] GetParameters() => new object[] { previewClipboard };
     }
 }

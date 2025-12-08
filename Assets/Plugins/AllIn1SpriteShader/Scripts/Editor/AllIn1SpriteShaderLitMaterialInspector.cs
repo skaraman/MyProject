@@ -1,4 +1,5 @@
 ﻿#if UNITY_EDITOR
+using AllIn1SpriteShader;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -105,7 +106,7 @@ public class AllIn1SpriteShaderLitMaterialInspector : ShaderGUI
             GenericEffect("Ghost", "GHOST_ON", 64, 65, true, "This effect will not affect the outline", new int[] { 157 });
             GenericEffect("Hologram", "HOLOGRAM_ON", 73, 77, true, null, new int[] { 140, 158 });
             GenericEffect("Chromatic Aberration", "CHROMABERR_ON", 78, 79);
-            GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139 });
+            GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139, 172 });
             GenericEffect("Flicker", "FLICKER_ON", 81, 83);
             GenericEffect("Shadow", "SHADOW_ON", 84, 87);
             GenericEffect("Shine", "SHINE_ON", 133, 138);
@@ -116,7 +117,7 @@ public class AllIn1SpriteShaderLitMaterialInspector : ShaderGUI
         DrawLine(Color.grey, 1, 3);
         GUILayout.Label("UV Effects", bigLabelStyle);
 
-        currEnabledDrawers[uvFxShapeDrawer] = GUILayout.Toggle(currEnabledDrawers[uvFxShapeDrawer], new GUIContent("Show Alpha Effects"), toggleButtonStyle);
+        currEnabledDrawers[uvFxShapeDrawer] = GUILayout.Toggle(currEnabledDrawers[uvFxShapeDrawer], new GUIContent("Show UV Effects"), toggleButtonStyle);
         if(currEnabledDrawers[uvFxShapeDrawer])
         {
             GenericEffect("Hand Drawn", "DOODLE_ON", 88, 89);
@@ -773,20 +774,22 @@ public class AllIn1SpriteShaderLitMaterialInspector : ShaderGUI
 
     private void ResetProperty(MaterialProperty targetProperty)
     {
-        if(originalMaterialCopy == null) originalMaterialCopy = new Material(targetMat.shader);
-        if(targetProperty.propertyType == ShaderPropertyType.Float || targetProperty.propertyType == ShaderPropertyType.Range)
+		AllIn1ShaderPropertyType shaderProperty = EditorUtils.GetShaderTypeByMaterialProperty(targetProperty);
+
+		if (originalMaterialCopy == null) originalMaterialCopy = new Material(targetMat.shader);
+        if(shaderProperty == AllIn1ShaderPropertyType.Float || shaderProperty == AllIn1ShaderPropertyType.Range)
         {
             targetProperty.floatValue = originalMaterialCopy.GetFloat(targetProperty.name);
         }
-        else if(targetProperty.propertyType == ShaderPropertyType.Vector)
+        else if(shaderProperty == AllIn1ShaderPropertyType.Vector)
         {
             targetProperty.vectorValue = originalMaterialCopy.GetVector(targetProperty.name);
         }
-        else if(targetProperty.propertyType == ShaderPropertyType.Color)
+        else if(shaderProperty == AllIn1ShaderPropertyType.Color)
         {
             targetProperty.colorValue = originalMaterialCopy.GetColor(targetProperty.name);
         }
-        else if(targetProperty.propertyType == ShaderPropertyType.Texture)
+        else if(shaderProperty == AllIn1ShaderPropertyType.Texture)
         {
             targetProperty.textureValue = originalMaterialCopy.GetTexture(targetProperty.name);
         }

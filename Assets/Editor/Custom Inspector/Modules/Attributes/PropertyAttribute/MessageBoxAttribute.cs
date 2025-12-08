@@ -1,6 +1,5 @@
-using UnityEngine;
-using System.Diagnostics;
 using System;
+using System.Diagnostics;
 
 namespace CustomInspector
 {
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class MessageBoxAttribute : PropertyAttribute
+    public class MessageBoxAttribute : ComparablePropertyAttribute
     {
         public readonly string content;
         public readonly MessageBoxType type;
@@ -22,5 +21,7 @@ namespace CustomInspector
             this.content = content;
             this.type = type;
         }
+
+        protected override object[] GetParameters() => new object[] { content, type };
     }
 }

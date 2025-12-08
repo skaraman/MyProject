@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -9,21 +8,25 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class LabelSettingsAttribute : PropertyAttribute
+    public class LabelSettingsAttribute : ComparablePropertyAttribute
     {
         public readonly LabelStyle style;
         public readonly string newName = null;
 
-        public LabelSettingsAttribute(LabelStyle style)
+        private LabelSettingsAttribute()
         {
             order = -5;
+        }
+        public LabelSettingsAttribute(LabelStyle style) : this()
+        {
             this.style = style;
         }
-        public LabelSettingsAttribute(string newName, LabelStyle style = LabelStyle.FullSpacing)
+        public LabelSettingsAttribute(string newName, LabelStyle style = LabelStyle.FullSpacing) : this()
         {
-            order = -5;
             this.newName = newName;
             this.style = style;
         }
+
+        protected override object[] GetParameters() => new object[] { newName, style };
     }
 }

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -9,9 +8,14 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class HideFieldAttribute : PropertyAttribute
+    public class HideFieldAttribute : ComparablePropertyAttribute
     {
-        public HideFieldAttribute() => order = 1;
+        public HideFieldAttribute()
+        {
+            order = 1;
+        }
+
+        protected override object[] GetParameters() => null;
     }
 }
 

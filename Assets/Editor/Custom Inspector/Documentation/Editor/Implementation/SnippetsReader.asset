@@ -33,8 +33,23 @@ MonoBehaviour:
     public Animator animator;\r\n\r\n            [HorizontalLine]\r\n\r\n           
     [AnimatorParameter(nameof(animatorController))]\r\n            public string
     paramName2;\r\n\r\n            [AnimatorParameter(nameof(animator))]\r\n           
-    public string paramName;\r\n        }\r\n\r\n        [SerializeField] AsButtonAttributeExamples
-    asButtonAttributeExamples = new AsButtonAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
+    public string paramName;\r\n        }\r\n\r\n        [SerializeField] ArrayContainerExamples
+    arrayContainerExamples = new ArrayContainerExamples();\r\n\r\n        [System.Serializable]\r\n       
+    class ArrayContainerExamples\r\n        {\r\n            [MessageBox(\"New label
+    and ShowIf and is applied to the whole array.\" +\r\n                       
+    \"\\nArray is shown if 'visible' is ticked.\", MessageBoxType.Info)]\r\n\r\n           
+    public bool visible = true;\r\n\r\n            [LabelSettings(\"New Label\"),\r\n           
+    ShowIf(nameof(visible))]\r\n            [ArrayContainer]\r\n            public
+    ArrayContainer<int> myArray;\r\n\r\n            [HorizontalLine]\r\n           
+    [MessageBox(\"New labels and MinAttribute are applied to all elements.\" +\r\n                       
+    \"\\nAll elements of the array are positive.\", MessageBoxType.Info)]\r\n           
+    [SerializeField, HideField] bool _;\r\n\r\n            [LabelSettings(\"New Label\"),\r\n           
+    Min(0)]\r\n            public List<int> myPositiveNumbers\r\n               
+    = new() { 1, 2, 3 };\r\n\r\n            private void Start()\r\n            {\r\n               
+    // Types can be easily converted:\r\n                ArrayContainer<int> numbers
+    = Array.CreateInstance(typeof(int), 5);\r\n                int[] ints = numbers;\r\n           
+    }\r\n        }\r\n\r\n        [SerializeField] AsButtonAttributeExamples asButtonAttributeExamples
+    = new AsButtonAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
     class AsButtonAttributeExamples\r\n        {\r\n            [AsButton]\r\n           
     public bool selectableBoolean;\r\n\r\n            [Space2(10)]\r\n\r\n           
     [ShowMethod(nameof(GetSelectableBoolean))]\r\n\r\n            [Space2(20)]\r\n\r\n           
@@ -126,35 +141,36 @@ MonoBehaviour:
     [ShowProperty(\"<Foo>k__BackingField\")]\r\n\r\n            [HideField]\r\n           
     public bool _;\r\n\r\n#pragma warning disable CS0618 // Type or member is obsolete\r\n           
     public int Bar\r\n            { private get; set; } = 45;\r\n\r\n           
-    [Title(\"Reference to autoproperty\")]\r\n            [DisplayAutoProperty(nameof(Bar))]\r\n\r\n           
-    [HideField]\r\n            public bool __;\r\n#pragma warning restore CS0618
-    // Type or member is obsolete\r\n        }\r\n\r\n        [SerializeField] FixedValuesAttributeExamples
-    fixedValuesAttributeExamples = new FixedValuesAttributeExamples();\r\n\r\n       
-    [System.Serializable]\r\n        class FixedValuesAttributeExamples\r\n       
-    {\r\n            [FixedValues(1, 7, 15)]\r\n            public int integer;\r\n\r\n           
-    [FixedValues(\"Bob\", \"John\", \"Martin\")]\r\n            public string name;\r\n       
-    }\r\n\r\n        [SerializeField] FoldoutAttributeExamples foldoutAttributeExamples
-    = new FoldoutAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
-    class FoldoutAttributeExamples\r\n        {\r\n            [HorizontalLine(\"ScriptableObject\")]\r\n\r\n           
-    [MessageBox(\"Please fill the 'scriptable1'-value and then click the foldout
-    to edit its values.\", MessageBoxType.Info)]\r\n            [Foldout]\r\n           
-    public ScriptableObject scriptable1;\r\n\r\n            [MessageBox(\"This is
-    the default display.\", MessageBoxType.Info)]\r\n            public ScriptableObject
-    scriptable2;\r\n\r\n            [HorizontalLine(\"Other References\")]\r\n\r\n           
-    [Foldout]\r\n            public MonoBehaviour anyMonoBehaviour;\r\n        }\r\n\r\n       
-    [SerializeField] ForceFillAttributeExamples forceFillAttributeExamples = new
-    ForceFillAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
-    class ForceFillAttributeExamples\r\n        {\r\n            [ForceFill]\r\n           
-    public GameObject gob1;\r\n\r\n            [ForceFill(errorMessage = \"No Animation
-    without GameObject possible!!\")]\r\n            public GameObject gob2;\r\n\r\n           
-    [ForceFill, SerializeField]\r\n            string s2 = \"Make this String Empty.\";\r\n\r\n           
-    [ForceFill(\"<undefined>\",\r\n                       \"empty\", \"Empty\",\r\n                      
-    \"undefined\")]\r\n            public string s3 = \"<undefined>\";\r\n\r\n           
-    [HorizontalLine(\"others\")]\r\n\r\n            [ForceFill(\"(0, 0, 0)\"), SerializeField]\r\n           
-    Vector3 c = new Vector3(0, 0, 0);\r\n\r\n            [ForceFill(null)] public
-    GameObject gob3;\r\n\r\n            [ForceFill(\"-1\"), SerializeField]\r\n           
-    float f = -1;\r\n\r\n            [HorizontalLine(\"only check if playing\")]
-    //test it by starting your game and then look back on this editorwindow\r\n                                                     
+    [MessageBox(\"Enter play-mode to change unserialized auto-property\", MessageBoxType.Info)]\r\n           
+    [DisplayAutoProperty(nameof(Bar))]\r\n\r\n            [HideField]\r\n           
+    public bool __;\r\n#pragma warning restore CS0618 // Type or member is obsolete\r\n       
+    }\r\n\r\n        [SerializeField] FixedValuesAttributeExamples fixedValuesAttributeExamples
+    = new FixedValuesAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
+    class FixedValuesAttributeExamples\r\n        {\r\n            [FixedValues(1,
+    7, 15)]\r\n            public int integer;\r\n\r\n            [FixedValues(\"Bob\",
+    \"John\", \"Martin\")]\r\n            public string name;\r\n        }\r\n\r\n       
+    [SerializeField] FoldoutAttributeExamples foldoutAttributeExamples = new FoldoutAttributeExamples();\r\n\r\n       
+    [System.Serializable]\r\n        class FoldoutAttributeExamples\r\n        {\r\n           
+    [HorizontalLine(\"ScriptableObject\")]\r\n\r\n            [MessageBox(\"Please
+    fill the 'scriptable1'-value and then click the foldout to edit its values.\",
+    MessageBoxType.Info)]\r\n            [Foldout]\r\n            public ScriptableObject
+    scriptable1;\r\n\r\n            [MessageBox(\"This is the default display.\",
+    MessageBoxType.Info)]\r\n            public ScriptableObject scriptable2;\r\n\r\n           
+    [HorizontalLine(\"Other References\")]\r\n\r\n            [Foldout]\r\n           
+    public MonoBehaviour anyMonoBehaviour;\r\n        }\r\n\r\n        [SerializeField]
+    ForceFillAttributeExamples forceFillAttributeExamples = new ForceFillAttributeExamples();\r\n\r\n       
+    [System.Serializable]\r\n        class ForceFillAttributeExamples\r\n       
+    {\r\n            [ForceFill]\r\n            public GameObject gob1;\r\n\r\n           
+    [ForceFill(errorMessage = \"No Animation without GameObject possible!!\")]\r\n           
+    public GameObject gob2;\r\n\r\n            [ForceFill, SerializeField]\r\n           
+    string s2 = \"Make this String Empty.\";\r\n\r\n            [ForceFill(\"<undefined>\",\r\n                      
+    \"empty\", \"Empty\",\r\n                       \"undefined\")]\r\n           
+    public string s3 = \"<undefined>\";\r\n\r\n            [HorizontalLine(\"others\")]\r\n\r\n           
+    [ForceFill(\"(0, 0, 0)\"), SerializeField]\r\n            Vector3 c = new Vector3(0,
+    0, 0);\r\n\r\n            [ForceFill(null)] public GameObject gob3;\r\n\r\n           
+    [ForceFill(\"-1\"), SerializeField]\r\n            float f = -1;\r\n\r\n           
+    [HorizontalLine(\"only check if playing\")] //test it by starting your game and
+    then look back on this editorwindow\r\n                                                     
     //or only check if playing (because it would get filled)\r\n            [ForceFill(onlyTestInPlayMode
     = true)] public GameObject gob = null;\r\n\r\n            void Start()\r\n           
     {\r\n                // this.CheckForceFilled();\r\n                // gob1 =
@@ -196,45 +212,52 @@ MonoBehaviour:
     = new HideFieldAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
     class HideFieldAttributeExamples\r\n        {\r\n            [MessageBox(\"[HideField]
     still shows all other attributes\", MessageBoxType.Info)]\r\n            [HideField]
-    public bool _;\r\n\r\n            //Title is visible\r\n            [Title(\"Title1\")]\r\n           
-    [HideField]\r\n            public bool a1;\r\n            public bool a2;\r\n\r\n\r\n           
-    [MessageBox(\"[HideInInspector] hides everything\", MessageBoxType.Info)]\r\n           
-    [HideField] public bool __;\r\n\r\n            //Title is hidden too\r\n           
-    [Title(\"Title2\")]\r\n            [HideInInspector]\r\n            public bool
+    public bool _;\r\n\r\n            // attributes are visible\r\n            [Title(\"This
+    title is still shown\")]\r\n            [HideField]\r\n            public bool
+    a1;\r\n            public bool a2;\r\n\r\n            [MessageBox(\"[HideInInspector]
+    hides everything\", MessageBoxType.Info)]\r\n            [HideField] public bool
+    __;\r\n\r\n            // attributes are hidden\r\n            [Title(\"This
+    title is hidden\")]\r\n            [HideInInspector]\r\n            public bool
     b1;\r\n            public bool b2;\r\n        }\r\n\r\n        [SerializeField]
     HookAttributeExamples hookAttributeExamples = new HookAttributeExamples();\r\n\r\n       
     [System.Serializable]\r\n        class HookAttributeExamples\r\n        {\r\n           
-    [Title(\"Logs previous and new value in console\")]\r\n            [MessageBox(\"Change
-    value and look into console\", MessageBoxType.Info)]\r\n            [Hook(nameof(LogInput))]\r\n           
+    [HorizontalLine(\"With parameters\")]\r\n\r\n            [Title(\"Logs previous
+    and new value in console\")]\r\n            [MessageBox(\"Change this value and
+    look into the console\", MessageBoxType.Info)]\r\n            [Hook(nameof(LogInput))]\r\n           
     public float value = 0;\r\n\r\n            void LogInput(float oldValue, float
     newValue)\r\n            {\r\n                Debug.Log($\"Changed from {oldValue}
-    to {newValue}\");\r\n            }\r\n        }\r\n\r\n        [SerializeField]
-    HorizontalGroupAttributeExamples horizontalGroupAttributeExamples = new HorizontalGroupAttributeExamples();\r\n\r\n       
-    [System.Serializable]\r\n        class HorizontalGroupAttributeExamples\r\n       
-    {\r\n            [SerializeField, HorizontalGroup(true)]\r\n            SceneInfos
-    offlineScene;\r\n            [SerializeField, HorizontalGroup]\r\n           
-    SceneInfos onlineScene;\r\n\r\n\r\n            [HorizontalLine(2.5f, FixedColor.Gray,
-    30)]\r\n\r\n\r\n            [MessageBox(\"Combine with other attributes\", MessageBoxType.Info)]\r\n\r\n           
-    [HorizontalGroup(true, size = 4)]\r\n            public string test = \"Combine
-    with a button\";\r\n\r\n            [HorizontalGroup(size = 1),\r\n           
-    Button(nameof(Func), size = Size.small),\r\n            HideField]\r\n           
-    public int b;\r\n            void Func() { Debug.Log(\"Button pressed!\"); }\r\n\r\n\r\n\r\n           
-    [HorizontalLine(2.5f, FixedColor.Gray, 30)]\r\n\r\n\r\n\r\n            [HorizontalGroup(true),\r\n           
-    LabelSettings(LabelStyle.NoLabel)]\r\n            public string hisName = \"James\";\r\n\r\n           
+    to {newValue}\");\r\n            }\r\n\r\n            [HorizontalLine(\"Without
+    parameters\")]\r\n\r\n            [MessageBox(\"Change this value and look into
+    the console\", MessageBoxType.Info)]\r\n            [Hook(nameof(LogHelloWorld))]\r\n           
+    public float value2 = 0;\r\n\r\n            void LogHelloWorld()\r\n           
+    {\r\n                Debug.Log($\"Hello World!\");\r\n            }\r\n       
+    }\r\n\r\n        [SerializeField] HorizontalGroupAttributeExamples horizontalGroupAttributeExamples
+    = new HorizontalGroupAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
+    class HorizontalGroupAttributeExamples\r\n        {\r\n            [SerializeField,
+    HorizontalGroup(true)]\r\n            SceneInfos offlineScene;\r\n           
+    [SerializeField, HorizontalGroup]\r\n            SceneInfos onlineScene;\r\n\r\n\r\n           
+    [HorizontalLine(2.5f, FixedColor.Gray, 30)]\r\n\r\n\r\n            [MessageBox(\"Combine
+    with other attributes\", MessageBoxType.Info)]\r\n\r\n            [HorizontalGroup(true,
+    size = 4)]\r\n            public string test = \"Combine with a button\";\r\n\r\n           
+    [HorizontalGroup(size = 1),\r\n            Button(nameof(Func), size = Size.small),\r\n           
+    HideField]\r\n            public int b;\r\n            void Func() { Debug.Log(\"Button
+    pressed!\"); }\r\n\r\n\r\n\r\n            [HorizontalLine(2.5f, FixedColor.Gray,
+    30)]\r\n\r\n\r\n\r\n            [HorizontalGroup(true),\r\n            LabelSettings(LabelStyle.NoLabel)]\r\n           
+    public string hisName = \"James\";\r\n\r\n            [HorizontalGroup,\r\n           
+    LabelSettings(LabelStyle.NoLabel)]\r\n            public string hisName2 = \"Robert\";\r\n\r\n           
     [HorizontalGroup,\r\n            LabelSettings(LabelStyle.NoLabel)]\r\n           
-    public string hisName2 = \"Robert\";\r\n\r\n            [HorizontalGroup,\r\n           
-    LabelSettings(LabelStyle.NoLabel)]\r\n            public string hisName3 = \"Smith\";\r\n\r\n           
-    [HorizontalGroup(true),\r\n            LabelSettings(LabelStyle.NoLabel)]\r\n           
-    public string herName = \"Jennifer\";\r\n\r\n            [HorizontalGroup,\r\n           
-    LabelSettings(LabelStyle.NoLabel)]\r\n            public string herName2 = \"Susan\";\r\n\r\n           
+    public string hisName3 = \"Smith\";\r\n\r\n            [HorizontalGroup(true),\r\n           
+    LabelSettings(LabelStyle.NoLabel)]\r\n            public string herName = \"Jennifer\";\r\n\r\n           
     [HorizontalGroup,\r\n            LabelSettings(LabelStyle.NoLabel)]\r\n           
-    public string herName3 = \"Miller\";\r\n\r\n\r\n            [System.Serializable]\r\n           
-    class SceneInfos\r\n            {\r\n                [ForceFill] public string
-    name = \"Start Scene\";\r\n                [Title(\"Some Info\")]\r\n               
-    [Min(0)] public int loadingTime = 5;\r\n                public GameObject prefab
-    = null;\r\n\r\n                [HorizontalGroup(true), LabelSettings(LabelStyle.NoLabel)]\r\n               
-    public string foo = \"Hello\";\r\n                [HorizontalGroup, LabelSettings(LabelStyle.NoLabel)]\r\n               
-    public string bar = \"World\";\r\n            }\r\n        }\r\n\r\n        [SerializeField]
+    public string herName2 = \"Susan\";\r\n\r\n            [HorizontalGroup,\r\n           
+    LabelSettings(LabelStyle.NoLabel)]\r\n            public string herName3 = \"Miller\";\r\n\r\n\r\n           
+    [System.Serializable]\r\n            class SceneInfos\r\n            {\r\n               
+    [ForceFill] public string name = \"Start Scene\";\r\n                [Title(\"Some
+    Info\")]\r\n                [Min(0)] public int loadingTime = 5;\r\n               
+    public GameObject prefab = null;\r\n\r\n                [HorizontalGroup(true),
+    LabelSettings(LabelStyle.NoLabel)]\r\n                public string foo = \"Hello\";\r\n               
+    [HorizontalGroup, LabelSettings(LabelStyle.NoLabel)]\r\n                public
+    string bar = \"World\";\r\n            }\r\n        }\r\n\r\n        [SerializeField]
     HorizontalLineAttributeExamples horizontalLineAttributeExamples = new HorizontalLineAttributeExamples();\r\n\r\n       
     [System.Serializable]\r\n        class HorizontalLineAttributeExamples\r\n       
     {\r\n            [HorizontalLine(\"Booleans\", 2)]\r\n            public bool
@@ -472,17 +495,19 @@ MonoBehaviour:
     {\r\n                return evenNumber % 2 == 0;\r\n            }\r\n       
     }\r\n\r\n        [SerializeField] ShowMethodAttributeExamples showMethodAttributeExamples
     = new ShowMethodAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
-    class ShowMethodAttributeExamples\r\n        {\r\n            [ShowMethod(nameof(GetTime))]\r\n\r\n           
-    [ShowMethod(nameof(GetTime),\r\n                label = \"Current time\",\r\n               
-    tooltip = \"Updated on each gui-update\")]\r\n\r\n            [SerializeField,
-    HideField]\r\n            bool someBool = false;\r\n\r\n            string GetTime()\r\n           
-    {\r\n                return DateTime.Now.ToString();\r\n            }\r\n       
-    }\r\n\r\n        [SerializeField] ShowPropertyAttributeExamples showPropertyAttributeExamples
-    = new ShowPropertyAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
-    class ShowPropertyAttributeExamples\r\n        {\r\n            [ShowProperty(\"myClass.enabled\",
-    label = \"Use Class\")]\r\n\r\n            [SerializeField, ShowIf(\"myClass.enabled\"),
-    Indent(-1)]\r\n            MyClass myClass;\r\n\r\n            [System.Serializable]\r\n           
-    class MyClass\r\n            {\r\n                [HideField] public bool enabled;\r\n\r\n               
+    class ShowMethodAttributeExamples\r\n        {\r\n            [MessageBox(\"Move
+    your cursor over the fields to update their values.\", MessageBoxType.Info)]\r\n\r\n           
+    [ShowMethod(nameof(GetTime))]\r\n\r\n            [ShowMethod(nameof(GetTime),\r\n               
+    label = \"Current time\",\r\n                tooltip = \"Updated on each gui-update\")]\r\n\r\n           
+    [SerializeField, HideField]\r\n            bool someBool = false;\r\n\r\n           
+    string GetTime()\r\n            {\r\n                return DateTime.Now.ToString();\r\n           
+    }\r\n        }\r\n\r\n        [SerializeField] ShowPropertyAttributeExamples
+    showPropertyAttributeExamples = new ShowPropertyAttributeExamples();\r\n\r\n       
+    [System.Serializable]\r\n        class ShowPropertyAttributeExamples\r\n       
+    {\r\n            [ShowProperty(\"myClass.enabled\", label = \"Use Class\")]\r\n\r\n           
+    [SerializeField, ShowIf(\"myClass.enabled\"), Indent(-1)]\r\n            MyClass
+    myClass;\r\n\r\n            [System.Serializable]\r\n            class MyClass\r\n           
+    {\r\n                [HideField] public bool enabled;\r\n\r\n               
     public int a;\r\n                public int b;\r\n            }\r\n        }\r\n\r\n       
     [SerializeField] Space2AttributeExamples space2AttributeExamples = new Space2AttributeExamples();\r\n\r\n       
     [System.Serializable]\r\n        class Space2AttributeExamples\r\n        {\r\n           
@@ -627,6 +652,9 @@ MonoBehaviour:
     [SerializeField, HideField] bool _;\r\n\r\n            [LabelSettings(\"New Label\"),\r\n           
     Min(0)]\r\n            public List<int> myPositiveNumbers\r\n               
     = new() { 1, 2, 3 };\r\n\r\n            private void Start()\r\n            {\r\n               
+    // Types can be easily converted:\r\n                List<int> numbers = new
+    ListContainer<int>() { 1, 2, 3 };\r\n                ListContainer<int> ints
+    = numbers;\r\n\r\n                // Is serializable by JsonUtility\r\n               
     string json = JsonUtility.ToJson(myList);\r\n                ListContainer<int>
     deserialized\r\n                    = JsonUtility.FromJson<ListContainer<int>>(json);\r\n           
     }\r\n        }\r\n\r\n        [SerializeField] MessageDrawerExamples messageDrawerExamples
@@ -746,11 +774,20 @@ MonoBehaviour:
     set1.TryAdd(UnityEngine.Random.Range(-2000, 2000));\r\n            }\r\n       
     }\r\n\r\n\r\n        [SerializeField] StaticsDrawerExamples staticsDrawerExamples
     = new StaticsDrawerExamples();\r\n\r\n        [System.Serializable]\r\n       
-    class StaticsDrawerExamples\r\n        {\r\n            [Title(\"My Values\")]\r\n           
-    public string hello = \"Hello!\";\r\n\r\n\r\n            static int a = 6;\r\n           
-    static float b = 9.5f;\r\n            static GameObject c = null;\r\n           
-    static Color d = Color.white;\r\n            public static Vector2 e = new Vector2(0.5f,
-    8);\r\n\r\n            [SerializeField] StaticsDrawer sDrawer;\r\n        }\r\n\r\n       
+    class StaticsDrawerExamples\r\n        {\r\n            [HorizontalLine(\"Default\")]\r\n\r\n           
+    [Title(\"My Values\")]\r\n            public string hello = \"Hello!\";\r\n\r\n\r\n           
+    static int a = 6;\r\n            static float b = 9.5f;\r\n            protected
+    GameObject c = null;\r\n            private static Color d = Color.white;\r\n           
+    public static Vector2 e = new Vector2(0.5f, 8);\r\n\r\n            [SerializeField,
+    StaticsDrawer]\r\n            StaticsDrawer instanceDrawer = new();\r\n\r\n           
+    [HorizontalLine(\"Including base class\")]\r\n\r\n            [SerializeField]
+    B myClass;\r\n\r\n            [Serializable]\r\n            class B : A\r\n           
+    {\r\n                private static bool a0 = false;\r\n\r\n                [StaticsDrawer(StaticMembersSearchType.AlsoInBases)]\r\n               
+    public StaticsDrawer fullDrawer = new();\r\n\r\n                [HorizontalLine(\"Including
+    inherited members\")]\r\n\r\n                [StaticsDrawer(StaticMembersSearchType.FlattenHierarchy)]\r\n               
+    public StaticsDrawer inheritedDrawer = new();\r\n            }\r\n           
+    class A\r\n            {\r\n                private static int a1 = 4;\r\n               
+    protected static bool a2 = true;\r\n            }\r\n        }\r\n\r\n       
     [SerializeField] SerializableTupleExamples serializableTupleExamples = new SerializableTupleExamples();\r\n\r\n       
     [System.Serializable]\r\n        class SerializableTupleExamples\r\n        {\r\n           
     //Non Serialized\r\n            public (int, int) notShown1;\r\n            public
@@ -766,8 +803,12 @@ MonoBehaviour:
     public Color c2 = Color.red;\r\n\r\n            [Title(\"HDR\")]\r\n           
     [ColorUsage(true, hdr: true)]\r\n            public Color c3 = Color.magenta;\r\n           
     [ColorUsage(true, hdr: false)]\r\n            public Color c4 = Color.cyan;\r\n       
-    }\r\n\r\n        [SerializeField] DelayedAttributeExamples delayedAttributeExamples
-    = new DelayedAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
+    }\r\n\r\n        [SerializeField] FormerlySerializedAsAttributeExamples formerlySerializedAsAttributeExamples
+    = new FormerlySerializedAsAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
+    class FormerlySerializedAsAttributeExamples\r\n        {\r\n            // public
+    int hitpoints;\r\n\r\n            [UnityEngine.Serialization.FormerlySerializedAs(\"hitpoints\")]\r\n           
+    public int health;\r\n        }\r\n\r\n        [SerializeField] DelayedAttributeExamples
+    delayedAttributeExamples = new DelayedAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
     class DelayedAttributeExamples\r\n        {\r\n            [Delayed]\r\n           
     public string delayed = \"Edit Here\";\r\n\r\n            public string instant
     = \"Edit Here\";\r\n\r\n\r\n            [ShowMethod(nameof(GetDelayedOne))]\r\n           
@@ -804,11 +845,13 @@ MonoBehaviour:
     list1 = new string[] { \"Abc\", \"Def\", \"Ghi\", \"Jkl\" };\r\n        }\r\n\r\n       
     [SerializeField] NonSerializedAttributeExamples nonSerializedAttributeExamples
     = new NonSerializedAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
-    class NonSerializedAttributeExamples\r\n        {\r\n            [NonSerialized]\r\n           
-    public int myNonSerializedInt;\r\n\r\n            [HideInInspector]\r\n           
-    public int mySerializedInt;\r\n\r\n\r\n            [ShowProperty(nameof(myNonSerializedInt))]\r\n           
-    [Space2(15)]\r\n            [ShowProperty(nameof(mySerializedInt))]\r\n           
-    [HideField] public bool _;\r\n        }\r\n\r\n        [SerializeField] RangeAttributeExamples
+    class NonSerializedAttributeExamples\r\n        {\r\n            [HorizontalLine(\"Not
+    found, because of [NonSerialized]\")]\r\n\r\n            [ShowProperty(nameof(myNonSerializedInt))]\r\n           
+    [HideField] public bool __;\r\n\r\n            [NonSerialized]\r\n           
+    public int myNonSerializedInt;\r\n\r\n            [HorizontalLine(\"Found, because
+    it is still serialized\")]\r\n\r\n            [ShowProperty(nameof(mySerializedInt))]\r\n           
+    [HideField] public bool ___;\r\n\r\n            [HideInInspector]\r\n           
+    public int mySerializedInt;\r\n        }\r\n\r\n        [SerializeField] RangeAttributeExamples
     rangeAttributeExamples = new RangeAttributeExamples();\r\n\r\n        [System.Serializable]\r\n       
     class RangeAttributeExamples\r\n        {\r\n            [Range(0, 10)] public
     int _int;\r\n            [Range(0, 10)] public float _float;\r\n        }\r\n\r\n       
@@ -839,179 +882,183 @@ MonoBehaviour:
       info: 0
       values:
         _: 0
-        values: 000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d0000001e0000001f000000200000002100000022000000230000002400000025000000260000002700000028000000290000002a0000002b0000002c0000002d0000002e0000002f000000300000003100000032000000330000003400000035000000360000003700000038000000390000003a0000003b0000003c0000003d0000003e0000003f000000400000004100000042000000430000004400000045000000460000004700000048000000490000004a0000004b0000004c0000004d0000004e0000004f00000050000000510000005200000053000000
+        values: 000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d0000001e0000001f000000200000002100000022000000230000002400000025000000260000002700000028000000290000002a0000002b0000002c0000002d0000002e0000002f000000300000003100000032000000330000003400000035000000360000003700000038000000390000003a0000003b0000003c0000003d0000003e0000003f000000400000004100000042000000430000004400000045000000460000004700000048000000490000004a0000004b0000004c0000004d0000004e0000004f000000500000005100000052000000530000005400000055000000
       editor_input: 0
     values:
       _: 0
       values:
       - start: 1284
         end: 1654
-      - start: 1866
-        end: 3239
-      - start: 3447
-        end: 3698
-      - start: 3918
-        end: 4196
-      - start: 4436
-        end: 5098
-      - start: 5302
-        end: 6094
-      - start: 6322
-        end: 6835
-      - start: 7053
-        end: 7682
-      - start: 7896
-        end: 8215
-      - start: 8427
-        end: 8842
-      - start: 9100
-        end: 9711
-      - start: 9935
-        end: 10091
-      - start: 10299
-        end: 10816
-      - start: 11032
-        end: 12255
-      - start: 12483
-        end: 12896
-      - start: 13100
-        end: 14061
-      - start: 14273
-        end: 15106
-      - start: 15322
-        end: 15891
-      - start: 16087
-        end: 16470
-      - start: 16710
-        end: 18740
-      - start: 18976
-        end: 19792
-      - start: 19998
-        end: 20411
-      - start: 20643
-        end: 21002
-      - start: 21234
-        end: 21826
-      - start: 22026
-        end: 22282
-      - start: 22478
-        end: 24037
-      - start: 24229
-        end: 24830
-      - start: 25050
-        end: 25494
-      - start: 25690
-        end: 26476
-      - start: 26696
-        end: 26982
-      - start: 27190
-        end: 27552
-      - start: 27776
-        end: 28658
-      - start: 28870
-        end: 29565
-      - start: 29789
-        end: 30345
-      - start: 30557
-        end: 31089
-      - start: 31289
-        end: 31733
-      - start: 32030
-        end: 32647
-      - start: 32899
-        end: 33346
-      - start: 33550
-        end: 35944
-      - start: 36156
-        end: 36372
-      - start: 36596
-        end: 36811
-      - start: 37027
-        end: 38176
-      - start: 38396
-        end: 38771
-      - start: 38999
-        end: 39375
-      - start: 39579
-        end: 39798
-      - start: 39994
-        end: 40889
-      - start: 41081
-        end: 41169
-      - start: 41369
-        end: 42228
-      - start: 42436
-        end: 42902
-      - start: 43122
-        end: 43389
-      - start: 43593
-        end: 43814
-      - start: 44010
-        end: 44175
-      - start: 44379
-        end: 44912
-      - start: 45104
-        end: 45437
-      - start: 45649
-        end: 46056
-      - start: 46387
-        end: 46594
-      - start: 46790
-        end: 47749
-      - start: 47925
-        end: 48469
-      - start: 48653
-        end: 49487
-      - start: 49667
-        end: 50198
-      - start: 50394
-        end: 51422
-      - start: 51618
-        end: 52199
-      - start: 53350
-        end: 53849
-      - start: 54073
-        end: 54558
-      - start: 54790
-        end: 56389
-      - start: 56617
-        end: 57536
-      - start: 52423
-        end: 53122
-      - start: 57792
-        end: 58888
-      - start: 59092
-        end: 60429
-      - start: 60657
-        end: 61091
-      - start: 61850
-        end: 62176
-      - start: 61289
-        end: 61638
-      - start: 62555
-        end: 62963
-      - start: 63171
-        end: 63585
-      - start: 63791
-        end: 64038
-      - start: 64278
-        end: 64719
-      - start: 64911
-        end: 65089
-      - start: 65305
-        end: 65389
-      - start: 65625
-        end: 65782
-      - start: 66014
-        end: 66339
-      - start: 66539
-        end: 66632
-      - start: 66832
-        end: 66985
-      - start: 67193
-        end: 67597
-      - start: 67809
-        end: 67995
+      - start: 3096
+        end: 4469
+      - start: 4677
+        end: 4928
+      - start: 5148
+        end: 5426
+      - start: 5666
+        end: 6328
+      - start: 6532
+        end: 7324
+      - start: 7552
+        end: 8065
+      - start: 8283
+        end: 8912
+      - start: 9126
+        end: 9445
+      - start: 9657
+        end: 10072
+      - start: 10330
+        end: 10994
+      - start: 11218
+        end: 11374
+      - start: 11582
+        end: 12099
+      - start: 12315
+        end: 13538
+      - start: 13766
+        end: 14179
+      - start: 14383
+        end: 15344
+      - start: 15556
+        end: 16389
+      - start: 16605
+        end: 17215
+      - start: 17411
+        end: 18196
+      - start: 18436
+        end: 20466
+      - start: 20702
+        end: 21518
+      - start: 21724
+        end: 22137
+      - start: 22369
+        end: 22728
+      - start: 22960
+        end: 23552
+      - start: 23752
+        end: 24008
+      - start: 24204
+        end: 25763
+      - start: 25955
+        end: 26556
+      - start: 26776
+        end: 27220
+      - start: 27416
+        end: 28202
+      - start: 28422
+        end: 28708
+      - start: 28916
+        end: 29278
+      - start: 29502
+        end: 30384
+      - start: 30596
+        end: 31291
+      - start: 31515
+        end: 32071
+      - start: 32283
+        end: 32815
+      - start: 33015
+        end: 33459
+      - start: 33756
+        end: 34373
+      - start: 34625
+        end: 35072
+      - start: 35276
+        end: 37670
+      - start: 37882
+        end: 38098
+      - start: 38322
+        end: 38537
+      - start: 38753
+        end: 39902
+      - start: 40122
+        end: 40606
+      - start: 40834
+        end: 41210
+      - start: 41414
+        end: 41633
+      - start: 41829
+        end: 42724
+      - start: 42916
+        end: 43004
+      - start: 43204
+        end: 44063
+      - start: 44271
+        end: 44737
+      - start: 44957
+        end: 45224
+      - start: 45428
+        end: 45649
+      - start: 45845
+        end: 46010
+      - start: 46214
+        end: 46747
+      - start: 46939
+        end: 47272
+      - start: 47484
+        end: 47891
+      - start: 48222
+        end: 48429
+      - start: 1854
+        end: 2884
+      - start: 48625
+        end: 49584
+      - start: 49760
+        end: 50304
+      - start: 50488
+        end: 51322
+      - start: 51502
+        end: 52033
+      - start: 52229
+        end: 53488
+      - start: 53684
+        end: 54265
+      - start: 55416
+        end: 55915
+      - start: 56139
+        end: 56624
+      - start: 56856
+        end: 58455
+      - start: 58683
+        end: 59602
+      - start: 54489
+        end: 55188
+      - start: 59858
+        end: 60954
+      - start: 61158
+        end: 62495
+      - start: 62723
+        end: 63157
+      - start: 64728
+        end: 65054
+      - start: 63355
+        end: 64516
+      - start: 65433
+        end: 65841
+      - start: 66455
+        end: 66869
+      - start: 66101
+        end: 66247
+      - start: 67075
+        end: 67322
+      - start: 67562
+        end: 68003
+      - start: 68195
+        end: 68373
+      - start: 68589
+        end: 68673
+      - start: 68909
+        end: 69066
+      - start: 69298
+        end: 69786
+      - start: 69986
+        end: 70079
+      - start: 70279
+        end: 70432
+      - start: 70640
+        end: 71044
+      - start: 71256
+        end: 71442
     editor_keyInput: 0
     editor_valueInput:
       start: 0
@@ -1019,11 +1066,17 @@ MonoBehaviour:
   _: 0
   previewObj:
     animatorParameterAttributeExamples:
-      animatorController: {fileID: 9100000, guid: 3a1cea91d6692bf40b069a1d3b66f1b5,
-        type: 2}
+      animatorController: {fileID: 9100000, guid: 3a1cea91d6692bf40b069a1d3b66f1b5, type: 2}
       animator: {fileID: 0}
-      paramName2: <missing>
+      paramName2: NewFloat
       paramName: <missing>
+    arrayContainerExamples:
+      visible: 1
+      myArray:
+        _: 0
+        values: 0000000000000000
+      _: 0
+      myPositiveNumbers: 010000000200000003000000
     asButtonAttributeExamples:
       selectableBoolean: 0
       holdDownBoolean: 0
@@ -1032,7 +1085,7 @@ MonoBehaviour:
       myString: notSelected
       _: 0
     asRangeAttributeExamples:
-      positiveRange: {x: 0, y: 3.1415927}
+      positiveRange: {x: 0, y: 3.6145241}
       negativeRange: {x: 5.274035, y: 1}
     assetsOnlyAttributeExamples:
       gob1: {fileID: 0}
@@ -1117,7 +1170,8 @@ MonoBehaviour:
       b1: 0
       b2: 0
     hookAttributeExamples:
-      value: 0
+      value: 3
+      value2: 1
     horizontalGroupAttributeExamples:
       offlineScene:
         name: start Scene
@@ -1174,10 +1228,10 @@ MonoBehaviour:
       layer1: 0
       layer2: 0
     maskAttributeExamples:
-      myInt: 30
+      myInt: 5
       rc: 0
       ability: 3
-      FreezePosition: 1
+      FreezePosition: 0
     maxAttributeExamples:
       _int: 10
       vector3: {x: 0, y: 0, z: 0}
@@ -1193,10 +1247,10 @@ MonoBehaviour:
       _int: 10
       minimum: 0
       maximum: 0
-      myCappedValue: 152
+      myCappedValue: 143
       stringMin: 78
-      minVector: {x: 11, y: 32, z: 9}
-      myVector: {x: 11, y: 32, z: 225}
+      minVector: {x: 1, y: 32, z: 9}
+      myVector: {x: 78, y: 32, z: 225}
     multipleOfAttributeExamples:
       _int: 6
       _float: 1.2
@@ -1372,7 +1426,7 @@ MonoBehaviour:
         - elements: 000000000000000000000000000000000000000000000000
     dynamicSliderExamples:
       sliderValue:
-        value: 5
+        value: 4.61
         min: 1
         max: 10
       value2:
@@ -1401,8 +1455,7 @@ MonoBehaviour:
     folderPathExamples:
       folderPath:
         path: Assets
-        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000,
-          type: 3}
+        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000, type: 3}
       path2:
         path: <invalid>
         assetReference: {fileID: 0}
@@ -1411,8 +1464,7 @@ MonoBehaviour:
         assetReference: {fileID: 0}
       path:
         path: Assets
-        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000,
-          type: 3}
+        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000, type: 3}
     lineGraphExamples:
       ak47_damage:
         _: 0
@@ -1451,10 +1503,10 @@ MonoBehaviour:
       dict2:
         _: 0
         keyValuePairs:
-        - key: 
+        - key: 1
           value:
-            a: 0
-            b: 0
+            a: 1
+            b: 1
             c: 0
           isValid: 1
     serializableDateTimeExamples:
@@ -1540,15 +1592,13 @@ MonoBehaviour:
           info: 0
           values:
             _: 0
-            values: 9afbffff0000000062030000
+            values: 01000000
           editor_input: 0
         values:
           _: 0
           values:
-          - Some Random Value
           - abc
-          - Some Random Value
-        editor_keyInput: 0
+        editor_keyInput: 1
         editor_valueInput: abc
       a: 0
       myBehaviours:
@@ -1592,8 +1642,13 @@ MonoBehaviour:
       a: 0
     staticsDrawerExamples:
       hello: Hello!
-      sDrawer:
+      instanceDrawer:
         b: 0
+      myClass:
+        fullDrawer:
+          b: 0
+        inheritedDrawer:
+          b: 0
     serializableTupleExamples:
       tuple1:
         item1: 1
@@ -1607,6 +1662,8 @@ MonoBehaviour:
       c2: {r: 1, g: 0, b: 0, a: 0}
       c3: {r: 1, g: 0, b: 1, a: 0}
       c4: {r: 0, g: 0, b: 0, a: 0}
+    formerlySerializedAsAttributeExamples:
+      health: 0
     delayedAttributeExamples:
       delayed: Edit here
       instant: Edit here
@@ -1631,8 +1688,9 @@ MonoBehaviour:
     nonReorderableAttributeExamples:
       list1: []
     nonSerializedAttributeExamples:
+      __: 0
+      ___: 0
       mySerializedInt: 0
-      _: 0
     rangeAttributeExamples:
       _int: 0
       _float: 0

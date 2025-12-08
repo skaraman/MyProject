@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -8,7 +7,7 @@ namespace CustomInspector
 
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class AsButtonAttribute : PropertyAttribute
+    public class AsButtonAttribute : ComparablePropertyAttribute
     {
         public readonly bool staysPressed;
 
@@ -21,5 +20,7 @@ namespace CustomInspector
         {
             this.staysPressed = staysPressed;
         }
+
+        protected override object[] GetParameters() => new object[] { staysPressed };
     }
 }

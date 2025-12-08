@@ -1,8 +1,14 @@
-using UnityEngine;
+using System;
+using System.Diagnostics;
 
 namespace CustomInspector
 {
-    public class TupleAttribute : PropertyAttribute { }
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
+    [Conditional("UNITY_EDITOR")]
+    public class TupleAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     [System.Serializable]
     public class SerializableTuple<T1, T2>

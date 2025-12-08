@@ -46,6 +46,39 @@ namespace CustomInspector.Documentation
             public string paramName;
         }
 
+        [SerializeField] ArrayContainerExamples arrayContainerExamples = new ArrayContainerExamples();
+
+        [System.Serializable]
+        class ArrayContainerExamples
+        {
+            [MessageBox("New label and ShowIf and is applied to the whole array." +
+                        "\nArray is shown if 'visible' is ticked.", MessageBoxType.Info)]
+
+            public bool visible = true;
+
+            [LabelSettings("New Label"),
+            ShowIf(nameof(visible))]
+            [ArrayContainer]
+            public ArrayContainer<int> myArray;
+
+            [HorizontalLine]
+            [MessageBox("New labels and MinAttribute are applied to all elements." +
+                        "\nAll elements of the array are positive.", MessageBoxType.Info)]
+            [SerializeField, HideField] bool _;
+
+            [LabelSettings("New Label"),
+            Min(0)]
+            public List<int> myPositiveNumbers
+                = new() { 1, 2, 3 };
+
+            private void Start()
+            {
+                // Types can be easily converted:
+                ArrayContainer<int> numbers = Array.CreateInstance(typeof(int), 5);
+                int[] ints = numbers;
+            }
+        }
+
         [SerializeField] AsButtonAttributeExamples asButtonAttributeExamples = new AsButtonAttributeExamples();
 
         [System.Serializable]
@@ -308,7 +341,7 @@ namespace CustomInspector.Documentation
             public int Bar
             { private get; set; } = 45;
 
-            [Title("Reference to autoproperty")]
+            [MessageBox("Enter play-mode to change unserialized auto-property", MessageBoxType.Info)]
             [DisplayAutoProperty(nameof(Bar))]
 
             [HideField]
@@ -481,18 +514,17 @@ namespace CustomInspector.Documentation
             [MessageBox("[HideField] still shows all other attributes", MessageBoxType.Info)]
             [HideField] public bool _;
 
-            //Title is visible
-            [Title("Title1")]
+            // attributes are visible
+            [Title("This title is still shown")]
             [HideField]
             public bool a1;
             public bool a2;
 
-
             [MessageBox("[HideInInspector] hides everything", MessageBoxType.Info)]
             [HideField] public bool __;
 
-            //Title is hidden too
-            [Title("Title2")]
+            // attributes are hidden
+            [Title("This title is hidden")]
             [HideInInspector]
             public bool b1;
             public bool b2;
@@ -503,14 +535,27 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class HookAttributeExamples
         {
+            [HorizontalLine("With parameters")]
+
             [Title("Logs previous and new value in console")]
-            [MessageBox("Change value and look into console", MessageBoxType.Info)]
+            [MessageBox("Change this value and look into the console", MessageBoxType.Info)]
             [Hook(nameof(LogInput))]
             public float value = 0;
 
             void LogInput(float oldValue, float newValue)
             {
                 Debug.Log($"Changed from {oldValue} to {newValue}");
+            }
+
+            [HorizontalLine("Without parameters")]
+
+            [MessageBox("Change this value and look into the console", MessageBoxType.Info)]
+            [Hook(nameof(LogHelloWorld))]
+            public float value2 = 0;
+
+            void LogHelloWorld()
+            {
+                Debug.Log($"Hello World!");
             }
         }
 
@@ -1173,6 +1218,8 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class ShowMethodAttributeExamples
         {
+            [MessageBox("Move your cursor over the fields to update their values.", MessageBoxType.Info)]
+
             [ShowMethod(nameof(GetTime))]
 
             [ShowMethod(nameof(GetTime),
@@ -1586,6 +1633,11 @@ namespace CustomInspector.Documentation
 
             private void Start()
             {
+                // Types can be easily converted:
+                List<int> numbers = new ListContainer<int>() { 1, 2, 3 };
+                ListContainer<int> ints = numbers;
+
+                // Is serializable by JsonUtility
                 string json = JsonUtility.ToJson(myList);
                 ListContainer<int> deserialized
                     = JsonUtility.FromJson<ListContainer<int>>(json);
@@ -1891,17 +1943,43 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class StaticsDrawerExamples
         {
+            [HorizontalLine("Default")]
+
             [Title("My Values")]
             public string hello = "Hello!";
 
 
             static int a = 6;
             static float b = 9.5f;
-            static GameObject c = null;
-            static Color d = Color.white;
+            protected GameObject c = null;
+            private static Color d = Color.white;
             public static Vector2 e = new Vector2(0.5f, 8);
 
-            [SerializeField] StaticsDrawer sDrawer;
+            [SerializeField, StaticsDrawer]
+            StaticsDrawer instanceDrawer = new();
+
+            [HorizontalLine("Including base class")]
+
+            [SerializeField] B myClass;
+
+            [Serializable]
+            class B : A
+            {
+                private static bool a0 = false;
+
+                [StaticsDrawer(StaticMembersSearchType.AlsoInBases)]
+                public StaticsDrawer fullDrawer = new();
+
+                [HorizontalLine("Including inherited members")]
+
+                [StaticsDrawer(StaticMembersSearchType.FlattenHierarchy)]
+                public StaticsDrawer inheritedDrawer = new();
+            }
+            class A
+            {
+                private static int a1 = 4;
+                protected static bool a2 = true;
+            }
         }
 
         [SerializeField] SerializableTupleExamples serializableTupleExamples = new SerializableTupleExamples();
@@ -1937,6 +2015,17 @@ namespace CustomInspector.Documentation
             public Color c3 = Color.magenta;
             [ColorUsage(true, hdr: false)]
             public Color c4 = Color.cyan;
+        }
+
+        [SerializeField] FormerlySerializedAsAttributeExamples formerlySerializedAsAttributeExamples = new FormerlySerializedAsAttributeExamples();
+
+        [System.Serializable]
+        class FormerlySerializedAsAttributeExamples
+        {
+            // public int hitpoints;
+
+            [UnityEngine.Serialization.FormerlySerializedAs("hitpoints")]
+            public int health;
         }
 
         [SerializeField] DelayedAttributeExamples delayedAttributeExamples = new DelayedAttributeExamples();
@@ -2041,17 +2130,21 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class NonSerializedAttributeExamples
         {
+            [HorizontalLine("Not found, because of [NonSerialized]")]
+
+            [ShowProperty(nameof(myNonSerializedInt))]
+            [HideField] public bool __;
+
             [NonSerialized]
             public int myNonSerializedInt;
 
+            [HorizontalLine("Found, because it is still serialized")]
+
+            [ShowProperty(nameof(mySerializedInt))]
+            [HideField] public bool ___;
+
             [HideInInspector]
             public int mySerializedInt;
-
-
-            [ShowProperty(nameof(myNonSerializedInt))]
-            [Space2(15)]
-            [ShowProperty(nameof(mySerializedInt))]
-            [HideField] public bool _;
         }
 
         [SerializeField] RangeAttributeExamples rangeAttributeExamples = new RangeAttributeExamples();

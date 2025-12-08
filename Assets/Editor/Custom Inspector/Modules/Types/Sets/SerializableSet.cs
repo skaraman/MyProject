@@ -11,8 +11,12 @@ namespace CustomInspector
     /// <summary>
     /// Only valid for SerializableSet's! Used to for display in the inspector
     /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class SetAttribute : PropertyAttribute { }
+    public class SetAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     /// <summary>
     /// A list without duplicates

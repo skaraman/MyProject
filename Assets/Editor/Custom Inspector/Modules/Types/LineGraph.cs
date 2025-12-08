@@ -82,8 +82,9 @@ namespace CustomInspector
     /// <summary>
     /// Only valid for LineGraph! Used to fix overriding of other attributes
     /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class LineGraphAttribute : PropertyAttribute
+    public class LineGraphAttribute : ComparablePropertyAttribute
     {
         public const float defaultGraphHeight = 150;
         /// <summary>
@@ -99,5 +100,7 @@ namespace CustomInspector
                 graphHeight = 100;
             }
         }
+
+        protected override object[] GetParameters() => null;
     }
 }

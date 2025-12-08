@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -9,7 +8,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class IndentAttribute : PropertyAttribute
+    public class IndentAttribute : ComparablePropertyAttribute
     {
         public readonly int additionalIndentLevel;
         public IndentAttribute(int additionalIndentLevel = 1)
@@ -18,5 +17,7 @@ namespace CustomInspector
 
             this.additionalIndentLevel = additionalIndentLevel;
         }
+
+        protected override object[] GetParameters() => new object[] { additionalIndentLevel };
     }
 }

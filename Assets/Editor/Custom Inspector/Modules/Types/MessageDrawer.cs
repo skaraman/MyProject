@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
@@ -7,8 +8,12 @@ namespace CustomInspector
     /// <summary>
     /// Only valid for MessageDrawer! Used to fix overriding of other attributes
     /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class MessageDrawerAttribute : PropertyAttribute { }
+    public class MessageDrawerAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     /// <summary>
     /// Can be accessed by script to draw a message in the inspector runtime.

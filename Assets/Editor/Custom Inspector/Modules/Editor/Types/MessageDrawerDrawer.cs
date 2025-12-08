@@ -1,5 +1,6 @@
 using CustomInspector.Extensions;
 using CustomInspector.Helpers;
+using CustomInspector.Helpers.Editor;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEditor;
@@ -13,9 +14,15 @@ namespace CustomInspector.Editor
     /// </summary>
     [CustomPropertyDrawer(typeof(MessageDrawer))]
     [CustomPropertyDrawer(typeof(MessageDrawerAttribute))]
-    public class MessageDrawerDrawer : PropertyDrawer
+    public class MessageDrawerDrawer : TypedPropertyDrawer
     {
 #if UNITY_EDITOR
+        public MessageDrawerDrawer() : base(nameof(MessageDrawerAttribute) + " can only be used on " + nameof(MessageDrawer),
+        typeof(MessageDrawer)
+        )
+        { }
+
+
         public const int messageSize = 35;
 
         const float minSize = 350; //size at what the spacing disappears
@@ -24,6 +31,9 @@ namespace CustomInspector.Editor
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
+
+            if (!TryOnGUI(position, property, label))
+                return;
 
             DirtyValue messages = new DirtyValue(property).FindRelative("messages");
 
@@ -58,6 +68,8 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
 
             DirtyValue messages = new DirtyValue(property).FindRelative("messages");
 

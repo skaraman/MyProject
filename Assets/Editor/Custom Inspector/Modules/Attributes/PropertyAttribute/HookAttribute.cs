@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -24,7 +23,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class HookAttribute : PropertyAttribute
+    public class HookAttribute : ComparablePropertyAttribute
     {
         public readonly string methodPath;
         public readonly ExecutionTarget target;
@@ -45,5 +44,7 @@ namespace CustomInspector
             this.target = target;
             order = -10;
         }
+
+        protected override object[] GetParameters() => new object[] { methodPath, target };
     }
 }

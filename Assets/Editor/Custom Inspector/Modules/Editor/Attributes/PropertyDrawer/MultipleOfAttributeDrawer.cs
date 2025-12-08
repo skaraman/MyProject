@@ -113,7 +113,7 @@ namespace CustomInspector.Editor
             }
             else
             {
-                property.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                property.serializedObject.ApplyModifiedProperties();
                 object res = DirtyValue.GetOwner(property).FindRelative(m.stepPath).GetValue();
 
                 try

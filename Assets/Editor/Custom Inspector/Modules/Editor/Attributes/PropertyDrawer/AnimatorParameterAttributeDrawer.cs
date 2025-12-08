@@ -93,15 +93,15 @@ namespace CustomInspector.Editor
             public Func<SerializedProperty, List<string>> ParameterNames { get; private set; } = null;
 
             public PropInfo() { }
-            public void Initialize(SerializedProperty property, PropertyAttribute attr, FieldInfo fieldInfo)
+            public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
-                AnimatorParameterAttribute attribute = (AnimatorParameterAttribute)attr;
+                AnimatorParameterAttribute attr = (AnimatorParameterAttribute)attribute;
 
                 SerializedProperty prop;
                 PropertyValues.IFindProperties owner = property.GetOwnerAsFinder();
                 try
                 {
-                    prop = owner.FindPropertyRelative(attribute.animatorPath);
+                    prop = owner.FindPropertyRelative(attr.animatorPath);
                 }
                 catch (Exception e)
                 {
@@ -110,7 +110,7 @@ namespace CustomInspector.Editor
                 }
                 if (prop == null)
                 {
-                    ErrorMessage = $"AnimatorParameter: {attribute.animatorPath} was not found on {owner.Name}";
+                    ErrorMessage = $"AnimatorParameter: {attr.animatorPath} was not found on {owner.Name}";
                     return;
                 }
 
@@ -119,7 +119,7 @@ namespace CustomInspector.Editor
                 {
                     ParameterNames = p =>
                     {
-                        SerializedProperty animator = p.GetOwnerAsFinder().FindPropertyRelative(attribute.animatorPath);
+                        SerializedProperty animator = p.GetOwnerAsFinder().FindPropertyRelative(attr.animatorPath);
                         Animator value = animator.GetValue() as Animator;
                         if (value != null)
                             return value.parameters?.Select(p => p.name).ToList(); //they are null no controller is assigned
@@ -131,7 +131,7 @@ namespace CustomInspector.Editor
                 {
                     ParameterNames = p =>
                     {
-                        SerializedProperty animatorController = p.GetOwnerAsFinder().FindPropertyRelative(attribute.animatorPath);
+                        SerializedProperty animatorController = p.GetOwnerAsFinder().FindPropertyRelative(attr.animatorPath);
                         AnimatorController value = animatorController.GetValue() as AnimatorController;
                         if (value != null)
                             return value.parameters.Select(p => p.name).ToList();
@@ -141,7 +141,7 @@ namespace CustomInspector.Editor
                 }
                 else
                 {
-                    ErrorMessage = $"AnimatorParameter: Type {type} is invalid. {attribute.animatorPath} in {owner.Name} must be of type Animator or AnimatorController";
+                    ErrorMessage = $"AnimatorParameter: Type {type} is invalid. {attr.animatorPath} in {owner.Name} must be of type Animator or AnimatorController";
                 }
             }
         }

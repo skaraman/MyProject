@@ -94,9 +94,9 @@ namespace CustomInspector.Editor
             public bool IsInteractible { get; private set; }
 
             public PropInfo() { }
-            public void Initialize(SerializedProperty property, PropertyAttribute attr, FieldInfo fieldInfo)
+            public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
-                ProgressBarAttribute attribute = (ProgressBarAttribute)attr;
+                ProgressBarAttribute attr = (ProgressBarAttribute)attribute;
 
                 if (property.propertyType != SerializedPropertyType.Float && property.propertyType != SerializedPropertyType.Integer)
                 {
@@ -104,41 +104,41 @@ namespace CustomInspector.Editor
                     return;
                 }
 
-                BarHeight = GetSize(attribute.size);
-                IsInteractible = !attribute.isReadOnly && fieldInfo.GetCustomAttribute<ReadOnlyAttribute>() == null;
+                BarHeight = GetSize(attr.size);
+                IsInteractible = !attr.isReadOnly && fieldInfo.GetCustomAttribute<ReadOnlyAttribute>() == null;
 
                 //define getters
-                SerializedProperty maxProp = attribute.maxGetter != null ? property.GetOwnerAsFinder().FindPropertyRelative(attribute.maxGetter) : null;
-                SerializedProperty minProp = attribute.minGetter != null ? property.GetOwnerAsFinder().FindPropertyRelative(attribute.minGetter) : null;
+                SerializedProperty maxProp = attr.maxGetter != null ? property.GetOwnerAsFinder().FindPropertyRelative(attr.maxGetter) : null;
+                SerializedProperty minProp = attr.minGetter != null ? property.GetOwnerAsFinder().FindPropertyRelative(attr.minGetter) : null;
 
-                if ((attribute.maxGetter != null) == (maxProp != null) //check if has a getter, then property should be found
-                    && (attribute.minGetter != null) == (minProp != null))
+                if ((attr.maxGetter != null) == (maxProp != null) //check if has a getter, then property should be found
+                    && (attr.minGetter != null) == (minProp != null))
                 {
                     Func<SerializedProperty, float> getMin;
                     Func<SerializedProperty, float> getMax;
 
                     //Max
-                    if (attribute.maxGetter == null)
-                        getMax = (prop) => attribute.max;
+                    if (attr.maxGetter == null)
+                        getMax = (prop) => attr.max;
                     else if (maxProp.propertyType == SerializedPropertyType.Float)
-                        getMax = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attribute.maxGetter).floatValue;
+                        getMax = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attr.maxGetter).floatValue;
                     else if (maxProp.propertyType == SerializedPropertyType.Integer)
-                        getMax = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attribute.maxGetter).intValue;
+                        getMax = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attr.maxGetter).intValue;
                     else
                     {
-                        ErrorMessage = $"ProgressBar: set maximum: Property {attribute.maxGetter} is not a number";
+                        ErrorMessage = $"ProgressBar: set maximum: Property {attr.maxGetter} is not a number";
                         return;
                     }
                     //Min
-                    if (attribute.minGetter == null)
-                        getMin = (prop) => attribute.min;
+                    if (attr.minGetter == null)
+                        getMin = (prop) => attr.min;
                     else if (minProp.propertyType == SerializedPropertyType.Float)
-                        getMin = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attribute.minGetter).floatValue;
+                        getMin = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attr.minGetter).floatValue;
                     else if (minProp.propertyType == SerializedPropertyType.Integer)
-                        getMin = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attribute.minGetter).intValue;
+                        getMin = (prop) => prop.GetOwnerAsFinder().FindPropertyRelative(attr.minGetter).intValue;
                     else
                     {
-                        ErrorMessage = $"ProgressBar: set minimum: Property {attribute.minGetter} is not a number";
+                        ErrorMessage = $"ProgressBar: set minimum: Property {attr.minGetter} is not a number";
                         return;
                     }
 
@@ -148,12 +148,12 @@ namespace CustomInspector.Editor
                 {
                     //Check if existing
                     //Max
-                    if (attribute.maxGetter != null)
+                    if (attr.maxGetter != null)
                     {
                         DirtyValue maxValue;
                         try
                         {
-                            maxValue = DirtyValue.GetOwner(property).FindRelative(attribute.maxGetter);
+                            maxValue = DirtyValue.GetOwner(property).FindRelative(attr.maxGetter);
                         }
                         catch (Exception e)
                         {
@@ -163,17 +163,17 @@ namespace CustomInspector.Editor
                         //Check type
                         if (!typeof(float).IsAssignableFrom(maxValue.Type))
                         {
-                            ErrorMessage = $"ProgressBar: set minimum: Property {attribute.maxGetter} is not a number";
+                            ErrorMessage = $"ProgressBar: set minimum: Property {attr.maxGetter} is not a number";
                             return;
                         }
                     }
                     //Min
-                    if (attribute.minGetter != null)
+                    if (attr.minGetter != null)
                     {
                         DirtyValue minValue;
                         try
                         {
-                            minValue = DirtyValue.GetOwner(property).FindRelative(attribute.minGetter);
+                            minValue = DirtyValue.GetOwner(property).FindRelative(attr.minGetter);
                         }
                         catch (Exception e)
                         {
@@ -183,7 +183,7 @@ namespace CustomInspector.Editor
                         //Check type
                         if (!typeof(float).IsAssignableFrom(minValue.Type))
                         {
-                            ErrorMessage = $"ProgressBar: set minimum: Property {attribute.minGetter} is not a number";
+                            ErrorMessage = $"ProgressBar: set minimum: Property {attr.minGetter} is not a number";
                             return;
                         }
                     }
@@ -191,14 +191,14 @@ namespace CustomInspector.Editor
                     //set functions
                     GetMinMax = (prop) =>
                     {
-                        prop.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                        prop.serializedObject.ApplyModifiedProperties();
                         DirtyValue owner = DirtyValue.GetOwner(property);
-                        if (attribute.maxGetter == null) //only min
-                            return ((float)owner.FindRelative(attribute.minGetter).GetValue(), attribute.max);
-                        else if (attribute.minGetter == null) //only max
-                            return (attribute.min, (float)owner.FindRelative(attribute.maxGetter).GetValue());
+                        if (attr.maxGetter == null) //only min
+                            return ((float)owner.FindRelative(attr.minGetter).GetValue(), attr.max);
+                        else if (attr.minGetter == null) //only max
+                            return (attr.min, (float)owner.FindRelative(attr.maxGetter).GetValue());
                         else //both
-                            return ((float)owner.FindRelative(attribute.minGetter).GetValue(), (float)owner.FindRelative(attribute.maxGetter).GetValue());
+                            return ((float)owner.FindRelative(attr.minGetter).GetValue(), (float)owner.FindRelative(attr.maxGetter).GetValue());
                     };
                 }
             }

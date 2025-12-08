@@ -5,8 +5,12 @@ using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
 {
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class Array2DAttribute : PropertyAttribute { }
+    public class Array2DAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     [Serializable]
     public class Array2D<T>

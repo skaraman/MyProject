@@ -1,4 +1,5 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
 using System;
 using System.Linq;
 using UnityEditor;
@@ -7,11 +8,19 @@ using UnityEngine;
 namespace CustomInspector.Editor
 {
     [CustomPropertyDrawer(typeof(SerializableDateTimeAttribute))]
-    public class SerializableDateTimeDrawer : PropertyDrawer
+    public class SerializableDateTimeDrawer : TypedPropertyDrawer
     {
+        public SerializableDateTimeDrawer() : base(nameof(SerializableDateTimeAttribute) + " can only be used on " + nameof(SerializableDateTime),
+        typeof(SerializableDateTime)
+        )
+        { }
+
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
+
+            if (!TryOnGUI(position, property, label))
+                return;
 
             SerializableDateTimeAttribute attr = (SerializableDateTimeAttribute)attribute;
 
@@ -153,6 +162,9 @@ namespace CustomInspector.Editor
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
+
             SerializableDateTimeAttribute attr = (SerializableDateTimeAttribute)attribute;
             return attr.format switch
             {

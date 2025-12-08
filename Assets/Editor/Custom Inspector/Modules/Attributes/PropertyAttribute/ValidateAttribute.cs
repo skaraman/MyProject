@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class ValidateAttribute : PropertyAttribute
+    public class ValidateAttribute : ComparablePropertyAttribute
     {
         public readonly string methodPath;
         public readonly string errorMessage;
@@ -23,5 +22,7 @@ namespace CustomInspector
             this.errorMessage = errorMessage;
             this.errorType = errorType;
         }
+
+        protected override object[] GetParameters() => new object[] { methodPath, errorMessage, errorType };
     }
 }

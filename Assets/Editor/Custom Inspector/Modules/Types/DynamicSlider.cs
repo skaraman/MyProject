@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 
@@ -6,8 +7,12 @@ namespace CustomInspector
     /// <summary>
     /// Only valid for DynamicSlider! Used to fix overriding of other attributes
     /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class DynamicSliderAttribute : PropertyAttribute { }
+    public class DynamicSliderAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     /// <summary>
     /// If min and max are allowed to change

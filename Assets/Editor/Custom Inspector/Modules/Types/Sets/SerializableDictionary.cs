@@ -11,8 +11,9 @@ namespace CustomInspector
     /// <summary>
     /// Only valid for dictionary's! Used for display in the inspector
     /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class DictionaryAttribute : PropertyAttribute
+    public class DictionaryAttribute : ComparablePropertyAttribute
     {
         /// <summary>
         /// Only on SerializableDictionary: Overrides the key-column-header with a custom label
@@ -39,6 +40,8 @@ namespace CustomInspector
             }
             this.keySize = keySize;
         }
+
+        protected override object[] GetParameters() => null;
     }
 
     /// <summary>

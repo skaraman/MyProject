@@ -1,12 +1,11 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class ColorPaletteAttribute : PropertyAttribute
+    public class ColorPaletteAttribute : ComparablePropertyAttribute
     {
         /// <summary>
         /// removes the foldout option to choose a custom color
@@ -19,5 +18,7 @@ namespace CustomInspector
                 paletteName = "default";
             this.paletteName = paletteName;
         }
+
+        protected override object[] GetParameters() => new object[] { paletteName };
     }
 }

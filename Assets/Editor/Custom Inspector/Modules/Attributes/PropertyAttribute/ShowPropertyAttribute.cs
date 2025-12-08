@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class ShowPropertyAttribute : PropertyAttribute
+    public class ShowPropertyAttribute : ComparablePropertyAttribute
     {
         public readonly string getPropertyPath;
         /// <summary>
@@ -22,12 +21,14 @@ namespace CustomInspector
         /// </summary>
         public string tooltip = null;
 
-        
+
         /// <param name="getPropertyPath">The name of the property to display</param>
         public ShowPropertyAttribute(string getPropertyPath)
         {
             order = -10;
             this.getPropertyPath = getPropertyPath;
         }
+
+        protected override object[] GetParameters() => new object[] { getPropertyPath };
     }
 }

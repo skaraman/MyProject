@@ -1,18 +1,18 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class LayerAttribute : PropertyAttribute
+    public class LayerAttribute : ComparablePropertyAttribute
     {
         public readonly string requiredName = null;
-        public LayerAttribute() { }
-        public LayerAttribute(string requiredName)
+        public LayerAttribute(string requiredName = null)
         {
             this.requiredName = requiredName;
         }
+
+        protected override object[] GetParameters() => new object[] { requiredName };
     }
 }

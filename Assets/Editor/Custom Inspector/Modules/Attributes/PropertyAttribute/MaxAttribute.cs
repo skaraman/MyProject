@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class MaxAttribute : PropertyAttribute, IMinMaxAttribute
+    public class MaxAttribute : ComparablePropertyAttribute, IMinMaxAttribute
     {
         /// <summary>
         /// The maximum allowed value.
@@ -20,9 +19,11 @@ namespace CustomInspector
         readonly string maxPath = null;
         public string CapPath => maxPath;
 
+        protected override object[] GetParameters() => new object[] { max, maxPath };
+
         private MaxAttribute()
         {
-            //Has to be before the built-in MinAttribute
+            // Has to be before the built-in MinAttribute
             order = -10;
         }
         /// <summary>

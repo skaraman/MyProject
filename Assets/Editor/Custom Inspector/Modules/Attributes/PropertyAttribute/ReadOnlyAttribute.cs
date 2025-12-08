@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 
@@ -23,7 +22,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class ReadOnlyAttribute : PropertyAttribute
+    public class ReadOnlyAttribute : ComparablePropertyAttribute
     {
         public LabelStyle labelStyle;
         public DisableStyle disableStyle;
@@ -34,5 +33,7 @@ namespace CustomInspector
             this.disableStyle = disableStyle;
             this.labelStyle = labelStyle;
         }
+
+        protected override object[] GetParameters() => new object[] { disableStyle, labelStyle };
     }
 }

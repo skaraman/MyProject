@@ -1,14 +1,13 @@
 using System;
 using System.Diagnostics;
 using UnityEditor;
-using UnityEngine;
 
 namespace CustomInspector
 {
 
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class PreviewAttribute : PropertyAttribute
+    public class PreviewAttribute : ComparablePropertyAttribute
     {
         public readonly float thumbnailSize;
 
@@ -26,5 +25,7 @@ namespace CustomInspector
             };
 #endif
         }
+
+        protected override object[] GetParameters() => new object[] { thumbnailSize };
     }
 }

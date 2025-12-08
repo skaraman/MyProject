@@ -81,14 +81,22 @@ namespace CustomInspector.Extensions
                 Type type = DirtyValue.GetType(property);
                 if (type == typeof(int))
                     return property.intValue;
+                else if (type == typeof(long))
+                    return property.longValue;
                 else if (type == typeof(uint))
+#if UNITY_2022_1_OR_NEWER
+                    return property.uintValue;
+                else if (type == typeof(ulong))
+                    return property.ulongValue;
+#else
                     return (uint)property.intValue;
+                else if (type == typeof(ulong))
+                    return (ulong)property.longValue;
+#endif
                 else if (type == typeof(short))
                     return (short)property.intValue;
                 else if (type == typeof(ushort))
                     return (ushort)property.intValue;
-                else if (type == typeof(long))
-                    return (long)property.intValue;
                 else if (type == typeof(byte))
                     return (byte)property.intValue;
                 else
@@ -308,31 +316,16 @@ namespace CustomInspector.Extensions
         public static GUIContent ValidateLabel(GUIContent label, SerializedProperty property)
         {
             // start bug fixes for unity-bugs
-            // mark label as fixed by adding original name to the tooltip
 
-            // bug fix version 1 (by storing metadata in derived class)
+            if (property == null) // field is not drawn anyways, so we dont have to fix somethign
+                return label;
+
+            // bug fix by storing metadata in derived class
             if (label is not LabelContent lc // if label is not validated yet
             || lc.originalPropertyName != property.name) // if label belongs to wrong property
             {
                 label = new LabelContent(PropertyConversions.NameFormat(property.name), property.tooltip, originalPropertyName: property.name);
             }
-
-            // bug fix version 2 (by storing metadata in tooltip)
-            // string tooltip_end = $"original name: {PropertyConversions.NameFormat(property.name)}";
-            // if (label == null || label.tooltip == null
-            //          || label.tooltip.Length < tooltip_end.Length || label.tooltip[^(tooltip_end.Length)..] != tooltip_end)
-            // {
-            //     // fix label
-            //     label = new LabelContent(PropertyConversions.NameFormat(property.name), property.tooltip, originalPropertyName: property.name);
-            //     // mark tooltip
-            //     if (string.IsNullOrEmpty(label.tooltip))
-            //         label.tooltip = tooltip_end;
-            //     else
-            //         label.tooltip += "\n" + tooltip_end;
-            // }
-            // else Debug.Assert(label is LabelContent, "Validated labels should all be typeof(LabelContent)");
-
-            // end bug fixes
 
             return label;
         }
@@ -462,11 +455,11 @@ namespace CustomInspector.Extensions
         => property.GetAllProperties(alsoFromBases).OnlyVisible();
 
         public static bool HasMethodOnOwner(this SerializedProperty property, string methodPath,
-                                    Type[] parameterTypes = null, BindingFlags bindingAttr = defaultBindingFlags)
+                                    Type[] parameterTypes = null)
         {
             try
             {
-                GetMethodOnOwner(property, methodPath, parameterTypes, bindingAttr);
+                GetMethodOnOwner(property, methodPath, parameterTypes);
                 return true;
             }
             catch
@@ -479,16 +472,16 @@ namespace CustomInspector.Extensions
         /// <exception cref="MissingMethodException">the method name on the end of the path was not found</exception>
         /// <exception cref="Exceptions.WrongTypeException">If path has wrong format</exception>
         public static InvokableMethod GetMethodOnOwner(this SerializedProperty property, string methodPath,
-                                    Type[] parameterTypes = null, BindingFlags bindingAttr = defaultBindingFlags)
+                                    Type[] parameterTypes = null)
         {
-            return InvokableMethod.GetMethod(DirtyValue.GetOwner(property), methodPath, parameterTypes, bindingAttr);
+            return InvokableMethod.GetMethod(DirtyValue.GetOwner(property), methodPath, parameterTypes);
         }
         public static bool TryGetMethodOnOwner(this SerializedProperty property, out InvokableMethod invokableMethod, string methodPath,
-                                    Type[] parameterTypes = null, BindingFlags bindingAttr = defaultBindingFlags)
+                                    Type[] parameterTypes = null)
         {
             try
             {
-                invokableMethod = GetMethodOnOwner(property, methodPath, parameterTypes, bindingAttr);
+                invokableMethod = GetMethodOnOwner(property, methodPath, parameterTypes);
                 return true;
             }
             catch
@@ -503,22 +496,13 @@ namespace CustomInspector.Extensions
         /// <exception cref="MissingMethodException">the method name on the end of the path was not found</exception>
         /// <exception cref="Exceptions.WrongTypeException">If path has wrong format</exception>
         public static object CallMethodOnOwner(this SerializedProperty property, string methodPath,
-                                    Type[] parameterTypes = null, object[] parameters = null, BindingFlags bindingFlags = defaultBindingFlags)
+                                    Type[] parameterTypes = null, object[] parameters = null)
         {
             if (parameterTypes != null || parameters != null) //parameterTypes are important, because parameters can be null, and then no type can be retrieved
                 Debug.Assert(parameterTypes.Length == parameters.Length, "ParameterTypes have to be the types of the parameters");
 
-            var method = InvokableMethod.GetMethod(DirtyValue.GetOwner(property), methodPath, parameterTypes, bindingFlags);
+            var method = InvokableMethod.GetMethod(DirtyValue.GetOwner(property), methodPath, parameterTypes);
             return method.Invoke(parameters: parameters);
-        }
-        /// <exception cref="ArgumentException">invalid path</exception>
-        /// <exception cref="MissingFieldException">A field name on the path is not found</exception>
-        /// <exception cref="MissingMethodException">the method name on the end of the path was not found</exception>
-        /// <exception cref="Exceptions.WrongTypeException">If path has wrong format</exception>
-        public static InvokableMethod GetMethodInside(this SerializedProperty property, string methodPath,
-                                    Type[] parameterTypes = null, BindingFlags bindingAttr = defaultBindingFlags)
-        {
-            return InvokableMethod.GetMethod(new DirtyValue(property), methodPath, parameterTypes, bindingAttr);
         }
 
         /// <exception cref="ArgumentException">invalid path</exception>
@@ -526,9 +510,9 @@ namespace CustomInspector.Extensions
         /// <exception cref="MissingMethodException">the method name on the end of the path was not found</exception>
         /// <exception cref="Exceptions.WrongTypeException">If path has wrong format</exception>
         public static object CallMethodInside(this SerializedProperty property, string methodPath,
-                                    object[] parameters = null, BindingFlags bindingFlags = defaultBindingFlags)
+                                    object[] parameters = null)
         {
-            var method = InvokableMethod.GetMethod(new DirtyValue(property), methodPath, parameters?.Select(_ => _?.GetType()).ToArray(), bindingFlags);
+            var method = InvokableMethod.GetMethod(new DirtyValue(property), methodPath, parameters?.Select(_ => _?.GetType()).ToArray());
             return method.Invoke(parameters: parameters);
         }
 

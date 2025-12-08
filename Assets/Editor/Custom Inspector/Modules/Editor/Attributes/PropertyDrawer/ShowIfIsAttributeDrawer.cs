@@ -24,7 +24,7 @@ namespace CustomInspector.Editor
 
             ShowIfIsAttribute sa = (ShowIfIsAttribute)attribute;
 
-            property.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            property.serializedObject.ApplyModifiedProperties();
 
             object refValue;
             try

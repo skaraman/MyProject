@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -11,7 +10,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class ShowIfIsAttribute : PropertyAttribute
+    public class ShowIfIsAttribute : ComparablePropertyAttribute
     {
         public readonly string fieldPath;
         public readonly object value;
@@ -29,6 +28,8 @@ namespace CustomInspector
             this.fieldPath = fieldPath;
             this.value = value;
         }
+
+        protected override object[] GetParameters() => new object[] { fieldPath, value, Inverted };
     }
     /// <summary>
     /// Show field, if field (given by path/name) is not equal to given value

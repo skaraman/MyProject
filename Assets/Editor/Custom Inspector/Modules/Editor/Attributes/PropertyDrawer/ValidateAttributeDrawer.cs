@@ -47,8 +47,8 @@ namespace CustomInspector.Editor
                 }
                 else
                 {
-                    property.serializedObject.ApplyModifiedPropertiesWithoutUndo();
-                    bool isValid = CalculateValidness(property, out message);
+                    property.serializedObject.ApplyModifiedProperties();
+                    bool isValid = CalculateValidity(property, out message);
                     property.serializedObject.ApplyModifiedFields(false); //this function is not made for changes, but why not preventing wierd behaviour
 
                     saved.isAllowed = isValid;
@@ -59,8 +59,8 @@ namespace CustomInspector.Editor
             }
             else
             {
-                property.serializedObject.ApplyModifiedPropertiesWithoutUndo();
-                bool isValid = CalculateValidness(property, out message);
+                property.serializedObject.ApplyModifiedProperties();
+                bool isValid = CalculateValidity(property, out message);
                 property.serializedObject.ApplyModifiedFields(false); //this function is not made for changes, but why not preventing wierd behaviour
 
                 values.Add(property.propertyPath,
@@ -69,7 +69,7 @@ namespace CustomInspector.Editor
             }
 
 
-            bool CalculateValidness(SerializedProperty property, out string errorMessage)
+            bool CalculateValidity(SerializedProperty property, out string errorMessage)
             {
                 ValidateAttribute va = (ValidateAttribute)attribute;
 

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class ProgressBarAttribute : PropertyAttribute
+    public class ProgressBarAttribute : ComparablePropertyAttribute
     {
         public Size size;
 
@@ -20,6 +19,8 @@ namespace CustomInspector
         public readonly float max;
 
         public bool isReadOnly = false;
+
+        protected override object[] GetParameters() => new object[] { minGetter, min, maxGetter, max };
 
         public ProgressBarAttribute(float max)
         {

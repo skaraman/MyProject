@@ -8,22 +8,23 @@ namespace CustomInspector.Extensions
 {
     public class InvokableMethod
     {
-        object owner;
-        MethodInfo info;
+        readonly object owner;
+        readonly MethodInfo info;
 
+        public MethodInfo Info => info;
         public Type ReturnType => info.ReturnType;
         public string Name => info.Name;
 
 
 
-        public InvokableMethod(object owner, MethodInfo info)
+        private InvokableMethod(object owner, MethodInfo info)
         {
             this.owner = owner;
             Debug.Assert(owner.GetType() != typeof(UnityEditor.SerializedProperty) && owner.GetType() != typeof(UnityEditor.SerializedObject), "Expected the dirty object");
             Debug.Assert(owner.GetType() != typeof(DirtyValue), "Expected the *actual* dirty object not the holder");
             this.info = info;
         }
-        public InvokableMethod(object owner, string methodName, Type[] parameterTypes = null, BindingFlags bindingAttr = PropertyValues.defaultBindingFlags)
+        public InvokableMethod(object owner, string methodName, Type[] parameterTypes = null)
         {
             if (owner == null)
                 throw new NullReferenceException("method owner is null");
@@ -32,24 +33,10 @@ namespace CustomInspector.Extensions
             Debug.Assert(!methodName.Contains('.'), "No path accepted. Name expected");
 
             this.owner = owner;
-            info = GetMethod(owner, methodName, parameterTypes, bindingAttr);
+            info = GetMethod(owner, methodName, parameterTypes);
 
             if (info == null)
                 throw new MissingMethodException($"method '{methodName}' not found in '{owner.GetType()}'");
-        }
-
-        public static bool HasMethod(DirtyValue obj, string methodPath,
-                                    Type[] parameterTypes = null, BindingFlags bindingAttr = PropertyValues.defaultBindingFlags)
-        {
-            try
-            {
-                GetMethod(obj, methodPath, parameterTypes, bindingAttr);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
 
@@ -58,7 +45,7 @@ namespace CustomInspector.Extensions
         /// <exception cref="MissingMethodException">the method name on the end of the path was not found</exception>
         /// <exception cref="Exceptions.WrongTypeException">If path has wrong format</exception>
         public static InvokableMethod GetMethod(DirtyValue obj, string methodPath,
-                                    Type[] parameterTypes = null, BindingFlags bindingAttr = PropertyValues.defaultBindingFlags)
+                                    Type[] parameterTypes = null)
         {
             int last = methodPath.LastIndexOf('.');
             if (last != -1)
@@ -68,18 +55,18 @@ namespace CustomInspector.Extensions
 
             string methodName = methodPath[(last + 1)..];
             object methodOwner = obj.GetValue();
-            MethodInfo info = GetMethod(methodOwner, methodName, parameterTypes, bindingAttr);
+            MethodInfo info = GetMethod(methodOwner, methodName, parameterTypes);
             return new InvokableMethod(methodOwner, info);
         }
 
-        static MethodInfo GetMethod(object owner, string methodName, Type[] parameterTypes = null, BindingFlags bindingAttr = PropertyValues.defaultBindingFlags)
+        static MethodInfo GetMethod(object owner, string methodName, Type[] parameterTypes = null)
         {
             Debug.Assert(!methodName.Contains('.'), "name instead of path expected");
             MethodInfo info;
             Type ownerType = owner.GetType();
             if ((parameterTypes?.Length ?? 0) == 0)
             {
-                info = ownerType.GetMethod(name: methodName, bindingAttr: bindingAttr, null, CallingConventions.Any, Type.EmptyTypes, null);
+                info = ownerType.GetMethod(name: methodName, bindingAttr: PropertyValues.defaultBindingFlags, null, CallingConventions.Any, Type.EmptyTypes, null);
                 if (info == null)
                     throw new MissingMethodException($"'{methodName}' not found in '{ownerType}' without parameters");
             }
@@ -87,13 +74,13 @@ namespace CustomInspector.Extensions
             {
                 if (!parameterTypes.Contains(null))
                 {
-                    info = ownerType.GetMethod(name: methodName, bindingAttr: bindingAttr, null, CallingConventions.Any, parameterTypes, null);
+                    info = ownerType.GetMethod(name: methodName, bindingAttr: PropertyValues.defaultBindingFlags, null, CallingConventions.Any, parameterTypes, null);
                     if (info == null)
                         throw new MissingMethodException($"'{methodName}' not found in '{ownerType}' with parameters '{string.Join(separator: ", ", parameterTypes.Select(_ => _.ToString()))}'");
                 }
                 else // some parameter types are not defined (null)
                 {
-                    var sameName = ownerType.GetMethods(bindingAttr)
+                    var sameName = ownerType.GetMethods(PropertyValues.defaultBindingFlags)
                                     .Where(_ => _.Name == methodName); //namen filtern
 
                     Debug.Assert(sameName.Any(), "No methods with same name found");

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class GetSetAttribute : PropertyAttribute
+    public class GetSetAttribute : ComparablePropertyAttribute
     {
         public readonly string getmethodPath;
         public readonly string setmethodPath;
@@ -26,5 +25,7 @@ namespace CustomInspector
             this.getmethodPath = getmethodPath;
             this.setmethodPath = setmethodPath;
         }
+
+        protected override object[] GetParameters() => new object[] { getmethodPath, setmethodPath };
     }
 }

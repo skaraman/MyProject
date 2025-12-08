@@ -1,4 +1,5 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
 using System;
 using UnityEditor;
 using UnityEngine;
@@ -7,24 +8,19 @@ namespace CustomInspector.Editor
 {
     [CustomPropertyDrawer(typeof(Array2D<>))]
     [CustomPropertyDrawer(typeof(Array2DAttribute))]
-    public class Array2DDrawer : PropertyDrawer
+    public class Array2DDrawer : TypedPropertyDrawer
     {
+        public Array2DDrawer() : base(nameof(Array2DAttribute) + " can only be used on Array2D",
+        typeof(Array2D<>)
+        )
+        { }
+
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
 
-            if (property == null)
+            if (!TryOnGUI(position, property, label))
                 return;
-
-
-            //Check type
-            if (!fieldInfo.FieldType.IsGenericType
-                || fieldInfo.FieldType.GetGenericTypeDefinition() != typeof(Array2D<>))
-            {
-                DrawProperties.DrawPropertyWithMessage(position, label, property,
-                                "Array2DAttribute only valid on Array2D", MessageType.Error);
-                return;
-            }
 
             //foldout
             position.height = EditorGUIUtility.singleLineHeight;
@@ -133,15 +129,8 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            if (property == null)
-                return 0f;
-
-            //Check type
-            if (!fieldInfo.FieldType.IsGenericType
-                || fieldInfo.FieldType.GetGenericTypeDefinition() != typeof(Array2D<>))
-            {
-                return DrawProperties.GetPropertyWithMessageHeight(label, property);
-            }
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
 
             //foldout
             if (!property.isExpanded)

@@ -1,4 +1,7 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -9,21 +12,29 @@ namespace CustomInspector.Editor
     //Draws all static properties of class. But only editable while playing! (because they cannot get serialized)
     [CustomPropertyDrawer(typeof(StaticsDrawer))]
     [CustomPropertyDrawer(typeof(StaticsDrawerAttribute))]
-    public class StaticPropertyDrawerDrawer : PropertyDrawer
+    public class StaticPropertyDrawerDrawer : TypedPropertyDrawer
     {
-        const BindingFlags bindingFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        public StaticPropertyDrawerDrawer() : base(nameof(StaticsDrawerAttribute) + " can only be used on " + nameof(StaticsDrawer),
+        typeof(StaticsDrawer)
+        )
+        { }
+
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
 
+            if (!TryOnGUI(position, property, label))
+                return;
+
             position.height = EditorGUIUtility.singleLineHeight;
 
-            GUIContent header = new("static fields:");
+            GUIContent header = new("Static Fields:");
             if (!Application.isPlaying)
                 header.tooltip = "You cannot change these values while not playing, because static variables doesnt get serialized";
 
+            StaticFieldsInfo info = propertyInfos.GetInfo(property, attribute, fieldInfo);
             DirtyValue owner = DirtyValue.GetOwner(property);
-            FieldInfo[] fields = owner.Type.GetFields(bindingFlags);
+            FieldInfo[] fields = info.FieldInfos;
 
             if (fields.Length <= 0)
             {
@@ -52,18 +63,62 @@ namespace CustomInspector.Editor
                             if (EditorGUI.EndChangeCheck())
                                 value.SetValue(res);
                         }
-                    };
+                    }
+                    ;
                 }
             }
 
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            DirtyValue owner = DirtyValue.GetOwner(property);
-            FieldInfo[] fields = owner.Type.GetFields(bindingFlags);
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
+
+            StaticFieldsInfo info = propertyInfos.GetInfo(property, attribute, fieldInfo);
+            FieldInfo[] fields = info.FieldInfos;
 
             return EditorGUIUtility.singleLineHeight //leadline
                 + fields.Length * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
+        }
+        static readonly PropInfoCache<StaticFieldsInfo> propertyInfos = new();
+        class StaticFieldsInfo : ICachedPropInfo
+        {
+            public FieldInfo[] FieldInfos { get; private set; }
+            public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
+            {
+                BindingFlags bindingFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
+                FieldInfos = GetFields();
+
+                FieldInfo[] GetFields()
+                {
+                    Type fieldType = DirtyValue.GetOwner(property).Type;
+                    if (fieldType == null)
+                        return new FieldInfo[0];
+
+                    if (attribute != null && attribute is StaticsDrawerAttribute attr)
+                    {
+                        if (attr.searchType == StaticMembersSearchType.FlattenHierarchy)
+                            bindingFlags |= BindingFlags.FlattenHierarchy;
+                        else if (attr.searchType == StaticMembersSearchType.AlsoInBases)
+                        {
+                            // Full search
+                            Type type = fieldType;
+                            List<FieldInfo> fields = new();
+                            while (type != null)
+                            {
+                                fields.AddRange(type.GetFields(bindingFlags));
+                                // Debug.Log("type=" + type);
+                                type = type.BaseType;
+                            }
+                            // Debug.Log(string.Join(", ", fields));
+                            return fields.ToArray();
+                        }
+                    }
+
+                    return fieldType.GetFields(bindingFlags);
+                }
+            }
         }
     }
 }

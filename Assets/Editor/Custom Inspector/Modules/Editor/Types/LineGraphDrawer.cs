@@ -1,5 +1,7 @@
 using CustomInspector.Extensions;
 using CustomInspector.Helpers;
+using CustomInspector.Helpers.Editor;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
@@ -10,8 +12,13 @@ namespace CustomInspector.Editor
 {
     [CustomPropertyDrawer(typeof(LineGraph))]
     [CustomPropertyDrawer(typeof(LineGraphAttribute))]
-    public class LineGraphDrawer : PropertyDrawer
+    public class LineGraphDrawer : TypedPropertyDrawer
     {
+        public LineGraphDrawer() : base(nameof(LineGraphAttribute) + " can only be used on " + nameof(LineGraph),
+        typeof(LineGraph)
+        )
+        { }
+
         //static
         const string pointsPropertyName = "points";
 
@@ -29,6 +36,9 @@ namespace CustomInspector.Editor
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
+
+            if (!TryOnGUI(position, property, label))
+                return;
 
             position.height = EditorGUIUtility.singleLineHeight;
             property.isExpanded = EditorGUI.Foldout(position, property.isExpanded, label);
@@ -225,6 +235,13 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
+            //Check type
+            Type fieldType = DirtyValue.GetType(property);
+            if (fieldType != typeof(LineGraph))
+            {
+                return EditorGUIUtility.singleLineHeight;
+            }
+
             if (property.isExpanded)
             {
                 SerializedProperty pointsProperty = property.FindPropertyRelative(pointsPropertyName);

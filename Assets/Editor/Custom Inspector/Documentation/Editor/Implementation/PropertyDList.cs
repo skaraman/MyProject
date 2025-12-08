@@ -64,6 +64,7 @@ namespace CustomInspector.Documentation
         ValidateAttribute,
         //Types
         Array2D,
+        ArrayContainer,
         DynamicSlider,
         FilePath,
         FolderPath,
@@ -83,6 +84,7 @@ namespace CustomInspector.Documentation
         //Unity
         ColorUsageAttribute,
         DelayedAttribute,
+        FormerlySerializedAsAttribute,
         HeaderAttribute,
         HideInInspectorAttribute,
         MinAttribute,
@@ -231,6 +233,7 @@ namespace CustomInspector.Documentation
         static readonly List<NewPropertyD> types = new List<NewPropertyD>()
         {
             NewPropertyD.Array2D,
+            NewPropertyD.ArrayContainer,
             NewPropertyD.DynamicSlider,
             NewPropertyD.FilePath,
             NewPropertyD.FolderPath,
@@ -251,6 +254,7 @@ namespace CustomInspector.Documentation
         static readonly List<NewPropertyD> unityBuildIn = new List<NewPropertyD>()
         {
             NewPropertyD.ColorUsageAttribute,
+            NewPropertyD.FormerlySerializedAsAttribute,
             NewPropertyD.DelayedAttribute,
             NewPropertyD.HeaderAttribute,
             NewPropertyD.HideInInspectorAttribute,

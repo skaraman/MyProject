@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -12,7 +11,7 @@ namespace CustomInspector
     [Obsolete("Use [field: <attribute>] instead to directly work with the field")]
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class DisplayAutoPropertyAttribute : PropertyAttribute
+    public class DisplayAutoPropertyAttribute : ComparablePropertyAttribute
     {
         public readonly string propertyPath;
         public readonly bool allowChange;
@@ -31,5 +30,7 @@ namespace CustomInspector
             this.propertyPath = propertyPath;
             this.allowChange = allowChange;
         }
+
+        protected override object[] GetParameters() => new object[] { propertyPath, allowChange };
     }
 }

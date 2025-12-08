@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -9,12 +8,14 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class FromChildrenAttribute : PropertyAttribute
+    public class FromChildrenAttribute : ComparablePropertyAttribute
     {
         public bool allowNull = false;
         public FromChildrenAttribute()
         {
             order = -10;
         }
+
+        protected override object[] GetParameters() => null;
     }
 }

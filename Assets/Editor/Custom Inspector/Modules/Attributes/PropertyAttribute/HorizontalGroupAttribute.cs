@@ -1,7 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
-using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
 {
@@ -10,7 +8,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class HorizontalGroupAttribute : PropertyAttribute
+    public class HorizontalGroupAttribute : ComparablePropertyAttribute
     {
         public readonly bool beginNewGroup = false;
         public float size = 1;
@@ -29,5 +27,7 @@ namespace CustomInspector
                 size = 0;
             this.beginNewGroup = beginNewGroup;
         }
+
+        protected override object[] GetParameters() => new object[] { beginNewGroup };
     }
 }

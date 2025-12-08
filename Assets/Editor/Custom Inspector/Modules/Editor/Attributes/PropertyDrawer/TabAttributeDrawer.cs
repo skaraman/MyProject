@@ -217,7 +217,7 @@ namespace CustomInspector.Editor
             {
                 TabAttribute tabAttribute = (TabAttribute)attribute;
 
-                groupInfos = HorizontalGroupInfos.CreateNewHorizontalGroupInfos(property, fieldInfo);
+                groupInfos = HorizontalGroupInfos.CreateNewHorizontalGroupInfos(property, attribute, fieldInfo);
 
                 //In array/list nothing matters - just error it | other enumerable like one Transform are allowed
                 if (IsListOrArray(fieldInfo.FieldType)) //is list
@@ -283,7 +283,7 @@ namespace CustomInspector.Editor
             private HorizontalGroupInfos(bool isGroupFirst, string groupLastPath)
             { this.isGroupFirst = isGroupFirst; this.groupLastPath = groupLastPath; }
 
-            public static HorizontalGroupInfos CreateNewHorizontalGroupInfos(SerializedProperty property, FieldInfo fieldInfo)
+            public static HorizontalGroupInfos CreateNewHorizontalGroupInfos(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
                 HorizontalGroupInfos res;
 
@@ -294,7 +294,7 @@ namespace CustomInspector.Editor
                 else
                 {
                     HorizontalGroupAttributeDrawer.GroupMember[] group
-                                = HorizontalGroupAttributeDrawer.GroupMembers.GetGroup(property);
+                                = HorizontalGroupAttributeDrawer.GroupMembers.GetGroup(property, attribute);
 
                     Debug.Assert(group.Length > 0, "Horizontal-group could not be found");
 

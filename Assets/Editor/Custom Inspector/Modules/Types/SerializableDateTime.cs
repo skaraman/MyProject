@@ -87,13 +87,16 @@ namespace CustomInspector
         => new DateTime(dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, dateTime.kind);
     }
 
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class SerializableDateTimeAttribute : PropertyAttribute
+    public class SerializableDateTimeAttribute : ComparablePropertyAttribute
     {
         public readonly SerializableDateTime.InspectorFormat format;
         public SerializableDateTimeAttribute(SerializableDateTime.InspectorFormat format)
         {
             this.format = format;
         }
+
+        protected override object[] GetParameters() => null;
     }
 }

@@ -7,7 +7,7 @@ namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class BackgroundColorAttribute : PropertyAttribute
+    public class BackgroundColorAttribute : ComparablePropertyAttribute
     {
         public readonly FixedColor color;
         public readonly float borderSize;
@@ -23,5 +23,7 @@ namespace CustomInspector
             this.color = color;
             this.borderSize = Mathf.Max(0, borderSize);
         }
+
+        protected override object[] GetParameters() => new object[] { color, borderSize };
     }
 }

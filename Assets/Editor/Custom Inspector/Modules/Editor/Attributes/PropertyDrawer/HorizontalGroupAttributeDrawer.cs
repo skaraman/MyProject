@@ -29,7 +29,7 @@ namespace CustomInspector.Editor
 
             try
             {
-                PropertyIdentifier id = new(property);
+                PropertyAttributeIdentifier id = new(property, attribute);
                 if (!savedInfos.TryGetValue(id, out InspectorInfo info))
                 {
                     info = new InspectorInfo(position, property, (HorizontalGroupAttribute)attribute, fieldInfo);
@@ -72,7 +72,7 @@ namespace CustomInspector.Editor
         {
             try
             {
-                PropertyIdentifier id = new(property);
+                PropertyAttributeIdentifier id = new(property, attribute);
                 GroupMember[] group = propertyGroups.GetInfo(property, attribute, fieldInfo).values;
 
 
@@ -108,7 +108,7 @@ namespace CustomInspector.Editor
                     if (storedHeights.Any()
                         && storedHeights.Peek().last.propertyPath == group[^1].id.propertyPath)
                     {
-                        (PropertyIdentifier last, float maxHeight) current = storedHeights.Pop();
+                        (PropertyAttributeIdentifier last, float maxHeight) current = storedHeights.Pop();
                         storedHeights.Push((current.last, Mathf.Max(GetHeight(), current.maxHeight)));
                     }
 
@@ -137,10 +137,10 @@ namespace CustomInspector.Editor
         }
 
         /// <summary> This is a Stack, because there can be horizontal groups inside other horizontal groups and the last is always the current interest </summary>
-        readonly static Stack<(PropertyIdentifier last, float maxHeight)> storedHeights = new();
+        readonly static Stack<(PropertyAttributeIdentifier last, float maxHeight)> storedHeights = new();
 
         // For performance, the property can access its informations out of Dictionary instead of recalculate each time
-        readonly static Dictionary<PropertyIdentifier, InspectorInfo> savedInfos = new();
+        readonly static Dictionary<PropertyAttributeIdentifier, InspectorInfo> savedInfos = new();
         static readonly PropInfoCache<GroupMembers> propertyGroups = new();
         public class GroupMembers : ICachedPropInfo
         {
@@ -148,15 +148,15 @@ namespace CustomInspector.Editor
 
             public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
-                values = GetGroup(property);
+                values = GetGroup(property, attribute);
             }
-            public static GroupMember[] GetGroup(SerializedProperty property)
+            public static GroupMember[] GetGroup(SerializedProperty property, PropertyAttribute attr)
             {
                 if (property == null)
                     throw new NullReferenceException("property is null");
 
                 if (property.IsArrayElement()) //arr element is not allowed
-                    return new[] { new GroupMember(new PropertyIdentifier(property), 1) };
+                    return new[] { new GroupMember(new PropertyAttributeIdentifier(property, attr), 1) };
 
                 var owner = property.GetOwnerAsFinder();
 
@@ -212,15 +212,15 @@ namespace CustomInspector.Editor
                 //Test
                 Debug.Assert(props.Count > 0, "Property group is empty");
                 //Return
-                return props.Select(_ => new GroupMember(new PropertyIdentifier(_.prop), _.size)).ToArray();
+                return props.Select(_ => new GroupMember(new PropertyAttributeIdentifier(_.prop, attr), _.size)).ToArray();
             }
         }
         public readonly struct GroupMember
         {
-            public readonly PropertyIdentifier id;
+            public readonly PropertyAttributeIdentifier id;
             public readonly float size;
 
-            public GroupMember(PropertyIdentifier id, float size)
+            public GroupMember(PropertyAttributeIdentifier id, float size)
             {
                 this.id = id;
                 this.size = size;

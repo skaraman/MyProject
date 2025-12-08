@@ -1,4 +1,5 @@
 ﻿#if UNITY_EDITOR
+using AllIn1SpriteShader;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -26,6 +27,17 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
     private const uint colorFxShapeDrawer = 1;
     private const uint uvFxShapeDrawer = 2;
 
+	public bool IsSRPShader()
+	{
+		bool res = false;
+		if(targetMat != null)
+		{
+			res = targetMat.shader.name == "AllIn1SpriteShader/AllIn1SpriteShaderSRPBatch";
+		}
+
+		return res;
+	}
+
     public override void OnGUI(MaterialEditor materialEditor, MaterialProperty[] properties)
     {
         matEditor = materialEditor;
@@ -41,11 +53,18 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
         smallLabelStyle.fontSize = smallFontSize;
         toggleButtonStyle = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, richText = true };
         currEnabledDrawers = new bool[materialDrawers.Length];
-        uint iniDrawers = (uint)ShaderGUI.FindProperty("_EditorDrawers", matProperties).floatValue;
+		bool isShaderSRP = IsSRPShader();
+
+		uint iniDrawers = (uint)ShaderGUI.FindProperty("_EditorDrawers", matProperties).floatValue;
         for(int i = 0; i < materialDrawers.Length; i++) currEnabledDrawers[i] = (materialDrawers[i] & iniDrawers) > 0;
 
         GUILayout.Label("General Properties", bigLabelStyle);
         DrawProperty(0);
+		if (isShaderSRP)
+		{
+			DrawProperty(172);
+		}
+
         DrawProperty(1);
         DrawProperty(2);
         
@@ -83,8 +102,16 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
         if(currEnabledDrawers[colorFxShapeDrawer])
         {
             Glow("Glow", "GLOW_ON");
-            GenericEffect("Fade", "FADE_ON", 7, 13);
-            Outline("Outline", "OUTBASE_ON");
+			if (isShaderSRP)
+			{
+				GenericEffect("Fade", "FADE_ON", 7, 13, true, null, new int[] { 173, 174 });
+			}
+			else
+			{
+				GenericEffect("Fade", "FADE_ON", 7, 13, true);
+			}
+
+			Outline("Outline", "OUTBASE_ON", isShaderSRP);
             GenericEffect("Alpha Outline", "ALPHAOUTLINE_ON", 26, 30, true, "A more performant but less flexible outline");
             InnerOutline("Inner Outline", "INNEROUTLINE_ON", 66, 69);
             Gradient("Gradient & Radial Gradient", "GRADIENT_ON");
@@ -102,12 +129,13 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
             GenericEffect("Ghost", "GHOST_ON", 64, 65, true, "This effect will not affect the outline", new int[] { 157 });
             GenericEffect("Hologram", "HOLOGRAM_ON", 73, 77, true, null, new int[] { 140, 158 });
             GenericEffect("Chromatic Aberration", "CHROMABERR_ON", 78, 79);
-            GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139 });
+            if(!isShaderSRP) GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139, 172 });
+            else GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139, 179 });
             GenericEffect("Flicker", "FLICKER_ON", 81, 83);
             GenericEffect("Shadow", "SHADOW_ON", 84, 87);
             GenericEffect("Shine", "SHINE_ON", 133, 138);
             GenericEffect("Contrast & Brightness", "CONTRAST_ON", 152, 153);
-            Overlay("Overlay Texture", "OVERLAY_ON");
+            Overlay("Overlay Texture", "OVERLAY_ON", isShaderSRP);
             GenericEffect("Alpha Cutoff", "ALPHACUTOFF_ON", 70, 70);
             GenericEffect("Alpha Round", "ALPHAROUND_ON", 144, 144);
         }
@@ -115,7 +143,7 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
         DrawLine(Color.grey, 1, 3);
         GUILayout.Label("UV Effects", bigLabelStyle);
 
-        currEnabledDrawers[uvFxShapeDrawer] = GUILayout.Toggle(currEnabledDrawers[uvFxShapeDrawer], new GUIContent("Show Alpha Effects"), toggleButtonStyle);
+        currEnabledDrawers[uvFxShapeDrawer] = GUILayout.Toggle(currEnabledDrawers[uvFxShapeDrawer], new GUIContent("Show UV Effects"), toggleButtonStyle);
         if(currEnabledDrawers[uvFxShapeDrawer])
         {
             GenericEffect("Hand Drawn", "DOODLE_ON", 88, 89);
@@ -128,7 +156,15 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
             GenericEffect("Radial Clipping / Radial Fill", "RADIALCLIPPING_ON", 164, 166);
             GenericEffect("Texture Scroll", "TEXTURESCROLL_ON", 106, 107, true, "Set Texture Wrap Mode to Repeat");
             GenericEffect("Zoom", "ZOOMUV_ON", 108, 108);
-            GenericEffect("Distortion", "DISTORT_ON", 109, 112);
+			if (isShaderSRP)
+			{
+				GenericEffect("Distortion", "DISTORT_ON", 109, 112, true, null, new int[] { 177 });
+			}
+			else
+			{
+				GenericEffect("Distortion", "DISTORT_ON", 109, 112);
+			}
+
             GenericEffect("Warp Distortion", "WARP_ON", 167, 169);
             GenericEffect("Twist", "TWISTUV_ON", 113, 116);
             GenericEffect("Rotate", "ROTATEUV_ON", 117, 117, true, "_Tip_ Use Clipping effect to avoid possible undesired parts");
@@ -261,7 +297,7 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
         else targetMat.DisableKeyword(keyword);
     }
 
-    private void Outline(string inspector, string keyword)
+    private void Outline(string inspector, string keyword, bool isSRPShader)
     {
         bool toggle = oldKeyWords.Contains(keyword);
         bool ini = toggle;
@@ -295,6 +331,11 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
                     DrawProperty(19);
                     DrawProperty(20);
                     DrawProperty(21);
+
+					if (isSRPShader)
+					{
+						DrawProperty(175);
+					}
                 }
 
                 DrawLine(Color.grey, 1, 3);
@@ -305,6 +346,11 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
                     DrawProperty(23);
                     DrawProperty(24);
                     DrawProperty(25);
+
+					if (isSRPShader)
+					{
+						DrawProperty(176);
+					}
                 }
 
                 DrawLine(Color.grey, 1, 3);
@@ -703,7 +749,7 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
         EditorGUILayout.EndToggleGroup();
     }
 
-    private void Overlay(string inspector, string keyword)
+    private void Overlay(string inspector, string keyword, bool isShaderSRP)
     {
         bool toggle = oldKeyWords.Contains(keyword);
         bool ini = toggle;
@@ -739,6 +785,11 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
 
                 for(int i = 160; i <= 163; i++) DrawProperty(i);
                 for(int i = 170; i <= 171; i++) DrawProperty(i);
+
+				if (isShaderSRP)
+				{
+					DrawProperty(178);
+				}
             }
             EditorGUILayout.EndVertical();
         }
@@ -772,20 +823,22 @@ public class AllIn1SpriteShaderMaterialInspector : ShaderGUI
 
     private void ResetProperty(MaterialProperty targetProperty)
     {
+		AllIn1ShaderPropertyType shaderProperty = EditorUtils.GetShaderTypeByMaterialProperty(targetProperty);
+
         if(originalMaterialCopy == null) originalMaterialCopy = new Material(targetMat.shader);
-        if(targetProperty.propertyType == ShaderPropertyType.Float || targetProperty.propertyType == ShaderPropertyType.Range)
+        if(shaderProperty == AllIn1ShaderPropertyType.Float || shaderProperty == AllIn1ShaderPropertyType.Range)
         {
             targetProperty.floatValue = originalMaterialCopy.GetFloat(targetProperty.name);
         }
-        else if(targetProperty.propertyType == ShaderPropertyType.Vector)
+        else if(shaderProperty == AllIn1ShaderPropertyType.Vector)
         {
             targetProperty.vectorValue = originalMaterialCopy.GetVector(targetProperty.name);
         }
-        else if(targetProperty.propertyType == ShaderPropertyType.Color)
+        else if(shaderProperty == AllIn1ShaderPropertyType.Color)
         {
             targetProperty.colorValue = originalMaterialCopy.GetColor(targetProperty.name);
         }
-        else if(targetProperty.propertyType == ShaderPropertyType.Texture)
+        else if(shaderProperty == AllIn1ShaderPropertyType.Texture)
         {
             targetProperty.textureValue = originalMaterialCopy.GetTexture(targetProperty.name);
         }

@@ -9,8 +9,12 @@ namespace CustomInspector
     /// <summary>
     /// Only valid for FolderPath or FilePath! Used to fix overriding of other attributes
     /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class AssetPathAttribute : PropertyAttribute { }
+    public class AssetPathAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     /// <summary>
     /// Used for any Object whether its a folder or a file

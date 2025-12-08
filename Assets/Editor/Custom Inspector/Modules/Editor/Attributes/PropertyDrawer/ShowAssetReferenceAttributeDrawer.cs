@@ -63,11 +63,11 @@ namespace CustomInspector.Editor
         }
 
         /// <summary> For performance reasons we save the asset reference </summary>
-        readonly static Dictionary<PropertyIdentifier, Object> assetReferences = new();
+        readonly static Dictionary<PropertyAttributeIdentifier, Object> assetReferences = new();
 
         Object GetAssetReference(SerializedProperty property)
         {
-            PropertyIdentifier id = new(property);
+            PropertyAttributeIdentifier id = new(property, attribute);
             if (!assetReferences.TryGetValue(id, out Object res))
             {
                 TryGetAsset(GetAssetName(), out res);

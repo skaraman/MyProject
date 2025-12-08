@@ -58,12 +58,12 @@ half rand(half2 seed, half offset) {
 	return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 }
 
-half rand2(half2 seed, half offset) {
-	return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+half rand2(half2 seed, half offset, half speed) {
+	return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 }
 
-half rand2CustomTime(half2 seed, half offset, half customTime) {
-	return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+half rand2CustomTime(half2 seed, half offset, half customTime, half speed) {
+	return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 }
 //-----------------------------------------------------------------------
 half RemapFloat(half inValue, half inMin, half inMax, half outMin, half outMax){

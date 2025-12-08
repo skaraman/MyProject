@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class Min2Attribute : PropertyAttribute, IMinMaxAttribute
+    public class Min2Attribute : ComparablePropertyAttribute, IMinMaxAttribute
     {
         /// <summary>
         /// The minimum allowed value.
@@ -20,21 +19,20 @@ namespace CustomInspector
         readonly string minPath = null;
         public string CapPath => minPath;
 
-        public Min2Attribute()
-        {
-            order = -10;
-        }
+        protected override object[] GetParameters() => new object[] { min, minPath };
 
         /// <summary>
         /// Attribute used to make a float or int variable in a script be restricted to a specific minimum value.
         /// </summary>
         /// <param name="min">The minimum  allowed value.</param>
-        public Min2Attribute(float min) : this()
+        public Min2Attribute(float min)
         {
+            order = -10;
             this.min = min;
         }
-        public Min2Attribute(string minPath) : this()
+        public Min2Attribute(string minPath)
         {
+            order = -10;
             if (string.IsNullOrEmpty(minPath))
                 Debug.LogWarning($"No {nameof(minPath)} given to Min2Attribute to retrieve value from");
             this.minPath = minPath;

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -10,8 +9,12 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class AssetsOnlyAttribute : PropertyAttribute
+    public class AssetsOnlyAttribute : ComparablePropertyAttribute
     {
+        public AssetsOnlyAttribute()
+        {
+        }
 
+        protected override object[] GetParameters() => null;
     }
 }

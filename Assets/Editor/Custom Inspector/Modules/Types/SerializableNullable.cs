@@ -5,8 +5,12 @@ using UnityEngine;
 namespace CustomInspector
 {
 
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class NullableAttribute : PropertyAttribute { }
+    public class NullableAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
 
     [Serializable]
     public struct SerializableNullable<T> where T : struct

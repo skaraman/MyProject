@@ -105,7 +105,8 @@ namespace CustomInspector.Editor
 
                     default:
                         throw new System.NotImplementedException($"{a.style}");
-                };
+                }
+                ;
             }
         }
 
@@ -117,9 +118,9 @@ namespace CustomInspector.Editor
             public Func<SerializedProperty, bool> Condition { get; private set; }
 
             public PropInfo() { }
-            public void Initialize(SerializedProperty property, PropertyAttribute attr, FieldInfo fieldInfo)
+            public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
-                ShowIfAttribute attribute = (ShowIfAttribute)attr;
+                ShowIfAttribute attr = (ShowIfAttribute)attribute;
                 //Check if not list element
                 if (property.IsArrayElement()) //is element in a list
                 {
@@ -131,7 +132,7 @@ namespace CustomInspector.Editor
 
                 try
                 {
-                    Condition = GetCondition(property, attribute);
+                    Condition = GetCondition(property, attr);
                     ErrorMessage = null;
                 }
                 catch (Exception e)
@@ -279,21 +280,21 @@ namespace CustomInspector.Editor
                             if (propPaths == null) //only methods   (there must be props, because on_targetObject_paths.Any was true)
                                 targetObject_values = (p) =>
                                 {
-                                    p.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                                    p.serializedObject.ApplyModifiedProperties();
                                     DirtyValue owner = DirtyValue.GetOwner(p);
                                     return methodPaths.Select(_ => InvokableMethod.GetMethod(owner, _).Invoke());
                                 };
                             else if (methodPaths == null) //only props
                                 targetObject_values = (p) =>
                                 {
-                                    p.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                                    p.serializedObject.ApplyModifiedProperties();
                                     DirtyValue owner = DirtyValue.GetOwner(p);
                                     return propPaths.Select(_ => owner.FindRelative(_).GetValue());
                                 };
                             else //both
                                 targetObject_values = (p) =>
                                 {
-                                    p.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                                    p.serializedObject.ApplyModifiedProperties();
                                     DirtyValue owner = DirtyValue.GetOwner(p);
                                     return propPaths.Select(_ => owner.FindRelative(_).GetValue())
                                         .Concat(methodPaths.Select(_ => InvokableMethod.GetMethod(owner, _).Invoke()));

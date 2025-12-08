@@ -12,7 +12,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class ForceFillAttribute : PropertyAttribute
+    public class ForceFillAttribute : ComparablePropertyAttribute
     {
         /// <summary>
         /// The height in the inspector of the errormessage
@@ -30,17 +30,16 @@ namespace CustomInspector
         /// </summary>
         public bool onlyTestInPlayMode = false;
 
-        public ForceFillAttribute()
-        {
-            order = -10;
-        }
         /// <summary>
         /// Define additional forbidden values. 'Null' is always forbidden
         /// </summary>
-        public ForceFillAttribute(params string[] notAllowed) : this()
+        public ForceFillAttribute(params string[] notAllowed)
         {
+            order = -10;
             this.notAllowed = notAllowed;
         }
+
+        protected override object[] GetParameters() => new[] { notAllowed };
     }
     /// <summary>
     /// A helper class to test in the editor, if all fields in the inspector are filled

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 namespace CustomInspector
 {
@@ -48,7 +47,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class ShowIfAttribute : PropertyAttribute
+    public class ShowIfAttribute : ComparablePropertyAttribute
     {
         public const float indentation = 15;
 
@@ -63,6 +62,8 @@ namespace CustomInspector
         /// </summary>
         public int indent = 1;
         public bool Invert { get; protected set; } = false;
+
+        protected override object[] GetParameters() => new object[] { conditionPaths, op, comOp, Invert };
 
         private ShowIfAttribute()
         {

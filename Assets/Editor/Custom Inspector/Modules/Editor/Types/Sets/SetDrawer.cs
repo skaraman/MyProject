@@ -1,4 +1,5 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,8 +12,13 @@ namespace CustomInspector.Editor
     [CustomPropertyDrawer(typeof(SetAttribute))]
     [CustomPropertyDrawer(typeof(SerializableSet<>))]
     [CustomPropertyDrawer(typeof(SerializableSortedSet<>))]
-    public class SetDrawer : PropertyDrawer
+    public class SetDrawer : TypedPropertyDrawer
     {
+        public SetDrawer() : base(nameof(SetAttribute) + " can only be used on CustomInspector sets",
+            typeof(SerializableSet<>), typeof(SerializableSortedSet<>)
+            )
+        { }
+
         const string valuesListPath = "values.values";
         const float errorHeight = 60;
         //Remove has to happen after dict was drawn. otherwise tries to draw removed things
@@ -21,13 +27,8 @@ namespace CustomInspector.Editor
         {
             label = PropertyValues.ValidateLabel(label, property);
 
-            //Check type
-            if (!ValidType())
-            {
-                DrawProperties.DrawPropertyWithMessage(position, label, property,
-                    "SerializableDictionaryAttribute only valid on SerializableDictionary's", MessageType.Error);
+            if (!TryOnGUI(position, property, label))
                 return;
-            }
 
             //draw dict
             SerializedProperty values = property.FindPropertyRelative(valuesListPath);
@@ -42,7 +43,8 @@ namespace CustomInspector.Editor
 
             // header hover info
             Rect headerRect = DrawProperties.ListDrawer.GetHeaderRect(position);
-            Type argType = fieldInfo.FieldType.GetGenericArguments()[0];
+            Type fieldType = DirtyValue.GetType(property);
+            Type argType = fieldType.GetGenericArguments()[0];
             var draggedObject = DrawProperties.ListDrawer.AcceptDragNDrop(headerRect, argType, values);
             if (draggedObject.Any())
             {
@@ -106,10 +108,8 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            //Check type
-            if (!ValidType())
-                return DrawProperties.GetPropertyWithMessageHeight(label, property);
-
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
 
             SerializedProperty values = property.FindPropertyRelative(valuesListPath);
             if (values == null) // could not be found, probably because value was not serializable
@@ -137,11 +137,11 @@ namespace CustomInspector.Editor
 
             return totalHeight;
         }
-        bool ValidType()
+        static bool ValidType(Type type)
         {
-            if (!fieldInfo.FieldType.IsGenericType)
+            if (!type.IsGenericType)
                 return false;
-            Type td = fieldInfo.FieldType.GetGenericTypeDefinition();
+            Type td = type.GetGenericTypeDefinition();
             return td == typeof(SerializableSet<>) || td == typeof(SerializableSortedSet<>);
         }
         DrawProperties.MultiColumnList.Column[] GetSetColumns(SerializedProperty property, SerializedProperty values)

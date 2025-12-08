@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -10,7 +9,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class AsRangeAttribute : PropertyAttribute
+    public class AsRangeAttribute : ComparablePropertyAttribute
     {
         public readonly float minLimit;
         public readonly float maxLimit;
@@ -20,5 +19,7 @@ namespace CustomInspector
             this.minLimit = minLimit;
             this.maxLimit = maxLimit;
         }
+
+        protected override object[] GetParameters() => new object[] { minLimit, maxLimit };
     }
 }

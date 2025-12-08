@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
@@ -14,7 +13,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class ButtonAttribute : PropertyAttribute
+    public class ButtonAttribute : ComparablePropertyAttribute
     {
         public readonly string methodPath;
         public readonly bool usePropertyAsParameter;
@@ -37,5 +36,7 @@ namespace CustomInspector
             this.methodPath = methodPath;
             this.usePropertyAsParameter = usePropertyAsParameter;
         }
+
+        protected override object[] GetParameters() => new object[] { methodPath, usePropertyAsParameter };
     }
 }

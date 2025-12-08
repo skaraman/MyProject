@@ -6,7 +6,7 @@ namespace CustomInspector
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
-    public class TitleAttribute : PropertyAttribute
+    public class TitleAttribute : ComparablePropertyAttribute
     {
         public readonly string content;
         public readonly bool underlined;
@@ -23,5 +23,7 @@ namespace CustomInspector
             this.content = content;
             this.underlined = underlined;
         }
+
+        protected override object[] GetParameters() => new object[] { content, underlined };
     }
 }

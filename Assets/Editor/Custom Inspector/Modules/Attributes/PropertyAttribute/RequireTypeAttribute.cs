@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using UnityEngine;
 
 
 namespace CustomInspector
@@ -11,7 +10,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class RequireTypeAttribute : PropertyAttribute
+    public class RequireTypeAttribute : ComparablePropertyAttribute
     {
         public System.Type requiredType { get; private set; }
 
@@ -19,5 +18,7 @@ namespace CustomInspector
         {
             this.requiredType = type;
         }
+
+        protected override object[] GetParameters() => new object[] { requiredType };
     }
 }

@@ -34,7 +34,7 @@ namespace CustomInspector.Editor
             }
 
             //Call getter
-            property.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            property.serializedObject.ApplyModifiedProperties();
             object value;
             try
             {

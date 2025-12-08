@@ -149,7 +149,7 @@ namespace CustomInspector.Editor
                 {
                     GetValue = (p) =>
                     {
-                        p.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                        p.serializedObject.ApplyModifiedProperties();
                         return PropertyValues.CallMethodOnOwner(p, gsa.getmethodPath);
                     };
                 }
@@ -161,7 +161,7 @@ namespace CustomInspector.Editor
                     {
                         GetValue = (p) =>
                         {
-                            p.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                            p.serializedObject.ApplyModifiedProperties();
                             return PropertyValues.CallMethodOnOwner(p, gsa.getmethodPath, propTypeArray, new object[] { p.GetValue() });
                         };
                     }

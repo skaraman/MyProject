@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEngine;
 
 namespace CustomInspector.Helpers
 {
@@ -9,56 +10,46 @@ namespace CustomInspector.Helpers
     /// Two properties on different components cannot be differentiated!
     /// Used to save errors or other information on specific properties for performance through different OnGUI's.
     /// </summary>
-    public class PropertyIdentifier
+    public class PropertyAttributeIdentifier
     {
         public readonly Type targetObjectType;
         public readonly string propertyPath;
+        public readonly int attributeHash;
 
-        public PropertyIdentifier(SerializedProperty property)
+        public PropertyAttributeIdentifier(SerializedProperty property, PropertyAttribute attribute)
         {
             this.targetObjectType = property.serializedObject.targetObject.GetType();
             this.propertyPath = property.propertyPath;
+            if (attribute == null)
+                this.attributeHash = 0;
+            else if (attribute is ComparablePropertyAttribute comparableAttr)
+                this.attributeHash = comparableAttr.GetReliableHash();
+            else
+                throw new ArgumentException($"Attribute {attribute.GetType()} must derive from {nameof(ComparablePropertyAttribute)} to create an identifier.");
         }
-        public PropertyIdentifier(Type targetObject, string fullPath)
+        public PropertyAttributeIdentifier(Type targetObject, string fullPath, int attributeHash)
         {
             this.targetObjectType = targetObject;
             this.propertyPath = fullPath;
+            this.attributeHash = attributeHash;
         }
 
 
 
         public override bool Equals(object obj)
         {
-            if (obj is PropertyIdentifier identifier)
+            if (obj is PropertyAttributeIdentifier identifier)
             {
                 return EqualityComparer<Type>.Default.Equals(targetObjectType, identifier.targetObjectType) &&
-                        propertyPath == identifier.propertyPath;
+                        propertyPath == identifier.propertyPath &&
+                        attributeHash == identifier.attributeHash;
             }
             return false;
         }
-        public override int GetHashCode() => HashCode.Combine(targetObjectType, propertyPath);
+        public override int GetHashCode() => HashCode.Combine(targetObjectType, propertyPath, attributeHash);
 
-        public static bool operator ==(PropertyIdentifier i1, PropertyIdentifier i2)
-        {
-            if (i1 is null)
-                return i2 is null;
-            else if (i2 is null)
-                return false;
-
-            return i1.targetObjectType == i2.targetObjectType
-                && i1.propertyPath == i2.propertyPath;
-        }
-
-        public static bool operator !=(PropertyIdentifier i1, PropertyIdentifier i2)
-        {
-            if (i1 is null)
-                return i2 is not null;
-            else if (i2 is null)
-                return true;
-
-            return i1.targetObjectType != i2.targetObjectType
-                || i1.propertyPath == i2.propertyPath;
-        }
+        public static bool operator ==(PropertyAttributeIdentifier i1, PropertyAttributeIdentifier i2) => i1?.Equals(i2) ?? i2 == null;
+        public static bool operator !=(PropertyAttributeIdentifier i1, PropertyAttributeIdentifier i2) => (!i1?.Equals(i2)) ?? i2 != null;
     }
 
     /// <summary>
@@ -69,11 +60,16 @@ namespace CustomInspector.Helpers
     {
         readonly SerializedObject targetObject;
         readonly string propertyPath;
+        readonly int attributeHash;
 
-        public ExactPropertyIdentifier(SerializedProperty property)
+        public ExactPropertyIdentifier(SerializedProperty property, PropertyAttribute attribute)
         {
             targetObject = property.serializedObject;
             propertyPath = property.propertyPath;
+            if (attribute is ComparablePropertyAttribute comparableAttr)
+                this.attributeHash = comparableAttr.GetReliableHash();
+            else
+                throw new ArgumentException($"Attribute {attribute.GetType()} must derive from {nameof(ComparablePropertyAttribute)} to create an identifier.");
         }
 
         public override bool Equals(object o)
@@ -81,32 +77,14 @@ namespace CustomInspector.Helpers
             if (o is ExactPropertyIdentifier other)
             {
                 return targetObject == other.targetObject
-                    && propertyPath == other.propertyPath;
+                    && propertyPath == other.propertyPath
+                    && attributeHash == other.attributeHash;
             }
             else return false;
         }
-        public override int GetHashCode() => HashCode.Combine(targetObject, propertyPath);
+        public override int GetHashCode() => HashCode.Combine(targetObject, propertyPath, attributeHash);
 
-        public static bool operator ==(ExactPropertyIdentifier i1, ExactPropertyIdentifier i2)
-        {
-            if (i1 is null)
-                return i2 is null;
-            else if (i2 is null)
-                return false;
-
-            return i1.targetObject == i2.targetObject
-                && i1.propertyPath == i2.propertyPath;
-        }
-
-        public static bool operator !=(ExactPropertyIdentifier i1, ExactPropertyIdentifier i2)
-        {
-            if (i1 is null)
-                return i2 is not null;
-            else if (i2 is null)
-                return true;
-
-            return i1.targetObject != i2.targetObject
-                || i1.propertyPath == i2.propertyPath;
-        }
+        public static bool operator ==(ExactPropertyIdentifier i1, ExactPropertyIdentifier i2) => i1?.Equals(i2) ?? i2 == null;
+        public static bool operator !=(ExactPropertyIdentifier i1, ExactPropertyIdentifier i2) => (!i1?.Equals(i2)) ?? i2 != null;
     }
 }

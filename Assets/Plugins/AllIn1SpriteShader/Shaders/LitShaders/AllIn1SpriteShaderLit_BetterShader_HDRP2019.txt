@@ -3,7 +3,7 @@
 //
 // Auto-generated shader code, don't hand edit!
 //
-//   Unity Version: 2019.4.16f1
+//   Unity Version: 2021.3.45f2
 //   Render Pipeline: HDRP2019
 //   Platform: WindowsEditor
 ////////////////////////////////////////
@@ -244,6 +244,8 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
     	
     _OverlayTextureScrollXSpeed("Speed X Axis", Range(-5, 5)) = 0.25 //170
 	_OverlayTextureScrollYSpeed("Speed Y Axis", Range(-5, 5)) = 0.25 //171
+	
+	_GlitchSpeed("Glitch Speed", Range(0.0, 100)) = 20 //172
 
     _ZTestMode ("Z Test Mode", Float) = 4
     _CullingOption ("Culling Option", float) = 0
@@ -1163,7 +1165,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
 	#endif
 
 	#if GLITCH_ON
-		half _GlitchAmount, _GlitchSize;
+		half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 	#endif
 
 	#if FLICKER_ON
@@ -1402,12 +1404,8 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
 		return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 	}
 
-	half rand2(half2 seed, half offset) {
-		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-	}
-
-	half rand2CustomTime(half2 seed, half offset, half customTime) {
-		return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+	half rand2(half2 seed, half offset, half speed) {
+		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 	}
 	//-----------------------------------------------------------------------
 
@@ -1725,9 +1723,9 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
 			uvGlitch.y -= 0.5;
-			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * d.vertexColor;
+			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * d.vertexColor;
 		#endif
 		//--------------------------------------
 
@@ -1956,12 +1954,12 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
 			#endif
 
 			#if OUTDIST_ON
-				d.texcoord3.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
-				d.texcoord3.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
+				d.texcoord2.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
+				d.texcoord2.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
 				#if ATLAS_ON
-					d.texcoord3 = half2((d.texcoord3.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord3.y - _MinYUV) / (_MaxYUV - _MinYUV));
+					d.texcoord2 = half2((d.texcoord2.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 				#endif
-				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord3).r - 0.5) * 0.2 * _OutlineDistortAmount;
+				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord2).r - 0.5) * 0.2 * _OutlineDistortAmount;
 				destUv.x += outDistortAmnt;
 				destUv.y += outDistortAmnt;
 			#endif
@@ -2448,7 +2446,11 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
             d.texcoord0 = IN.uv0.xyxy;
             d.screenPos = IN.ScreenPosition;
 
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - d.worldSpacePosition);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(d.worldSpacePosition);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(d.worldSpacePosition));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
 
@@ -2486,7 +2488,11 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
             float3 bitangent = cross(d.worldSpaceTangent.xyz, d.worldSpaceNormal) * d.tangentSign;
            
             d.TBNMatrix = float3x3(d.worldSpaceTangent, -bitangent, d.worldSpaceNormal);
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(i.worldPos);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
              d.texcoord0 = i.texcoord0;
@@ -4047,7 +4053,7 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 	#endif
 
 	#if GLITCH_ON
-		half _GlitchAmount, _GlitchSize;
+		half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 	#endif
 
 	#if FLICKER_ON
@@ -4286,12 +4292,8 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 	}
 
-	half rand2(half2 seed, half offset) {
-		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-	}
-
-	half rand2CustomTime(half2 seed, half offset, half customTime) {
-		return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+	half rand2(half2 seed, half offset, half speed) {
+		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 	}
 	//-----------------------------------------------------------------------
 
@@ -4609,9 +4611,9 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
 			uvGlitch.y -= 0.5;
-			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * d.vertexColor;
+			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * d.vertexColor;
 		#endif
 		//--------------------------------------
 
@@ -4840,12 +4842,12 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 			#endif
 
 			#if OUTDIST_ON
-				d.texcoord3.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
-				d.texcoord3.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
+				d.texcoord2.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
+				d.texcoord2.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
 				#if ATLAS_ON
-					d.texcoord3 = half2((d.texcoord3.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord3.y - _MinYUV) / (_MaxYUV - _MinYUV));
+					d.texcoord2 = half2((d.texcoord2.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 				#endif
-				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord3).r - 0.5) * 0.2 * _OutlineDistortAmount;
+				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord2).r - 0.5) * 0.2 * _OutlineDistortAmount;
 				destUv.x += outDistortAmnt;
 				destUv.y += outDistortAmnt;
 			#endif
@@ -5332,7 +5334,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             d.texcoord0 = IN.uv0.xyxy;
             d.screenPos = IN.ScreenPosition;
 
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - d.worldSpacePosition);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(d.worldSpacePosition);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(d.worldSpacePosition));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
 
@@ -5370,7 +5376,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             float3 bitangent = cross(d.worldSpaceTangent.xyz, d.worldSpaceNormal) * d.tangentSign;
            
             d.TBNMatrix = float3x3(d.worldSpaceTangent, -bitangent, d.worldSpaceNormal);
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(i.worldPos);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
              d.texcoord0 = i.texcoord0;
@@ -6760,7 +6770,7 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 	#endif
 
 	#if GLITCH_ON
-		half _GlitchAmount, _GlitchSize;
+		half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 	#endif
 
 	#if FLICKER_ON
@@ -6999,12 +7009,8 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 	}
 
-	half rand2(half2 seed, half offset) {
-		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-	}
-
-	half rand2CustomTime(half2 seed, half offset, half customTime) {
-		return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+	half rand2(half2 seed, half offset, half speed) {
+		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 	}
 	//-----------------------------------------------------------------------
 
@@ -7322,9 +7328,9 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
 			uvGlitch.y -= 0.5;
-			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * d.vertexColor;
+			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * d.vertexColor;
 		#endif
 		//--------------------------------------
 
@@ -7553,12 +7559,12 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 			#endif
 
 			#if OUTDIST_ON
-				d.texcoord3.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
-				d.texcoord3.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
+				d.texcoord2.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
+				d.texcoord2.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
 				#if ATLAS_ON
-					d.texcoord3 = half2((d.texcoord3.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord3.y - _MinYUV) / (_MaxYUV - _MinYUV));
+					d.texcoord2 = half2((d.texcoord2.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 				#endif
-				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord3).r - 0.5) * 0.2 * _OutlineDistortAmount;
+				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord2).r - 0.5) * 0.2 * _OutlineDistortAmount;
 				destUv.x += outDistortAmnt;
 				destUv.y += outDistortAmnt;
 			#endif
@@ -8045,7 +8051,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             d.texcoord0 = IN.uv0.xyxy;
             d.screenPos = IN.ScreenPosition;
 
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - d.worldSpacePosition);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(d.worldSpacePosition);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(d.worldSpacePosition));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
 
@@ -8083,7 +8093,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             float3 bitangent = cross(d.worldSpaceTangent.xyz, d.worldSpaceNormal) * d.tangentSign;
            
             d.TBNMatrix = float3x3(d.worldSpaceTangent, -bitangent, d.worldSpaceNormal);
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(i.worldPos);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
              d.texcoord0 = i.texcoord0;
@@ -9496,7 +9510,7 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 	#endif
 
 	#if GLITCH_ON
-		half _GlitchAmount, _GlitchSize;
+		half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 	#endif
 
 	#if FLICKER_ON
@@ -9735,12 +9749,8 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 	}
 
-	half rand2(half2 seed, half offset) {
-		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-	}
-
-	half rand2CustomTime(half2 seed, half offset, half customTime) {
-		return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+	half rand2(half2 seed, half offset, half speed) {
+		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 	}
 	//-----------------------------------------------------------------------
 
@@ -10058,9 +10068,9 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
 			uvGlitch.y -= 0.5;
-			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * d.vertexColor;
+			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * d.vertexColor;
 		#endif
 		//--------------------------------------
 
@@ -10289,12 +10299,12 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 			#endif
 
 			#if OUTDIST_ON
-				d.texcoord3.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
-				d.texcoord3.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
+				d.texcoord2.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
+				d.texcoord2.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
 				#if ATLAS_ON
-					d.texcoord3 = half2((d.texcoord3.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord3.y - _MinYUV) / (_MaxYUV - _MinYUV));
+					d.texcoord2 = half2((d.texcoord2.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 				#endif
-				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord3).r - 0.5) * 0.2 * _OutlineDistortAmount;
+				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord2).r - 0.5) * 0.2 * _OutlineDistortAmount;
 				destUv.x += outDistortAmnt;
 				destUv.y += outDistortAmnt;
 			#endif
@@ -10781,7 +10791,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             d.texcoord0 = IN.uv0.xyxy;
             d.screenPos = IN.ScreenPosition;
 
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - d.worldSpacePosition);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(d.worldSpacePosition);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(d.worldSpacePosition));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
 
@@ -10819,7 +10833,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             float3 bitangent = cross(d.worldSpaceTangent.xyz, d.worldSpaceNormal) * d.tangentSign;
            
             d.TBNMatrix = float3x3(d.worldSpaceTangent, -bitangent, d.worldSpaceNormal);
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(i.worldPos);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
              d.texcoord0 = i.texcoord0;
@@ -12210,7 +12228,7 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 	#endif
 
 	#if GLITCH_ON
-		half _GlitchAmount, _GlitchSize;
+		half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 	#endif
 
 	#if FLICKER_ON
@@ -12449,12 +12467,8 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 	}
 
-	half rand2(half2 seed, half offset) {
-		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-	}
-
-	half rand2CustomTime(half2 seed, half offset, half customTime) {
-		return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+	half rand2(half2 seed, half offset, half speed) {
+		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 	}
 	//-----------------------------------------------------------------------
 
@@ -12772,9 +12786,9 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
 			uvGlitch.y -= 0.5;
-			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * d.vertexColor;
+			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * d.vertexColor;
 		#endif
 		//--------------------------------------
 
@@ -13003,12 +13017,12 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 			#endif
 
 			#if OUTDIST_ON
-				d.texcoord3.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
-				d.texcoord3.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
+				d.texcoord2.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
+				d.texcoord2.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
 				#if ATLAS_ON
-					d.texcoord3 = half2((d.texcoord3.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord3.y - _MinYUV) / (_MaxYUV - _MinYUV));
+					d.texcoord2 = half2((d.texcoord2.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 				#endif
-				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord3).r - 0.5) * 0.2 * _OutlineDistortAmount;
+				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord2).r - 0.5) * 0.2 * _OutlineDistortAmount;
 				destUv.x += outDistortAmnt;
 				destUv.y += outDistortAmnt;
 			#endif
@@ -13495,7 +13509,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             d.texcoord0 = IN.uv0.xyxy;
             d.screenPos = IN.ScreenPosition;
 
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - d.worldSpacePosition);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(d.worldSpacePosition);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(d.worldSpacePosition));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
 
@@ -13533,7 +13551,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             float3 bitangent = cross(d.worldSpaceTangent.xyz, d.worldSpaceNormal) * d.tangentSign;
            
             d.TBNMatrix = float3x3(d.worldSpaceTangent, -bitangent, d.worldSpaceNormal);
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(i.worldPos);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
              d.texcoord0 = i.texcoord0;
@@ -14957,7 +14979,7 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 	#endif
 
 	#if GLITCH_ON
-		half _GlitchAmount, _GlitchSize;
+		half _GlitchAmount, _GlitchSize, _GlitchSpeed;
 	#endif
 
 	#if FLICKER_ON
@@ -15196,12 +15218,8 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 	}
 
-	half rand2(half2 seed, half offset) {
-		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-	}
-
-	half rand2CustomTime(half2 seed, half offset, half customTime) {
-		return (frac(sin(dot(seed * floor(50 + (customTime % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
+	half rand2(half2 seed, half offset, half speed) {
+		return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 	}
 	//-----------------------------------------------------------------------
 
@@ -15519,9 +15537,9 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
 			uvGlitch.y -= 0.5;
-			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * d.vertexColor;
+			half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+				* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+			col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, d.texcoord0.xy + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * d.vertexColor;
 		#endif
 		//--------------------------------------
 
@@ -15750,12 +15768,12 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
 			#endif
 
 			#if OUTDIST_ON
-				d.texcoord3.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
-				d.texcoord3.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
+				d.texcoord2.x += ((_Time.x + _RandomSeed) * _OutlineDistortTexXSpeed) % 1;
+				d.texcoord2.y += ((_Time.x + _RandomSeed) * _OutlineDistortTexYSpeed) % 1;
 				#if ATLAS_ON
-					d.texcoord3 = half2((d.texcoord3.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord3.y - _MinYUV) / (_MaxYUV - _MinYUV));
+					d.texcoord2 = half2((d.texcoord2.x - _MinXUV) / (_MaxXUV - _MinXUV), (d.texcoord2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 				#endif
-				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord3).r - 0.5) * 0.2 * _OutlineDistortAmount;
+				half outDistortAmnt = (SAMPLE_TEXTURE2D(_OutlineDistortTex, sampler_OutlineDistortTex, d.texcoord2).r - 0.5) * 0.2 * _OutlineDistortAmount;
 				destUv.x += outDistortAmnt;
 				destUv.y += outDistortAmnt;
 			#endif
@@ -16242,7 +16260,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             d.texcoord0 = IN.uv0.xyxy;
             d.screenPos = IN.ScreenPosition;
 
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - d.worldSpacePosition);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(d.worldSpacePosition);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(d.worldSpacePosition));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
 
@@ -16280,7 +16302,11 @@ PackedVaryingsToPS Vert(VertexData inputMesh)
             float3 bitangent = cross(d.worldSpaceTangent.xyz, d.worldSpaceNormal) * d.tangentSign;
            
             d.TBNMatrix = float3x3(d.worldSpaceTangent, -bitangent, d.worldSpaceNormal);
-            d.worldSpaceViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+            #if _HDRP || _URP
+            d.worldSpaceViewDir = GetWorldSpaceNormalizeViewDir(i.worldPos);
+            #else
+            d.worldSpaceViewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+            #endif
 
             d.tangentSpaceViewDir = mul(d.TBNMatrix, d.worldSpaceViewDir);
              d.texcoord0 = i.texcoord0;

@@ -8,10 +8,21 @@ using UnityEngine;
 namespace CustomInspector
 {
     /// <summary>
+    /// Only valid for ListContainer! Used to fix overriding of other attributes
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    public class ListContainerAttribute : ComparablePropertyAttribute
+    {
+        protected override object[] GetParameters() => null;
+    }
+
+    /// <summary>
     /// An equivalent to the System.Collections.Generic.List<T>
     /// </summary>
     [System.Serializable]
-    public class ListContainer<T> : ICollection<T>, IEnumerable<T>, IEnumerable, IList<T>, IReadOnlyCollection<T>, IReadOnlyList<T>, ICollection, IList
+    public class ListContainer<T> : ICollection<T>, IEnumerable<T>, IList<T>, IReadOnlyCollection<T>, IReadOnlyList<T>,
+        IEnumerable, ICollection, IList
     {
         [MessageBox("ListContainer is missing the [ListContainer]-attribute to be correctly displayed")]
         [SerializeField, HideField] bool _;
@@ -152,10 +163,4 @@ namespace CustomInspector
             ((IList)values).Remove(value);
         }
     }
-
-    /// <summary>
-    /// Only valid for ListContainer! Used to fix overriding of other attributes
-    /// </summary>
-    [System.Diagnostics.Conditional("UNITY_EDITOR")]
-    public class ListContainerAttribute : PropertyAttribute { }
 }

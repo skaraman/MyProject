@@ -119,10 +119,10 @@ namespace CustomInspector.Editor
             public Action<SerializedProperty, object, object> HookMethod { get; private set; }
             public Func<bool> IfExecute { get; private set; }
             public PropInfo() { }
-            public void Initialize(SerializedProperty property, PropertyAttribute attr, FieldInfo fieldInfo)
+            public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
                 DirtyValue owner = DirtyValue.GetOwner(property);
-                HookAttribute attribute = (HookAttribute)attr;
+                HookAttribute attr = (HookAttribute)attribute;
                 Type propertyType = fieldInfo.FieldType;
 
                 InvokableMethod method;
@@ -130,13 +130,13 @@ namespace CustomInspector.Editor
                 {
                     try
                     {
-                        method = property.GetMethodOnOwner(attribute.methodPath);
+                        method = property.GetMethodOnOwner(attr.methodPath);
                         MethodHasParameters = false;
                         ErrorMessage = null;
                     }
                     catch
                     {
-                        method = property.GetMethodOnOwner(attribute.methodPath, new Type[] { propertyType, propertyType });
+                        method = property.GetMethodOnOwner(attr.methodPath, new Type[] { propertyType, propertyType });
                         MethodHasParameters = true;
                         ErrorMessage = null;
                     }
@@ -152,19 +152,19 @@ namespace CustomInspector.Editor
                     return;
                 }
 
-                if (!MethodHasParameters && attribute.useHookOnly)
+                if (!MethodHasParameters && attr.useHookOnly)
                 {
                     ErrorMessage = $"HookAttribute: New inputs are not applied, because you set 'useHookOnly', " +
-                            $"but your method on '{attribute.methodPath}' did not define the parameters {propertyType} oldValue, {propertyType} newValue";
+                            $"but your method on '{attr.methodPath}' did not define the parameters {propertyType} oldValue, {propertyType} newValue";
                     return;
                 }
 
-                IfExecute = attribute.target switch
+                IfExecute = attr.target switch
                 {
                     ExecutionTarget.Always => () => true,
                     ExecutionTarget.IsPlaying => () => Application.isPlaying,
                     ExecutionTarget.IsNotPlaying => () => !Application.isPlaying,
-                    _ => throw new NotImplementedException(attribute.target.ToString()),
+                    _ => throw new NotImplementedException(attr.target.ToString()),
                 };
 
 
@@ -176,7 +176,8 @@ namespace CustomInspector.Editor
                         {
                             try
                             {
-                                p.CallMethodOnOwner(attribute.methodPath, new Type[] { propertyType, propertyType }, new object[] { o, n });
+                                var owner = DirtyValue.GetOwner(p).GetValue();
+                                method.Info.Invoke(owner, new object[] { o, n });
                             }
                             catch (Exception e)
                             {
@@ -193,7 +194,8 @@ namespace CustomInspector.Editor
                         {
                             try
                             {
-                                p.CallMethodOnOwner(attribute.methodPath);
+                                var owner = DirtyValue.GetOwner(p).GetValue();
+                                method.Info.Invoke(owner, new object[0]);
                             }
                             catch (Exception e)
                             {

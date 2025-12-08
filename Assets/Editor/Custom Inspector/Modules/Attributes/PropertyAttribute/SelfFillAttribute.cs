@@ -10,7 +10,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     [Conditional("UNITY_EDITOR")]
-    public class SelfFillAttribute : PropertyAttribute
+    public class SelfFillAttribute : ComparablePropertyAttribute
     {
         public OwnerMode mode = OwnerMode.Self;
         public readonly bool hideIfFilled;
@@ -20,6 +20,8 @@ namespace CustomInspector
 
             this.hideIfFilled = hideIfFilled;
         }
+
+        protected override object[] GetParameters() => new object[] { hideIfFilled };
     }
     public enum OwnerMode
     {

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
@@ -11,7 +10,7 @@ namespace CustomInspector
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]
-    public class ToolbarAttribute : PropertyAttribute
+    public class ToolbarAttribute : ComparablePropertyAttribute
     {
         public readonly float height;
         public readonly float space;
@@ -44,5 +43,7 @@ namespace CustomInspector
             this.space = space;
             this.maxWidth = maxWidth;
         }
+
+        protected override object[] GetParameters() => new object[] { height, space, maxWidth };
     }
 }

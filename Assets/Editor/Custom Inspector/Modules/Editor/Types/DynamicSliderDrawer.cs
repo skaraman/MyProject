@@ -1,4 +1,5 @@
 using CustomInspector.Extensions;
+using CustomInspector.Helpers.Editor;
 using System;
 using UnityEditor;
 using UnityEngine;
@@ -8,19 +9,20 @@ namespace CustomInspector.Editor
 {
     [CustomPropertyDrawer(typeof(DynamicSlider))]
     [CustomPropertyDrawer(typeof(DynamicSliderAttribute))]
-    public class DynamicSliderDrawer : PropertyDrawer
+    public class DynamicSliderDrawer : TypedPropertyDrawer
     {
 #if UNITY_EDITOR
+        public DynamicSliderDrawer() : base(nameof(DynamicSliderAttribute) + " can only be used on " + nameof(DynamicSlider),
+        typeof(DynamicSlider)
+        )
+        { }
+
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             label = PropertyValues.ValidateLabel(label, property);
 
-            //Check type
-            if (fieldInfo.FieldType != typeof(DynamicSlider))
-            {
-                EditorGUI.HelpBox(position, "DynamicSliderAttribute only valid on DynamicSlider", MessageType.Error);
+            if (!TryOnGUI(position, property, label))
                 return;
-            }
 
             //Get/test min max
             SerializedProperty min = property.FindPropertyRelative("min");
@@ -110,11 +112,8 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            //Check type
-            if (fieldInfo.FieldType != typeof(DynamicSlider))
-            {
-                return EditorGUIUtility.singleLineHeight;
-            }
+            if (!TryGetPropertyHeight(property, label, out float fallbackHeight))
+                return fallbackHeight;
 
             SerializedProperty min = property.FindPropertyRelative("min");
             SerializedProperty max = property.FindPropertyRelative("max");
