@@ -1066,9 +1066,10 @@ MonoBehaviour:
   _: 0
   previewObj:
     animatorParameterAttributeExamples:
-      animatorController: {fileID: 9100000, guid: 3a1cea91d6692bf40b069a1d3b66f1b5, type: 2}
+      animatorController: {fileID: 9100000, guid: 3a1cea91d6692bf40b069a1d3b66f1b5,
+        type: 2}
       animator: {fileID: 0}
-      paramName2: NewFloat
+      paramName2: <missing>
       paramName: <missing>
     arrayContainerExamples:
       visible: 1
@@ -1085,8 +1086,8 @@ MonoBehaviour:
       myString: notSelected
       _: 0
     asRangeAttributeExamples:
-      positiveRange: {x: 0, y: 3.6145241}
-      negativeRange: {x: 5.274035, y: 1}
+      positiveRange: {x: 0, y: 10}
+      negativeRange: {x: 10, y: 6.834883}
     assetsOnlyAttributeExamples:
       gob1: {fileID: 0}
       gob2: {fileID: 0}
@@ -1170,7 +1171,7 @@ MonoBehaviour:
       b1: 0
       b2: 0
     hookAttributeExamples:
-      value: 3
+      value: 3.16
       value2: 1
     horizontalGroupAttributeExamples:
       offlineScene:
@@ -1262,10 +1263,10 @@ MonoBehaviour:
       icon: {fileID: 0}
     progressBarAttributeExamples:
       value1: 0.6
-      value2: 22
+      value2: 45
       value3: 2
-      min: 1
-      max: 3
+      min: 1.89
+      max: 4.02
     readOnlyAttributeExamples:
       n: 0
       gob: {fileID: 0}
@@ -1455,7 +1456,8 @@ MonoBehaviour:
     folderPathExamples:
       folderPath:
         path: Assets
-        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000, type: 3}
+        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000,
+          type: 3}
       path2:
         path: <invalid>
         assetReference: {fileID: 0}
@@ -1464,7 +1466,8 @@ MonoBehaviour:
         assetReference: {fileID: 0}
       path:
         path: Assets
-        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000, type: 3}
+        assetReference: {fileID: 102900000, guid: 00000000000000001000000000000000,
+          type: 3}
     lineGraphExamples:
       ak47_damage:
         _: 0
@@ -1692,7 +1695,7 @@ MonoBehaviour:
       ___: 0
       mySerializedInt: 0
     rangeAttributeExamples:
-      _int: 0
+      _int: 1
       _float: 0
     spaceAttributeExamples:
       int1: 0

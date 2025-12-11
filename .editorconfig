@@ -1,4 +1,21 @@
+root = true
+
 [*.cs]
+# Use spaces for indentation
+indent_style = space
+indent_size = 2
+
+# Put braces on the same line (K&R style)
 csharp_new_line_before_open_brace = none
-csharp_prefer_braces = false:suggestion
-csharp_style_allow_embedded_statements_on_same_line = true:suggestion
+
+# Explicitly disable new lines before braces in all contexts
+csharp_new_line_before_open_brace_types = false
+csharp_new_line_before_open_brace_methods = false
+csharp_new_line_before_open_brace_properties = false
+csharp_new_line_before_open_brace_accessors = false
+csharp_new_line_before_open_brace_anonymous_methods = false
+csharp_new_line_before_open_brace_control_blocks = false
+csharp_new_line_before_open_brace_lambdas = false
+
+# Optional: keep expressions compact
+csharp_new_line_between_query_expression_clauses = false
