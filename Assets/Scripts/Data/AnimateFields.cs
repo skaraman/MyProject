@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
-using CustomInspector;
 using System.Reflection;
+using CustomInspector;
+using UnityEngine;
 
 [Serializable]
 public class AnimateFields : MonoBehaviour {

@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using CustomInspector;
 using UnityEngine;
 
-public class DestructionManager : MonoBehaviour
-{
+public class DestructionManager : MonoBehaviour {
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
 
   public GameObject piecesParent;
@@ -28,88 +27,71 @@ public class DestructionManager : MonoBehaviour
   WaitForSeconds cachedSelfIgnoreWait;
   float cachedSelfIgnoreDuration = -1f;
 
-  void Awake()
-  {
+  void Awake() {
     BuildCache();
   }
 
-  void OnValidate()
-  {
+  void OnValidate() {
     BuildCache();
   }
 
-  void BuildCache()
-  {
+  void BuildCache() {
     pieces.Clear();
     pieceColliders.Clear();
 
-    if (!piecesParent)
-    {
+    if (!piecesParent) {
       return;
     }
 
     var foundPieces = piecesParent.GetComponentsInChildren<Piece>(true);
-    for (var i = 0; i < foundPieces.Length; i++)
-    {
+    for (var i = 0; i < foundPieces.Length; i++) {
       var piece = foundPieces[i];
       if (!piece) continue;
-      if (!piece.InitializeForDestruction(this))
-      {
+      if (!piece.InitializeForDestruction(this)) {
         continue;
       }
       pieces.Add(piece);
-      if (piece.Collider != null)
-      {
+      if (piece.Collider != null) {
         pieceColliders.Add(piece.Collider);
       }
     }
   }
 
-  void ForceAnimation()
-  {
+  void ForceAnimation() {
     FireRandomPieces(0);
   }
 
-  public void FireRandomPieces(int count)
-  {
-    if (pieces.Count == 0)
-    {
+  public void FireRandomPieces(int count) {
+    if (pieces.Count == 0) {
       return;
     }
     shuffleBuffer.Clear();
     shuffleBuffer.AddRange(pieces);
-    if (count <= 0)
-    {
+    if (count <= 0) {
       count = UnityEngine.Random.Range(1, shuffleBuffer.Count + 1);
     }
-    if (count > shuffleBuffer.Count)
-    {
+    if (count > shuffleBuffer.Count) {
       count = shuffleBuffer.Count;
     }
 
     ShufflePieces(shuffleBuffer);
 
-    if (logLaunches)
-    {
+    if (logLaunches) {
       Debug.Log($"[DestructionManager] Firing {count} pieces");
     }
-    for (var i = 0; i < count; i++)
-    {
+    for (var i = 0; i < count; i++) {
       ActivateAndImpulse(shuffleBuffer[i]);
     }
   }
 
-  static void ShufflePieces(List<Piece> data)
-  {
-    for (var i = 0; i < data.Count; i++)
-    {
+  static void ShufflePieces(List<Piece> data) {
+    for (var i = 0; i < data.Count; i++) {
       var j = UnityEngine.Random.Range(i, data.Count);
       (data[i], data[j]) = (data[j], data[i]);
     }
   }
 
-  void ActivateAndImpulse(Piece piece)
-  {
+  void ActivateAndImpulse(Piece piece) {
     if (!IsPieceReady(piece)) return;
     piece.StopDisableRoutine();
     piece.ResetTransformToOrigin();
@@ -118,8 +100,7 @@ public class DestructionManager : MonoBehaviour
     SetupBounceData(piece);
   }
 
-  void ApplyBurstImpulse(Piece piece)
-  {
+  void ApplyBurstImpulse(Piece piece) {
     var dir = GetLaunchDirection();
     var mag = UnityEngine.Random.Range(impulseMin, impulseMax) * launchForceScale;
     var body = piece?.Body;
@@ -128,70 +109,57 @@ public class DestructionManager : MonoBehaviour
     body.AddTorque(UnityEngine.Random.Range(-mag, mag), ForceMode2D.Impulse);
   }
 
-  Vector2 GetLaunchDirection()
-  {
+  Vector2 GetLaunchDirection() {
     var horiz = UnityEngine.Random.Range(launchHorizontalMin, 1f);
     horiz *= UnityEngine.Random.value < 0.5f ? -1f : 1f;
     var upwardMin = Mathf.Min(launchUpwardMin, launchUpwardMax);
     var upwardMax = Mathf.Max(launchUpwardMin, launchUpwardMax);
     var vert = UnityEngine.Random.Range(upwardMin, upwardMax);
     var dir = new Vector2(horiz, vert);
-    if (dir.sqrMagnitude < 0.001f)
-    {
+    if (dir.sqrMagnitude < 0.001f) {
       return Vector2.up;
     }
     return dir.normalized;
   }
 
-  void SetupBounceData(Piece piece)
-  {
+  void SetupBounceData(Piece piece) {
     piece.SetupBounceDetection();
   }
 
-  void FixedUpdate()
-  {
+  void FixedUpdate() {
     MonitorBounces();
   }
 
-  void MonitorBounces()
-  {
-    for (var i = 0; i < pieces.Count; i++)
-    {
+  void MonitorBounces() {
+    for (var i = 0; i < pieces.Count; i++) {
       var piece = pieces[i];
-      if (!IsPieceActive(piece) || piece.HasBounced)
-      {
+      if (!IsPieceActive(piece) || piece.HasBounced) {
         continue;
       }
 
-      if (piece.ShouldRegisterBounce())
-      {
+      if (piece.ShouldRegisterBounce()) {
         RegisterBounce(piece);
       }
     }
   }
 
-  bool IsPieceReady(Piece piece)
-  {
+  bool IsPieceReady(Piece piece) {
     return piece != null && piece.IsReadyForDestruction();
   }
 
-  bool IsPieceActive(Piece piece)
-  {
+  bool IsPieceActive(Piece piece) {
     return piece != null && piece.IsSimulatingPhysics;
   }
 
-  void RegisterBounce(Piece piece)
-  {
+  void RegisterBounce(Piece piece) {
     piece.RegisterBounce(bounceImpulseMin, bounceImpulseMax, postBounceDisableDelay, "fakeBounce");
   }
 
-  public void HandlePieceCollision(Piece source, Collision2D collision)
-  {
+  public void HandlePieceCollision(Piece source, Collision2D collision) {
     if (source == null || collision == null) return;
     var otherCol = collision.collider;
     if (!otherCol) return;
-    if (otherCol.CompareTag(wallTag))
-    {
+    if (otherCol.CompareTag(wallTag)) {
       return;
     }
 
@@ -203,21 +171,17 @@ public class DestructionManager : MonoBehaviour
     StartCoroutine(IgnorePairTemporarily(selfCol, otherCol, GetSelfIgnoreWait()));
   }
 
-  IEnumerator IgnorePairTemporarily(Collider2D a, Collider2D b, WaitForSeconds wait)
-  {
+  IEnumerator IgnorePairTemporarily(Collider2D a, Collider2D b, WaitForSeconds wait) {
     if (!a || !b) yield break;
     Physics2D.IgnoreCollision(a, b, true);
     yield return wait;
-    if (a && b)
-    {
+    if (a && b) {
       Physics2D.IgnoreCollision(a, b, false);
     }
   }
 
-  WaitForSeconds GetSelfIgnoreWait()
-  {
-    if (cachedSelfIgnoreWait == null || !Mathf.Approximately(cachedSelfIgnoreDuration, selfIgnoreDuration))
-    {
+  WaitForSeconds GetSelfIgnoreWait() {
+    if (cachedSelfIgnoreWait == null || !Mathf.Approximately(cachedSelfIgnoreDuration, selfIgnoreDuration)) {
       cachedSelfIgnoreDuration = selfIgnoreDuration;
       cachedSelfIgnoreWait = new WaitForSeconds(selfIgnoreDuration);
     }

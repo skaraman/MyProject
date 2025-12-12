@@ -22,10 +22,10 @@ public class MainMenuInput : ButtonGroup {
     actions.Clear();
   }
 
-  public void MenuUp() { 
+  public void MenuUp() {
     if (activeIndexMainMenu < 0) {
       activeIndexMainMenu = 0;
-    } 
+    }
     else {
       activeIndexMainMenu -= 1;
     }
@@ -69,10 +69,10 @@ public class MainMenuInput : ButtonGroup {
     var shader = button.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(0);
     shader.SetKeyword("OUTBASE_ON", true);
   }
-  
+
   protected override void HandleInactiveState(GameObject button) {
     var shader = button.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(0);
     shader.SetKeyword("OUTBASE_ON", false);
-  }   
+  }
 }
 

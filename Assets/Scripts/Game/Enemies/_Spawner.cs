@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 using CustomInspector;
+using UnityEngine;
 
 public class Spawner : MonoBehaviour {
   public SerializableSortedDictionary<string, GameObject> enemyPrefabs;

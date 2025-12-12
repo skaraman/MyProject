@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using UnityEngine;
 using CustomInspector;
+using UnityEngine;
 
 [RequireComponent(typeof(EnemyInfo))]
 public class EnemyController : MonoBehaviour {

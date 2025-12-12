@@ -1,7 +1,7 @@
-using UnityEngine;
-using UnityEngine.InputSystem;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class InputProcessor : MonoBehaviour {
   public TestActions input;

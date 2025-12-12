@@ -4,7 +4,7 @@ using System.Collections.Generic;
 public static class MessageBus {
   private static Dictionary<string, Action<object>> _messageTable =
       new Dictionary<string, Action<object>>();
-  
+
   // Track registered keys for efficient cleanup during scene transitions
   private static HashSet<string> registeredKeys = new HashSet<string>();
 
@@ -34,7 +34,7 @@ public static class MessageBus {
       action?.Invoke(data);
     }
   }
-  
+
   // Optional: Clear all messages (useful for scene transitions)
   public static void Clear() {
     _messageTable.Clear();

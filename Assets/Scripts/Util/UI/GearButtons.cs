@@ -32,12 +32,12 @@ public class GearButtons : ButtonGroup {
       button.GetComponent<SpriteWithNormals>().labelPrefix = slot.Value.gearId;
       var shaderAnimator = button.GetComponent<AllIn1AnimatorInspector>();
       var newColor = ShaderColors.myColors[slot.Value.gearColor];
-      shaderAnimator.SetKeyword("GLOW_ON", true);
       shaderAnimator.ResetActive();
       shaderAnimator.Reset();
-      shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f);
-      shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f);
-      shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f);
+      shaderAnimator.SetKeyword("GLOW_ON", true);
+      shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f, replaceExisting: true);
+      shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
+      shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f, replaceExisting: true);
       button.GetComponent<SpriteWithNormals>().ForceUpdateSpriteAndNormal();
     }
   }

@@ -62,7 +62,7 @@ public class LoadMenuInput : ButtonGroup {
         var currentRatioY = worldY / yh;
         var delta = currentRatioY - lastRatioY;
         lastRatioY = currentRatioY;
-        
+
         for (int i = 0; i < scrollWrap.transform.childCount; i++) {
           var child = scrollWrap.transform.GetChild(i);
           child.localPosition = new Vector3(0, child.localPosition.y + delta * 25f, 0);

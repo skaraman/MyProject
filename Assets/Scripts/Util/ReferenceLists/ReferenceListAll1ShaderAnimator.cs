@@ -1,5 +1,5 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class ReferenceListAllIn1AnimatorInspector : MonoBehaviour {
   public List<AllIn1AnimatorInspector> references = new();

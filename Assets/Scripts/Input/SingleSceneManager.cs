@@ -30,7 +30,7 @@ public class SingleSceneManager : MonoBehaviour {
 
     actions.Add(MessageBus.On("closePauseMenu", o => OpenGameplay()));
     actions.Add(MessageBus.On("openPauseMenu", o => OpenPauseMenu()));
-    
+
     Blackscreen.SetActive(true);
     MainMenu.SetActive(true);
     _SwitchMap("mainMenu");
@@ -57,7 +57,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
     autoSaver.enableTimeTracking = true;
     _SwitchMap("none");
-    
+
     blackscreen.Play("alphaIn");
 
     AsyncCoroutine.RunAfterDelay(2, () => {
@@ -111,7 +111,7 @@ public class SingleSceneManager : MonoBehaviour {
 
   private void _SwitchMap(string map) {
     inputProcessor.SwitchMap(map);
-    mouseManager.SwitchMap(map);   
+    mouseManager.SwitchMap(map);
   }
 
   private bool _isNewGame() {

@@ -1,8 +1,8 @@
-using UnityEngine;
-using System.Linq;
-using System.Globalization;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using CustomInspector;
+using UnityEngine;
 
 public class SaveCollider : MonoBehaviour {
   [Button(nameof(LogPointsCsv), label = "Log", size = Size.small)] public bool slowDown;

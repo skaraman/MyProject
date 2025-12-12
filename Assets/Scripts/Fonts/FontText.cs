@@ -1,6 +1,6 @@
-using UnityEngine;
 using System.Collections.Generic;
 using CustomInspector;
+using UnityEngine;
 
 public class FontText : MonoBehaviour {
   public GameObject characterPrefab;
@@ -172,7 +172,7 @@ public class FontText : MonoBehaviour {
       obj.transform.localPosition = new Vector3(x, y + offsetY, 0);
 
       charsProcessedInLine++;
-      
+
       // Check if we've processed all characters in current line
       if (currentLine < lineCharCounts.Count && charsProcessedInLine >= lineCharCounts[currentLine]) {
         yOffset -= lineHeights[currentLine];

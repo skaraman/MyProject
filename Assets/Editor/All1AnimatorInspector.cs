@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using UnityEngine;
 using CustomInspector;
+using UnityEngine;
 
 [RequireComponent(typeof(Renderer))]
 public class AllIn1AnimatorInspector : MonoBehaviour {
@@ -29,6 +29,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     public int propHash;
     public List<Sequence<float>> sequences = new();
     public bool loop;
+    public bool autoPlay = true;
     public int currentSequenceIndex = 0;
     public float timer = 0f;
     public float lastValue;
@@ -44,6 +45,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     public int propHash;
     public List<Sequence<Color>> sequences = new();
     public bool loop;
+    public bool autoPlay = true;
     public int currentSequenceIndex = 0;
     public float timer = 0f;
     public Color lastValue;
@@ -59,6 +61,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     public int propHash;
     public List<Sequence<Vector4>> sequences = new();
     public bool loop;
+    public bool autoPlay = true;
     public int currentSequenceIndex = 0;
     public float timer = 0f;
     public Vector4 lastValue;
@@ -92,6 +95,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   private Material _material;
   private bool changed;
   private float deltaTime;
+  private bool _hasStarted;
 
   public List<FloatAnimation> activeFloatAnimations = new();
   public List<ColorAnimation> activeColorAnimations = new();
@@ -106,6 +110,11 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     ApplyAllProperties(true);
   }
 
+  public void OnValidate() {
+    CacheAllHashes();
+    BuildDictionaries();
+  }
+
   public void Awake() {
     _renderer = GetComponent<Renderer>();
     _propBlock = new MaterialPropertyBlock();
@@ -113,7 +122,8 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     ResetActive();
     CacheAllHashes();
     BuildDictionaries();
-    BuildActiveLists();
+    ResetAnimationStates();
+    BuildActiveLists(true);
     ApplyAllProperties(true);
   }
 
@@ -133,6 +143,11 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     colorAnimDict.Clear();
     vectorAnimDict.Clear();
     keywordDict.Clear();
+    _hasStarted = false;
+  }
+
+  public void StartAnimations(bool restartSequences = true) {
+    StartAnimationsInternal(restartSequences);
   }
 
   void CacheAllHashes() {
@@ -154,13 +169,51 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     foreach (var a in keywordToggles) keywordDict[a.keyword] = a;
   }
 
-  void BuildActiveLists() {
+  void ResetAnimationStates() {
+    foreach (var anim in floatAnimations) ResetAnim(anim);
+    foreach (var anim in colorAnimations) ResetAnim(anim);
+    foreach (var anim in vectorAnimations) ResetAnim(anim);
+  }
+
+  void ResetAnim(FloatAnimation anim) {
+    anim.timer = 0f;
+    anim.isDone = false;
+    anim.currentSequenceIndex = 0;
+    anim.lastValue = 0f;
+  }
+
+  void ResetAnim(ColorAnimation anim) {
+    anim.timer = 0f;
+    anim.isDone = false;
+    anim.currentSequenceIndex = 0;
+    anim.lastValue = default;
+  }
+
+  void ResetAnim(VectorAnimation anim) {
+    anim.timer = 0f;
+    anim.isDone = false;
+    anim.currentSequenceIndex = 0;
+    anim.lastValue = default;
+  }
+
+  void StartAnimationsInternal(bool restartSequences) {
+    _hasStarted = true;
+    if (restartSequences) ResetAnimationStates();
+    BuildActiveLists();
+    ApplyAllProperties(true);
+  }
+
+  bool ShouldActivateOnAdd(bool animAutoPlay) {
+    return animAutoPlay || _hasStarted;
+  }
+
+  void BuildActiveLists(bool autoOnly = false) {
     activeFloatAnimations.Clear();
     activeColorAnimations.Clear();
     activeVectorAnimations.Clear();
-    foreach (var a in floatAnimations) if (!a.isDone) activeFloatAnimations.Add(a);
-    foreach (var a in colorAnimations) if (!a.isDone) activeColorAnimations.Add(a);
-    foreach (var a in vectorAnimations) if (!a.isDone) activeVectorAnimations.Add(a);
+    foreach (var a in floatAnimations) if (!a.isDone && (!autoOnly || a.autoPlay)) activeFloatAnimations.Add(a);
+    foreach (var a in colorAnimations) if (!a.isDone && (!autoOnly || a.autoPlay)) activeColorAnimations.Add(a);
+    foreach (var a in vectorAnimations) if (!a.isDone && (!autoOnly || a.autoPlay)) activeVectorAnimations.Add(a);
   }
 
   public void Update() {
@@ -289,53 +342,74 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void SetKeyword(string keyword, bool enabled) {
-    if (keywordDict.TryGetValue(keyword, out var existing)) {
-      existing.enabled = enabled;
-    }
-    else {
-      var kw = new KeywordToggle { keyword = keyword, enabled = enabled };
-      kw.CacheHash();
-      keywordToggles.Add(kw);
-      keywordDict[keyword] = kw;
-    }
+    keywordToggles.RemoveAll(kw => kw.keyword == keyword);
+    keywordDict.Remove(keyword);
+    var kw = new KeywordToggle { keyword = keyword, enabled = enabled };
+    kw.CacheHash();
+    keywordToggles.Add(kw);
+    keywordDict[keyword] = kw;
     ToggleKeywords();
   }
 
 
-  public void AddFloatSequence(string prop, float from, float to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null) {
+  public void AddFloatSequence(string prop, float from, float to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null, bool replaceExisting = true, bool autoPlay = true) {
     if (!floatAnimDict.TryGetValue(prop, out var anim)) {
-      anim = new FloatAnimation { prop = prop, loop = loop };
+      anim = new FloatAnimation { prop = prop, loop = loop, autoPlay = autoPlay };
       anim.CacheHash();
       floatAnimations.Add(anim);
       floatAnimDict[prop] = anim;
     }
+    else if (replaceExisting) {
+      anim.sequences.Clear();
+      anim.currentSequenceIndex = 0;
+      anim.timer = 0f;
+      anim.isDone = false;
+    }
+    anim.loop = loop;
+    anim.autoPlay = autoPlay;
     anim.sequences.Add(new Sequence<float> { from = from, to = to, duration = duration, delay = delay, easing = easing ?? AnimationCurve.Linear(0, 0, 1, 1) });
     anim.isDone = false;
-    if (!activeFloatAnimations.Contains(anim)) activeFloatAnimations.Add(anim);
+    if (ShouldActivateOnAdd(anim.autoPlay) && !activeFloatAnimations.Contains(anim)) activeFloatAnimations.Add(anim);
   }
 
-  public void AddColorSequence(string prop, Color from, Color to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null) {
+  public void AddColorSequence(string prop, Color from, Color to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null, bool replaceExisting = true, bool autoPlay = true) {
     if (!colorAnimDict.TryGetValue(prop, out var anim)) {
-      anim = new ColorAnimation { prop = prop, loop = loop };
+      anim = new ColorAnimation { prop = prop, loop = loop, autoPlay = autoPlay };
       anim.CacheHash();
       colorAnimations.Add(anim);
       colorAnimDict[prop] = anim;
     }
+    else if (replaceExisting) {
+      anim.sequences.Clear();
+      anim.currentSequenceIndex = 0;
+      anim.timer = 0f;
+      anim.isDone = false;
+    }
+    anim.loop = loop;
+    anim.autoPlay = autoPlay;
     anim.sequences.Add(new Sequence<Color> { from = from, to = to, duration = duration, delay = delay, easing = easing ?? AnimationCurve.Linear(0, 0, 1, 1) });
     anim.isDone = false;
-    if (!activeColorAnimations.Contains(anim)) activeColorAnimations.Add(anim);
+    if (ShouldActivateOnAdd(anim.autoPlay) && !activeColorAnimations.Contains(anim)) activeColorAnimations.Add(anim);
   }
 
-  public void AddVectorSequence(string prop, Vector4 from, Vector4 to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null) {
+  public void AddVectorSequence(string prop, Vector4 from, Vector4 to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null, bool replaceExisting = true, bool autoPlay = true) {
     if (!vectorAnimDict.TryGetValue(prop, out var anim)) {
-      anim = new VectorAnimation { prop = prop, loop = loop };
+      anim = new VectorAnimation { prop = prop, loop = loop, autoPlay = autoPlay };
       anim.CacheHash();
       vectorAnimations.Add(anim);
       vectorAnimDict[prop] = anim;
     }
+    else if (replaceExisting) {
+      anim.sequences.Clear();
+      anim.currentSequenceIndex = 0;
+      anim.timer = 0f;
+      anim.isDone = false;
+    }
+    anim.loop = loop;
+    anim.autoPlay = autoPlay;
     anim.sequences.Add(new Sequence<Vector4> { from = from, to = to, duration = duration, delay = delay, easing = easing ?? AnimationCurve.Linear(0, 0, 1, 1) });
     anim.isDone = false;
-    if (!activeVectorAnimations.Contains(anim)) activeVectorAnimations.Add(anim);
+    if (ShouldActivateOnAdd(anim.autoPlay) && !activeVectorAnimations.Contains(anim)) activeVectorAnimations.Add(anim);
   }
 
   public void AddTextureAssignment(string prop, Sprite texture) {

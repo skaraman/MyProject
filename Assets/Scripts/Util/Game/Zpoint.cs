@@ -1,8 +1,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class Zpoint : MonoBehaviour
-{
+public class Zpoint : MonoBehaviour {
   public SortingGroup sortingGroup;
   private Camera mainCamera;
   private Transform cachedTransform;

@@ -44,7 +44,7 @@ public static class AsyncCoroutine {
       cts.Dispose();
     active.Clear();
   }
-  
+
   public static async void RunAfterDelay(float seconds, Action callback) {
     var ms = (int)(seconds * 1000);
     await Task.Delay(ms);

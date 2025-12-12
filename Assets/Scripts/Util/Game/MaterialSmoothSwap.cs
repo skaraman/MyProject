@@ -1,10 +1,10 @@
-using UnityEngine;
 using System.Collections;
+using UnityEngine;
 
 public class MaterialSmoothSwap : MonoBehaviour {
   [SerializeField] private Material material1;
   [SerializeField] private Material material2;
-  [SerializeField] private float blendDuration = 1f; 
+  [SerializeField] private float blendDuration = 1f;
   [SerializeField] private AnimationCurve blendCurve = AnimationCurve.Linear(0, 0, 1, 1);
 
   private Renderer _renderer;
@@ -20,8 +20,8 @@ public class MaterialSmoothSwap : MonoBehaviour {
   }
 
   public void TriggerMaterialBlend() {
-    if (_isBlending || material1 == null || material2 == null) return; 
-                                                                      
+    if (_isBlending || material1 == null || material2 == null) return;
+
     Material sourceMat = _usingSecondMat ? material2 : material1;
     Material targetMat = _usingSecondMat ? material1 : material2;
     StartCoroutine(BlendMaterialsRoutine(sourceMat, targetMat));
@@ -36,7 +36,7 @@ public class MaterialSmoothSwap : MonoBehaviour {
       float t = Mathf.Clamp01(elapsed / blendDuration);
       float curveT = blendCurve.Evaluate(t);
       runtimeMat.Lerp(fromMat, toMat, curveT);
-      yield return null; 
+      yield return null;
     }
 
     _renderer.material.Lerp(fromMat, toMat, 1f);

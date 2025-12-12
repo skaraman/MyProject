@@ -1,9 +1,9 @@
 #if UNITY_EDITOR
-using UnityEngine;
-using UnityEditor;
-using UnityEditor.SceneManagement;
 using System;
 using System.Linq;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
 
 public class SceneSaveVersionTracker : MonoBehaviour {
   public int version;

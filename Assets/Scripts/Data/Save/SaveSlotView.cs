@@ -1,9 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Collections;
-using UnityEngine;
 using NUnit.Framework.Internal;
+using UnityEngine;
 
 public class SaveSlotView : MonoBehaviour {
   public GameObject saveSlotPrefab;
@@ -25,16 +25,15 @@ public class SaveSlotView : MonoBehaviour {
     var dirs = Directory.GetDirectories(path);
     // Sort directories numerically by folder name
     Array.Sort(dirs, (x, y) => {
-        var xName = Path.GetFileName(x);
-        var yName = Path.GetFileName(y);
-        
-        if (int.TryParse(xName, out int xNum) && int.TryParse(yName, out int yNum))
-        {
-            return xNum.CompareTo(yNum);
-        }
-        
-        // Fallback to string comparison if parsing fails
-        return string.Compare(xName, yName, StringComparison.Ordinal);
+      var xName = Path.GetFileName(x);
+      var yName = Path.GetFileName(y);
+
+      if (int.TryParse(xName, out int xNum) && int.TryParse(yName, out int yNum)) {
+        return xNum.CompareTo(yNum);
+      }
+
+      // Fallback to string comparison if parsing fails
+      return string.Compare(xName, yName, StringComparison.Ordinal);
     });
     //Debug.Log($"Found {dirs.Length} directories in: {path}");
     SavesCount = dirs.Length;
@@ -43,7 +42,8 @@ public class SaveSlotView : MonoBehaviour {
     if (SavesCount > 0) {
       mainMenuGroup.buttons.Insert(1, loadButton);
       shader.SetKeyword("GREYSCALE_ON", false);
-    } else {
+    }
+    else {
       shader.SetKeyword("GREYSCALE_ON", true);
     }
 
@@ -74,9 +74,9 @@ public class SaveSlotView : MonoBehaviour {
       slot.location = Convert.ToString(loaded["location"]);
       slot.UpdateSlotInfo();
       loadMenuGroup.buttons.Add(go);
-      
+
       var propagators = go.GetComponentsInChildren<ComponentPropagator>();
-      for (int j = 0; j < propagators.Length; j++){
+      for (int j = 0; j < propagators.Length; j++) {
         propagators[j].ForcePropagation(); // Call this manually
       }
     }

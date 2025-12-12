@@ -19,7 +19,7 @@ public class TransformWrapper : TimeScaledTransform {
   [ForceUpdate]
   void Update() {
     if (cachedTransform == null) cachedTransform = transform;
-    
+
     var targetPos = new Vector3(x, y, z);
     var currentPos = cachedTransform.localPosition;
     if (targetPos != lastPos || currentPos != lastPos) {

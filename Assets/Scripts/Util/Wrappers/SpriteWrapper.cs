@@ -32,7 +32,7 @@ public class SpriteWrapper : MonoBehaviour {
       isDirty = false;
       return;
     }
-    
+
     // Only update if values have changed
     if (currentColor.r != r || currentColor.g != g || currentColor.b != b || currentColor.a != a || isDirty) {
       currentColor.r = r;

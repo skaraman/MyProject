@@ -1,8 +1,7 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
-public class SaveSlot : MonoBehaviour
-{
+public class SaveSlot : MonoBehaviour {
   public string saveNumber;
   public string avatar;
   public List<string> forms = new List<string> { "Base" };

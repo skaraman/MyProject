@@ -1,6 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using System.Collections.Generic;
 
 public class MouseManager : MonoBehaviour {
   public string defaultMap;
@@ -21,7 +21,7 @@ public class MouseManager : MonoBehaviour {
   string scrollUpKey;
   string scrollDownKey;
   Vector3 lastScreenPos;
-  
+
   private Camera mainCamera;
   private Mouse mouse;
 
@@ -49,7 +49,8 @@ public class MouseManager : MonoBehaviour {
       if (lastHovered) MessageBus.Send(exitKey, lastHovered);
       if (target) MessageBus.Send(hoverKey, target);
       lastHovered = target;
-    } else if (target) {
+    }
+    else if (target) {
       MessageBus.Send(hoverKey, target);
     }
 
@@ -99,8 +100,8 @@ public class MouseManager : MonoBehaviour {
     clickKey = $"{newMap}.click";
     releaseKey = $"{newMap}.release";
     rightClickKey = $"{newMap}.rightClick";
-    rightReleaseKey =  $"{newMap}.rightRelease";
-    middleClickKey =  $"{newMap}.middleClick";
+    rightReleaseKey = $"{newMap}.rightRelease";
+    middleClickKey = $"{newMap}.middleClick";
     middleReleaseKey = $"{newMap}.middleRelease";
     scrollUpKey = $"{newMap}.scrollUp";
     scrollDownKey = $"{newMap}.scrollDown";

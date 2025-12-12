@@ -30,7 +30,7 @@ public class FormButtons : ButtonGroup {
     button.GetComponent<ReferenceListGameObject>().Get(0).SetActive(false);
     button.GetComponent<ReferenceListGameObject>().Get(1).SetActive(true);
   }
-  
+
   protected override void HandleHoverState(GameObject button) {
     if (button.GetComponent<ReferenceListGameObject>().Get(2)) {
       if (button.GetComponent<ReferenceListGameObject>().Get(2).activeSelf) return;

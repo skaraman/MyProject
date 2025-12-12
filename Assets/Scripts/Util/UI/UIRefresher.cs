@@ -12,7 +12,7 @@ public class UIRefresher : MonoBehaviour {
   void Update() {
     // Ensure all renderers on this GameObject and its children are not culled
     if (renderers == null || renderers.Length == 0) return;
-    
+
     foreach (var r in renderers) {
       if (r == null) continue;
       r.forceRenderingOff = false;

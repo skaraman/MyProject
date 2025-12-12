@@ -1,8 +1,8 @@
-﻿using UnityEngine;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
 using CustomInspector;
+using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -10,6 +10,7 @@ using UnityEditor;
 public class GearController : MonoBehaviour {
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
+  [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)] public bool _bool;
   public string defaultAnimation = "Breathe";
 
   public GameObject[] GearObjects;
@@ -150,9 +151,9 @@ public class GearController : MonoBehaviour {
               shaderAnimator.Reset();
               var newColor = ShaderColors.myColors[equip.Value.gearColor];
               shaderAnimator.SetKeyword("GLOW_ON", true);
-              shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f);
-              shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f);
-              shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f);
+              shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f, replaceExisting: true);
+              shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
+              shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f, replaceExisting: true);
             }
             else {
               Debug.LogWarning($"GameObject {go.name} does not have a AllIn1AnimatorInspector component attached.");
@@ -180,9 +181,9 @@ public class GearController : MonoBehaviour {
               }
               var newColor = ShaderColors.myColors[gearColor];
               shaderAnimator.SetKeyword("GLOW_ON", true);
-              shaderAnimator.AddFloatSequence("_Glow", 6f, 6f, 1f);
-              shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f);
-              shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f);
+              shaderAnimator.AddFloatSequence("_Glow", 6f, 6f, 1f, replaceExisting: true);
+              shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
+              shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f, replaceExisting: true);
               spriteRenderer.color = newColor;
             }
           }

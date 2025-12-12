@@ -24,7 +24,7 @@ public class PauseMenuInput : MonoBehaviour {
   public List<GameObject> changingUI = new();
   public List<GameObject> primaryUIText = new();
   public List<GameObject> secondaryUIText = new();
-  
+
   void Awake() { }
 
   void Start() {
@@ -50,7 +50,7 @@ public class PauseMenuInput : MonoBehaviour {
     actions.Clear();
   }
 
-  void menuLeft() { 
+  void menuLeft() {
     activeSelectedIndex -= 1;
     if (activeSelectedIndex < 1) {
       activeSelectedIndex = menuButtons.buttons.Count - 2;
@@ -90,7 +90,8 @@ public class PauseMenuInput : MonoBehaviour {
             ShaderColors.pairs[formButtons.buttons[formHoverIndex].name]["primary"]["color"]],
           ShaderColors.myColors[
             ShaderColors.pairs[formButtons.buttons[formHoverIndex].name]["primary"]["color"]],
-          1f
+          1f,
+          replaceExisting: true
         );
       }
       foreach (var ui in secondaryUIText) {
@@ -100,7 +101,8 @@ public class PauseMenuInput : MonoBehaviour {
             ShaderColors.pairs[formButtons.buttons[formHoverIndex].name]["secondary"]["color"]],
           ShaderColors.myColors[
             ShaderColors.pairs[formButtons.buttons[formHoverIndex].name]["secondary"]["color"]],
-          1f
+          1f,
+          replaceExisting: true
         );
       }
       gearButtons.OnGearReady(formButtons.buttons[formHoverIndex].name);
@@ -125,7 +127,7 @@ public class PauseMenuInput : MonoBehaviour {
     menuButtons.SetHoverIndex(-1);
     activeHoverIndex = -1;
     formButtons.SetHoverIndex(-1);
-    
+
   }
 
   void click(object target) {
@@ -137,7 +139,7 @@ public class PauseMenuInput : MonoBehaviour {
       if (formHoverIndex >= 0) {
         select();
         return;
-      } 
+      }
     }
     if (activeHoverIndex == 0) {
       menuLeft();
@@ -148,7 +150,7 @@ public class PauseMenuInput : MonoBehaviour {
     if (activeHoverIndex > 0 && activeHoverIndex < 6) {
       select();
     }
-    
+
   }
 
 
