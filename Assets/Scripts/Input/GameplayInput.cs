@@ -54,7 +54,11 @@ public class GameplayInput : MonoBehaviour {
     actions.Clear();
   }
 
-  void attack1() { }
+  void attack1() { 
+    gearController.PlayAnimation("Dance");
+
+
+  }
   void attack2() { }
   void attack3() { }
   void attack4() { }
@@ -62,25 +66,47 @@ public class GameplayInput : MonoBehaviour {
   void dash() { }
   void dodge() { }
 
-  System.Collections.IEnumerator jump() {
+  System.Collections.IEnumerator Jump() {
+    Debug.Log("Jump attempt started");
     if (!isGrounded || gearController == null) {
+      Debug.LogWarning("Jump canceled: not grounded or gearController null");
       yield break;
     }
+
+    float jumpHeight = 10f; // Variable for vertical jump amount
+    float totalDuration = 1f; // Variable for total jump duration (1 second)
+
+    Debug.Log($"Jump parameters: height={jumpHeight}, duration={totalDuration}");
     gearController.PlayAnimation("Jump");
     isGrounded = false;
     isJumping = true;
     isFalling = false;
-    erb.linearVelocity = new Vector2(erb.linearVelocity.x, 0); // Reset vertical velocity before jump
-    erb.AddForce(new Vector2(0, 400f + AllStatValues.Esperanza["MVSP"] * 20f));
-    yield return new WaitForSeconds(1);
+
+    float startY = transform.position.y;
+    float timeElapsed = 0f;
+
+    while (timeElapsed < totalDuration) {
+      timeElapsed += Time.deltaTime;
+      float t = timeElapsed / totalDuration;
+      float newY = startY + jumpHeight * Mathf.Sin(t * Mathf.PI);
+      transform.position = new Vector2(transform.position.x, newY);
+      Debug.Log($"Jumping: y={transform.position.y:F2}, t={t:F2}");
+      yield return null;
+    }
+
     isGrounded = true;
     isJumping = false;
+    Debug.Log("Jump completed");
+
     if (gearController == null) {
       stanceTimer = 0f;
+      Debug.LogWarning("gearController null during landing");
       yield break;
     }
+
     gearController.PlayAnimation("JumpLanding");
     if (Animations.Esperanza.TryGetValue(gearController.CurrentAnimation, out var landingAnim)) {
+      Debug.Log($"Landing animation duration: {landingAnim.duration}ms");
       yield return new WaitForSeconds(landingAnim.duration / 1000f);
     }
     stanceTimer = 0f;

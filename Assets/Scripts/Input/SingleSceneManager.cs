@@ -60,7 +60,7 @@ public class SingleSceneManager : MonoBehaviour {
 
     blackscreen.Play("alphaIn");
 
-    AsyncCoroutine.RunAfterDelay(2, () => {
+    AsyncCoroutine.RunAfterDelay(2, () => { // TODO i think ican just use yeild return new WaitForSeconds
       blackscreen.Play("alphaOut");
       MainMenu.SetActive(false);
       GameplayInterface.SetActive(true);
