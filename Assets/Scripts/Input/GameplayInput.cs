@@ -26,6 +26,10 @@ public class GameplayInput : MonoBehaviour {
   private bool isFalling = false;
   private bool isGrounded = true;
   private float stanceTimer = 0f;
+  [SerializeField]
+  private float jumpHeight = 5f;
+  [SerializeField]
+  private float jumpDuration = 1f;
 
   void Start() {
     actions.Add(MessageBus.On("gameplay.attack1", o => attack1()));
@@ -35,7 +39,7 @@ public class GameplayInput : MonoBehaviour {
     actions.Add(MessageBus.On("gameplay.block", o => block()));
     actions.Add(MessageBus.On("gameplay.dash", o => dash()));
     actions.Add(MessageBus.On("gameplay.dodge", o => dodge()));
-    actions.Add(MessageBus.On("gameplay.jump", o => StartCoroutine(jump())));
+    actions.Add(MessageBus.On("gameplay.jump", o => Jump()));
     actions.Add(MessageBus.On("gameplay.charUp", o => charUp(o)));
     actions.Add(MessageBus.On("gameplay.charDown", o => charDown(o)));
     actions.Add(MessageBus.On("gameplay.charLeft", o => charLeft(o)));
@@ -66,49 +70,45 @@ public class GameplayInput : MonoBehaviour {
   void dash() { }
   void dodge() { }
 
-  System.Collections.IEnumerator Jump() {
-    Debug.Log("Jump attempt started");
-    if (!isGrounded || gearController == null) {
-      Debug.LogWarning("Jump canceled: not grounded or gearController null");
-      yield break;
-    }
+  void Jump() {
+    if (!isGrounded || gearController == null || erb == null) return;
 
-    float jumpHeight = 10f; // Variable for vertical jump amount
-    float totalDuration = 1f; // Variable for total jump duration (1 second)
-
-    Debug.Log($"Jump parameters: height={jumpHeight}, duration={totalDuration}");
     gearController.PlayAnimation("Jump");
     isGrounded = false;
     isJumping = true;
     isFalling = false;
 
-    float startY = transform.position.y;
-    float timeElapsed = 0f;
+    float startY = erb.transform.localPosition.y;
+    float peakY = startY + jumpHeight;
+    float halfDuration = jumpDuration * 0.5f;
 
-    while (timeElapsed < totalDuration) {
-      timeElapsed += Time.deltaTime;
-      float t = timeElapsed / totalDuration;
-      float newY = startY + jumpHeight * Mathf.Sin(t * Mathf.PI);
-      transform.position = new Vector2(transform.position.x, newY);
-      Debug.Log($"Jumping: y={transform.position.y:F2}, t={t:F2}");
-      yield return null;
-    }
+    LeanTween.cancel(erb.gameObject);
+    LeanTween.sequence()
+      .append(LeanTween.moveLocalY(erb.gameObject, peakY, halfDuration).setEaseOutQuad())
+      .append(LeanTween.moveLocalY(erb.gameObject, startY, halfDuration).setEaseInQuad())
+      .append(() => {
+        isGrounded = true;
+        isJumping = false;
+        HandleLanding();
+      });
+  }
 
-    isGrounded = true;
-    isJumping = false;
-    Debug.Log("Jump completed");
-
+  void HandleLanding() {
     if (gearController == null) {
       stanceTimer = 0f;
-      Debug.LogWarning("gearController null during landing");
-      yield break;
+      return;
     }
 
     gearController.PlayAnimation("JumpLanding");
     if (Animations.Esperanza.TryGetValue(gearController.CurrentAnimation, out var landingAnim)) {
-      Debug.Log($"Landing animation duration: {landingAnim.duration}ms");
-      yield return new WaitForSeconds(landingAnim.duration / 1000f);
+      StartCoroutine(LandingDelay(landingAnim.duration / 1000f));
+      return;
     }
+    stanceTimer = 0f;
+  }
+
+  System.Collections.IEnumerator LandingDelay(float duration) {
+    yield return new WaitForSeconds(duration);
     stanceTimer = 0f;
   }
 
