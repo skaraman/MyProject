@@ -103,7 +103,13 @@ public class AnimationController {
     if (!forceRestart && isPlaying && animationName == currentAnimation) return true;
 
     if (!TryResolveInterrupt(animationName, out var resolvedAnimation, out var queued)) {
-      return false;
+      if (forceRestart) {
+        resolvedAnimation = animationName;
+        queued = animationName;
+      }
+      else {
+        return false;
+      }
     }
 
     currentAnimation = resolvedAnimation;
@@ -111,9 +117,10 @@ public class AnimationController {
     animationTimer = 0f;
     pingPong = false;
     isPlaying = true;
-    currentFrame = animationData[currentAnimation].start - 1;
+    var anim = animationData[currentAnimation];
+    currentFrame = anim.start;
 
-    var category = animationData[currentAnimation].To ? "To" : currentAnimation;
+    var category = anim.To == 1 ? "To" : anim.To == 2 ? "To2" : currentAnimation;
     SetAnimationCategory(category);
     UpdateSprites(currentFrame);
     SetBounces();
@@ -194,7 +201,7 @@ public class AnimationController {
     if (!isPlaying || string.IsNullOrEmpty(currentAnimation) || animationData == null) return;
     if (!animationData.TryGetValue(currentAnimation, out var anim)) return;
 
-    float slowFactor = SlowDown ? 10f : 1f;
+    float slowFactor = SlowDown ? 20f : 1f;
     animationTimer += (deltaTime * 1000f) / slowFactor;
     float normalTime = animationTimer / Mathf.Max(1f, anim.duration);
 
@@ -309,7 +316,7 @@ public class AnimationController {
     if (!activeTweens.ContainsKey(bounceParent)) {
       activeTweens[bounceParent] = new List<int>();
     }
-    var fSlowDown = SlowDown ? 10f : 1f;
+    var fSlowDown = SlowDown ? 20f : 1f;
     BounceFrame frame = sequence[index];
     Vector3 targetPos = new Vector3(frame.x, frame.y, bounceParent.transform.localPosition.z);
     float duration = frame.duration * fSlowDown;
@@ -353,7 +360,7 @@ public class AnimationController {
     if (!activeTweens.ContainsKey(go)) {
       activeTweens[go] = new List<int>();
     }
-    var fSlowDown = SlowDown ? 10f : 1f;
+    var fSlowDown = SlowDown ? 20f : 1f;
     var targetPath = sequence[index];
     if (collider.pathCount == 0) collider.pathCount = 1;
     Vector2[] startPoints = collider.GetPath(0);
