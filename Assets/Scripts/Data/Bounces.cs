@@ -107,7 +107,7 @@ public static class BounceAdjustments {
     ["Dodge"] = new List<BounceFrame> { new(.31f, -.56f, .01f, 1), new(.42f, -.74f, .24f, 1) },
     ["DodgeToStance"] = new List<BounceFrame> { new(-.32f, -.41f) },
 
-    ["Block"] = new List<BounceFrame> { new(.16f, .19f, .02f, 1) },
+    ["Block"] = new List<BounceFrame> { new(-.07f, -.7f, .02f, 1) },
     ["BlockToStance"] = new List<BounceFrame> { new(-.18f, -.59f) },
 
     ["Stance"] = new List<BounceFrame> { new(-.3f, -.43f) },
