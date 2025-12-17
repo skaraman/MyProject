@@ -95,25 +95,29 @@ public class AnimationController {
     AdvanceAnimation(deltaTime);
   }
 
-  public bool PlayAnimation(string animationName, bool forceRestart = false) {
+  public bool PlayAnimation(string animationName, bool forceRestart = false, bool resolveInterrupts = true) {
     if (animationData == null || !animationData.ContainsKey(animationName)) {
       Debug.LogWarning($"[AnimationController] Animation '{animationName}' missing.");
       return false;
     }
     if (!forceRestart && isPlaying && animationName == currentAnimation) return true;
 
-    if (!TryResolveInterrupt(animationName, out var resolvedAnimation, out var queued)) {
-      if (forceRestart) {
-        resolvedAnimation = animationName;
-        queued = animationName;
+    if (!resolveInterrupts || forceRestart) {
+      currentAnimation = animationName;
+      queuedAnimation = null;
+    }
+    else {
+      if (TryResolveInterrupt(animationName, out var resolvedAnimation, out var queued)) {
+        currentAnimation = resolvedAnimation;
+        queuedAnimation = queued;
+
       }
       else {
         return false;
       }
     }
 
-    currentAnimation = resolvedAnimation;
-    queuedAnimation = queued;
+
     animationTimer = 0f;
     pingPong = false;
     isPlaying = true;
@@ -130,7 +134,7 @@ public class AnimationController {
   public void ForceAnimation(string animationName = null) {
     string anim = animationName ?? (!string.IsNullOrEmpty(CurrentAnimation) ? CurrentAnimation : defaultAnimation);
     if (string.IsNullOrEmpty(anim)) return;
-    PlayAnimation(anim, true);
+    PlayAnimation(anim, forceRestart: true, resolveInterrupts: false);
   }
 
   public void PauseAnimation() {
@@ -329,9 +333,12 @@ public class AnimationController {
     AddTweenId(bounceParent, scaleDescr.id);
     scaleDescr.setOnComplete(() => RemoveTweenId(bounceParent, scaleDescr.id));
 
-    var delayDescr = LeanTween.delayedCall(bounceParent, duration, () => StartBounceSequence(bounceParent, sequence, index + 1));
+    LTDescr delayDescr = null;
+    delayDescr = LeanTween.delayedCall(bounceParent, duration, () => {
+      RemoveTweenId(bounceParent, delayDescr.id);
+      StartBounceSequence(bounceParent, sequence, index + 1);
+    });
     AddTweenId(bounceParent, delayDescr.id);
-    delayDescr.setOnComplete(() => RemoveTweenId(bounceParent, delayDescr.id));
   }
 
   private void SetHBoxes() {

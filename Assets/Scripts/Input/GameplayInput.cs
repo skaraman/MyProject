@@ -71,23 +71,33 @@ public class GameplayInput : MonoBehaviour {
   private PendingSuperAttack pendingSuperAttack2; // attack3 + attack4 -> superattack2
 
   void Start() {
-    actions.Add(MessageBus.On("gameplay.attack1", o => attack1()));
-    actions.Add(MessageBus.On("gameplay.attack2", o => attack2()));
-    actions.Add(MessageBus.On("gameplay.attack3", o => attack3()));
-    actions.Add(MessageBus.On("gameplay.attack4", o => attack4()));
-    actions.Add(MessageBus.On("gameplay.block", o => block()));
-    actions.Add(MessageBus.On("gameplay.dash", o => dash()));
-    actions.Add(MessageBus.On("gameplay.dodge", o => dodge()));
-    actions.Add(MessageBus.On("gameplay.jump", o => Jump()));
+    actions.Add(MessageBus.On("gameplay.attack1", o => { if (_IsPressed(o)) attack1(); }));
+    actions.Add(MessageBus.On("gameplay.attack2", o => { if (_IsPressed(o)) attack2(); }));
+    actions.Add(MessageBus.On("gameplay.attack3", o => { if (_IsPressed(o)) attack3(); }));
+    actions.Add(MessageBus.On("gameplay.attack4", o => { if (_IsPressed(o)) attack4(); }));
+    actions.Add(MessageBus.On("gameplay.block", o => { if (_IsPressed(o)) block(); }));
+    actions.Add(MessageBus.On("gameplay.dash", o => { if (_IsPressed(o)) dash(); }));
+    actions.Add(MessageBus.On("gameplay.dodge", o => { if (_IsPressed(o)) dodge(); }));
+    actions.Add(MessageBus.On("gameplay.jump", o => { if (_IsPressed(o)) Jump(); }));
+    actions.Add(MessageBus.On("gameplay.pause", o => { if (_IsPressed(o)) pause(); }));
+    actions.Add(MessageBus.On("gameplay.dance", o => { if (_IsPressed(o)) dance(); }));
+    actions.Add(MessageBus.On("gameplay.wheel", o => { if (_IsPressed(o)) formsWheel.SetActive(!formsWheel.activeSelf); }));
     actions.Add(MessageBus.On("gameplay.charUp", o => charUp(o)));
     actions.Add(MessageBus.On("gameplay.charDown", o => charDown(o)));
     actions.Add(MessageBus.On("gameplay.charLeft", o => charLeft(o)));
     actions.Add(MessageBus.On("gameplay.charRight", o => charRight(o)));
-    actions.Add(MessageBus.On("gameplay.pause", o => pause()));
-    actions.Add(MessageBus.On("gameplay.dance", o => dance()));
-    actions.Add(MessageBus.On("gameplay.wheel", o => formsWheel.SetActive(!formsWheel.activeSelf)));
     cameraRB = cam.GetComponent<Rigidbody2D>();
     erb = EsperanzaParent.GetComponent<Rigidbody2D>();
+  }
+
+  bool _IsPressed(object o) {
+    if (o == null) return true;
+    if (o is bool b) return b;
+    if (o is float f) return f > 0.5f;
+    if (o is int i) return i != 0;
+    if (o is Vector2 v) return v.sqrMagnitude > 0.25f;
+    if (o is Vector3 v3) return v3.sqrMagnitude > 0.25f;
+    return true;
   }
 
   void OnDisable() {

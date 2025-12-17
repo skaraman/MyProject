@@ -204,11 +204,12 @@ public class GearController : MonoBehaviour {
 
   public void ForceAnimation() {
     if (animationController == null) return;
-    animationController.ForceAnimation(defaultAnimation);
+    animationController.ForceAnimation(string.IsNullOrEmpty(defaultAnimation) ? null : defaultAnimation);
   }
 
-  public void PlayAnimation(string anim) {
-    animationController?.PlayAnimation(anim);
+  public void PlayAnimation(string anim, bool forceRestart = false, bool resolveInterrupts = true) {
+    if (string.IsNullOrEmpty(anim)) return;
+    animationController?.PlayAnimation(anim, forceRestart, resolveInterrupts);
   }
 
   public AnimationController Controller => animationController;
