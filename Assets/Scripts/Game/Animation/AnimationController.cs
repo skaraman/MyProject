@@ -34,7 +34,7 @@ public class AnimationController {
   private string currentAnimation;
   private string queuedAnimation;
   private int currentFrame;
-  private float animationTimer;
+  public float animationTimer;
   private bool pingPong;
   private bool isPlaying;
   private bool isFacingRight = true;

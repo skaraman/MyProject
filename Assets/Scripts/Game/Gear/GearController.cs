@@ -12,6 +12,7 @@ public class GearController : MonoBehaviour {
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
   [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)] public bool _bool;
   public string defaultAnimation = "Breathe";
+  public float timer;
 
   public GameObject[] GearObjects;
   public GameObject[] HairObjects;
@@ -42,6 +43,7 @@ public class GearController : MonoBehaviour {
 
   void Update() {
     if (animationController == null) return;
+    timer = animationController.animationTimer;
     animationController.SlowDown = slowDown;
     animationController.ForceLoop = forceLoop;
     if (needsFlip) {

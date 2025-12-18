@@ -167,7 +167,24 @@ public static class BounceAdjustments {
     ["PunchRightToPunchLeft"] = new List<BounceFrame> { new(.81f, -.3f) },
     ["PunchRightToKickLeft"] = new List<BounceFrame> { new(.18f, -.39f) },
     ["PunchRightToKickRight"] = new List<BounceFrame> { new(.75f, -.28f) },
-    ["PunchRightToStance"] = new List<BounceFrame> { new(-.33f, -.42f) }
+    ["PunchRightToStance"] = new List<BounceFrame> { new(-.33f, -.42f) },
+
+    ["SuperBlast"] = new List<BounceFrame> { new(-0.1f, -0.2f, .02f), new(-.13f, -.3f, .18f), new(-.66f, -.73f, .15f), new(1.21f, -1.48f, .23f), new(1.71f, -1.43f, .16f), new(1.7f, -1.31f, .26f) },
+    ["SuperBlastToKickLeft"] = new List<BounceFrame> { new(.3f, -.52f) },
+    ["SuperBlastToKickRight"] = new List<BounceFrame> { new(.81f, -.37f) },
+    ["SuperBlastToPunchLeft"] = new List<BounceFrame> { new(.84f, -.45f) },
+    ["SuperBlastToPunchRight"] = new List<BounceFrame> { new(.99f, -.36f) },
+    ["SuperBlastToStance"] = new List<BounceFrame> { new(-.14f, -.56f) },
+    ["DanceToSuperBlast"] = new List<BounceFrame> { new(-.04f, -.09f) },
+    ["PunchLeftToSuperBlast"] = new List<BounceFrame> { new(-.02f, -.26f) },
+    ["PunchRightToSuperBlast"] = new List<BounceFrame> { new(.04f, -.21f) },
+    ["KickLeftToSuperBlast"] = new List<BounceFrame> { new(-.15f, -.2f) },
+    ["KickRightToSuperBlast"] = new List<BounceFrame> { new(-.07f, -.21f) },
+    ["RunToSuperBlast"] = new List<BounceFrame> { new(-.03f, -.021f) },
+    ["SprintToSuperBlast"] = new List<BounceFrame> { new(-.04f, -.28f) },
+    ["StanceToSuperBlast"] = new List<BounceFrame> { new(-.06f, -.28f) },
+    ["WalkToSuperBlast"] = new List<BounceFrame> { new(-.02f, -.23f) },
+
   };
 
   public static Dictionary<string, Dictionary<string, List<BounceFrame>>> Esperanza { get; } = new Dictionary<string, Dictionary<string, List<BounceFrame>>> {

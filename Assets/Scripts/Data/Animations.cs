@@ -40,10 +40,7 @@ public static class Animations {
     { "Block", new AnimData { start = 1, end = 42, duration = 500 } },
     { "Dodge", new AnimData { start = 1, end = 58, duration = 250 } },
     { "Stance", new AnimData { start = 1, end = 59, duration = 1000, pingPong = true } },
-    { "Jump", new AnimData { start = 1, end = 41, duration = 400 } },
-    { "JumpDouble", new AnimData { start = 1, end = 32, duration = 300 } },
-    { "JumpFalling", new AnimData { start = 1, end = 31, duration = 175, loop = true } },
-    { "JumpLanding", new AnimData { start = 1, end = 31, duration = 500 } },
+
 
     { "KickLeft", new AnimData { start = 1, end = 53, duration = 500 } },
     { "KickRight", new AnimData { start = 1, end = 31, duration = 300 } },
@@ -95,6 +92,10 @@ public static class Animations {
 
     { "DodgeToStance", new AnimData { start = 278, end = 289, duration = 175, To = 1 } },
 
+    { "Jump", new AnimData { start = 1, end = 41, duration = 300 } },
+    { "JumpDouble", new AnimData { start = 1, end = 32, duration = 300 } },
+    { "JumpFalling", new AnimData { start = 1, end = 31, duration = 175, loop = true } },
+    { "JumpLanding", new AnimData { start = 1, end = 31, duration = 300 } },
     { "JumpToJumpDouble", new AnimData { start = 290, end = 300, duration = 175, To = 1 } },
     { "JumpToJumpFalling", new AnimData { start = 302, end = 313, duration = 175, To = 1 } },
     { "JumpToJumpLanding", new AnimData { start = 314, end = 325, duration = 175, To = 1 } },

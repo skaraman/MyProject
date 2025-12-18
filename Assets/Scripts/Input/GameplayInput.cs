@@ -28,8 +28,8 @@ public class GameplayInput : MonoBehaviour {
   [SerializeField] private float stanceMoveMultiplier = 0.15f;
 
   [Header("Jump")]
-  [SerializeField] private float jumpHeight = 5f;
-  [SerializeField] private float jumpDuration = 1f;
+  [SerializeField] private float jumpHeight = 7f;
+  [SerializeField] private float jumpDuration = 2f;
   [SerializeField] private float airAttackBoostHeight = 1f;
   [SerializeField] private float airAttackBoostHangSeconds = 0.15f;
   [SerializeField] private int maxAirAttackBoostsPerJump = 1;
