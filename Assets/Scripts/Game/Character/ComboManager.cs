@@ -185,7 +185,7 @@ public class ComboManager {
     string transitionName = fromAnim + "To" + toAnim;
     
     // Check if this transition exists in animation data
-    if (animationData != null && animationData.ContainsKey(transitionName)) {
+    if (animationData != null && animationData.TryGetValue(transitionName, out var transitionData)) {
       return transitionName;
     }
     

@@ -32,6 +32,8 @@ public class ComboExample : MonoBehaviour {
   [SerializeField] private string customComboName = "Custom Combo";
   [SerializeField] private List<string> customComboAnimations = new List<string> { "PunchRight", "KickRight", "PunchLeft" };
 
+  private const float COMBO_TEST_DELAY_SECONDS = 0.08f;
+
   void Start() {
     if (gearController == null) {
       gearController = GetComponent<GearController>();
@@ -141,8 +143,7 @@ public class ComboExample : MonoBehaviour {
       gearController.PlayAnimation(anim);
       
       // Wait for a short time (within the animation duration)
-      // Using 0.08 seconds to ensure we're within timing windows
-      yield return new WaitForSeconds(0.08f);
+      yield return new WaitForSeconds(COMBO_TEST_DELAY_SECONDS);
     }
     
     Debug.Log("[ComboExample] Combo sequence complete!");
@@ -178,7 +179,7 @@ public class ComboExample : MonoBehaviour {
     gearController.PlayAnimation("PunchLeft");
     
     // Continue with Combo B
-    yield return new WaitForSeconds(0.08f);
+    yield return new WaitForSeconds(COMBO_TEST_DELAY_SECONDS);
     
     Debug.Log("[ComboExample] Playing KickRight (continues Combo B if it exists)...");
     gearController.PlayAnimation("KickRight");
