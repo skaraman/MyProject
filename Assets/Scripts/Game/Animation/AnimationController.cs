@@ -114,7 +114,7 @@ public class AnimationController {
     string processedAnimationName = animationName;
     if (comboManager != null && resolveInterrupts && !forceRestart) {
       string comboResult = comboManager.ProcessAnimationRequest(animationName, Time.time);
-      if (!string.IsNullOrEmpty(comboResult) && animationData.ContainsKey(comboResult)) {
+      if (!string.IsNullOrEmpty(comboResult)) {
         processedAnimationName = comboResult;
       }
     }

@@ -23,6 +23,8 @@ public class Combo {
 /// Watches PlayAnimation calls and triggers special combo transitions when sequences match.
 /// </summary>
 public class ComboManager {
+  private const float MS_TO_SECONDS = 1000f;
+  
   // All defined combos
   private List<Combo> combos = new List<Combo>();
 
@@ -61,7 +63,15 @@ public class ComboManager {
   /// </summary>
   public void AddCombo(Combo combo) {
     if (combo != null && !string.IsNullOrEmpty(combo.comboName)) {
-      combos.Add(combo);
+      // Check for duplicate combo names and replace if found
+      int existingIndex = combos.FindIndex(c => c.comboName == combo.comboName);
+      if (existingIndex >= 0) {
+        combos[existingIndex] = combo;
+        Debug.LogWarning($"[ComboManager] Replaced existing combo '{combo.comboName}'");
+      }
+      else {
+        combos.Add(combo);
+      }
     }
   }
 
@@ -103,7 +113,7 @@ public class ComboManager {
     if (!string.IsNullOrEmpty(lastAnimation) && animationData != null) {
       float timeSinceLastAnimation = currentTime - lastAnimationTime;
       if (animationData.TryGetValue(lastAnimation, out var lastAnimData)) {
-        float animationDuration = lastAnimData.duration / 1000f; // Convert ms to seconds
+        float animationDuration = lastAnimData.duration / MS_TO_SECONDS;
         timingValid = timeSinceLastAnimation <= animationDuration;
       }
     }

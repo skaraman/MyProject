@@ -217,7 +217,7 @@ public class GearController : MonoBehaviour {
 
   public void LoadCombos() {
     var loaded = SaveSlotManager.Load("combos");
-    if (loaded.Keys.Count == 0) {
+    if (loaded.Count == 0) {
       // If no saved combos, initialize with default combos
       InitializeDefaultCombos();
       return;
