@@ -41,6 +41,8 @@ public class AnimationController {
   private bool pendingFlip;
   private bool hasResetLeanTween;
 
+  private ComboManager comboManager;
+
   public void Initialize(
     Transform root,
     IEnumerable<GameObject> sprites,
@@ -76,6 +78,12 @@ public class AnimationController {
     interruptData = interrupts ?? new Dictionary<string, Dictionary<string, string>>();
     bounceData = bounces ?? new Dictionary<string, Dictionary<string, List<BounceFrame>>>();
     hBoxData = hboxes ?? new Dictionary<string, Dictionary<string, List<HBox>>>();
+    
+    // Initialize combo manager if not already created
+    if (comboManager == null) {
+      comboManager = new ComboManager();
+    }
+    comboManager.Initialize(animationData);
   }
 
   public void SetSpriteObjects(IEnumerable<GameObject> targets) {
@@ -102,12 +110,21 @@ public class AnimationController {
     }
     if (!forceRestart && isPlaying && animationName == currentAnimation) return true;
 
+    // Process combo detection if combo manager is available
+    string processedAnimationName = animationName;
+    if (comboManager != null && resolveInterrupts && !forceRestart) {
+      string comboResult = comboManager.ProcessAnimationRequest(animationName, Time.time);
+      if (!string.IsNullOrEmpty(comboResult) && animationData.ContainsKey(comboResult)) {
+        processedAnimationName = comboResult;
+      }
+    }
+
     if (!resolveInterrupts || forceRestart) {
-      currentAnimation = animationName;
+      currentAnimation = processedAnimationName;
       queuedAnimation = null;
     }
     else {
-      if (TryResolveInterrupt(animationName, out var resolvedAnimation, out var queued)) {
+      if (TryResolveInterrupt(processedAnimationName, out var resolvedAnimation, out var queued)) {
         currentAnimation = resolvedAnimation;
         queuedAnimation = queued;
 
@@ -179,6 +196,10 @@ public class AnimationController {
       return anim.duration / 1000f;
     }
     return 0f;
+  }
+
+  public ComboManager GetComboManager() {
+    return comboManager;
   }
 
   public void QueueFlip() {

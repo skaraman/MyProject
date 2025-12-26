@@ -75,6 +75,7 @@ public class GearController : MonoBehaviour {
 
   public void LoadGear() {
     GetSavedGearState();
+    LoadCombos();
     RefreshGear();
     MessageBus.Send("gearReady");
   }
@@ -212,6 +213,69 @@ public class GearController : MonoBehaviour {
   public void PlayAnimation(string anim, bool forceRestart = false, bool resolveInterrupts = true) {
     if (string.IsNullOrEmpty(anim)) return;
     animationController?.PlayAnimation(anim, forceRestart, resolveInterrupts);
+  }
+
+  public void LoadCombos() {
+    var loaded = SaveSlotManager.Load("combos");
+    if (loaded.Keys.Count == 0) {
+      // If no saved combos, initialize with default combos
+      InitializeDefaultCombos();
+      return;
+    }
+    var comboManager = animationController?.GetComboManager();
+    if (comboManager != null) {
+      comboManager.LoadCombos(loaded);
+    }
+  }
+
+  public void SaveCombos() {
+    var comboManager = animationController?.GetComboManager();
+    if (comboManager == null) return;
+    var saveData = new SaveData();
+    comboManager.SaveCombos(saveData);
+    SaveSlotManager.Save("combos", saveData);
+  }
+
+  public void AddCombo(string comboName, List<string> animations) {
+    var comboManager = animationController?.GetComboManager();
+    if (comboManager == null) return;
+    var combo = new Combo(comboName, animations);
+    comboManager.AddCombo(combo);
+    SaveCombos();
+  }
+
+  public bool RemoveCombo(string comboName) {
+    var comboManager = animationController?.GetComboManager();
+    if (comboManager == null) return false;
+    bool removed = comboManager.RemoveCombo(comboName);
+    if (removed) SaveCombos();
+    return removed;
+  }
+
+  public bool EditCombo(string comboName, List<string> newAnimations) {
+    var comboManager = animationController?.GetComboManager();
+    if (comboManager == null) return false;
+    bool edited = comboManager.EditCombo(comboName, newAnimations);
+    if (edited) SaveCombos();
+    return edited;
+  }
+
+  public List<Combo> GetCombos() {
+    var comboManager = animationController?.GetComboManager();
+    return comboManager?.GetCombos() ?? new List<Combo>();
+  }
+
+  private void InitializeDefaultCombos() {
+    var comboManager = animationController?.GetComboManager();
+    if (comboManager == null) return;
+    
+    // Default combo examples based on the problem statement
+    comboManager.AddCombo(new Combo("Triple Strike", new List<string> { "PunchRight", "PunchLeft", "KickLeft" }));
+    comboManager.AddCombo(new Combo("Left Hook", new List<string> { "PunchLeft", "PunchRight" }));
+    comboManager.AddCombo(new Combo("Right Combo", new List<string> { "PunchRight", "KickRight" }));
+    comboManager.AddCombo(new Combo("Kick Combo", new List<string> { "KickLeft", "KickRight" }));
+    
+    SaveCombos();
   }
 
   public AnimationController Controller => animationController;
