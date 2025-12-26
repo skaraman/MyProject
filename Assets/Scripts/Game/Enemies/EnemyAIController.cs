@@ -18,6 +18,7 @@ public class EnemyAIController : MonoBehaviour {
   private EnemyInfo info;
   private Coroutine aiRoutine;
   private float nextAttackTime;
+  private const int maxAttackChainDepth = 3;
 
   void Awake() {
     rb = GetComponent<Rigidbody2D>();
@@ -50,7 +51,7 @@ public class EnemyAIController : MonoBehaviour {
 
       if (distance <= closingDistance) {
         yield return AttackSequence();
-        yield return PostAttackAction();
+        yield return PostAttackAction(0);
       }
       else {
         yield return ApproachPlayer();
@@ -114,7 +115,7 @@ public class EnemyAIController : MonoBehaviour {
     }
   }
 
-  private IEnumerator PostAttackAction() {
+  private IEnumerator PostAttackAction(int chainDepth) {
     // Random action after attack: stand still, run away, run towards, or another attack
     float roll = Random.value;
     
@@ -135,8 +136,15 @@ public class EnemyAIController : MonoBehaviour {
     }
     else {
       // Another random attack - loop back to attack sequence
-      yield return AttackSequence();
-      yield return PostAttackAction(); // Recursive call for post-attack action
+      // Limit recursion depth to prevent stack overflow
+      if (chainDepth < maxAttackChainDepth) {
+        yield return AttackSequence();
+        yield return PostAttackAction(chainDepth + 1); // Recursive call with incremented depth
+      } else {
+        // Max depth reached, just stand still instead
+        StopMovement();
+        yield return new WaitForSeconds(Random.Range(waitRange.x, waitRange.y));
+      }
     }
   }
 
