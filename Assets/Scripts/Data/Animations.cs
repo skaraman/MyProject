@@ -37,8 +37,8 @@ public static class Animations {
         new MovementFrame(0.0f, new Vector2(0f, 2f)),
         new MovementFrame(0.3f, new Vector2(1f, 1f)),
         new MovementFrame(0.6f, new Vector2(1f, -1f)),
-        new MovementFrame(1.0f, new Vector2(0.5f, -2f)),
-        new MovementFrame(1.5f, new Vector2(0f, 0f))
+        new MovementFrame(0.85f, new Vector2(0.5f, -2f)),
+        new MovementFrame(1.0f, new Vector2(0f, 0f))
       }
     } },
     { "Hurt", new AnimData { start = 1, end = 60, duration = 175 } },

@@ -87,7 +87,7 @@ public class EnemyAIController : MonoBehaviour {
       
       while (elapsed < duration && currentFrame < animData.movementSequence.Count) {
         var frame = animData.movementSequence[currentFrame];
-        float frameTime = (frame.time / 1000f) * duration; // Normalize frame time
+        float frameTime = frame.time * duration; // frame.time is normalized 0.0-1.0
         
         if (elapsed >= frameTime) {
           // Apply movement from this frame
