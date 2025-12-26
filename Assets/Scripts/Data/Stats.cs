@@ -69,8 +69,13 @@ public static class AllStatValues {
     { "DMG", 1 }, { "HP", 10 }, { "AS", 1 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 1 }, { "AKSP", 1 }, { "CDST", 1 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
   };
 
+  public static Dictionary<string, float> LesserDevil { set; get; } = new Dictionary<string, float> {
+    { "DMG", 1.5f }, { "HP", 15 }, { "AS", 1.2f }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 1.3f }, { "AKSP", 1.1f }, { "CDST", 1.2f }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
+  };
+
   public static Dictionary<string, Dictionary<string, float>> Enemies { get; } = new Dictionary<string, Dictionary<string, float>> {
-    { "Imp", Imp }
+    { "Imp", Imp },
+    { "LesserDevil", LesserDevil }
   };
 
 }

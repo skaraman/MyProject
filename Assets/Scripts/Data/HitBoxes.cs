@@ -248,7 +248,30 @@ public static class HBoxes {
     { "hurt", ImpHurt }, { "hit1", ImpHit1 }
   };
 
+  public static Dictionary<string, List<HBox>> LesserDevilHurt { get; } = new Dictionary<string, List<HBox>> {
+    ["Run"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(0.12f, -0.28f), new(0.74f, -0.17f), new(1.23f, -0.27f), new(1.28f, -0.81f), new(1.10f, -1.17f), new(1.40f, -1.48f), new(2.27f, -1.98f), new(1.70f, -2.05f), new(0.18f, -2.07f), new(-0.82f, -1.75f), new(-1.18f, -2.51f), new(-1.78f, -2.14f), new(-2.01f, -1.27f), new(-1.32f, -1.28f), new(-1.23f, -0.85f), new(-0.85f, -0.56f) }),
+    },
+    ["Idle"] = new List<HBox> { },
+    ["Attack"] = new List<HBox> { },
+    ["Hurt"] = new List<HBox> { },
+    ["Death"] = new List<HBox> { },
+  };
+
+  public static Dictionary<string, List<HBox>> LesserDevilHit1 { get; } = new Dictionary<string, List<HBox>> {
+    ["Run"] = new List<HBox> { },
+    ["Idle"] = new List<HBox> { },
+    ["Attack"] = new List<HBox> { },
+    ["Hurt"] = new List<HBox> { },
+    ["Death"] = new List<HBox> { },
+  };
+
+  public static Dictionary<string, Dictionary<string, List<HBox>>> LesserDevil = new Dictionary<string, Dictionary<string, List<HBox>>> {
+    { "hurt", LesserDevilHurt }, { "hit1", LesserDevilHit1 }
+  };
+
   public static Dictionary<string, Dictionary<string, Dictionary<string, List<HBox>>>> Enemies { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, List<HBox>>>> {
-    { "Imp", Imp }
+    { "Imp", Imp },
+    { "LesserDevil", LesserDevil }
   };
 }

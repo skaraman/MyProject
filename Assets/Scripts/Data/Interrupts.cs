@@ -116,7 +116,27 @@ public static class Interrupts {
     ["Death"] = new Dictionary<string, string>()
   };
 
+  public static Dictionary<string, Dictionary<string, string>> LesserDevil { get; } = new Dictionary<string, Dictionary<string, string>> {
+    ["Idle"] = new Dictionary<string, string> {
+      { "Run", "Run" }, { "Attack", "Attack" }, { "Hurt", "Hurt" }, { "Jump", "Jump" }, { "Death", "Death" }
+    },
+    ["Run"] = new Dictionary<string, string> {
+      { "Idle", "Idle" }, { "Attack", "Attack" }, { "Hurt", "Hurt" }, { "Jump", "Jump" }, { "Death", "Death" }
+    },
+    ["Attack"] = new Dictionary<string, string> {
+      { "Hurt", "Hurt" }, { "Death", "Death" }
+    },
+    ["Hurt"] = new Dictionary<string, string> {
+      {"Hurt", "Hurt"}, { "Death", "Death" }
+    },
+    ["Jump"] = new Dictionary<string, string> {
+      { "Hurt", "Hurt" },
+    },
+    ["Death"] = new Dictionary<string, string>()
+  };
+
   public static Dictionary<string, Dictionary<string, Dictionary<string, string>>> Enemies { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, string>>> {
-    { "Imp", Imp }
+    { "Imp", Imp },
+    { "LesserDevil", LesserDevil }
   };
 }

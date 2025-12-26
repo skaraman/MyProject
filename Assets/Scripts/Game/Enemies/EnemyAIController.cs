@@ -24,6 +24,7 @@ public class EnemyAIController : MonoBehaviour {
     enemyController ??= GetComponent<EnemyController>();
     info = GetComponent<EnemyInfo>();
     closingDistance = ResolveClosingDistance();
+    moveSpeed = ResolveMoveSpeed();
   }
 
   void OnEnable() {
@@ -49,9 +50,10 @@ public class EnemyAIController : MonoBehaviour {
 
       if (distance <= closingDistance) {
         yield return AttackSequence();
+        yield return PostAttackAction();
       }
       else {
-        yield return RepositionSequence();
+        yield return ApproachPlayer();
       }
       yield return null;
     }
@@ -62,47 +64,105 @@ public class EnemyAIController : MonoBehaviour {
     nextAttackTime = Time.time + attackCooldown;
 
     StopMovement();
-    if (enemyController.PlayAnimation("Attack")) {
-      float wait = enemyController.GetAnimationDurationSeconds("Attack");
+    
+    // Use random attack animation if multiple exist, otherwise use "Attack"
+    string attackAnim = "Attack";
+    if (enemyController.PlayAnimation(attackAnim)) {
+      float wait = enemyController.GetAnimationDurationSeconds(attackAnim);
       if (wait <= 0f) wait = 0.5f;
-      yield return new WaitForSeconds(wait);
+      
+      // Apply animation-driven movement during attack
+      yield return ApplyAnimationMovement(attackAnim, wait);
     }
+    
     enemyController.PlayAnimation(enemyController.defaultAnimation);
   }
 
-  private IEnumerator RepositionSequence() {
-    var toPlayer = ((Vector2)(player.position - transform.position)).normalized;
-    float roll = Random.value;
-
-    if (roll < 0.25f) {
+  private IEnumerator ApplyAnimationMovement(string animationName, float duration) {
+    // Get animation data to check for movement sequence
+    var animData = GetAnimationData(animationName);
+    if (animData?.movementSequence != null && animData.movementSequence.Count > 0) {
+      float elapsed = 0f;
+      int currentFrame = 0;
+      
+      while (elapsed < duration && currentFrame < animData.movementSequence.Count) {
+        var frame = animData.movementSequence[currentFrame];
+        float frameTime = (frame.time / 1000f) * duration; // Normalize frame time
+        
+        if (elapsed >= frameTime) {
+          // Apply movement from this frame
+          Vector2 velocity = frame.velocity;
+          if (!enemyController.IsFacingRight) {
+            velocity.x *= -1; // Flip X velocity if facing left
+          }
+          
+          if (rb != null) {
+            rb.linearVelocity = velocity;
+          }
+          
+          currentFrame++;
+        }
+        
+        elapsed += Time.deltaTime;
+        yield return null;
+      }
+      
       StopMovement();
-      enemyController.PauseAnimation();
+    } else {
+      // No movement sequence, just wait
+      yield return new WaitForSeconds(duration);
+    }
+  }
+
+  private IEnumerator PostAttackAction() {
+    // Random action after attack: stand still, run away, run towards, or another attack
+    float roll = Random.value;
+    
+    if (roll < 0.25f) {
+      // Stand still
+      StopMovement();
       yield return new WaitForSeconds(Random.Range(waitRange.x, waitRange.y));
-      enemyController.ResumeAnimation();
-      yield break;
     }
-
-    Vector2 moveDir = toPlayer;
-    float duration;
-    float speedMultiplier = 1f;
-
-    if (roll < 0.55f) {
-      moveDir = -toPlayer;
-      duration = Random.Range(backstepRange.x, backstepRange.y);
-      speedMultiplier = 0.75f;
+    else if (roll < 0.5f) {
+      // Run away from character
+      var awayFromPlayer = ((Vector2)(transform.position - player.position)).normalized;
+      yield return MoveInDirection(awayFromPlayer, Random.Range(backstepRange.x, backstepRange.y), 0.75f);
     }
-    else if (roll < 0.85f) {
-      duration = Random.Range(lungeRange.x, lungeRange.y);
-      speedMultiplier = 1.6f;
+    else if (roll < 0.75f) {
+      // Run towards character
+      var towardsPlayer = ((Vector2)(player.position - transform.position)).normalized;
+      yield return MoveInDirection(towardsPlayer, Random.Range(lungeRange.x, lungeRange.y), 1.2f);
     }
     else {
-      duration = Random.Range(runStepRange.x, runStepRange.y);
+      // Another random attack - loop back to attack sequence
+      yield return AttackSequence();
+      yield return PostAttackAction(); // Recursive call for post-attack action
     }
+  }
 
+  private IEnumerator ApproachPlayer() {
+    // Enemy uses Run animation to move towards the player
+    var toPlayer = ((Vector2)(player.position - transform.position)).normalized;
+    
     if (!enemyController.PlayAnimation("Run")) {
       yield break;
     }
-    yield return MoveForDuration(moveDir, duration, speedMultiplier);
+    
+    // Move towards player for a short duration
+    yield return MoveInDirection(toPlayer, Random.Range(runStepRange.x, runStepRange.y), 1f);
+    enemyController.PlayAnimation(enemyController.defaultAnimation);
+  }
+
+  private IEnumerator MoveInDirection(Vector2 direction, float duration, float speedMultiplier) {
+    if (direction.sqrMagnitude > 0.001f) {
+      enemyController.FaceDirection(direction.x);
+    }
+    
+    if (!enemyController.PlayAnimation("Run")) {
+      yield break;
+    }
+    
+    yield return MoveForDuration(direction, duration, speedMultiplier);
     enemyController.PlayAnimation(enemyController.defaultAnimation);
   }
 
@@ -148,5 +208,21 @@ public class EnemyAIController : MonoBehaviour {
       return cd;
     }
     return fallbackClosingDistance;
+  }
+
+  private float ResolveMoveSpeed() {
+    var type = enemyController != null ? enemyController.enemyType : info?.enemyType;
+    if (!string.IsNullOrEmpty(type) && AllStatValues.Enemies.TryGetValue(type, out var stats) && stats.TryGetValue("MVSP", out var ms)) {
+      return ms;
+    }
+    return moveSpeed; // Return default if stat not found
+  }
+
+  private AnimData GetAnimationData(string animationName) {
+    var type = enemyController != null ? enemyController.enemyType : info?.enemyType;
+    if (!string.IsNullOrEmpty(type) && Animations.Enemies.TryGetValue(type, out var anims) && anims.TryGetValue(animationName, out var data)) {
+      return data;
+    }
+    return null;
   }
 }

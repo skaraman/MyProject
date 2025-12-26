@@ -1,8 +1,20 @@
 
 using System.Collections.Generic;
+using UnityEngine;
+
+public class MovementFrame {
+  public float time;
+  public Vector2 velocity;
+  
+  public MovementFrame(float time, Vector2 velocity) {
+    this.time = time;
+    this.velocity = velocity;
+  }
+}
 
 public class AnimData {
   public int start; public int end; public float duration; public bool loop; public int To; public bool pingPong;
+  public List<MovementFrame> movementSequence;
 }
 
 public static class Animations {
@@ -10,8 +22,25 @@ public static class Animations {
   public static Dictionary<string, AnimData> Imp { get; } = new Dictionary<string, AnimData> {
     { "Idle", new AnimData { start = 1, end = 46, duration = 1200, loop = true } },
     { "Run", new AnimData { start = 1, end = 46, duration = 1000, loop = true } },
-    { "Attack", new AnimData { start = 1, end = 32, duration = 600 } },
-    { "Jump", new AnimData { start = 2, end = 196, duration = 1750 } },
+    { "Attack", new AnimData { 
+      start = 1, end = 32, duration = 600,
+      movementSequence = new List<MovementFrame> {
+        new MovementFrame(0.0f, new Vector2(0f, 0f)),
+        new MovementFrame(0.2f, new Vector2(2f, 0f)),
+        new MovementFrame(0.4f, new Vector2(1.5f, 0f)),
+        new MovementFrame(0.6f, new Vector2(0f, 0f))
+      }
+    } },
+    { "Jump", new AnimData { 
+      start = 2, end = 196, duration = 1750,
+      movementSequence = new List<MovementFrame> {
+        new MovementFrame(0.0f, new Vector2(0f, 2f)),
+        new MovementFrame(0.3f, new Vector2(1f, 1f)),
+        new MovementFrame(0.6f, new Vector2(1f, -1f)),
+        new MovementFrame(1.0f, new Vector2(0.5f, -2f)),
+        new MovementFrame(1.5f, new Vector2(0f, 0f))
+      }
+    } },
     { "Hurt", new AnimData { start = 1, end = 60, duration = 175 } },
     { "Death", new AnimData { start = 1, end = 74, duration = 1500 } }
   };
@@ -19,8 +48,25 @@ public static class Animations {
   public static Dictionary<string, AnimData> LesserDevil { get; } = new Dictionary<string, AnimData> {
     { "Idle", new AnimData { start = 1, end = 40, duration = 1200, loop = true } },
     { "Run", new AnimData { start = 1, end = 30, duration = 850, loop = true } },
-    { "Attack", new AnimData { start = 1, end = 28, duration = 650 } },
-    { "Jump", new AnimData { start = 1, end = 40, duration = 1200 } },
+    { "Attack", new AnimData { 
+      start = 1, end = 28, duration = 650,
+      movementSequence = new List<MovementFrame> {
+        new MovementFrame(0.0f, new Vector2(0f, 0f)),
+        new MovementFrame(0.15f, new Vector2(2.5f, 0f)),
+        new MovementFrame(0.35f, new Vector2(1.8f, 0f)),
+        new MovementFrame(0.55f, new Vector2(0f, 0f))
+      }
+    } },
+    { "Jump", new AnimData { 
+      start = 1, end = 40, duration = 1200,
+      movementSequence = new List<MovementFrame> {
+        new MovementFrame(0.0f, new Vector2(0f, 2.5f)),
+        new MovementFrame(0.25f, new Vector2(1.2f, 1.5f)),
+        new MovementFrame(0.5f, new Vector2(1.2f, -1f)),
+        new MovementFrame(0.85f, new Vector2(0.6f, -2.5f)),
+        new MovementFrame(1.2f, new Vector2(0f, 0f))
+      }
+    } },
     { "Hurt", new AnimData { start = 1, end = 24, duration = 400 } },
     { "Death", new AnimData { start = 1, end = 52, duration = 1600 } }
   };
