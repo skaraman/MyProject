@@ -66,7 +66,7 @@ public class EnemyAIController : MonoBehaviour {
 
     StopMovement();
     
-    // Use random attack animation if multiple exist, otherwise use "Attack"
+    // Use Attack animation for all enemies
     string attackAnim = "Attack";
     if (enemyController.PlayAnimation(attackAnim)) {
       float wait = enemyController.GetAnimationDurationSeconds(attackAnim);
@@ -84,24 +84,38 @@ public class EnemyAIController : MonoBehaviour {
     var animData = GetAnimationData(animationName);
     if (animData?.movementSequence != null && animData.movementSequence.Count > 0) {
       float elapsed = 0f;
-      int currentFrame = 0;
+      Vector2 currentVelocity = Vector2.zero;
       
-      while (elapsed < duration && currentFrame < animData.movementSequence.Count) {
-        var frame = animData.movementSequence[currentFrame];
-        float frameTime = frame.time * duration; // frame.time is normalized 0.0-1.0
+      while (elapsed < duration) {
+        // Find the appropriate frame based on normalized time
+        float normalizedTime = elapsed / duration;
         
-        if (elapsed >= frameTime) {
-          // Apply movement from this frame
-          Vector2 velocity = frame.velocity;
-          if (!enemyController.IsFacingRight) {
-            velocity.x *= -1; // Flip X velocity if facing left
+        // Find the current and next frames for interpolation
+        int frameIndex = 0;
+        for (int i = 0; i < animData.movementSequence.Count - 1; i++) {
+          if (normalizedTime >= animData.movementSequence[i].time && 
+              normalizedTime < animData.movementSequence[i + 1].time) {
+            frameIndex = i;
+            break;
           }
-          
-          if (rb != null) {
-            rb.linearVelocity = velocity;
-          }
-          
-          currentFrame++;
+        }
+        
+        // If we're past the last frame, use the last frame's velocity
+        if (normalizedTime >= animData.movementSequence[animData.movementSequence.Count - 1].time) {
+          frameIndex = animData.movementSequence.Count - 1;
+        }
+        
+        // Get velocity from current frame
+        currentVelocity = animData.movementSequence[frameIndex].velocity;
+        
+        // Apply movement with facing direction
+        Vector2 velocity = currentVelocity;
+        if (!enemyController.IsFacingRight) {
+          velocity.x *= -1; // Flip X velocity if facing left
+        }
+        
+        if (rb != null) {
+          rb.linearVelocity = velocity;
         }
         
         elapsed += Time.deltaTime;

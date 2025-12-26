@@ -111,7 +111,7 @@ public static class Interrupts {
       {"Hurt", "Hurt"}, { "Death", "Death" }
     },
     ["Jump"] = new Dictionary<string, string> {
-      { "Hurt", "Hurt" },
+      { "Hurt", "Hurt" }, { "Death", "Death" }
     },
     ["Death"] = new Dictionary<string, string>()
   };
@@ -130,7 +130,7 @@ public static class Interrupts {
       {"Hurt", "Hurt"}, { "Death", "Death" }
     },
     ["Jump"] = new Dictionary<string, string> {
-      { "Hurt", "Hurt" },
+      { "Hurt", "Hurt" }, { "Death", "Death" }
     },
     ["Death"] = new Dictionary<string, string>()
   };
