@@ -90,6 +90,11 @@ public class EnemyAIController : MonoBehaviour {
         // Find the appropriate frame based on normalized time
         float normalizedTime = elapsed / duration;
         
+        // Safety check: reset if we somehow went backwards (shouldn't happen in forward playback)
+        if (lastFrameIndex > 0 && normalizedTime < animData.movementSequence[lastFrameIndex].time) {
+          lastFrameIndex = 0;
+        }
+        
         // Find the current frame (searching from last known position)
         int frameIndex = lastFrameIndex;
         for (int i = lastFrameIndex; i < animData.movementSequence.Count - 1; i++) {
@@ -132,6 +137,8 @@ public class EnemyAIController : MonoBehaviour {
 
   private IEnumerator PostAttackAction(int chainDepth) {
     // Random action after attack: stand still, run away, run towards, or another attack
+    // Note: Recursive approach is intentional - allows full attack sequence (animation + timing)
+    // to complete before next random action. Loop would require complex state tracking.
     float roll = Random.value;
     
     if (roll < 0.25f) {
@@ -150,13 +157,13 @@ public class EnemyAIController : MonoBehaviour {
       yield return MoveInDirection(towardsPlayer, Random.Range(lungeRange.x, lungeRange.y), 1.2f);
     }
     else {
-      // Another random attack - loop back to attack sequence
-      // Limit recursion depth to prevent stack overflow
+      // Another random attack - creates attack chains
+      // Depth limit prevents infinite recursion (max 3 attacks = 4 total including initial)
       if (chainDepth < maxAttackChainDepth) {
         yield return AttackSequence();
-        yield return PostAttackAction(chainDepth + 1); // Recursive call with incremented depth
+        yield return PostAttackAction(chainDepth + 1);
       } else {
-        // Max depth reached, just stand still instead
+        // Max depth reached, fallback to stand still
         StopMovement();
         yield return new WaitForSeconds(Random.Range(waitRange.x, waitRange.y));
       }
