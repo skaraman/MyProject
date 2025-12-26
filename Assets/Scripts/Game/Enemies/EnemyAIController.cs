@@ -84,15 +84,15 @@ public class EnemyAIController : MonoBehaviour {
     var animData = GetAnimationData(animationName);
     if (animData?.movementSequence != null && animData.movementSequence.Count > 0) {
       float elapsed = 0f;
-      Vector2 currentVelocity = Vector2.zero;
+      int lastFrameIndex = 0; // Cache to avoid re-searching from start
       
       while (elapsed < duration) {
         // Find the appropriate frame based on normalized time
         float normalizedTime = elapsed / duration;
         
-        // Find the current and next frames for interpolation
-        int frameIndex = 0;
-        for (int i = 0; i < animData.movementSequence.Count - 1; i++) {
+        // Find the current frame (searching from last known position)
+        int frameIndex = lastFrameIndex;
+        for (int i = lastFrameIndex; i < animData.movementSequence.Count - 1; i++) {
           if (normalizedTime >= animData.movementSequence[i].time && 
               normalizedTime < animData.movementSequence[i + 1].time) {
             frameIndex = i;
@@ -105,11 +105,12 @@ public class EnemyAIController : MonoBehaviour {
           frameIndex = animData.movementSequence.Count - 1;
         }
         
-        // Get velocity from current frame
-        currentVelocity = animData.movementSequence[frameIndex].velocity;
+        lastFrameIndex = frameIndex; // Cache for next iteration
+        
+        // Get velocity from current frame (discrete changes match hitbox system behavior)
+        Vector2 velocity = animData.movementSequence[frameIndex].velocity;
         
         // Apply movement with facing direction
-        Vector2 velocity = currentVelocity;
         if (!enemyController.IsFacingRight) {
           velocity.x *= -1; // Flip X velocity if facing left
         }
