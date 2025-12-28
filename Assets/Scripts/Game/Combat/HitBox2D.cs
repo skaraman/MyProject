@@ -1,38 +1,26 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Events;
 
 /// <summary>
-/// HitBox - a box that sends a contact of HitTrue to a general manager 
-/// with the details of itself and the collider it hit.
+/// HitBox - a box that detects contacts with HurtBox2D and forwards them for validation.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Collider2D))]
 public class HitBox2D : MonoBehaviour {
-  [Serializable]
-  public class HurtBoxEvent : UnityEvent<HurtBox2D> { }
-
   [Tooltip("If true, ignores contacts with colliders on the same root object (prevents self-hits).")]
   public bool ignoreSameRoot = true;
 
   [Tooltip("If true, each HurtBox2D can only be hit once while this component is enabled.")]
   public bool hitEachHurtBoxOnce = true;
 
-  [Tooltip("Called when this hitbox makes contact with a HurtBox2D.")]
-  public HurtBoxEvent OnHit = new();
+  [Tooltip("Optional identifier for filtering hit reactions (attack name/type).")]
+  public string hitId;
 
   private readonly HashSet<int> hitHurtBoxIds = new();
-  private IHitManager hitManager;
 
   void Reset() {
     var collider = GetComponent<Collider2D>();
     if (collider != null) collider.isTrigger = true;
-  }
-
-  void Awake() {
-    // Find hit manager in parent hierarchy
-    hitManager = GetComponentInParent<IHitManager>();
   }
 
   void OnEnable() {
@@ -62,14 +50,6 @@ public class HitBox2D : MonoBehaviour {
         if (hitHurtBoxIds.Contains(id)) return;
         hitHurtBoxIds.Add(id);
       }
-
-      // Send contact to manager
-      if (hitManager != null) {
-        hitManager.OnHitContact(this, hurtBox);
-      }
-
-      // Notify local event listeners
-      OnHit?.Invoke(hurtBox);
 
       // Let the HurtBox validate and receive the hit
       hurtBox.ReceiveHit(this);

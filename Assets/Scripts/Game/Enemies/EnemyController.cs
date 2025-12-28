@@ -16,7 +16,7 @@ public class EnemyController : MonoBehaviour {
   public GameObject[] hBoxObjects;
 
   [Header("Animation Data")]
-  public string enemyType = "Imp";
+  public string enemyType;
   public string defaultAnimation = "Idle";
   public bool playOnStart = true;
 
@@ -34,6 +34,7 @@ public class EnemyController : MonoBehaviour {
   }
 
   void Start() {
+    enemyType = GetComponent<EnemyInfo>().enemyType;
     if (playOnStart && !string.IsNullOrEmpty(defaultAnimation)) {
       PlayAnimation(defaultAnimation, true);
     }
