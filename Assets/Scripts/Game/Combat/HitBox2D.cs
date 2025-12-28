@@ -55,7 +55,7 @@ public class HitBox2D : MonoBehaviour {
     if (!isActiveAndEnabled || other == null) return;
     if (ignoreSameRoot && other.transform.root == transform.root) return;
 
-    var hurtBox = other.GetComponent<HurtBox2D>();
+    var hurtBox = other.GetComponentInParent<HurtBox2D>();
     if (hurtBox != null && hurtBox.isActiveAndEnabled) {
       if (hitEachHurtBoxOnce) {
         var id = hurtBox.GetInstanceID();
