@@ -6,6 +6,9 @@ using UnityEngine;
 
 namespace CustomInspector.Helpers.Editor
 {
+    /// <summary>
+    /// PropertyDrawer for attributes that should only be used on specific types.
+    /// </summary>
     public class TypedPropertyDrawer : PropertyDrawer
     {
         readonly string errorMessage;

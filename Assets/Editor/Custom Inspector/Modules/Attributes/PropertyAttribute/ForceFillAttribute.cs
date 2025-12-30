@@ -48,7 +48,7 @@ namespace CustomInspector
     {
         /// <summary>
         /// Prints an Error, if any field in Class has Attribute [ForceFill] and is null (to check if everything got filled in the inspector)
-        /// <para>It prints found fields' names and the transforms Hierarchies of the Monobehaviour</para>
+        /// <para>It prints found fields' names and the transforms hierarchy of the Monobehaviour</para>
         /// <para>This function is conditional: It wont cut performance in build</para>
         /// </summary>
         [Conditional("UNITY_EDITOR")]
@@ -57,7 +57,29 @@ namespace CustomInspector
 
         /// <summary>
         /// Prints an Error, if any field in Class has Attribute [ForceFill] and is null (to check if everything got filled in the inspector)
-        /// <para>It prints found fields' names and the given owners Hierarchies of the Monobehaviour</para>
+        /// <para>It prints found fields' names and the scriptables path in project</para>
+        /// <para>This function is conditional: It wont cut performance in build</para>
+        /// </summary>
+        [Conditional("UNITY_EDITOR")]
+        public static void CheckForceFilled(this ScriptableObject @object)
+        {
+            string path = "unknown path";
+#if UNITY_EDITOR
+            if (@object != null)
+            {
+                path = UnityEditor.AssetDatabase.GetAssetPath(@object);
+                if (string.IsNullOrEmpty(path))
+                    path = "runtime-created instance";
+            }
+            else
+                path = "null-object";
+#endif
+            @object.CheckFilled(path, attributeType: typeof(ForceFillAttribute));
+        }
+
+        /// <summary>
+        /// Prints an Error, if any field in Class has Attribute [ForceFill] and is null (to check if everything got filled in the inspector)
+        /// <para>It prints found fields' names and the given owners hierarchy</para>
         /// <para>This function is conditional: It wont cut performance in build</para>
         /// </summary>
         [Conditional("UNITY_EDITOR")]

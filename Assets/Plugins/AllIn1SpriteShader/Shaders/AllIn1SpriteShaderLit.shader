@@ -421,7 +421,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
             // this has to be here or specular color will be ignored. Not in SG code
             #if _SIMPLELIT
@@ -1660,10 +1660,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -2080,6 +2084,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -2448,7 +2453,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -3050,7 +3055,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
             
 
@@ -4286,10 +4291,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -4706,6 +4715,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -5074,7 +5084,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -5582,7 +5592,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
@@ -6808,10 +6818,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -7228,6 +7242,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -7596,7 +7611,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -8018,7 +8033,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
             // Includes
             //#include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
@@ -9244,10 +9259,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -9664,6 +9683,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -10032,7 +10052,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -10452,7 +10472,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
 
             // Includes
@@ -11679,10 +11699,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -12099,6 +12123,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -12467,7 +12492,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -12883,7 +12908,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
             // this has to be here or specular color will be ignored. Not in SG code
             #if _SIMPLELIT
@@ -14121,10 +14146,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -14541,6 +14570,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -14909,7 +14939,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -15357,7 +15387,7 @@ ZWrite On
    #define _URP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
         #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
         #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RenderingLayers.hlsl"
@@ -16584,10 +16614,14 @@ ZWrite On
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -17004,6 +17038,7 @@ ZWrite On
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);
@@ -17372,7 +17407,7 @@ ZWrite On
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -17704,5 +17739,5 @@ ZWrite On
    }
    
    
-   CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+   CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 }

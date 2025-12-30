@@ -478,7 +478,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -1755,10 +1755,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -2543,7 +2547,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -3434,7 +3438,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -4718,10 +4722,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -5506,7 +5514,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -6221,7 +6229,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -7500,10 +7508,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -8288,7 +8300,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -9077,7 +9089,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -10353,10 +10365,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -11141,7 +11157,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -11908,7 +11924,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -13186,10 +13202,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -13974,7 +13994,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -14689,7 +14709,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -15966,10 +15986,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -16754,7 +16778,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -17463,7 +17487,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -18735,10 +18759,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -19523,7 +19551,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -20268,7 +20296,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -21541,10 +21569,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -22329,7 +22361,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -23088,7 +23120,7 @@ void Frag(  VertexToPixel v2f
    #define _HDRP 1
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
                #pragma vertex Vert
    #pragma fragment Frag
@@ -24360,10 +24392,14 @@ void Frag(  VertexToPixel v2f
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -25148,7 +25184,7 @@ void Frag(  VertexToPixel v2f
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -25708,5 +25744,5 @@ void Frag(  VertexToPixel v2f
 
    
    
-   CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+   CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 }

@@ -183,12 +183,12 @@ namespace CustomInspector.Documentation
 
             [Space2(20)]
             [BackgroundColor(FixedColor.CherryRed)]
-            [Title("Important", upperSpacing = 2,
+            [Header2("Important", upperSpacing = 2,
                                 alignment = TextAlignment.Center,
                                 fontSize = 15)]
             public int yourNumber;
 
-            [Title("My GameObject")]
+            [Header2("My GameObject")]
             [BackgroundColor(FixedColor.DustyBlue)]
             public GameObject gob;
         }
@@ -327,7 +327,7 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class DisplayAutoPropertyAttributeExamples
         {
-            [field: Title("Field")]
+            [field: Header2("Field")]
             [field: SerializeField, Min2(0)]
             public int Foo
             { get; private set; } = 45;
@@ -482,12 +482,12 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class GUIColorAttributeExamples
         {
-            [Title("Integers")]
+            [Header2("Integers")]
             public int a;
             public int b;
 
             [GUIColor(FixedColor.Cyan)]
-            [Title("My colors")]
+            [Header2("My colors")]
             [GUIColor]
             public string s1 = "Hello World!";
             [GUIColor(FixedColor.Red, colorWholeUI: false)]
@@ -515,7 +515,7 @@ namespace CustomInspector.Documentation
             [HideField] public bool _;
 
             // attributes are visible
-            [Title("This title is still shown")]
+            [Header2("This Header2 is still shown")]
             [HideField]
             public bool a1;
             public bool a2;
@@ -524,7 +524,7 @@ namespace CustomInspector.Documentation
             [HideField] public bool __;
 
             // attributes are hidden
-            [Title("This title is hidden")]
+            [Header2("This Header2 is hidden")]
             [HideInInspector]
             public bool b1;
             public bool b2;
@@ -537,7 +537,7 @@ namespace CustomInspector.Documentation
         {
             [HorizontalLine("With parameters")]
 
-            [Title("Logs previous and new value in console")]
+            [Header2("Logs previous and new value in console", bold = false)]
             [MessageBox("Change this value and look into the console", MessageBoxType.Info)]
             [Hook(nameof(LogInput))]
             public float value = 0;
@@ -545,6 +545,15 @@ namespace CustomInspector.Documentation
             void LogInput(float oldValue, float newValue)
             {
                 Debug.Log($"Changed from {oldValue} to {newValue}");
+            }
+
+            [Header2("Logs changes on enter (see DelayedAttribute)", bold = false)]
+            [Delayed2]
+            [Hook(nameof(LogMessageChange))]
+            public string message = "New message";
+            void LogMessageChange(string newValue)
+            {
+                Debug.Log(newValue);
             }
 
             [HorizontalLine("Without parameters")]
@@ -619,7 +628,7 @@ namespace CustomInspector.Documentation
             class SceneInfos
             {
                 [ForceFill] public string name = "Start Scene";
-                [Title("Some Info")]
+                [Header2("Some Info")]
                 [Min(0)] public int loadingTime = 5;
                 public GameObject prefab = null;
 
@@ -711,17 +720,17 @@ namespace CustomInspector.Documentation
             [LabelSettings("My < new - Label :)")]
             public int a;
 
-            [Title("Short names?")]
+            [Header2("Short names?")]
             [LabelSettings(LabelStyle.NoSpacing)]
             public string _short = "Tired of too big label space??";
 
-            [Title("You want an empty label?")]
+            [Header2("You want an empty label?")]
             public string message = "John";
 
             [LabelSettings(LabelStyle.EmptyLabel)]
             public string message2 = "Smith";
 
-            [Title("You want no label?")]
+            [Header2("You want no label?")]
             [LabelSettings(LabelStyle.NoLabel)]
             public string longString = "My very long string";
         }
@@ -731,11 +740,11 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class LayerAttributeExamples
         {
-            [Title("Any Layer:")]
+            [Header2("Any Layer:")]
 
             [Layer] public int layer;
 
-            [Title("Specific Layers:")]
+            [Header2("Specific Layers:")]
 
             [Layer("Default")]
             public int layer1;
@@ -749,15 +758,52 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class MaskAttributeExamples
         {
+            [HorizontalLine("integers")]
+
             [MessageBox("Here are the first 5 bits of the integer (represented as booleans)", MessageBoxType.Info)]
+
             [Mask(5)] public int myInt = 5;
 
-            [Space2(10)]
+            [Mask(" x ", "y:", "z = ")]
+            public int FreezePosition = 0;
+
+            // enum definition
+            public enum PositionConstraints
+            {
+                None = 0,
+                FreezeX = 1 << 0,
+                FreezeY = 1 << 1,
+                FreezeZ = 1 << 2,
+                FreezeAll = FreezeX | FreezeY | FreezeZ
+            }
+            // You can read/write the value the enum
+            public PositionConstraints positionConstraints
+            {
+                get => (PositionConstraints)FreezePosition;
+                set => FreezePosition = (int)value;
+            }
+
+            // You can read from masks by bitshifting
+            void Start()
+            {
+                bool thirdBool
+                    = (myInt & (1 << 3)) != 0;
+            }
+
+            [HorizontalLine("vectors")]
+
+            [Mask]
+            public Vector3 maskRepresentation = new Vector3(0, 1, 0);
+
+            [ShowProperty(nameof(maskRepresentation),
+                label = "Vector representation: ",
+                removePreviousAttributes = true,
+                isReadonly = true)]
+
+            [HorizontalLine("enums")]
 
             [MessageBox("Select multiple enum values at once.", MessageBoxType.Info)]
             [Mask] public RigidbodyConstraints rc;
-
-            [Space2(10)]
 
             [Mask]
             public Ability ability
@@ -768,33 +814,6 @@ namespace CustomInspector.Documentation
                 Hear = 1 << 1,
                 Walk = 1 << 2,
                 HearAndWalk = Hear | Walk,
-            }
-
-            void Start()
-            {
-                bool thirdBool
-                    = (myInt & (1 << 3)) != 0;
-            }
-
-            [Space2(10)]
-            //--- a deeper example showing how to work with the values
-
-            //The value
-            [Mask(" x ", " y ", " z ")] public int FreezePosition = 0;
-            //enum definition
-            public enum PositionConstraints
-            {
-                None = 0,
-                FreezeX = 1 << 0,
-                FreezeY = 1 << 1,
-                FreezeZ = 1 << 2,
-                FreezeAll = FreezeX | FreezeY | FreezeZ
-            }
-            //You can read/write the value the enum
-            public PositionConstraints positionConstraints
-            {
-                get => (PositionConstraints)FreezePosition;
-                set => FreezePosition = (int)value;
             }
         }
 
@@ -829,7 +848,7 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class MessageBoxAttributeExamples
         {
-            [Title("Here are some message-boxes:")]
+            [Header2("Here are some message-boxes:")]
             [MessageBox("Booleans",
                     MessageBoxType.Info)]
             public bool myBool1 = true;
@@ -911,7 +930,7 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class ProgressBarAttributeExamples
         {
-            [Title("Progress Bars:")]
+            [Header2("Progress Bars:")]
             [Space2(20)]
 
             //You can set a maximum value
@@ -947,8 +966,11 @@ namespace CustomInspector.Documentation
             [HorizontalLine("Disabled")]
 
             [SerializeField, ReadOnly] int n;
-            [SerializeField, ReadOnly] GameObject gob;
-            [SerializeField, ReadOnly] Sprite spr;
+
+            [Button(nameof(Start), size = Size.small)]
+            [ReadOnly]
+            [Button(nameof(Start), size = Size.small)]
+            [SerializeField] Sprite spr;
 
             [HorizontalLine("Only Text")]
 
@@ -965,7 +987,31 @@ namespace CustomInspector.Documentation
             i1 = "This is a very deep explanation..",
             i2 = "Oho, what do i see there",
             i3 = "Hello World!";
+
+            void Start()
+            {
+
+            }
         }
+
+        [SerializeField] RequireHasComponentAttributeExamples requireHasComponentAttributeExamples = new RequireHasComponentAttributeExamples();
+
+        [System.Serializable]
+        class RequireHasComponentAttributeExamples
+        {
+            [MessageBox("Assign prefabs in here what they have attached to their root", MessageBoxType.Info)]
+
+            [Header2("Requires Camera")]
+
+            [RequireHasComponent(typeof(Camera))]
+            public Component myComponent;
+
+            [Header2("Requires Camera and AudioListener")]
+
+            [RequireHasComponent(typeof(Camera), typeof(AudioListener))]
+            public GameObject myGameObject;
+        }
+
 
         [SerializeField] RequireTypeAttributeExamples requireTypeAttributeExamples = new RequireTypeAttributeExamples();
 
@@ -1240,6 +1286,8 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class ShowPropertyAttributeExamples
         {
+            [HorizontalLine("Show property again")]
+
             [ShowProperty("myClass.enabled", label = "Use Class")]
 
             [SerializeField, ShowIf("myClass.enabled"), Indent(-1)]
@@ -1253,6 +1301,16 @@ namespace CustomInspector.Documentation
                 public int a;
                 public int b;
             }
+
+            [HorizontalLine("Remove previous attributes")]
+
+            [MessageBox("Here the [ShowIf] was removed causing class to be always shown", MessageBoxType.Info)]
+
+            [ShowProperty(nameof(myClass),
+                removePreviousAttributes = true,
+                isReadonly = true)]
+
+            [SerializeField, HideField] bool __;
         }
 
         [SerializeField] Space2AttributeExamples space2AttributeExamples = new Space2AttributeExamples();
@@ -1314,20 +1372,22 @@ namespace CustomInspector.Documentation
             [Tag] public string tag2;
         }
 
-        [SerializeField] TitleAttributeExamples titleAttributeExamples = new TitleAttributeExamples();
+        [SerializeField] Header2AttributeExamples header2AttributeExamples = new Header2AttributeExamples();
 
         [System.Serializable]
-        class TitleAttributeExamples
+        class Header2AttributeExamples
         {
-            [Title("My Class", underlined: true,
+            [Header2("My Class",
+                underlined = true,
+                bold = true,
                 fontSize = 15,
                 alignment = TextAlignment.Center)]
 
             [HorizontalLine("")]
 
-            [MessageBox("The [Title]-attribute allows other attributes to draw before", MessageBoxType.Info)]
+            [MessageBox("The [Header2]-attribute allows other attributes to draw before", MessageBoxType.Info)]
             [Button(nameof(MyFunc), label = "Button1")]
-            [Title("My Boolean")]
+            [Header2("My Boolean")]
             [Button(nameof(MyFunc), label = "Button2")]
             public bool b1;
 
@@ -1494,12 +1554,12 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class DynamicSliderExamples
         {
-            [Title("A changable range")]
+            [Header2("A changable range")]
             [DynamicSlider]
             public DynamicSlider sliderValue
                 = new DynamicSlider(5, 1, 10);
 
-            [Title("Only one custom side")]
+            [Header2("Only one custom side")]
             [DynamicSlider]
             public DynamicSlider value2
                 = new DynamicSlider(5, 1, 10, FixedSide.FixedMin);
@@ -1597,6 +1657,12 @@ namespace CustomInspector.Documentation
                                        new Vector2(50, 10),
                                        new Vector2(50, 0)});
 
+            [LineGraph]
+            public LineGraph timescalePerLevel
+                = new LineGraph(new Vector2[]{ new Vector2(1, 1),
+                                       new Vector2(5, 2),
+                                       new Vector2(50, 5)});
+
 
             private void Start()
             {
@@ -1653,7 +1719,11 @@ namespace CustomInspector.Documentation
             [Button(nameof(LogWarning))]
             [Button(nameof(LogError))]
 
-            [MessageDrawer] public MessageDrawer md = new MessageDrawer();
+            [Header2("Max Messages are capped by the maxMessageCount parameter", bold = false)]
+
+            [MessageDrawer]
+            public MessageDrawer md
+                = new MessageDrawer(maxMessageCount: 3);
 
             void LogTime()
             {
@@ -1945,7 +2015,7 @@ namespace CustomInspector.Documentation
         {
             [HorizontalLine("Default")]
 
-            [Title("My Values")]
+            [Header2("My Values")]
             public string hello = "Hello!";
 
 
@@ -2004,13 +2074,13 @@ namespace CustomInspector.Documentation
         [System.Serializable]
         class ColorUsageAttributeExamples
         {
-            [Title("Alpha")]
+            [Header2("Alpha")]
             [ColorUsage(showAlpha: true)]
             public Color c1 = Color.white;
             [ColorUsage(showAlpha: false)]
             public Color c2 = Color.red;
 
-            [Title("HDR")]
+            [Header2("HDR")]
             [ColorUsage(true, hdr: true)]
             public Color c3 = Color.magenta;
             [ColorUsage(true, hdr: false)]

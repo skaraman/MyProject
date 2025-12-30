@@ -1,5 +1,6 @@
 using CustomInspector.Extensions;
 using System;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -79,7 +80,23 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            return DrawProperties.GetPropertyHeight(label, property);
+            ReadOnlyAttribute readOnlyAttr = (ReadOnlyAttribute)attribute;
+            if (readOnlyAttr.disableStyle == DisableStyle.OnlyText)
+            {
+                string valueString;
+                try
+                {
+                    valueString = property.GetValue().ToString();
+                }
+                catch (NotSupportedException e)
+                {
+                    valueString = e.Message;
+                }
+                return EditorGUIUtility.singleLineHeight * (1 + valueString.Count(c => c == '\n'))
+                    + EditorGUIUtility.standardVerticalSpacing;
+            }
+            else
+                return DrawProperties.GetPropertyHeight(label, property);
         }
     }
 }

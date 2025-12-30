@@ -12,7 +12,8 @@ namespace CustomInspector
     /// Time complexity: access = O(log(n)) , add/remove = O(n)
     /// </summary>
     [System.Serializable]
-    public class SerializableSortedSet<T> : SerializableSet<T>, ICollection, ICollection<T>, IEnumerable, IEnumerable<T> where T : IComparable
+    public class SerializableSortedSet<T> : SerializableSet<T>, ICollection, ICollection<T>, IEnumerable, IEnumerable<T>, IReadOnlyCollection<T>
+        where T : IComparable
     {
         /// <returns>If item was added(true) or was already in set(false)</returns>
         public override bool TryAdd(T item)
@@ -200,7 +201,8 @@ namespace CustomInspector
                             throw new ArgumentException($"Item '{value}' already existed in set at previous position");
                         case > 0: // list[index-1] > value
                             throw new ArgumentException($"Could not insert {value} at position {index} because element at previous position is greater");
-                    };
+                    }
+                    ;
                 }
                 if (index + 1 < Count)
                 {
@@ -212,7 +214,8 @@ namespace CustomInspector
                             throw new ArgumentException($"Item '{value}' already existed in set at previous position");
                         case > 0: // list[index+1] > value
                             break;
-                    };
+                    }
+                    ;
                 }
                 values[index] = value;
             }
@@ -237,7 +240,8 @@ namespace CustomInspector
                         values.Sort();
                         Internal_OnDeserialization(sender);
                         return;
-                };
+                }
+                ;
             }
 #endif
         }

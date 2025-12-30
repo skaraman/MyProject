@@ -221,7 +221,7 @@ namespace CustomInspector.Extensions
                     => throw new ArgumentException("PropertyRoot cannot be an array");
                 public bool IsArray()
                     => false;
-                public string Name => obj.targetObject.name;
+                public string Name => obj.targetObject.GetType().Name;
             }
             public class ChildProp : IFindProperties
             {
@@ -240,7 +240,9 @@ namespace CustomInspector.Extensions
                 {
                     if (property == null)
                         throw new NullReferenceException("property is null");
-                    if (!property.isArray && property.propertyType != SerializedPropertyType.Generic)
+                    if (!property.isArray
+                        && property.propertyType != SerializedPropertyType.Generic
+                        && property.propertyType != SerializedPropertyType.ManagedReference) // managed references are runtime interpreted types, where given type is just the unsealed base class
                         throw new NotSupportedException($"{property.propertyType} not supported");
 
                     this.property = property;
@@ -311,7 +313,8 @@ namespace CustomInspector.Extensions
         => property.IsArrayElement(out var _);
 
         /// <summary>
-        /// This repairs broken labels and marks them as validated and if it was changed, it marks it so label does not change afterwards
+        /// This repairs broken labels and marks them as validated and if it was changed, it marks it so label does not change afterwards.
+        /// Call this with null-label to generate a new label
         /// </summary>
         public static GUIContent ValidateLabel(GUIContent label, SerializedProperty property)
         {
@@ -484,7 +487,7 @@ namespace CustomInspector.Extensions
                 invokableMethod = GetMethodOnOwner(property, methodPath, parameterTypes);
                 return true;
             }
-            catch
+            catch (MissingMethodException)
             {
                 invokableMethod = null;
                 return false;

@@ -23,7 +23,7 @@ namespace CustomInspector
     /// </summary>
     /// <typeparam name="T"></typeparam>
     [System.Serializable]
-    public class SerializableSet<T> : ICollection, ICollection<T>, IEnumerable, IEnumerable<T>, IDeserializationCallback
+    public class SerializableSet<T> : ICollection, ICollection<T>, IEnumerable, IEnumerable<T>, IDeserializationCallback, IReadOnlyCollection<T>
     {
         [MessageBox("Use the [SetAttribute] attribute for displaying in the inspector", MessageBoxType.Error)]
         [SerializeField, HideField] bool info;

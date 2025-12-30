@@ -59,33 +59,33 @@ public class MouseManager : MonoBehaviour {
         lastClickedTarget = target;
         clickCacheTimer = clickCacheDuration;
         MessageBus.Send(clickKey, target);
-        Debug.Log($"[MouseManager] Left Click on: {target.name}");
+        // Debug.Log($"[MouseManager] Left Click on: {target.name}");
       }
 
       if (mouse.leftButton.wasReleasedThisFrame) {
         var releaseTarget = clickCacheTimer > 0 ? lastClickedTarget : target;
         MessageBus.Send(releaseKey, releaseTarget);
-        Debug.Log($"[MouseManager] Left Release on: {releaseTarget?.name}");
+        // Debug.Log($"[MouseManager] Left Release on: {releaseTarget?.name}");
       }
 
       if (mouse.rightButton.wasPressedThisFrame) {
         MessageBus.Send(rightClickKey, target);
-        Debug.Log($"[MouseManager] Right Click on: {target.name}");
+        // Debug.Log($"[MouseManager] Right Click on: {target.name}");
       }
 
       if (mouse.rightButton.wasReleasedThisFrame) {
         MessageBus.Send(rightReleaseKey, target);
-        Debug.Log($"[MouseManager] Right Release on: {target.name}");
+        // Debug.Log($"[MouseManager] Right Release on: {target.name}");
       }
 
       if (mouse.middleButton.wasPressedThisFrame) {
         MessageBus.Send(middleClickKey, target);
-        Debug.Log($"[MouseManager] Middle Click on: {target.name}");
+        // Debug.Log($"[MouseManager] Middle Click on: {target.name}");
       }
 
       if (mouse.middleButton.wasReleasedThisFrame) {
         MessageBus.Send(middleReleaseKey, target);
-        Debug.Log($"[MouseManager] Middle Release on: {target.name}");
+        // Debug.Log($"[MouseManager] Middle Release on: {target.name}");
       }
     }
 

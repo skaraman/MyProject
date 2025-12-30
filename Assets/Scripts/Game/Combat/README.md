@@ -22,10 +22,12 @@ The HitBox detects collisions with HurtBoxes and forwards them to HurtBox2D.
 - Optional `hitId` for filtering special hits
 - Prevents self-hits via `ignoreSameRoot`
 - Optionally prevents hitting the same HurtBox multiple times via `hitEachHurtBoxOnce`
+- Optional cooldown window between hits via `hitCooldown`
 
 **Inspector Properties:**
 - `ignoreSameRoot`: If true, ignores contacts with colliders on the same root object (prevents self-hits)
 - `hitEachHurtBoxOnce`: If true, each HurtBox2D can only be hit once while this component is enabled
+- `hitCooldown`: Minimum time in seconds between successful hits (0 disables cooldown)
 - `hitId`: Optional identifier for filtering hit reactions (attack name/type)
 
 ### HurtBox2D

@@ -50,6 +50,7 @@ namespace CustomInspector.Documentation
 
         private void OnValidate()
         {
+            Debug.Assert(lineIndices != null, "lineIndices must not be null!");
             if (codeSnippetsFile == null)
                 return; // happens too oft - the user shouldnt notice
 
@@ -373,6 +374,7 @@ namespace CustomInspector.Documentation
         /// <summary>
         /// Each line first character index
         /// </summary>
+        [NonSerialized]
         List<int> lineIndices = new List<int>() { 0 };
 
         int LineIndexToCharacterIndex(int index)
@@ -385,7 +387,9 @@ namespace CustomInspector.Documentation
         int CharacterIndexToLineIndex(int index)
         {
             //if not calculated yet
-            if (lineIndices.Last() < index)
+            if (lineIndices == null || lineIndices.Count == 0) // bugfix-workaround: Unity serialization overrode lineIndices even tough it was readonly and [NonSerialized]
+                lineIndices = new List<int>() { 0 };
+            if (lineIndices.Count == 0 || lineIndices.Last() < index)
             {
                 while (CalcNextLine() < index) { }
 

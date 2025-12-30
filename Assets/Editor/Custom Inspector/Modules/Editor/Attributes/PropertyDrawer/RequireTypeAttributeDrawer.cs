@@ -8,7 +8,7 @@ namespace CustomInspector.Editor
     /// Draws an ObjectField constrained to given type like some interface
     /// </summary>
     [CustomPropertyDrawer(typeof(RequireTypeAttribute))]
-    public class RequireTypeDrawer : PropertyDrawer
+    public class RequireTypeAttributeDrawer : PropertyDrawer
     {
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {

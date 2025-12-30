@@ -29,7 +29,8 @@ namespace CustomInspector
 
         public ReadOnlyAttribute(DisableStyle disableStyle = DisableStyle.GreyedOut, LabelStyle labelStyle = LabelStyle.FullSpacing)
         {
-            order = -5;
+            if (this.disableStyle == DisableStyle.GreyedOut)
+                order = -10;
             this.disableStyle = disableStyle;
             this.labelStyle = labelStyle;
         }

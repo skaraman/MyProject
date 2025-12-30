@@ -49,8 +49,14 @@ namespace CustomInspector.Editor
 
         public class GlobalDisable : IDisposable
         {
-            public GlobalDisable() => isGlobalDisabled = true;
-            public void Dispose() => isGlobalDisabled = false;
+            readonly bool previousState;
+            public GlobalDisable(bool isDisabled = true)
+            {
+                previousState = isGlobalDisabled;
+                isGlobalDisabled = isDisabled;
+            }
+
+            public void Dispose() => isGlobalDisabled = previousState;
         }
     }
 }

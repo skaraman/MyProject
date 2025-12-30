@@ -28,16 +28,17 @@ public class DestructionManager : MonoBehaviour {
     if (pieces.Count == 0) return;
     var active = new List<Piece>();
     for (var i = 0; i < pieces.Count; i++) {
-      if (pieces[i] != null) active.Add(pieces[i]);
+      pieces[i].gameObject.SetActive(false);
+      active.Add(pieces[i]);
     }
     var count = Random.Range(1, piecesRoot.childCount);
     Shuffle(active);
     for (var i = 0; i < active.Count; i++) {
-      active[i].gameObject.SetActive(i < count);
       active[i].ResetPiece();
     }
     for (var i = 0; i < count; i++) {
       var p = active[i];
+      p.gameObject.SetActive(true);
       var f = new Vector2(Random.Range(planarForceMin.x, planarForceMax.x), Random.Range(planarForceMin.y, planarForceMax.y));
       var t = Random.Range(torqueMin, torqueMax);
       p.Launch(f, t);

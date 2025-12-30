@@ -7,7 +7,7 @@ namespace CustomInspector
     /// <summary>
     /// An extension to the unitys built-in [Min]-attribute that also accepts references in form of relative paths
     /// </summary>
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
     public class Min2Attribute : ComparablePropertyAttribute, IMinMaxAttribute
     {

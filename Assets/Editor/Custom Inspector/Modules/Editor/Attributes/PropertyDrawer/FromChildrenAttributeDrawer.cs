@@ -124,7 +124,8 @@ namespace CustomInspector.Editor
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            if (property.propertyType != SerializedPropertyType.ObjectReference)
+            PropInfo propInfo = cache.GetInfo(property, attribute, fieldInfo);
+            if (!string.IsNullOrEmpty(propInfo.ErrorMessage))
             {
                 return DrawProperties.GetPropertyWithMessageHeight(label, property);
             }

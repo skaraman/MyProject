@@ -21,6 +21,15 @@ namespace CustomInspector
         /// </summary>
         public string tooltip = null;
 
+        /// <summary>
+        /// If referenced property should be displayed raw without attributes on original getPropertyPath
+        /// </summary>
+        public bool removePreviousAttributes = false;
+        /// <summary>
+        /// If referenced property of getPropertyPath should be displayed readonly
+        /// </summary>
+        public bool isReadonly = false;
+
 
         /// <param name="getPropertyPath">The name of the property to display</param>
         public ShowPropertyAttribute(string getPropertyPath)

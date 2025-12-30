@@ -40,7 +40,7 @@ namespace CustomInspector.Editor
             if (messages.IsExisting)
             {
                 var mList = (List<(string content, MessageBoxType type)>)messages.GetValue();
-                if (mList.Count > 0)
+                if (mList != null && mList.Count > 0) // NullCheck is a hotfix for when message drawers serialization breaks and loses all data
                 {
                     using (new NewIndentLevel(0))
                     {
@@ -75,7 +75,7 @@ namespace CustomInspector.Editor
 
             if (messages.IsExisting)
             {
-                return (messageSize + EditorGUIUtility.standardVerticalSpacing) * ((IList)messages.GetValue()).Count;
+                return (messageSize + EditorGUIUtility.standardVerticalSpacing) * ((IList)messages.GetValue())?.Count ?? 0; // // NullCheck is a hotfix for when message drawers serialization breaks and loses all data
             }
             else
             {

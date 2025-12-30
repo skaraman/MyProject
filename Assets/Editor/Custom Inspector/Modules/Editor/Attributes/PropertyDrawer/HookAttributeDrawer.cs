@@ -114,9 +114,10 @@ namespace CustomInspector.Editor
         class PropInfo : ICachedPropInfo
         {
             public string ErrorMessage { get; private set; }
-            public bool MethodHasParameters { get; private set; }
+            public int MethodParameterCount { get; private set; } = -1;
             /// <summary> A method that executes on with property, oldValue & newValue </summary>
             public Action<SerializedProperty, object, object> HookMethod { get; private set; }
+            /// <summary> Defines, in what scope the attribute will execute (e.g. ín or outside of playing) </summary>
             public Func<bool> IfExecute { get; private set; }
             public PropInfo() { }
             public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
@@ -125,37 +126,37 @@ namespace CustomInspector.Editor
                 HookAttribute attr = (HookAttribute)attribute;
                 Type propertyType = fieldInfo.FieldType;
 
-                InvokableMethod method;
-                try
+                InvokableMethod method = null;
+                // Find a method without parameters
+                if (method == null)
                 {
-                    try
-                    {
-                        method = property.GetMethodOnOwner(attr.methodPath);
-                        MethodHasParameters = false;
-                        ErrorMessage = null;
-                    }
-                    catch
-                    {
-                        method = property.GetMethodOnOwner(attr.methodPath, new Type[] { propertyType, propertyType });
-                        MethodHasParameters = true;
-                        ErrorMessage = null;
-                    }
+                    if (property.TryGetMethodOnOwner(out method, attr.methodPath, new Type[] { }))
+                        MethodParameterCount = 0;
                 }
-                catch (MissingMethodException e)
+                // Find a method with 1 parameter
+                if (method == null)
                 {
-                    ErrorMessage = e.Message + " or without parameters";
-                    return;
+                    if (property.TryGetMethodOnOwner(out method, attr.methodPath, new Type[] { propertyType }))
+                        MethodParameterCount = 1;
                 }
-                catch (Exception e)
+                // Find a method with 2 parameters
+                if (method == null)
                 {
-                    ErrorMessage = e.Message;
+                    if (property.TryGetMethodOnOwner(out method, attr.methodPath, new Type[] { propertyType, propertyType }))
+                        MethodParameterCount = 2;
+                }
+
+                // Test if any method was found
+                if (method == null)
+                {
+                    ErrorMessage = $"Method '{attr.methodPath}' not found in '{property.GetOwnerAsFinder().Name}' with 0-2 parameters of type '{propertyType.Name}'";
                     return;
                 }
 
-                if (!MethodHasParameters && attr.useHookOnly)
+                if (MethodParameterCount <= 0 && attr.useHookOnly)
                 {
                     ErrorMessage = $"HookAttribute: New inputs are not applied, because you set 'useHookOnly', " +
-                            $"but your method on '{attr.methodPath}' did not define the parameters {propertyType} oldValue, {propertyType} newValue";
+                            $"but your method on '{attr.methodPath}' did not define 1 or 2 parameters of type {propertyType}";
                     return;
                 }
 
@@ -168,7 +169,7 @@ namespace CustomInspector.Editor
                 };
 
 
-                if (MethodHasParameters)
+                if (MethodParameterCount == 2)
                 {
                     HookMethod = (p, o, n) =>
                     {
@@ -178,6 +179,24 @@ namespace CustomInspector.Editor
                             {
                                 var owner = DirtyValue.GetOwner(p).GetValue();
                                 method.Info.Invoke(owner, new object[] { o, n });
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogException(e);
+                            }
+                        }
+                    };
+                }
+                else if (MethodParameterCount == 1)
+                {
+                    HookMethod = (p, o, n) =>
+                    {
+                        if (IfExecute())
+                        {
+                            try
+                            {
+                                var owner = DirtyValue.GetOwner(p).GetValue();
+                                method.Info.Invoke(owner, new object[] { n });
                             }
                             catch (Exception e)
                             {

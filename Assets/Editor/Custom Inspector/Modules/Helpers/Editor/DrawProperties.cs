@@ -17,6 +17,7 @@ namespace CustomInspector.Extensions
             Debug.Assert(property != null);
             EditorGUI.PropertyField(position: position, label: label, property: property, includeChildren: includeChildren);
         }
+
         /// <summary>
         /// No label, but generics get theirself toString() in the foldout
         /// </summary>
@@ -48,20 +49,24 @@ namespace CustomInspector.Extensions
                 }
             }
         }
+
         public static void PropertyFieldWithFoldout(Rect position, GUIContent label, SerializedProperty property, bool includeChildren = true)
         {
             label = PropertyValues.ValidateLabel(label, property);
             property.isExpanded = EditorGUI.Foldout(position, property.isExpanded, label);
             EditorGUI.PropertyField(position, property, new GUIContent(" "), includeChildren);
         }
+
         public static float GetPropertyHeight(GUIContent label, SerializedProperty property, bool includeChildren = true)
         {
             Debug.Assert(property != null, "Property cannot be null");
             Debug.Assert(label != null, "Label should not be null. If you dont want a label use the GUIContent(\"\") or GUIContent(\" \")");
             return EditorGUI.GetPropertyHeight(property, label, includeChildren);
         }
+
         public static float GetPropertyHeight(SerializedProperty property, bool includeChildren = true)
             => EditorGUI.GetPropertyHeight(property, includeChildren);
+
         public static float GetPropertyHeight(SerializedPropertyType type, GUIContent label)
         {
             //!widemode is broken on EditorGUI.GetPropertyHeight
@@ -148,9 +153,11 @@ namespace CustomInspector.Extensions
                     default:
                         EditorGUI.LabelField(position, g, new GUIContent(value.ToString(), label.tooltip));
                         return value;
-                };
+                }
+                ;
             }
         }
+
         public static void DrawLabelSettings(Rect position, SerializedProperty property, GUIContent label, InternalLabelStyle style)
         {
             switch (style)
@@ -203,7 +210,7 @@ namespace CustomInspector.Extensions
             DrawMessageField(messageRect, errorMessage, type);
 
             position.y += messageRect.height + messageBoxEndSpacing;
-            position.height = DrawProperties.GetPropertyHeight(label, property);
+            position.height = DrawProperties.GetPropertyHeight(label, property, includeChildren);
 
             if (disabled)
                 DrawProperties.DisabledPropertyField(position, label, property, includeChildren);
@@ -485,7 +492,6 @@ namespace CustomInspector.Extensions
                     }
                 }
             }
-            [System.Diagnostics.Conditional("UNITY_EDITOR")]
             public static void DrawHeader(Rect position, GUIContent label, SerializedProperty property)
             {
                 TestIfList(property);
@@ -495,13 +501,11 @@ namespace CustomInspector.Extensions
             /// <summary>
             /// Draws a list under a foldout
             /// </summary>
-            [System.Diagnostics.Conditional("UNITY_EDITOR")]
             public static void DrawList(Rect position, GUIContent label, SerializedProperty property)
                 => DrawList(false, position, label, property);
             /// <summary>
             /// Draws a list under a foldout
             /// </summary>
-            [System.Diagnostics.Conditional("UNITY_EDITOR")]
             public static void DrawList(bool isReadOnly, Rect position, GUIContent label, SerializedProperty property)
             {
                 TestIfList(property);
@@ -524,7 +528,6 @@ namespace CustomInspector.Extensions
             /// <summary>
             /// Draws the list readonly if condition true, without top label or foldout
             /// </summary>
-            [System.Diagnostics.Conditional("UNITY_EDITOR")]
             public static void DrawBody(Rect position, SerializedProperty property, bool withLabels = true, bool includeChildren = true)
                 => DrawBody(isReadOnly: false, position, property, withLabels, includeChildren);
             public static void DrawBody(bool isReadOnly, Rect position, SerializedProperty property, bool withLabels = true, bool includeChildren = true)
@@ -594,7 +597,6 @@ namespace CustomInspector.Extensions
                         * (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing);
             }
 
-            [System.Diagnostics.Conditional("UNITY_EDITOR")]
             static void TestIfList(SerializedProperty property)
             {
                 if (property == null)
@@ -609,11 +611,9 @@ namespace CustomInspector.Extensions
                 /// <summary>
                 /// Draws a readonly list with EditorGUILayout in the inspector
                 /// </summary>
-                [System.Diagnostics.Conditional("UNITY_EDITOR")]
                 public static void DrawList(Rect position, GUIContent label, SerializedProperty property)
                     => ListDrawer.DrawList(isReadOnly: true, position: position, label: label, property: property);
 
-                [System.Diagnostics.Conditional("UNITY_EDITOR")]
                 public static void DrawList<T>(Rect position, SerializedProperty owner, IEnumerable<T> list, bool withLabels = true)
                 {
                     if (owner == null)
@@ -633,7 +633,6 @@ namespace CustomInspector.Extensions
                 /// <summary>
                 /// Draws a readonly list without top label or foldout
                 /// </summary>
-                [System.Diagnostics.Conditional("UNITY_EDITOR")]
                 public static void DrawBody(Rect position, SerializedProperty property, bool withLabels = true, bool includeChildren = true)
                     => ListDrawer.DrawBody(isReadOnly: true, position: position, property: property, withLabels: withLabels, includeChildren: includeChildren);
 

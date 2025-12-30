@@ -1,5 +1,5 @@
 BEGIN_OPTIONS
-	CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+	CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 	ShaderName "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
 END_OPTIONS
 	
@@ -1004,10 +1004,14 @@ BEGIN_CODE
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+		
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -1424,6 +1428,7 @@ BEGIN_CODE
 		//------------------
 
         col *= _Color;
+		
 		o.Albedo = col;
 		col.a *= _Alpha;
         clip(col.a - _AlphaCutoffValue - 0.01);

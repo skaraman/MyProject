@@ -1229,6 +1229,6 @@
             ENDCG
         }
     }
-	CustomEditor "AllIn1SpriteShaderMaterialInspector"
+	CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderMaterialInspector"
 	//Fallback "Sprites/Default" //Remove fallback so that any shader error is obvious to the user
 }

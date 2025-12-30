@@ -8,13 +8,20 @@ namespace CustomInspector
     [Conditional("UNITY_EDITOR")]
     public class MaskAttribute : ComparablePropertyAttribute
     {
-        public readonly int bitsAmount = 3;
+        /// <summary>
+        /// Shows the requested names for each displayed bit.
+        /// Never null, but members can be null.
+        /// </summary>
         public readonly string[] bitNames = null;
 
         /// <summary>
         /// Used without parameters for enums that should be displayed as mask
         /// </summary>
-        public MaskAttribute() { }
+        public MaskAttribute()
+            : this(3) // show 3 bits by default
+        {
+            bitNames = new string[3];
+        }
         /// <summary>
         /// bitsAmount is only used for integers and not enums
         /// </summary>
@@ -22,7 +29,7 @@ namespace CustomInspector
         {
             if (bitsAmount <= 0)
                 Debug.LogWarning($"Bitsamount on {nameof(MaskAttribute)} should not be negative");
-            this.bitsAmount = bitsAmount;
+            bitNames = new string[bitsAmount];
         }
         /// <summary>
         /// Used to label the single bits. The bitAmount equals the amount of names given
@@ -30,9 +37,8 @@ namespace CustomInspector
         public MaskAttribute(params string[] bitNames)
         {
             this.bitNames = bitNames;
-            this.bitsAmount = bitNames.Length;
         }
 
-        protected override object[] GetParameters() => new object[] { bitsAmount, bitNames };
+        protected override object[] GetParameters() => bitNames;
     }
 }

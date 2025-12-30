@@ -1570,7 +1570,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
          // data across stages, stripped like the above.
          struct VertexToPixel
@@ -2726,10 +2726,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -3514,7 +3518,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -5130,7 +5134,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
          
 
@@ -6291,10 +6295,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -7079,7 +7087,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -8733,7 +8741,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
          // data across stages, stripped like the above.
          struct VertexToPixel
@@ -9882,10 +9890,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -10670,7 +10682,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -12209,7 +12221,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
          
 
@@ -13356,10 +13368,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -14144,7 +14160,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -15611,7 +15627,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 
 #define _USINGTEXCOORD1 1
 #define _USINGTEXCOORD2 1
-
+#define NEED_FACING 1
 
          
 
@@ -16764,10 +16780,14 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
 			normalTS.xy *= _NormalStrength;
 			o.Normal = normalTS;
 		#endif
-        float normalSign = sign(dot(d.worldSpaceViewDir, d.worldSpaceNormal));
-        o.Normal *= normalSign;
 
-
+		float frontFacing = 1.0;
+		if(d.isFrontFace <= 0.0)
+		{
+			frontFacing = -1.0;
+		}
+		o.Normal *= frontFacing;
+        
 		//GLITCH_ON
 		#if GLITCH_ON
 			half2 uvGlitch = uvRect;
@@ -17552,7 +17572,7 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
              d.texcoord3 = i.texcoord3;
             // #endif
 
-            // d.isFrontFace = facing;
+             d.isFrontFace = facing;
             // #if %VERTEXCOLORREQUIREKEY%
              d.vertexColor = i.vertexColor;
             // #endif
@@ -17721,5 +17741,5 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    }
    
    
-   CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+   CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 }

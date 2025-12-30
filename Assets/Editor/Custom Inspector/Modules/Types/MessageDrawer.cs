@@ -9,7 +9,7 @@ namespace CustomInspector
     /// Only valid for MessageDrawer! Used to fix overriding of other attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
-    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    [Conditional("UNITY_EDITOR")]
     public class MessageDrawerAttribute : ComparablePropertyAttribute
     {
         protected override object[] GetParameters() => null;
@@ -26,9 +26,17 @@ namespace CustomInspector
         [MessageBox("You are overriding the default PropertyDrawer of MessageDrawer", MessageBoxType.Error)]
         [SerializeField, HideField] string info;
 
+        [NonSerialized] private int maxMessageCount;
 #if UNITY_EDITOR
         List<(string, MessageBoxType)> messages = new();
 #endif
+
+        public MessageDrawer(int maxMessageCount = 10)
+        {
+            if (maxMessageCount < 1)
+                throw new ArgumentException("maxMessageCount must be 1 or bigger.");
+            this.maxMessageCount = maxMessageCount;
+        }
 
         /// <summary>
         /// Disposes all current messages
@@ -37,7 +45,7 @@ namespace CustomInspector
         public void HideMessages(bool value)
         {
 #if UNITY_EDITOR
-            messages = null;
+            messages.Clear();
 #endif
         }
 
@@ -55,6 +63,8 @@ namespace CustomInspector
                 messages.Clear();
 
             messages.Add((message, type));
+            if (messages.Count > maxMessageCount)
+                messages = messages.GetRange(messages.Count - maxMessageCount, maxMessageCount);
 #endif
         }
         /// <summary>

@@ -4,9 +4,8 @@ using System.Diagnostics;
 
 namespace CustomInspector
 {
-
     /// <summary>
-    /// Draws an ObjectField constrained to given type like some interface
+    /// Draws an ObjectField constrained to given type (like some interface)
     /// </summary>
     [AttributeUsage(AttributeTargets.Field)]
     [Conditional("UNITY_EDITOR")]

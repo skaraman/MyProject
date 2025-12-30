@@ -189,7 +189,9 @@ public static class HBoxes {
     },
     ["SuperBlast"] = new List<HBox> {
       new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
-
+      new(.33f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
+      new(.02f, new List<Vector2> { new(-1.27f, -1.68f), new(-1.61f, -1.74f), new(-1.68f, -2.17f), new(-1.44f, -2.46f), new(-0.99f, -2.19f) }),
+      new(.21f, new List<Vector2> { new(0.95f, -2.81f), new(0.62f, -2.78f), new(0.55f, -3.00f), new(0.77f, -3.19f), new(1.08f, -2.97f) }),
     },
   };
 

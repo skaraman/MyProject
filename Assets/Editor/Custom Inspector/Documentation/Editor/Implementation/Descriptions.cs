@@ -13,7 +13,6 @@ namespace CustomInspector.Documentation
             ("Adds a horizontal line to divide and structure the inspector."
             , true) },
 
-
             { NewPropertyD.MessageBoxAttribute,
             ("Displays an informational message in the inspector." +
             "\nUseful for providing context or details about a property." +
@@ -46,16 +45,15 @@ namespace CustomInspector.Documentation
             "Useful for selecting values within a custom range."
             , true) },
 
-
             { NewPropertyD.AssetsOnlyAttribute,
             ("Prevents scene objects from being assigned to the property." +
             "\nOnly assets, such as prefabs or imported meshes, can be assigned to the property."
             , true) },
 
-
             { NewPropertyD.ButtonAttribute,
             ("Executes a function when the button is clicked." +
-            "\nUseful for editor scripts or frequently-used functions that should be easily accessible."
+            "\nUseful for editor scripts or frequently-used functions that should be easily accessible." +
+            "\n\nNote: Changes made while not playing will only be tracked on the MonoBehaviour where the method executes. Use UnityEditor.EditorUtility.SetDirty() to save changes made on other objects."
             , true) },
 
             { NewPropertyD.ColorPaletteAttribute,
@@ -66,11 +64,9 @@ namespace CustomInspector.Documentation
             "\n\nNote: Color palettes are saved in the editor preferences and can be shared via right-click -> copy+paste."
             , true) },
 
-
             { NewPropertyD.CopyPasteAttribute,
             ("Provides buttons for copying and pasting of variable values between programs using the system clipboard."
             , true) },
-
 
             { NewPropertyD.DecimalsAttribute,
             ("Limits the number of decimal places that can be entered for a property value." +
@@ -188,6 +184,9 @@ namespace CustomInspector.Documentation
             "\nWith this attribute you can easily make fields visible in the inspector without later wondering if you should change this value"
             , true) },
 
+            { NewPropertyD.RequireHasComponentAttribute,
+            ("Allows only values, that have specific Components attached to the same GameObject."
+            , true) },
 
             { NewPropertyD.RequireTypeAttribute,
             ("Anyone who masters C# will eventually get to the point that they are working with inheritance. " +
@@ -276,16 +275,14 @@ namespace CustomInspector.Documentation
             "\nNote: Does not work on list elements -> use CustomInspector.ListContainer<T> type instead of the System List<T> to apply it to the whole list"
             , true) },
 
-
             { NewPropertyD.TagAttribute,
             ("Makes you select tags from an enum dropdown."
             , true) },
 
-            { NewPropertyD.TitleAttribute,
+            { NewPropertyD.Header2Attribute,
             ("An alternative to the [Header]-attribute that does not always draws first,\ngiving you a more flexible draw order." +
-            "\nIt also allows for defining a tooltip and other options"
+            "\nIt also allows for defining a tooltip and more options"
             , true) },
-
 
             { NewPropertyD.ToolbarAttribute,
             ("A normal toggle or enum dropdown is very small and unobtrusive. " +
@@ -302,7 +299,6 @@ namespace CustomInspector.Documentation
             "\nUse the [Unwrap] to hide the foldout completely"
             , true) },
 
-
             { NewPropertyD.UnitAttribute,
             ("Make the current unit clear so that you can better assess the values"
             , true) },
@@ -311,17 +307,14 @@ namespace CustomInspector.Documentation
             ("Shows the serialized fields of the class instead of it wrapped with a foldout"
             , true) },
 
-
             { NewPropertyD.URLAttribute,
             ("Displays a clickable url in the inspector"
             , true) },
-
 
             { NewPropertyD.ValidateAttribute,
             ("If you only want to allow certain values, " +
             "this attribute is perfect to make it clear what is allowed or not directly when entering it in the inspector"
             , true) },
-
 
             { NewPropertyD.MaskAttribute,
             ("Everyone has seen the constraints on the rigidbody as 3 toggles next to each other " +
@@ -332,11 +325,9 @@ namespace CustomInspector.Documentation
             "Now you can easily show Masks in the inspector as what they are. Note: On integers you should specify how many bits are displayed (default=3)"
             , true) },
 
-
             { NewPropertyD.MaxAttribute,
             ("The counterpart to unitys buildin MinAttribute: Cap the values of numbers or components of vectors to a given maximum"
             , true) },
-
 
             { NewPropertyD.MultipleOfAttribute,
             ("It allows only multiples of a given number. The number can be passed by value or by name/path of field"
@@ -367,7 +358,6 @@ namespace CustomInspector.Documentation
             "\nNote: Since type drawers are not compatible to attributes by default, you have to add [AssetPath] attribute if you add other attributes"
             , true) },
 
-
             { NewPropertyD.FolderPath,
             ("Since FilePath cannot hold Folders, this is a type that only holds paths leading to folders. " +
             "Invalid paths return NullReferenceExceptions.\n(Also look at FilePath)" +
@@ -392,7 +382,10 @@ namespace CustomInspector.Documentation
             , true) },
 
             { NewPropertyD.MessageDrawer,
-            ("If you want to write something in the inspector at runtime instead of in the console. For non-runtime messages use the MessageBoxAttribute"
+            ("If you want to write something in the inspector at runtime instead of in the console.\n" +
+            "\nNote:\n" +
+            "\t- For non-runtime messages use the MessageBoxAttribute\n" +
+            "\t- Messages are only shown if Inspector updates"
             , true) },
 
             { NewPropertyD.SerializableNullable,
@@ -402,7 +395,6 @@ namespace CustomInspector.Documentation
             "\nFor example, you can assign any of the following three values to a bool? variable: true, false, or null."
             , true) },
 
-
             { NewPropertyD.ReorderableDictionary,
             ("A serializable dictionary that is shown and reordable in the inspector." +
             "\nDuplicate keys are marked in the inspector and won't be added to the dictionary." +
@@ -411,11 +403,9 @@ namespace CustomInspector.Documentation
             "\nTime complexity: access = O(log(n)), add/remove = O(n)"
             , true) },
 
-
             { NewPropertyD.SerializableInterface,
             ("A reference that has already given interface and is saved already casted."
             , true) },
-
 
             { NewPropertyD.SerializableDateTime,
             ("For displaying time in the unity-inspector." +
@@ -432,13 +422,11 @@ namespace CustomInspector.Documentation
             "\nUse SerializableSortedDictionary for better complexity/performance"
             , true) },
 
-
             { NewPropertyD.SerializableSortedDictionary,
             ("A serializable implementation of System.SortedDictionary that can be shown in the inspector." +
             "\nKey has to implement the interface System.IComparable." +
             "\nTime complexity: access = O(log(n)) , add/remove = O(n)"
             , true) },
-
 
             { NewPropertyD.SerializableSet,
             ("A list, with no duplicates possible. Adding a duplicate will lead to an ArgumentException" +
@@ -452,7 +440,6 @@ namespace CustomInspector.Documentation
             ("The equivalent to the System.SortedSet but can be serialized and shown in the unity-inspector" +
             "\nTime complexity: access = O(log(n)), add/remove = O(n)"
             , true) },
-
 
             { NewPropertyD.SerializableTuple,
             ("A serializable version of a Tuple"

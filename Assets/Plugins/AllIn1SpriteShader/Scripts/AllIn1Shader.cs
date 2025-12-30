@@ -29,7 +29,9 @@ namespace AllIn1SpriteShader
 
         private Material currMaterial, prevMaterial;
         private bool destroyed = false;
+#if UNITY_EDITOR
         private bool matAssigned = false;
+#endif
         private enum AfterSetAction { Clear, CopyMaterial, Reset};
 
         [Range(1f, 20f)] public float normalStrength = 5f;
@@ -309,7 +311,9 @@ namespace AllIn1SpriteShader
             if (sr != null)
             {
                 currMaterial = GetComponent<Renderer>().sharedMaterial;
+#if UNITY_EDITOR
                 matAssigned = true;
+#endif
             }
             else
             {
@@ -317,7 +321,9 @@ namespace AllIn1SpriteShader
                 if (img != null)
                 {
                     currMaterial = img.material;
+#if UNITY_EDITOR
                     matAssigned = true;
+#endif
                 }
             }
         }
@@ -328,7 +334,9 @@ namespace AllIn1SpriteShader
             if (sr != null)
             {
                 sr.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+#if UNITY_EDITOR
                 matAssigned = false;
+#endif
             }
             else
             {
@@ -336,7 +344,9 @@ namespace AllIn1SpriteShader
                 if (img != null)
                 {
                     img.material = new Material(Shader.Find("Sprites/Default"));
+#if UNITY_EDITOR
                     matAssigned = false;
+#endif
                 }
             }
             SetSceneDirty();

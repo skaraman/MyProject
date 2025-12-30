@@ -6,8 +6,7 @@ using UnityEngine.U2D.Animation;
 using UnityEditor;
 #endif
 
-public class SpriteWithNormals : MonoBehaviour
-{
+public class SpriteWithNormals : MonoBehaviour {
   public SpriteLibraryAsset colorLibrary;
   public SpriteLibraryAsset normalLibrary;
   public string category = "Breathe";
@@ -17,76 +16,70 @@ public class SpriteWithNormals : MonoBehaviour
   MaterialPropertyBlock _mpb;
   StringBuilder label = new();
 
-  void Awake()
-  {
+  void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
     _mpb = new MaterialPropertyBlock();
     UpdateSpriteAndNormal(0);
   }
 
-  public void SetAnimation(string name)
-  {
+  void OnValidate() {
+    if (colorLibrary == null || normalLibrary == null) return;
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    if (_renderer == null) return;
+    UpdateSpriteAndNormal(0);
+  }
+
+  public void SetAnimation(string name) {
     category = name;
   }
 
   [ForceUpdate]
-  public void ForceUpdateSpriteAndNormal()
-  {
+  public void ForceUpdateSpriteAndNormal() {
     UpdateSpriteAndNormal(0);
   }
 
-  string GetLabel(int frame)
-  {
+  string GetLabel(int frame) {
     label.Clear();
     label.Append(labelPrefix);
-    if (frame != 0 && labelPrefix != "")
-    {
+    if (frame != 0 && labelPrefix != "") {
       label.Append("_").Append(frame);
     }
-    else if (frame != 0 && labelPrefix == "")
-    {
+    else if (frame != 0 && labelPrefix == "") {
       label.Append(frame);
     }
     var result = label.ToString();
     return result;
   }
 
-  public void UpdateSpriteAndNormal(int frame)
-  {
+  public void UpdateSpriteAndNormal(int frame) {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     var currentLabel = GetLabel(frame);
-    if (colorLibrary == null || normalLibrary == null)
-    {
+    if (colorLibrary == null || normalLibrary == null) {
       Debug.LogError("Sprite libraries are not assigned! " + gameObject.name + " " + gameObject.transform.parent?.name);
       return;
     }
     var colorSprite = colorLibrary.GetSprite(category, currentLabel);
     var normalSprite = normalLibrary.GetSprite(category, currentLabel);
-    if (colorSprite == null)
-    {
+    if (colorSprite == null) {
       //Debug.LogWarning("[SpriteWithNormals] Color sprite is null for category=" + category + " label=" + currentLabel + " on " + gameObject.name);
       return;
     }
-    if (normalSprite == null)
-    {
+    if (normalSprite == null) {
       Debug.LogError("Normal sprite not found for category '" + category + "' with label '" + currentLabel + "' " + gameObject.name);
     }
     _renderer.sprite = colorSprite;
     _mpb ??= new MaterialPropertyBlock();
     _renderer.GetPropertyBlock(_mpb);
-    if (normalSprite != null && normalSprite.texture != null)
-    {
+    if (normalSprite != null && normalSprite.texture != null) {
       _mpb.SetTexture("_NormalMap", normalSprite.texture);
     }
-    else
-    {
+    else {
       Debug.LogError("Normal sprite or its texture is missing. " + gameObject.name);
     }
     _renderer.SetPropertyBlock(_mpb);
   }
 
-  public void FlipSprite(bool flip)
-  {
+  public void FlipSprite(bool flip) {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     _renderer.flipX = flip;
   }
@@ -158,7 +151,8 @@ public class SpriteWithNormalsEditor : Editor {
     if (categoryValues.Count == 0) {
       if (!string.IsNullOrEmpty(t.category)) {
         categoryValues.Add(t.category);
-      } else {
+      }
+      else {
         categoryValues.Add("Default");
       }
     }

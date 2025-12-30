@@ -246,6 +246,8 @@ public class GameplayInput : MonoBehaviour {
     erb.linearVelocityX = moveInput.x * speed * moveMultiplier;
     erb.linearVelocityY = moveInput.y * speed * moveMultiplier;
 
+    if (stanceTimeRemainingSeconds > 0f) return;
+
     if (gearController.Controller != null) {
       gearController.Controller.SetFacingDirection(moveInput.x);
     }

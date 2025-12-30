@@ -2,13 +2,12 @@
 using System.IO;
 using UnityEditor;
 using UnityEngine;
-using ShaderType = AllIn1SpriteShader.AllIn1Shader.ShaderTypes;
 
 namespace AllIn1SpriteShader
 {
     public class AllIn1ShaderWindow : EditorWindow
     {
-        private const string versionString = "4.5";
+        private const string versionString = "4.63";
         [MenuItem("Tools/AllIn1/SpriteShaderWindow")]
         public static void ShowAllIn1ShaderWindowWindow()
         {
@@ -422,9 +421,13 @@ namespace AllIn1SpriteShader
 
             if (obj == null) return false;
 
-            path = AssetDatabase.GetAssetPath(obj.GetInstanceID());
+#if UNITY_6000_3_OR_NEWER
+			path = AssetDatabase.GetAssetPath(obj.GetEntityId());
+#else
+			path = AssetDatabase.GetAssetPath(obj.GetInstanceID());
+#endif
 
-            if (path.Length > 0)
+			if (path.Length > 0)
             {
                 if (Directory.Exists(path)) return true;
                 else return false;
@@ -664,11 +667,11 @@ namespace AllIn1SpriteShader
             if(!showNotification) return;
             
             GUIContent content = new GUIContent(message);
-            #if UNITY_2019_1_OR_NEWER
+#if UNITY_2019_1_OR_NEWER
             SceneView.lastActiveSceneView.ShowNotification(content, 1.5f);
-            #else
+#else
             SceneView.lastActiveSceneView.ShowNotification(content);
-            #endif
+#endif
         }
         
         public static Shader FindShader(string shaderName)

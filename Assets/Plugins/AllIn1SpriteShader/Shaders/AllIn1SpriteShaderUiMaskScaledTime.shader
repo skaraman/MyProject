@@ -1244,6 +1244,6 @@
             ENDCG
 		}
 	}
-	CustomEditor "AllIn1SpriteShaderUiMaskMaterialInspector"
+	CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderUiMaskMaterialInspector"
 	//Fallback "Sprites/Default" //Remove fallback so that any shader error is obvious to the user
 }

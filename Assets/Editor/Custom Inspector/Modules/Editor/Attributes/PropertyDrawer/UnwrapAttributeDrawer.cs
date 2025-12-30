@@ -48,14 +48,11 @@ namespace CustomInspector.Editor
                 return DrawProperties.GetPropertyWithMessageHeight(label, property);
             }
 
-            IEnumerable<SerializedProperty> props = info.ChildrenPaths.Select(_ => property.serializedObject.FindProperty(_));
+            IEnumerable<SerializedProperty> props = info.ChildrenPaths.Select(x => property.serializedObject.FindProperty(x));
 
-            return props.Select(_ => DrawProperties.GetPropertyHeight(_) + EditorGUIUtility.standardVerticalSpacing).Sum() - EditorGUIUtility.standardVerticalSpacing;
+            return props.Select(x => DrawProperties.GetPropertyHeight(x) + EditorGUIUtility.standardVerticalSpacing).Sum() - EditorGUIUtility.standardVerticalSpacing;
         }
 
-        /// <summary>
-        /// We save them for performance reasons
-        /// </summary>
         static readonly PropInfoCache<PropInfo> cache = new();
         class PropInfo : ICachedPropInfo
         {

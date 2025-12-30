@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace CustomInspector.Helpers
 {
@@ -58,13 +59,13 @@ namespace CustomInspector.Helpers
     /// </summary>
     class ExactPropertyIdentifier
     {
-        readonly SerializedObject targetObject;
+        readonly Object targetObject;
         readonly string propertyPath;
         readonly int attributeHash;
 
         public ExactPropertyIdentifier(SerializedProperty property, PropertyAttribute attribute)
         {
-            targetObject = property.serializedObject;
+            targetObject = property.serializedObject.targetObject;
             propertyPath = property.propertyPath;
             if (attribute is ComparablePropertyAttribute comparableAttr)
                 this.attributeHash = comparableAttr.GetReliableHash();

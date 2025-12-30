@@ -4,10 +4,13 @@ using UnityEngine;
 
 namespace CustomInspector
 {
+    /// <summary>
+    /// Default PropertyAttribute class for all properties of the CustomInspector Asset
+    /// </summary>
     public abstract class ComparablePropertyAttribute : PropertyAttribute
     {
         /// <summary>
-        /// All memebrs that are important for the reliable hash
+        /// All members that are important for the reliable hash
         /// </summary>
         /// <returns></returns>
         protected abstract object[] GetParameters();

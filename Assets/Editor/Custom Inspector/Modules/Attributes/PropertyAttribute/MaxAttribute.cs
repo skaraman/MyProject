@@ -7,7 +7,7 @@ namespace CustomInspector
     /// <summary>
     /// Sets a maximum value for inputs in the inspector in form of a number or a reference (given by path)
     /// </summary>
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = true)]
     [Conditional("UNITY_EDITOR")]
     public class MaxAttribute : ComparablePropertyAttribute, IMinMaxAttribute
     {

@@ -1,5 +1,13 @@
 ﻿using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
+
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.UIElements.InputSystem;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.UI;
+#endif
 
 namespace AllIn1SpriteShader
 {
@@ -17,9 +25,35 @@ namespace AllIn1SpriteShader
         private Color[] targetColors;
         private Color[] currentColors;
 
+		private EventSystem eventSystem;
+
+		// Custom sort axis fields
+		private Camera mainCamera;
+		private TransparencySortMode originalSortMode;
+		private Vector3 originalSortAxis;
+		private bool sortingWasModified = false;
+
         void Start()
         {
-            currExpositor = 0;
+			EventSystem eventSystemInScene = GameObject.FindAnyObjectByType<EventSystem>();
+			if (eventSystemInScene != null)
+			{
+				GameObject.Destroy(eventSystemInScene.gameObject);
+			}
+
+			GameObject goEventSystem = new GameObject("Event System");
+			eventSystem = goEventSystem.AddComponent<EventSystem>();
+
+#if ENABLE_INPUT_SYSTEM
+			goEventSystem.AddComponent<InputSystemUIInputModule>();
+#elif ENABLE_LEGACY_INPUT_MANAGER
+			goEventSystem.AddComponent<StandaloneInputModule>();
+#endif
+
+			// Setup custom sort axis
+			SetupCustomSortAxis();
+
+			currExpositor = 0;
             SetExpositorText();
 
             for (int i = 0; i < expositors.Length; i++) expositors[i].transform.position = new Vector3(0, expositorDistance * i, 0);
@@ -47,27 +81,27 @@ namespace AllIn1SpriteShader
             backgroundMat.SetColor("_GradBotRightCol", currentColors[3]);
         }
 
-        private void GetInput()
-        {
-            if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
-            {
-                expositors[currExpositor].ChangeTarget(-1);
-            }
-            else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
-            {
-                expositors[currExpositor].ChangeTarget(1);
-            }
-            else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
-            {
-                ChangeExpositor(-1);
-            }
-            else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
-            {
-                ChangeExpositor(1);
-            }
-        }
+		private void GetInput()
+		{
+			if (AllIn1InputSystem.GetKeyDown(KeyCode.LeftArrow) || AllIn1InputSystem.GetKeyDown(KeyCode.A))
+			{
+				expositors[currExpositor].ChangeTarget(-1);
+			}
+			else if (AllIn1InputSystem.GetKeyDown(KeyCode.RightArrow) || AllIn1InputSystem.GetKeyDown(KeyCode.D))
+			{
+				expositors[currExpositor].ChangeTarget(1);
+			}
+			else if (AllIn1InputSystem.GetKeyDown(KeyCode.UpArrow) || AllIn1InputSystem.GetKeyDown(KeyCode.W))
+			{
+				ChangeExpositor(-1);
+			}
+			else if (AllIn1InputSystem.GetKeyDown(KeyCode.DownArrow) || AllIn1InputSystem.GetKeyDown(KeyCode.S))
+			{
+				ChangeExpositor(1);
+			}
+		}
 
-        private void ChangeExpositor(int offset)
+		private void ChangeExpositor(int offset)
         {
             currExpositor += offset;
             if (currExpositor > expositors.Length - 1) currExpositor = 0;
@@ -82,5 +116,73 @@ namespace AllIn1SpriteShader
         }
 
         public int GetCurrExpositor() { return currExpositor; }
+
+		private void SetupCustomSortAxis()
+		{
+			mainCamera = Camera.main;
+			if (mainCamera == null)
+			{
+				Debug.LogWarning("All1ShaderDemoController: Main camera not found. Custom sort axis will not be applied.");
+				return;
+			}
+
+			// Save original settings
+			originalSortMode = mainCamera.transparencySortMode;
+			originalSortAxis = mainCamera.transparencySortAxis;
+
+			// Detect render pipeline
+			string pipelineType = GetRenderPipelineType();
+
+			try
+			{
+				// Apply custom sort axis for all pipelines
+				// This is a Camera property that works across all render pipelines
+				mainCamera.transparencySortMode = TransparencySortMode.CustomAxis;
+				mainCamera.transparencySortAxis = new Vector3(0, 0, 1);
+				sortingWasModified = true;
+
+				//Debug.Log($"All1ShaderDemoController: Custom sort axis applied successfully ({mainCamera.transparencySortAxis}) for {pipelineType}");
+			}
+			catch (System.Exception e)
+			{
+				Debug.LogWarning($"All1ShaderDemoController: Failed to apply custom sort axis for {pipelineType}. Error: {e.Message}");
+				sortingWasModified = false;
+			}
+		}
+
+		private string GetRenderPipelineType()
+		{
+			RenderPipelineAsset currentRP = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+
+			if (currentRP == null)
+			{
+				return "Built-in Render Pipeline";
+			}
+
+			string rpTypeName = currentRP.GetType().Name;
+
+			if (rpTypeName.Contains("Universal") || rpTypeName.Contains("URP"))
+			{
+				return "Universal Render Pipeline (URP)";
+			}
+			else if (rpTypeName.Contains("HD") || rpTypeName.Contains("HighDefinition"))
+			{
+				return "High Definition Render Pipeline (HDRP)";
+			}
+			else
+			{
+				return $"Custom SRP ({rpTypeName})";
+			}
+		}
+
+		private void OnDestroy()
+		{
+			// Restore original camera settings
+			if (sortingWasModified && mainCamera != null)
+			{
+				mainCamera.transparencySortMode = originalSortMode;
+				mainCamera.transparencySortAxis = originalSortAxis;
+			}
+		}
     }
 }

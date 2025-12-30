@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Title
-  m_Shader: {fileID: 4800000, guid: 79ee6cefbc672a44e97359d4d14ea301, type: 3}
+  m_Shader: {fileID: 4800000, guid: 202ffec9202f22e478034613d6beb49c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
@@ -205,6 +205,7 @@ Material:
     - _GlitchAmount: 16.3
     - _GlitchFrequency: 10
     - _GlitchSize: 2.96
+    - _GlitchSpeed: 20
     - _Glow: 5.3
     - _GlowAffectLight: 0
     - _GlowAmount: 0
@@ -390,10 +391,13 @@ Material:
     - _ColorSwapGreen: {r: 1, g: 1, b: 1, a: 1}
     - _ColorSwapR: {r: 1, g: 0, b: 0, a: 1}
     - _ColorSwapRed: {r: 1, g: 1, b: 1, a: 1}
+    - _DistortTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _DistortionSpeed: {r: 0, g: 0, b: 0, a: 0}
     - _DistortionTile: {r: 1, g: 1, b: 0, a: 0}
     - _ExplosionCenters: {r: 0, g: 0, b: 0, a: 0}
     - _FadeBurnColor: {r: 1, g: 1, b: 0, a: 1}
+    - _FadeBurnTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _FadeTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _FadeTextureSize: {r: 1, g: 1, b: 0, a: 0}
     - _FadeTextureSpeed: {r: 0, g: 0, b: 0, a: 0}
     - _GlowColor: {r: 1, g: 0, b: 0, a: 1}
@@ -408,13 +412,17 @@ Material:
     - _HologramColor: {r: 1, g: 1, b: 1, a: 1}
     - _HologramStripeColor: {r: 0, g: 1, b: 1, a: 1}
     - _InnerOutlineColor: {r: 1, g: 0, b: 0, a: 1}
+    - _MainTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _OutColor: {r: 1, g: 1, b: 1, a: 1}
     - _OutDistortionSpeed: {r: 0, g: 0, b: 0, a: 0}
     - _OutDistortionTile: {r: 1, g: 1, b: 0, a: 0}
     - _OutTexTile: {r: 1, g: 1, b: 0, a: 0}
     - _OutlineColor: {r: 0, g: 0, b: 0, a: 1}
+    - _OutlineDistortTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _OutlineTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _OverlayColor: {r: 1, g: 1, b: 1, a: 1}
     - _OverlaySpeed: {r: 0, g: 0, b: 0, a: 0}
+    - _OverlayTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _OverlayTile: {r: 1, g: 1, b: 0, a: 0}
     - _RadialClipCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
     - _ShadowColor: {r: 0, g: 0, b: 0, a: 1}

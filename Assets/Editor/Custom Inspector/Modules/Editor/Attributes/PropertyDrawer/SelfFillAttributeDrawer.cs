@@ -96,22 +96,32 @@ namespace CustomInspector.Editor
                         break;
                     default:
                         throw new NotImplementedException(sa.mode.ToString());
-                };
+                }
+                ;
 
 
 
                 //Check if empty
                 if (property.objectReferenceValue == null)
                 {
-                    if (Application.isPlaying)
-                        Debug.LogError("SelfFill: Value was not set outside of play-mode hence it won't be set consistently.\nPlease open the inspector outside of play-mode at least once to fill the null-value.");
+                    void TrySaving()
+                    {
+                        if (Application.isPlaying)
+                        {
+                            Debug.LogError("SelfFill: Value was not set outside of play-mode hence it won't be set consistently." +
+                                "\nPlease open the inspector outside of play-mode at least once to fill the null-value, at: \n" +
+                                $"'{Common.GetFullPath(property.serializedObject)}' for property '{property.propertyPath}'");
+                        }
+                        property.serializedObject.ApplyModifiedProperties();
+                    }
+
 
                     RequireTypeAttribute requiredInterface = fieldInfo.GetCustomAttribute<RequireTypeAttribute>(); // support for 'require custom type' - like interface
 
                     if (fieldInfo.FieldType == typeof(GameObject))
                     {
                         property.objectReferenceValue = targets.First().gameObject;
-                        property.serializedObject.ApplyModifiedProperties();
+                        TrySaving();
                     }
                     else if (requiredInterface != null)
                     {
@@ -119,7 +129,7 @@ namespace CustomInspector.Editor
 
                         //Check if not found
                         if (property.objectReferenceValue != null)
-                            property.serializedObject.ApplyModifiedProperties();
+                            TrySaving();
                         else
                         {
                             DrawProperties.DrawPropertyWithMessage(position, label, property, $"SelfFill: No component with interface '{requiredInterface.requiredType}' found on '{sa.mode}'", MessageType.Error, disabled: true);
@@ -132,7 +142,7 @@ namespace CustomInspector.Editor
 
                         //Check if not found
                         if (property.objectReferenceValue != null)
-                            property.serializedObject.ApplyModifiedProperties();
+                            TrySaving();
                         else
                         {
                             DrawProperties.DrawPropertyWithMessage(position, label, property, $"SelfFill: No '{fieldInfo.FieldType}' component found on '{sa.mode}'", MessageType.Error, disabled: true);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -45,6 +46,7 @@ namespace CustomInspector.Helpers
                     yield return innerChild;
             }
         }
+
         public static IEnumerable<Transform> GetAllParents(this Transform child)
         {
             while (child.parent != null)
@@ -53,6 +55,7 @@ namespace CustomInspector.Helpers
                 child = child.parent;
             }
         }
+
         public static T GetComponentInDirectChildren<T>(this Transform parent) where T : Component
         {
             foreach (Transform child in parent)
@@ -62,6 +65,29 @@ namespace CustomInspector.Helpers
             }
             return default(T);
         }
+
+        public static string GetFullPath(GameObject gameObject) => GetFullPath(gameObject.transform);
+
+        public static string GetFullPath(Transform child)
+        {
+            if (child.parent == null)
+                return child.gameObject.scene.name + "." + child.name;
+            else
+                return GetFullPath(child.parent) + "." + child.name;
+        }
+
+        public static string GetFullPath(SerializedObject serializedObject)
+        {
+            if (serializedObject.targetObject is GameObject gob)
+                return GetFullPath(gob);
+            else if (serializedObject.targetObject is Component comp)
+                return GetFullPath(comp.gameObject);
+            else
+                return serializedObject.targetObject.name;
+        }
+
+        public static string GetFullPath(SerializedProperty property) => GetFullPath(property.serializedObject) + "." + property.propertyPath;
+
         /// <summary>
         /// Preserve percentage from one range A to another range B
         /// </summary>
@@ -77,6 +103,7 @@ namespace CustomInspector.Helpers
             float percentage = (value - minA) / (maxA - minA);
             return percentage * (maxB - minB) + minB;
         }
+
         public static bool SequenceEqual(this IList list1, IList list2)
         {
             if (list1.Count != list2.Count)
@@ -101,6 +128,19 @@ namespace CustomInspector.Helpers
                 return false;
             }
             return true;
+        }
+
+        public static bool IsVectorType(SerializedPropertyType propertyType)
+        {
+            return propertyType switch
+            {
+                SerializedPropertyType.Vector2 => true,
+                SerializedPropertyType.Vector2Int => true,
+                SerializedPropertyType.Vector3 => true,
+                SerializedPropertyType.Vector3Int => true,
+                SerializedPropertyType.Vector4 => true,
+                _ => false
+            };
         }
     }
 }

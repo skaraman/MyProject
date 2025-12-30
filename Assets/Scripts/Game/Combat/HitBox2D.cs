@@ -13,10 +13,14 @@ public class HitBox2D : MonoBehaviour {
   [Tooltip("If true, each HurtBox2D can only be hit once while this component is enabled.")]
   public bool hitEachHurtBoxOnce = true;
 
+  [Tooltip("Minimum time in seconds between successful hits. 0 disables the cooldown.")]
+  public float hitCooldown = 0f;
+
   [Tooltip("Optional identifier for filtering hit reactions (attack name/type).")]
   public string hitId;
 
   private readonly HashSet<int> hitHurtBoxIds = new();
+  private float nextHitTime;
 
   void Reset() {
     var collider = GetComponent<Collider2D>();
@@ -25,10 +29,15 @@ public class HitBox2D : MonoBehaviour {
 
   void OnEnable() {
     hitHurtBoxIds.Clear();
+    nextHitTime = 0f;
   }
 
   public void ResetHitCache() {
     hitHurtBoxIds.Clear();
+  }
+
+  public void ResetHitCooldown() {
+    nextHitTime = 0f;
   }
 
   void OnTriggerEnter2D(Collider2D other) {
@@ -42,6 +51,7 @@ public class HitBox2D : MonoBehaviour {
   private void HandleContact(Collider2D other) {
     if (!isActiveAndEnabled || other == null) return;
     if (ignoreSameRoot && other.transform.root == transform.root) return;
+    if (hitCooldown > 0f && Time.time < nextHitTime) return;
 
     var hurtBox = other.GetComponentInParent<HurtBox2D>();
     if (hurtBox != null && hurtBox.isActiveAndEnabled) {
@@ -53,6 +63,9 @@ public class HitBox2D : MonoBehaviour {
 
       // Let the HurtBox validate and receive the hit
       hurtBox.ReceiveHit(this);
+      if (hitCooldown > 0f) {
+        nextHitTime = Time.time + hitCooldown;
+      }
     }
   }
 }

@@ -29,14 +29,23 @@ namespace CustomInspector.Extensions
         [Conditional("UNITY_EDITOR")]
         public static void CheckFilled(this object _object, Transform owner, Type attributeType)
         {
+            if (owner != null)
+                CheckFilled(_object, owner.GetPathString(), attributeType);
+            else
+                CheckFilled(_object, "unknown owner", attributeType);
+        }
+        /// <summary>
+        /// Prints an Error, if any field in Class with given Attribute is null (to check if everything got filled in the inspector)
+        /// <para>It prints found fields' names and the given owners Hierarchies of the Monobehaviour</para>
+        /// </summary>
+        [Conditional("UNITY_EDITOR")]
+        public static void CheckFilled(this object _object, string path, Type attributeType)
+        {
             foreach (System.Reflection.FieldInfo field in _object.GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
             {
                 if (System.Attribute.IsDefined(field, attributeType) && field.GetValue(_object) == null)
                 {
-                    if (owner != null)
-                        UnityEngine.Debug.LogError($"{field.Name} on {owner.GetPathString()} is null. Fill it via inspector for Skript {_object.GetType().Name}");
-                    else
-                        UnityEngine.Debug.LogError($"{field.Name} on unknown owner is null. Fill it via inspector for Skript {_object.GetType().Name}");
+                    UnityEngine.Debug.LogError($"{field.Name} on {path} is null. Fill it via inspector for skript {_object.GetType().Name}");
                 }
             }
         }

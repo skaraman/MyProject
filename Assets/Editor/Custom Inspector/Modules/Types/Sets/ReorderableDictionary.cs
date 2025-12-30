@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Serialization;
 using UnityEngine;
-using Debug = UnityEngine.Debug;
 
 namespace CustomInspector
 {
@@ -88,14 +87,20 @@ namespace CustomInspector
         #region Changes
         public new void Clear()
         {
-            base.Clear();
+            // Skip editing keyValuePairs, since they are only for inspector display
+#if UNITY_EDITOR
             keyValuePairs.Clear();
+#endif
+            base.Clear();
         }
         public new bool TryAdd(TKey key, TValue value)
         {
             if (base.TryAdd(key, value))
             {
+                // Skip editing keyValuePairs, since they are only for inspector display
+#if UNITY_EDITOR
                 keyValuePairs.Add(new(key, value, true));
+#endif
                 return true;
             }
             return false;
@@ -112,11 +117,13 @@ namespace CustomInspector
         {
             if (base.Remove(key, out value))
             {
-                int index = keyValuePairs.FindIndex(kvp => kvp.key.Equals(key));
-                Debug.Assert(index != -1, "Internal Error: Serialized representation was not syncronised with dictionaries values.");
-                keyValuePairs.RemoveAt(index);
+                // Skip editing keyValuePairs, since they are only for inspector display
+#if UNITY_EDITOR
+                keyValuePairs.RemoveAll(kvp => kvp.key.Equals(key));
+#endif
                 return true;
             }
+            value = default;
             return false;
         }
         public new TValue this[TKey key]
@@ -124,13 +131,15 @@ namespace CustomInspector
             get => base[key];
             set
             {
-                base[key] = value; //this method also adds the key if key does not exist yet
-
+                // Skip editing keyValuePairs, since they are only for inspector display
+#if UNITY_EDITOR
                 int index = keyValuePairs.FindIndex(kvp => kvp.key.Equals(key));
                 if (index == -1) //does not exist yet
                     keyValuePairs.Add(new SerializableKeyValuePair(key, value, true));
                 else
                     keyValuePairs[index].value = value;
+#endif
+                base[key] = value; //this method also adds the key if key does not exist yet
             }
         }
         #endregion
