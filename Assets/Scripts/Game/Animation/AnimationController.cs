@@ -16,6 +16,8 @@ public class AnimationController {
   public string CurrentAnimation => currentAnimation;
   public bool IsPlaying => isPlaying;
   public bool IsFacingRight => isFacingRight;
+  public Action<string> OnEffectTriggered;
+  public Action<string> OnProjectileTriggered;
 
   private Transform rootTransform;
   private Vector3 baseScale = Vector3.one;
@@ -40,6 +42,9 @@ public class AnimationController {
   private bool isFacingRight = true;
   private bool pendingFlip;
   private bool hasResetLeanTween;
+  private int lastFrame = int.MinValue;
+  private bool effectTriggered;
+  private bool projectileTriggered;
 
   public void Initialize(
     Transform root,
@@ -128,6 +133,9 @@ public class AnimationController {
     SetAnimationCategory(category);
     UpdateSprites(currentFrame);
     SetBounces();
+    ResetAnimationEvents(anim);
+    TryTriggerFrameEvents(anim, lastFrame, currentFrame);
+    lastFrame = currentFrame;
     return true;
   }
 
@@ -208,6 +216,7 @@ public class AnimationController {
     float slowFactor = SlowDown ? 20f : 1f;
     animationTimer += (deltaTime * 1000f) / slowFactor;
     float normalTime = animationTimer / Mathf.Max(1f, anim.duration);
+    bool cycleReset = false;
 
     if (!pingPong) {
       int frameOffset = Mathf.FloorToInt((anim.end - anim.start) * normalTime);
@@ -225,6 +234,7 @@ public class AnimationController {
           pingPong = false;
           animationTimer = 0f;
           SetBounces();
+          cycleReset = true;
         }
         else {
           currentFrame = anim.end;
@@ -246,6 +256,7 @@ public class AnimationController {
         pingPong = false;
         animationTimer = 0f;
         SetBounces();
+        cycleReset = true;
       }
     }
 
@@ -256,6 +267,11 @@ public class AnimationController {
     }
 
     UpdateSprites(currentFrame);
+    if (cycleReset) {
+      ResetAnimationEvents(anim);
+    }
+    TryTriggerFrameEvents(anim, lastFrame, currentFrame);
+    lastFrame = currentFrame;
   }
 
   private bool TryResolveInterrupt(string requestedAnimation, out string resolvedAnimation, out string queued) {
@@ -277,6 +293,28 @@ public class AnimationController {
     foreach (var target in spriteTargets) {
       if (target == null) continue;
       target.SetAnimation(category);
+    }
+  }
+
+  private void ResetAnimationEvents(AnimData anim) {
+    effectTriggered = false;
+    projectileTriggered = false;
+    lastFrame = anim != null ? anim.start - 1 : int.MinValue;
+  }
+
+  private void TryTriggerFrameEvents(AnimData anim, int previousFrame, int currentFrame) {
+    if (anim == null) return;
+    if (!effectTriggered && !string.IsNullOrEmpty(anim.effect) && anim.effectFrame > 0) {
+      if (previousFrame < anim.effectFrame && currentFrame >= anim.effectFrame) {
+        effectTriggered = true;
+        OnEffectTriggered?.Invoke(anim.effect);
+      }
+    }
+    if (!projectileTriggered && !string.IsNullOrEmpty(anim.projectile) && anim.projectileFrame > 0) {
+      if (previousFrame < anim.projectileFrame && currentFrame >= anim.projectileFrame) {
+        projectileTriggered = true;
+        OnProjectileTriggered?.Invoke(anim.projectile);
+      }
     }
   }
 

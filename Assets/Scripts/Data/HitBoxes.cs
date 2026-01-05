@@ -12,6 +12,7 @@ public class HBox {
 }
 
 public static class HBoxes {
+  //**** Esperanza Hurt HitBoxes
   public static Dictionary<string, List<HBox>> EsperanzaHurt { get; } = new Dictionary<string, List<HBox>> {
     ["Breathe"] = new List<HBox> {
       new(0.01f, new List<Vector2>{ new(-0.48f, -0.54f), new(-0.25f, 0.24f), new(0.46f, 0.07f), new(0.33f, -0.59f), new(0.69f, -1.00f), new(0.62f, -1.37f), new(1.08f, -2.71f), new(0.71f, -2.88f), new(0.17f, -4.74f), new(0.70f, -5.03f), new(0.68f, -5.26f), new(-0.03f, -5.20f), new(-0.49f, -5.31f), new(-0.49f, -4.79f), new(-0.72f, -2.69f), new(-0.86f, -1.05f)})
@@ -192,6 +193,8 @@ public static class HBoxes {
       new(.33f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
       new(.02f, new List<Vector2> { new(-1.27f, -1.68f), new(-1.61f, -1.74f), new(-1.68f, -2.17f), new(-1.44f, -2.46f), new(-0.99f, -2.19f) }),
       new(.21f, new List<Vector2> { new(0.95f, -2.81f), new(0.62f, -2.78f), new(0.55f, -3.00f), new(0.77f, -3.19f), new(1.08f, -2.97f) }),
+      new(.14f, new List<Vector2> { new(3.04f, -2.19f), new(2.72f, -2.48f), new(2.72f, -2.91f), new(3.12f, -3.00f), new(3.17f, -2.54f) }),
+
     },
   };
 
@@ -199,6 +202,18 @@ public static class HBoxes {
     { "hurt", EsperanzaHurt }, { "hit1", EsperanzaHit1 }
   };
 
+  //**** Effects
+  public static Dictionary<string, List<HBox>> EffectHit { get; } = new Dictionary<string, List<HBox>> {
+    ["SuperBlastBall"] = new List<HBox> {
+      new(0.01f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
+      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
+      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
+      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
+      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
+    }
+  };
+
+  //**** Ememies
   public static Dictionary<string, List<HBox>> ImpHurt { get; } = new Dictionary<string, List<HBox>> {
     ["Run"] = new List<HBox> {
       new(0.01f, new List<Vector2> { new(0.12f, -0.28f), new(0.74f, -0.17f), new(1.23f, -0.27f), new(1.28f, -0.81f), new(1.10f, -1.17f), new(1.40f, -1.48f), new(2.27f, -1.98f), new(1.70f, -2.05f), new(0.18f, -2.07f), new(-0.82f, -1.75f), new(-1.18f, -2.51f), new(-1.78f, -2.14f), new(-2.01f, -1.27f), new(-1.32f, -1.28f), new(-1.23f, -0.85f), new(-0.85f, -0.56f) }),

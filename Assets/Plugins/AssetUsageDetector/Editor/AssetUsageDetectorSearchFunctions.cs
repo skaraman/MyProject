@@ -5,6 +5,9 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
+#if ASSET_USAGE_ADDRESSABLES
+using UnityEditor.AddressableAssets.Settings;
+#endif
 using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,6 +15,7 @@ using UnityEngine.U2D;
 using UnityEngine.Playables;
 using UnityEditor.U2D;
 using UnityEditor.Compilation;
+using UnityEngine.Rendering;
 using UnityEngine.Tilemaps;
 #if ASSET_USAGE_ADDRESSABLES
 using UnityEngine.AddressableAssets;
@@ -23,6 +27,7 @@ namespace AssetUsageDetectorNamespace
 	public partial class AssetUsageDetector
 	{
 		#region Helper Classes
+#pragma warning disable 0649
 		[Serializable]
 		private struct AssemblyDefinitionReferences
 		{
@@ -142,6 +147,7 @@ namespace AssetUsageDetectorNamespace
 				return null;
 			}
 		}
+#pragma warning restore 0649
 		#endregion
 
 		// Dictionary to quickly find the function to search a specific type with
@@ -170,24 +176,19 @@ namespace AssetUsageDetectorNamespace
 		private bool searchMonoBehavioursForScript;
 		private bool searchTextureReferences;
 		private bool searchShaderGraphsForSubGraphs;
-		private bool searchSerializableVariablesOnly;
-		private bool prevSearchSerializableVariablesOnly;
-
-		private BindingFlags fieldModifiers, propertyModifiers;
-		private BindingFlags prevFieldModifiers, prevPropertyModifiers;
 
 		// Unity's internal function that returns a SerializedProperty's corresponding FieldInfo
 		private delegate FieldInfo FieldInfoGetter( SerializedProperty p, out Type t );
 		private readonly FieldInfoGetter fieldInfoGetter = (FieldInfoGetter) Delegate.CreateDelegate( typeof( FieldInfoGetter ), typeof( Editor ).Assembly.GetType( "UnityEditor.ScriptAttributeUtility" ).GetMethod( "GetFieldInfoAndStaticTypeFromProperty", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static ) );
 		private readonly Func<Object> lightmapSettingsGetter = (Func<Object>) Delegate.CreateDelegate( typeof( Func<Object> ), typeof( LightmapEditorSettings ).GetMethod( "GetLightmapSettings", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static ) );
 		private readonly Func<Object> renderSettingsGetter = (Func<Object>) Delegate.CreateDelegate( typeof( Func<Object> ), typeof( RenderSettings ).GetMethod( "GetRenderSettings", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static ) );
-#if UNITY_2021_2_OR_NEWER
 		private readonly Func<Cubemap> defaultReflectionProbeGetter = (Func<Cubemap>) Delegate.CreateDelegate( typeof( Func<Cubemap> ), typeof( RenderSettings ).GetProperty( "defaultReflection", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static ).GetGetMethod( true ) );
-#endif
 
 		internal static readonly Func<SpriteAtlas, Sprite[]> spriteAtlasPackedSpritesGetter = (Func<SpriteAtlas, Sprite[]>) Delegate.CreateDelegate( typeof( Func<SpriteAtlas, Sprite[]> ), typeof( SpriteAtlasExtensions ).GetMethod( "GetPackedSprites", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static ) );
 #if ASSET_USAGE_ADDRESSABLES
-		private readonly PropertyInfo assetReferenceSubObjectTypeGetter = typeof( AssetReference ).GetProperty( "SubOjbectType", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance );
+		private readonly PropertyInfo assetReferenceSubObjectTypeGetter = 
+			typeof( AssetReference ).GetProperty( "SubObjectType", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance )
+			?? typeof( AssetReference ).GetProperty( "SubOjbectType", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance );
 #endif
 
 #if ASSET_USAGE_VFX_GRAPH
@@ -219,6 +220,9 @@ namespace AssetUsageDetectorNamespace
 					{ typeof( LightmapSettings ), SearchLightmapSettings },
 					{ typeof( RenderSettings ), SearchRenderSettings },
 					{ typeof( SpriteAtlas ), SearchSpriteAtlas },
+#if ASSET_USAGE_ADDRESSABLES
+                    { typeof(AddressableAssetSettings), SearchAddressableAssetSettings },
+#endif
 				};
 			}
 
@@ -242,17 +246,6 @@ namespace AssetUsageDetectorNamespace
 #endif
 				};
 			}
-
-			fieldModifiers = searchParameters.fieldModifiers | BindingFlags.Instance | BindingFlags.DeclaredOnly;
-			propertyModifiers = searchParameters.propertyModifiers | BindingFlags.Instance | BindingFlags.DeclaredOnly;
-			searchSerializableVariablesOnly = !searchParameters.searchNonSerializableVariables;
-
-			if( prevFieldModifiers != fieldModifiers || prevPropertyModifiers != propertyModifiers || prevSearchSerializableVariablesOnly != searchSerializableVariablesOnly )
-				typeToVariables.Clear();
-
-			prevFieldModifiers = fieldModifiers;
-			prevPropertyModifiers = propertyModifiers;
-			prevSearchSerializableVariablesOnly = searchSerializableVariablesOnly;
 
 			searchPrefabConnections = false;
 			searchMonoBehavioursForScript = false;
@@ -641,12 +634,12 @@ namespace AssetUsageDetectorNamespace
 			if( searchTextureReferences && isInPlayMode && !AssetDatabase.Contains( material ) )
 			{
 				Shader shader = material.shader;
-				int shaderPropertyCount = ShaderUtil.GetPropertyCount( shader );
+                int shaderPropertyCount = shader.GetPropertyCount();
 				for( int i = 0; i < shaderPropertyCount; i++ )
 				{
-					if( ShaderUtil.GetPropertyType( shader, i ) == ShaderUtil.ShaderPropertyType.TexEnv )
+                    if (shader.GetPropertyType(i) == ShaderPropertyType.Texture)
 					{
-						string propertyName = ShaderUtil.GetPropertyName( shader, i );
+                        string propertyName = shader.GetPropertyName(i);
 						Texture assignedTexture = material.GetTexture( propertyName );
 						if( objectsToSearchSet.Contains( assignedTexture ) )
 						{
@@ -673,12 +666,12 @@ namespace AssetUsageDetectorNamespace
 				ShaderImporter shaderImporter = AssetImporter.GetAtPath( AssetDatabase.GetAssetPath( shader ) ) as ShaderImporter;
 				if( shaderImporter != null )
 				{
-					int shaderPropertyCount = ShaderUtil.GetPropertyCount( shader );
+                    int shaderPropertyCount = shader.GetPropertyCount();
 					for( int i = 0; i < shaderPropertyCount; i++ )
 					{
-						if( ShaderUtil.GetPropertyType( shader, i ) == ShaderUtil.ShaderPropertyType.TexEnv )
+                        if (shader.GetPropertyType(i) == ShaderPropertyType.Texture)
 						{
-							string propertyName = ShaderUtil.GetPropertyName( shader, i );
+                            string propertyName = shader.GetPropertyName(i);
 							Texture defaultTexture = shaderImporter.GetDefaultTexture( propertyName );
 							if( !defaultTexture )
 								defaultTexture = shaderImporter.GetNonModifiableTexture( propertyName );
@@ -736,7 +729,7 @@ namespace AssetUsageDetectorNamespace
 				VariableGetterHolder[] variables = GetFilteredVariablesForType( scriptType );
 				for( int i = 0; i < variables.Length; i++ )
 				{
-					if( variables[i].isSerializable && !variables[i].IsProperty )
+                    if (!variables[i].IsProperty)
 					{
 						Object defaultValue = scriptImporter.GetDefaultReference( variables[i].Name );
 						if( objectsToSearchSet.Contains( defaultValue ) )
@@ -983,11 +976,7 @@ namespace AssetUsageDetectorNamespace
 		{
 			ReferenceNode referenceNode = PopReferenceNode( obj );
 
-#if UNITY_2021_2_OR_NEWER
 			referenceNode.AddLinkTo( SearchObject( defaultReflectionProbeGetter() ), "Default Reflection Probe" );
-#else
-			referenceNode.AddLinkTo( SearchObject( ReflectionProbe.defaultTexture ), "Default Reflection Probe" );
-#endif
 			SearchVariablesWithSerializedObject( referenceNode, true );
 			return referenceNode;
 		}
@@ -1078,6 +1067,29 @@ namespace AssetUsageDetectorNamespace
 				}
 			}
 		}
+
+#if ASSET_USAGE_ADDRESSABLES
+        private ReferenceNode SearchAddressableAssetSettings(object obj)
+        {
+            AddressableAssetSettings addressableSettings = (AddressableAssetSettings)obj;
+            ReferenceNode referenceNode = PopReferenceNode(addressableSettings);
+
+            // Search Addressable groups
+            foreach (Object asset in assetsToSearchSet)
+            {
+                // Don't check redundant prefab objects
+                if (asset is Component)
+                    continue;
+                if (asset is GameObject gameObject && gameObject.transform.parent != null)
+                    continue;
+
+                if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(asset, out string guid, out long _) && addressableSettings.FindAssetEntry(guid, true) is AddressableAssetEntry addressableEntry)
+                    referenceNode.AddLinkTo(GetReferenceNode(asset), $"Addressable: \"{addressableEntry.parentGroup.Name}\" -> \"{addressableEntry.address}\"");
+            }
+
+            return referenceNode;
+        }
+#endif
 
 		// Find references from an Assembly Definition File to its Assembly Definition References
 		private ReferenceNode SearchAssemblyDefinitionFile( object obj )
@@ -1387,6 +1399,7 @@ namespace AssetUsageDetectorNamespace
 				{
 					bool iteratingVisible = iteratorVisible.NextVisible( true );
 					bool searchPrefabOverridesOnly = ShouldExcludeRedundantPrefabReferences( unityObject );
+                    GameObject unityObjectPrefabInstanceRoot = searchPrefabOverridesOnly ? PrefabUtility.GetOutermostPrefabInstanceRoot(unityObject) : null;
 					bool enterChildren;
 					do
 					{
@@ -1468,7 +1481,7 @@ namespace AssetUsageDetectorNamespace
 								// m_RD.texture is a redundant reference that shows up when searching sprites
 								if( !propertyPath.EndsWithFast( "m_RD.texture" ) )
 								{
-									if( searchPrefabOverridesOnly && !iterator.prefabOverride )
+                                    if (searchPrefabOverridesOnly && !iterator.prefabOverride && ObjectBelongsToDifferentPrefabInstance(propertyValue, unityObjectPrefabInstanceRoot))
 									{
 										currentSearchResultGroup.NumberOfRedundantReferences++;
 										enterChildren = false;
@@ -1480,6 +1493,22 @@ namespace AssetUsageDetectorNamespace
 										if( searchParameters.searchRefactoring != null && objectsToSearchSet.Contains( propertyValue ) )
 											searchParameters.searchRefactoring( new SerializedPropertyMatch( unityObject, propertyValue, iterator ) );
 									}
+
+                                    /// Searching for references of a prefab instance's child object in either a scene or prefab mode should show the references coming from
+                                    /// that prefab instance to the child object. That's because even though <see cref="SerializedProperty.prefabOverride"/> returns
+                                    /// false for the variable that points to the child GameObject, that child GameObject is essentially different than its counterpart
+                                    /// in the prefab asset (it's an instance/clone of it after all). So no references will be reported unless we intervene.
+                                    bool ObjectBelongsToDifferentPrefabInstance(Object obj, GameObject prefabInstanceRoot)
+                                    {
+                                        if (obj == null)
+                                            return true;
+
+                                        GameObject objPrefabInstanceRoot = PrefabUtility.GetOutermostPrefabInstanceRoot(obj);
+                                        if (objPrefabInstanceRoot == null)
+                                            return true;
+
+                                        return objPrefabInstanceRoot != prefabInstanceRoot;
+                                    }
 								}
 							}
 						}
@@ -1503,10 +1532,6 @@ namespace AssetUsageDetectorNamespace
 			VariableGetterHolder[] variables = GetFilteredVariablesForType( referenceNode.nodeObject.GetType() );
 			for( int i = 0; i < variables.Length; i++ )
 			{
-				// When possible, don't search non-serializable variables
-				if( searchSerializableVariablesOnly && !variables[i].isSerializable )
-					continue;
-
 				try
 				{
 					object variableValue = variables[i].Get( referenceNode.nodeObject );
@@ -1604,130 +1629,107 @@ namespace AssetUsageDetectorNamespace
 
 			validVariables.Clear();
 
-			// Filter the fields
-			if( fieldModifiers != ( BindingFlags.Instance | BindingFlags.DeclaredOnly ) )
+			Type currType = type;
+			while( currType != typeof( object ) )
 			{
-				Type currType = type;
-				while( currType != typeof( object ) )
+                foreach (FieldInfo field in currType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
 				{
-					FieldInfo[] fields = currType.GetFields( fieldModifiers );
-					for( int i = 0; i < fields.Length; i++ )
-					{
-						FieldInfo field = fields[i];
+					// Skip obsolete fields
+					if( Attribute.IsDefined( field, typeof( ObsoleteAttribute ) ) )
+						continue;
 
-						// Skip obsolete fields
-						if( Attribute.IsDefined( field, typeof( ObsoleteAttribute ) ) )
-							continue;
+					// Skip primitive types
+					if( field.FieldType.IsIgnoredUnityType() )
+						continue;
 
-						// Skip primitive types
-						if( field.FieldType.IsIgnoredUnityType() )
-							continue;
+					// "ref struct"s can't be accessed via reflection
+					if( field.FieldType.IsByRefLike )
+						continue;
 
-#if UNITY_2021_2_OR_NEWER
-						// "ref struct"s can't be accessed via reflection
-						if( field.FieldType.IsByRefLike )
-							continue;
-#endif
+					// Additional filtering for fields:
+					// 1- Ignore "m_RectTransform", "m_CanvasRenderer" and "m_Canvas" fields of Graphic components
+					string fieldName = field.Name;
+					if( typeof( Graphic ).IsAssignableFrom( currType ) &&
+						( fieldName == "m_RectTransform" || fieldName == "m_CanvasRenderer" || fieldName == "m_Canvas" ) )
+						continue;
 
-						// Additional filtering for fields:
-						// 1- Ignore "m_RectTransform", "m_CanvasRenderer" and "m_Canvas" fields of Graphic components
-						string fieldName = field.Name;
-						if( typeof( Graphic ).IsAssignableFrom( currType ) &&
-							( fieldName == "m_RectTransform" || fieldName == "m_CanvasRenderer" || fieldName == "m_Canvas" ) )
-							continue;
-
-						VariableGetVal getter = field.CreateGetter( type );
-						if( getter != null )
-							validVariables.Add( new VariableGetterHolder( field, getter, searchSerializableVariablesOnly ? field.IsSerializable() : true ) );
-					}
-
-					currType = currType.BaseType;
+					VariableGetVal getter = field.CreateGetter( type );
+                    if (getter != null)
+                        validVariables.Add(new VariableGetterHolder(field, getter));
 				}
-			}
 
-			if( propertyModifiers != ( BindingFlags.Instance | BindingFlags.DeclaredOnly ) )
-			{
-				Type currType = type;
-				while( currType != typeof( object ) )
+                foreach (PropertyInfo property in currType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
 				{
-					PropertyInfo[] properties = currType.GetProperties( propertyModifiers );
-					for( int i = 0; i < properties.Length; i++ )
+					// Skip obsolete properties
+					if( Attribute.IsDefined( property, typeof( ObsoleteAttribute ) ) )
+						continue;
+
+					// Skip primitive types
+					if( property.PropertyType.IsIgnoredUnityType() )
+						continue;
+
+					// "ref struct"s can't be accessed via reflection
+					if( property.PropertyType.IsByRefLike )
+						continue;
+
+					// Skip properties without a getter function
+					MethodInfo propertyGetter = property.GetGetMethod( true );
+					if( propertyGetter == null )
+						continue;
+
+					// Skip indexer properties
+					if( property.GetIndexParameters().Length > 0 )
+						continue;
+
+					// No need to check properties with 'override' keyword
+					if( propertyGetter.GetBaseDefinition().DeclaringType != propertyGetter.DeclaringType )
+						continue;
+
+					string propertyName = property.Name;
+
+					// Ignore "gameObject", "transform", "rectTransform" and "attachedRigidbody" properties of components to get more useful results
+					if( typeof( Component ).IsAssignableFrom( currType ) && ( propertyName == "gameObject" ||
+						propertyName == "transform" || propertyName == "attachedRigidbody" || propertyName == "rectTransform" ) )
+						continue;
+					// Ignore "canvasRenderer" and "canvas" properties of Graphic components to get more useful results
+					else if( typeof( Graphic ).IsAssignableFrom( currType ) &&
+						( propertyName == "canvasRenderer" || propertyName == "canvas" ) )
+						continue;
+					// Prevent accessing properties of Unity that instantiate an existing resource (causing memory leak)
+					else if( typeof( MeshFilter ).IsAssignableFrom( currType ) && propertyName == "mesh" )
+						continue;
+					// Same as above
+					else if( ( propertyName == "material" || propertyName == "materials" ) &&
+						( typeof( Renderer ).IsAssignableFrom( currType ) || typeof( Collider ).IsAssignableFrom( currType ) ||
+						typeof( Collider2D ).IsAssignableFrom( currType ) ) )
+						continue;
+					// Ignore certain Material properties that are already searched via SearchMaterial function (also, if a material doesn't have a _Color or _BaseColor
+					// property and its "color" property is called, it logs an error to the console, so this rule helps avoid that scenario, as well)
+					else if( ( propertyName == "color" || propertyName == "mainTexture" ) && typeof( Material ).IsAssignableFrom( currType ) )
+						continue;
+					// Ignore "parameters" property of Animator since it doesn't contain any useful data and logs a warning to the console when Animator is inactive
+					else if( typeof( Animator ).IsAssignableFrom( currType ) && propertyName == "parameters" )
+						continue;
+					// Ignore "spriteAnimator" property of TMP_Text component because this property adds a TMP_SpriteAnimator component to the object if it doesn't exist
+					else if( propertyName == "spriteAnimator" && currType.Name == "TMP_Text" )
+						continue;
+					// Ignore "meshFilter" property of TextMeshPro and TMP_SubMesh components because this property adds a MeshFilter component to the object if it doesn't exist
+					else if( propertyName == "meshFilter" && ( currType.Name == "TextMeshPro" || currType.Name == "TMP_SubMesh" ) )
+						continue;
+					// Ignore "users" property of TerrainData because it returns the Terrains in the scene that use that TerrainData. This causes issues with callStack because TerrainData
+					// is already in callStack when Terrains are searched via "users" property of it and hence, Terrain->TerrainData references for that TerrainData can't be found in scenes
+					// (this is how callStack works, it prevents searching an object if it's already in callStack to avoid infinite recursion)
+					else if( propertyName == "users" && typeof( TerrainData ).IsAssignableFrom( currType ) )
+						continue;
+					else
 					{
-						PropertyInfo property = properties[i];
-
-						// Skip obsolete properties
-						if( Attribute.IsDefined( property, typeof( ObsoleteAttribute ) ) )
-							continue;
-
-						// Skip primitive types
-						if( property.PropertyType.IsIgnoredUnityType() )
-							continue;
-
-#if UNITY_2021_2_OR_NEWER
-						// "ref struct"s can't be accessed via reflection
-						if( property.PropertyType.IsByRefLike )
-							continue;
-#endif
-
-						// Skip properties without a getter function
-						MethodInfo propertyGetter = property.GetGetMethod( true );
-						if( propertyGetter == null )
-							continue;
-
-						// Skip indexer properties
-						if( property.GetIndexParameters().Length > 0 )
-							continue;
-
-						// No need to check properties with 'override' keyword
-						if( propertyGetter.GetBaseDefinition().DeclaringType != propertyGetter.DeclaringType )
-							continue;
-
-						string propertyName = property.Name;
-
-						// Ignore "gameObject", "transform", "rectTransform" and "attachedRigidbody" properties of components to get more useful results
-						if( typeof( Component ).IsAssignableFrom( currType ) && ( propertyName == "gameObject" ||
-							propertyName == "transform" || propertyName == "attachedRigidbody" || propertyName == "rectTransform" ) )
-							continue;
-						// Ignore "canvasRenderer" and "canvas" properties of Graphic components to get more useful results
-						else if( typeof( Graphic ).IsAssignableFrom( currType ) &&
-							( propertyName == "canvasRenderer" || propertyName == "canvas" ) )
-							continue;
-						// Prevent accessing properties of Unity that instantiate an existing resource (causing memory leak)
-						else if( typeof( MeshFilter ).IsAssignableFrom( currType ) && propertyName == "mesh" )
-							continue;
-						// Same as above
-						else if( ( propertyName == "material" || propertyName == "materials" ) &&
-							( typeof( Renderer ).IsAssignableFrom( currType ) || typeof( Collider ).IsAssignableFrom( currType ) ||
-							typeof( Collider2D ).IsAssignableFrom( currType ) ) )
-							continue;
-						// Ignore certain Material properties that are already searched via SearchMaterial function (also, if a material doesn't have a _Color or _BaseColor
-						// property and its "color" property is called, it logs an error to the console, so this rule helps avoid that scenario, as well)
-						else if( ( propertyName == "color" || propertyName == "mainTexture" ) && typeof( Material ).IsAssignableFrom( currType ) )
-							continue;
-						// Ignore "parameters" property of Animator since it doesn't contain any useful data and logs a warning to the console when Animator is inactive
-						else if( typeof( Animator ).IsAssignableFrom( currType ) && propertyName == "parameters" )
-							continue;
-						// Ignore "spriteAnimator" property of TMP_Text component because this property adds a TMP_SpriteAnimator component to the object if it doesn't exist
-						else if( propertyName == "spriteAnimator" && currType.Name == "TMP_Text" )
-							continue;
-						// Ignore "meshFilter" property of TextMeshPro and TMP_SubMesh components because this property adds a MeshFilter component to the object if it doesn't exist
-						else if( propertyName == "meshFilter" && ( currType.Name == "TextMeshPro" || currType.Name == "TMP_SubMesh" ) )
-							continue;
-						// Ignore "users" property of TerrainData because it returns the Terrains in the scene that use that TerrainData. This causes issues with callStack because TerrainData
-						// is already in callStack when Terrains are searched via "users" property of it and hence, Terrain->TerrainData references for that TerrainData can't be found in scenes
-						// (this is how callStack works, it prevents searching an object if it's already in callStack to avoid infinite recursion)
-						else if( propertyName == "users" && typeof( TerrainData ).IsAssignableFrom( currType ) )
-							continue;
-						else
-						{
-							VariableGetVal getter = property.CreateGetter();
-							if( getter != null )
-								validVariables.Add( new VariableGetterHolder( property, getter, searchSerializableVariablesOnly ? property.IsSerializable() : true ) );
-						}
+						VariableGetVal getter = property.CreateGetter();
+                        if (getter != null)
+                            validVariables.Add(new VariableGetterHolder(property, getter));
 					}
-
-					currType = currType.BaseType;
 				}
+
+				currType = currType.BaseType;
 			}
 
 			result = validVariables.ToArray();

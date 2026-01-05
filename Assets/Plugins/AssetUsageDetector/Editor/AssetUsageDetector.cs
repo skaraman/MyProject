@@ -8,9 +8,10 @@ using System;
 using System.IO;
 using System.Text;
 using Object = UnityEngine.Object;
-#if UNITY_2018_3_OR_NEWER && !UNITY_2021_2_OR_NEWER
-using PrefabStage = UnityEditor.Experimental.SceneManagement.PrefabStage;
-using PrefabStageUtility = UnityEditor.Experimental.SceneManagement.PrefabStageUtility;
+#if UNITY_6000_3_OR_NEWER
+using EntityId = UnityEngine.EntityId;
+#else
+using EntityId = System.Int32;
 #endif
 
 namespace AssetUsageDetectorNamespace
@@ -36,10 +37,7 @@ namespace AssetUsageDetectorNamespace
 			public bool dontSearchInSourceAssets = true;
 			public bool searchInProjectSettings = true;
 
-			public int searchDepthLimit = 4;
-			public BindingFlags fieldModifiers = BindingFlags.Public | BindingFlags.NonPublic;
-			public BindingFlags propertyModifiers = BindingFlags.Public | BindingFlags.NonPublic;
-			public bool searchNonSerializableVariables = true;
+			public int searchDepthLimit = 32;
 
 			public bool searchUnusedMaterialProperties = true;
 
@@ -80,13 +78,12 @@ namespace AssetUsageDetectorNamespace
 
 		// An optimization to search an object only once (key is a hash of the searched object)
 		private readonly Dictionary<string, ReferenceNode> searchedObjects = new Dictionary<string, ReferenceNode>( 4096 );
-		private readonly Dictionary<int, ReferenceNode> searchedUnityObjects = new Dictionary<int, ReferenceNode>( 32768 ); // Unity objects use their instanceIDs as key which is more performant
+        private readonly Dictionary<EntityId, ReferenceNode> searchedUnityObjects = new(32768); // Unity objects use their EntityIds as key
 
 		// Stack of SearchObject function parameters to avoid infinite loops (which happens when same object is passed as parameter to function)
 		private readonly List<object> callStack = new List<object>( 64 );
 
 		private Object currentSearchedObject;
-		private int currentDepth;
 
 		private bool searchingSourceAssets;
 		private bool isInPlayMode;
@@ -162,7 +159,6 @@ namespace AssetUsageDetectorNamespace
 				searchResult = new List<SearchResultGroup>(); // Overall search results
 
 				currentSearchedObject = null;
-				currentDepth = 0;
 				searchedObjectsCount = 0;
 				searchStartTime = EditorApplication.timeSinceStartup;
 
@@ -334,9 +330,9 @@ namespace AssetUsageDetectorNamespace
 				// Initialize data used by search functions
 				InitializeSearchFunctionsData( searchParameters );
 
-				// Initialize the nodes of searched asset(s)
-				foreach( Object obj in objectsToSearchSet )
-					searchedUnityObjects.Add( obj.GetInstanceID(), PopReferenceNode( obj ) );
+                // Initialize the nodes of searched asset(s)
+                foreach (Object obj in objectsToSearchSet)
+                    searchedUnityObjects.Add(obj.GetEntityId(), PopReferenceNode(obj));
 
 				// Progressbar values
 				int searchProgress = 0;
@@ -465,10 +461,6 @@ namespace AssetUsageDetectorNamespace
 					if( currentSearchResultGroup.AnyReferencesFound )
 						searchResult.Add( currentSearchResultGroup );
 				}
-
-				// Search non-serializable variables for references while searching a scene in play mode
-				if( isInPlayMode )
-					searchSerializableVariablesOnly = false;
 
 				if( scenesToSearch.Count > 0 )
 				{
@@ -664,8 +656,8 @@ namespace AssetUsageDetectorNamespace
 							usedObjectPathsSet.Add( assetPath );
 						else
 						{
-							for( Transform parent = ( (GameObject) obj ).transform.parent; parent != null; parent = parent.parent )
-								usedObjectPathsSet.Add( parent.gameObject.GetInstanceID().ToString() );
+                            for (Transform parent = ((GameObject)obj).transform.parent; parent != null; parent = parent.parent)
+                                usedObjectPathsSet.Add(parent.gameObject.GetEntityId().ToString());
 						}
 					}
 				}
@@ -736,14 +728,14 @@ namespace AssetUsageDetectorNamespace
 				{
 					if( !searchedTopmostGameObject )
 					{
-						if( obj is GameObject )
-							unusedMainObjectNodes[obj.GetInstanceID().ToString()] = node;
-						else
-							currentSearchResultGroup.AddReference( node );
+                        if (obj is GameObject)
+                            unusedMainObjectNodes[obj.GetEntityId().ToString()] = node;
+                        else
+                            currentSearchResultGroup.AddReference(node);
 					}
 					else // List child GameObject scene objects under their parent GameObject
 					{
-						string dictionaryKey = searchedTopmostGameObject.GetInstanceID().ToString();
+                        string dictionaryKey = searchedTopmostGameObject.GetEntityId().ToString();
 						List<ReferenceNode> unusedSubObjectNodesAtPath;
 						if( !unusedSubObjectNodes.TryGetValue( dictionaryKey, out unusedSubObjectNodesAtPath ) )
 							unusedSubObjectNodes[dictionaryKey] = unusedSubObjectNodesAtPath = new List<ReferenceNode>( 2 );
@@ -1008,6 +1000,10 @@ namespace AssetUsageDetectorNamespace
 					return cachedResult;
 			}
 
+            // Comply with the recursive search limit
+            if (callStack.Count >= searchParameters.searchDepthLimit)
+                return null;
+
 			searchedObjectsCount++;
 
 			ReferenceNode result;
@@ -1020,14 +1016,14 @@ namespace AssetUsageDetectorNamespace
 				{
 					if( assetsToSearchSet.Count == 0 )
 					{
-						searchedUnityObjects.Add( unityObject.GetInstanceID(), null );
+                        searchedUnityObjects.Add(unityObject.GetEntityId(), null);
 						return null;
 					}
 
 					assetPath = AssetDatabase.GetAssetPath( unityObject );
 					if( excludedAssetsPathsSet.Contains( assetPath ) || !AssetHasAnyReference( assetPath ) )
 					{
-						searchedUnityObjects.Add( unityObject.GetInstanceID(), null );
+                        searchedUnityObjects.Add(unityObject.GetEntityId(), null);
 						return null;
 					}
 				}
@@ -1069,17 +1065,11 @@ namespace AssetUsageDetectorNamespace
 			}
 			else
 			{
-				// Comply with the recursive search limit
-				if( currentDepth >= searchParameters.searchDepthLimit )
-					return null;
-
 				callStack.Add( obj );
-				currentDepth++;
 
 				result = PopReferenceNode( obj );
 				SearchVariablesWithReflection( result );
 
-				currentDepth--;
 				callStack.RemoveAt( callStack.Count - 1 );
 			}
 
@@ -1089,24 +1079,23 @@ namespace AssetUsageDetectorNamespace
 				result = null;
 			}
 
-			// Cache the search result if we are skimming through a class (not a struct; i.e. objHash != null)
-			// and if the object is a UnityEngine.Object (if not, cache the result only if we have actually found something
-			// or we are at the root of the search; i.e. currentDepth == 0)
-			if( !( obj is ValueType ) && ( result != null || unityObject != null || currentDepth == 0 ) )
-			{
-				if( !searchingSourceAsset )
-				{
-					if( obj is Object )
-						searchedUnityObjects.Add( unityObject.GetInstanceID(), result );
-					else
-						searchedObjects.Add( GetNodeObjectHash( obj ), result );
-				}
-				else if( result != null )
-				{
-					result.CopyReferencesTo( searchedUnityObjects[unityObject.GetInstanceID()] );
-					PoolReferenceNode( result );
-				}
-			}
+            // Cache the search result if we are skimming through a class (not a struct) and if the object is a UnityEngine.Object (if not,
+            // cache the result only if we have actually found something or we are at the root of the search; i.e. callStack.Count == 0)
+            if (obj is not ValueType && (result != null || unityObject != null || callStack.Count == 0))
+            {
+                if (!searchingSourceAsset)
+                {
+                    if (obj is Object)
+                        searchedUnityObjects.Add(unityObject.GetEntityId(), result);
+                    else
+                        searchedObjects.Add(GetNodeObjectHash(obj), result);
+                }
+                else if (result != null)
+                {
+                    result.CopyReferencesTo(searchedUnityObjects[unityObject.GetEntityId()]);
+                    PoolReferenceNode(result);
+                }
+            }
 
 			return result;
 		}
@@ -1232,46 +1221,46 @@ namespace AssetUsageDetectorNamespace
 			return false;
 		}
 
-		// If object was already searched, return its ReferenceNode
-		private bool TryGetReferenceNode( object nodeObject, out ReferenceNode referenceNode )
-		{
-			if( nodeObject is Object )
-			{
-				if( searchedUnityObjects.TryGetValue( ( (Object) nodeObject ).GetInstanceID(), out referenceNode ) )
-					return true;
-			}
-			else if( searchedObjects.TryGetValue( GetNodeObjectHash( nodeObject ), out referenceNode ) )
-				return true;
+        // If object was already searched, return its ReferenceNode
+        private bool TryGetReferenceNode(object nodeObject, out ReferenceNode referenceNode)
+        {
+            if (nodeObject is Object unityObject)
+            {
+                if (searchedUnityObjects.TryGetValue(unityObject.GetEntityId(), out referenceNode))
+                    return true;
+            }
+            else if (searchedObjects.TryGetValue(GetNodeObjectHash(nodeObject), out referenceNode))
+                return true;
 
-			referenceNode = null;
-			return false;
-		}
+            referenceNode = null;
+            return false;
+        }
 
-		// Get reference node for object
-		private ReferenceNode GetReferenceNode( object nodeObject )
-		{
-			ReferenceNode result;
-			if( nodeObject is Object )
-			{
-				int hash = ( (Object) nodeObject ).GetInstanceID();
-				if( !searchedUnityObjects.TryGetValue( hash, out result ) || result == null )
-				{
-					result = PopReferenceNode( nodeObject );
-					searchedUnityObjects[hash] = result;
-				}
-			}
-			else
-			{
-				string hash = GetNodeObjectHash( nodeObject );
-				if( !searchedObjects.TryGetValue( hash, out result ) || result == null )
-				{
-					result = PopReferenceNode( nodeObject );
-					searchedObjects[hash] = result;
-				}
-			}
+        // Get reference node for object
+        private ReferenceNode GetReferenceNode(object nodeObject)
+        {
+            ReferenceNode result;
+            if (nodeObject is Object unityObject)
+            {
+                EntityId hash = unityObject.GetEntityId();
+                if (!searchedUnityObjects.TryGetValue(hash, out result) || result == null)
+                {
+                    result = PopReferenceNode(nodeObject);
+                    searchedUnityObjects[hash] = result;
+                }
+            }
+            else
+            {
+                string hash = GetNodeObjectHash(nodeObject);
+                if (!searchedObjects.TryGetValue(hash, out result) || result == null)
+                {
+                    result = PopReferenceNode(nodeObject);
+                    searchedObjects[hash] = result;
+                }
+            }
 
-			return result;
-		}
+            return result;
+        }
 
 		// Fetch a reference node from pool
 		private ReferenceNode PopReferenceNode( object nodeObject )

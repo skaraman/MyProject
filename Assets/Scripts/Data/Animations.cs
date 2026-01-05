@@ -2,7 +2,16 @@
 using System.Collections.Generic;
 
 public class AnimData {
-  public int start; public int end; public float duration; public bool loop; public int To; public bool pingPong;
+  public int start;
+  public int end;
+  public float duration;
+  public bool loop;
+  public int To;
+  public bool pingPong;
+  public string effect;
+  public int effectFrame;
+  public string projectile;
+  public int projectileFrame;
 }
 
 public static class Animations {
@@ -46,7 +55,7 @@ public static class Animations {
     { "KickRight", new AnimData { start = 1, end = 31, duration = 300 } },
     { "PunchLeft", new AnimData { start = 1, end = 19, duration = 150 } },
     { "PunchRight", new AnimData { start = 1, end = 19, duration = 120 } },
-    { "SuperBlast", new AnimData { start = 1, end = 60, duration = 1000 } },
+    { "SuperBlast", new AnimData { start = 1, end = 60, duration = 1000, effect = "SuperBlast", projectile = "SuperBlastBall", effectFrame = 1, projectileFrame = 60 } },
 
     { "SuperBlastToKickLeft", new AnimData { start = 222, end = 238, duration = 175, To = 2 } },
     { "SuperBlastToKickRight", new AnimData { start = 205, end = 221, duration = 175, To = 2 } },

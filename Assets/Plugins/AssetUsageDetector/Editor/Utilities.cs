@@ -8,10 +8,6 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
-#if UNITY_2018_3_OR_NEWER && !UNITY_2021_2_OR_NEWER
-using PrefabStage = UnityEditor.Experimental.SceneManagement.PrefabStage;
-using PrefabStageUtility = UnityEditor.Experimental.SceneManagement.PrefabStageUtility;
-#endif
 
 namespace AssetUsageDetectorNamespace
 {
@@ -178,6 +174,28 @@ namespace AssetUsageDetectorNamespace
 			return false;
 		}
 
+#if UNITY_6000_3_OR_NEWER
+        public static EntityId GetEntityId(this Object obj)
+        {
+            return obj.GetEntityId();
+        }
+
+        public static Object EntityIdToObject(EntityId entityId)
+        {
+            return EditorUtility.EntityIdToObject(entityId);
+        }
+#else
+        public static int GetEntityId(this Object obj)
+        {
+            return obj.GetInstanceID();
+        }
+        
+        public static Object EntityIdToObject(int instanceID)
+        {
+            return EditorUtility.InstanceIDToObject(instanceID);
+        }
+#endif
+
 		// Returns an enumerator to iterate through all asset paths in the folder
 		public static IEnumerable<string> EnumerateFolderContents( Object folderAsset )
 		{
@@ -325,61 +343,6 @@ namespace AssetUsageDetectorNamespace
 			}
 
 			return t1.GetSiblingIndex() - t2.GetSiblingIndex();
-		}
-
-		// Check if the field is serializable
-		public static bool IsSerializable( this FieldInfo fieldInfo )
-		{
-			// See Serialization Rules: https://docs.unity3d.com/Manual/script-Serialization.html
-			if( fieldInfo.IsInitOnly )
-				return false;
-
-			// SerializeReference makes even System.Object fields serializable
-			if( Attribute.IsDefined( fieldInfo, typeof( SerializeReference ) ) )
-				return true;
-
-			if( ( !fieldInfo.IsPublic || fieldInfo.IsNotSerialized ) && !Attribute.IsDefined( fieldInfo, typeof( SerializeField ) ) )
-				return false;
-
-			return IsTypeSerializable( fieldInfo.FieldType );
-		}
-
-		// Check if the property is serializable
-		public static bool IsSerializable( this PropertyInfo propertyInfo )
-		{
-			return IsTypeSerializable( propertyInfo.PropertyType );
-		}
-
-		// Check if type is serializable
-		private static bool IsTypeSerializable( Type type )
-		{
-			// see Serialization Rules: https://docs.unity3d.com/Manual/script-Serialization.html
-			if( typeof( Object ).IsAssignableFrom( type ) )
-				return true;
-
-			if( type.IsArray )
-			{
-				if( type.GetArrayRank() != 1 )
-					return false;
-
-				type = type.GetElementType();
-
-				if( typeof( Object ).IsAssignableFrom( type ) )
-					return true;
-			}
-			else if( type.IsGenericType )
-			{
-				// Generic types are allowed on 2020.1 and later
-				if( type.GetGenericTypeDefinition() == typeof( List<> ) )
-				{
-					type = type.GetGenericArguments()[0];
-
-					if( typeof( Object ).IsAssignableFrom( type ) )
-						return true;
-				}
-			}
-
-			return Attribute.IsDefined( type, typeof( SerializableAttribute ), false );
 		}
 
 		// Check if instances of this type should be searched for references

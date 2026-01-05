@@ -10,10 +10,17 @@ public class DestructionManager : MonoBehaviour {
   public float torqueMin = -1;
   public float torqueMax = 1;
   public List<Piece> pieces = new();
+  private bool launchPending;
 
   void Awake() {
     piecesRoot = transform.FindDirectChild("PIECES");
     CollectPiecesFromChildren();
+  }
+
+  void Update() {
+    if (!launchPending) return;
+    launchPending = false;
+    LaunchRandomInternal();
   }
 
   public void CollectPiecesFromChildren() {
@@ -26,22 +33,33 @@ public class DestructionManager : MonoBehaviour {
 
   public void LaunchRandom() {
     if (pieces.Count == 0) return;
-    var active = new List<Piece>();
-    for (var i = 0; i < pieces.Count; i++) {
-      pieces[i].gameObject.SetActive(false);
-      active.Add(pieces[i]);
+    if (Time.inFixedTimeStep) {
+      // Avoid enabling/launching bodies mid-physics step.
+      launchPending = true;
+      return;
     }
-    var count = Random.Range(1, piecesRoot.childCount);
+    LaunchRandomInternal();
+  }
+
+  void LaunchRandomInternal() {
+    if (pieces.Count == 0) return;
+    var active = new List<Piece>(pieces);
     Shuffle(active);
+    var count = Random.Range(1, active.Count + 1);
     for (var i = 0; i < active.Count; i++) {
-      active[i].ResetPiece();
-    }
-    for (var i = 0; i < count; i++) {
       var p = active[i];
-      p.gameObject.SetActive(true);
-      var f = new Vector2(Random.Range(planarForceMin.x, planarForceMax.x), Random.Range(planarForceMin.y, planarForceMax.y));
-      var t = Random.Range(torqueMin, torqueMax);
-      p.Launch(f, t);
+      var shouldLaunch = i < count;
+      if (shouldLaunch) {
+        if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+        p.ResetPiece();
+        var f = new Vector2(Random.Range(planarForceMin.x, planarForceMax.x), Random.Range(planarForceMin.y, planarForceMax.y));
+        var t = Random.Range(torqueMin, torqueMax);
+        p.Launch(f, t);
+      }
+      else if (p.gameObject.activeSelf) {
+        p.gameObject.SetActive(false);
+        p.ResetPiece();
+      }
     }
   }
 

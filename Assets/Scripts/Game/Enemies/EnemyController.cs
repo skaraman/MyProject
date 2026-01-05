@@ -15,12 +15,24 @@ public class EnemyController : MonoBehaviour {
   [Tooltip("PolygonCollider2D objects that should be animated per frame.")]
   public GameObject[] hBoxObjects;
 
+  [Header("Effects")]
+  public SpriteWithNormals effectNode;
+
+  [Header("Projectiles")]
+  public ProjectileManager projectileManager;
+  public Transform projectileSpawn;
+  public bool useFacingDirection = true;
+  public Vector2 projectileDirection = Vector2.right;
+
   [Header("Animation Data")]
   public string enemyType;
   public string defaultAnimation = "Idle";
   public bool playOnStart = true;
 
   private AnimationController animationController = new();
+  private AnimationController effectAnimationController = new();
+  private readonly Dictionary<string, AnimData> effectAnimations = new();
+  private bool effectControllerInitialized;
   private Dictionary<string, AnimData> animationData;
   private Dictionary<string, Dictionary<string, string>> interruptData;
   private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData;
@@ -31,6 +43,8 @@ public class EnemyController : MonoBehaviour {
   void Awake() {
     LoadAnimationData();
     ConfigureAnimationController();
+    ConfigureEffectController();
+    HookAnimationEvents();
   }
 
   void Start() {
@@ -44,10 +58,18 @@ public class EnemyController : MonoBehaviour {
     animationController.SlowDown = slowDown;
     animationController.ForceLoop = forceLoop;
     animationController.Tick(Time.deltaTime);
+    if (effectControllerInitialized) {
+      effectAnimationController.SlowDown = slowDown;
+      effectAnimationController.ForceLoop = forceLoop;
+      effectAnimationController.Tick(Time.deltaTime);
+    }
   }
 
   void OnDisable() {
     animationController?.Cleanup(!Application.isPlaying);
+    if (effectControllerInitialized) {
+      effectAnimationController.Cleanup(!Application.isPlaying);
+    }
   }
 
   private void LoadAnimationData() {
@@ -86,14 +108,23 @@ public class EnemyController : MonoBehaviour {
 
   public void PauseAnimation() {
     animationController?.PauseAnimation();
+    if (effectControllerInitialized) {
+      effectAnimationController.PauseAnimation();
+    }
   }
 
   public void ResumeAnimation() {
     animationController?.ResumeAnimation();
+    if (effectControllerInitialized) {
+      effectAnimationController.ResumeAnimation();
+    }
   }
 
   public void StopAnimation(bool resetToDefault = false) {
     animationController?.StopAnimation(resetToDefault);
+    if (effectControllerInitialized) {
+      effectAnimationController.StopAnimation(false);
+    }
   }
 
   public void _TogglePause() {
@@ -102,6 +133,9 @@ public class EnemyController : MonoBehaviour {
 
   public void TogglePause(string forcePause = null) {
     animationController?.TogglePause(forcePause);
+    if (effectControllerInitialized) {
+      effectAnimationController.TogglePause(forcePause);
+    }
   }
 
   public void ForceAnimation() {
@@ -117,4 +151,79 @@ public class EnemyController : MonoBehaviour {
   }
 
   public AnimationController Controller => animationController;
+
+  private void HookAnimationEvents() {
+    if (animationController == null) return;
+    animationController.OnEffectTriggered = HandleEffectTriggered;
+    animationController.OnProjectileTriggered = HandleProjectileTriggered;
+  }
+
+  private void ConfigureEffectController() {
+    if (effectNode == null) return;
+    BuildEffectAnimations();
+    effectAnimationController.Initialize(
+      effectNode.transform,
+      new[] { effectNode.gameObject },
+      null,
+      null,
+      effectAnimations,
+      new Dictionary<string, Dictionary<string, string>>(),
+      null,
+      new Dictionary<string, Dictionary<string, List<HBox>>>(),
+      "",
+      false
+    );
+    effectControllerInitialized = true;
+  }
+
+  private void BuildEffectAnimations() {
+    effectAnimations.Clear();
+    AddEffectAnimations(Effects.Esperanza);
+    AddEffectAnimations(Effects.Things);
+    AddEffectAnimations(Effects.Imp);
+  }
+
+  private void AddEffectAnimations(Dictionary<string, EffectData> effects) {
+    if (effects == null) return;
+    foreach (var kvp in effects) {
+      if (string.IsNullOrEmpty(kvp.Key) || kvp.Value == null) continue;
+      effectAnimations[kvp.Key] = new AnimData {
+        start = kvp.Value.start,
+        end = kvp.Value.end,
+        duration = kvp.Value.duration * 1000f
+      };
+    }
+  }
+
+  private void HandleEffectTriggered(string effectKey) {
+    if (string.IsNullOrEmpty(effectKey) || effectNode == null) return;
+    if (!effectControllerInitialized) {
+      ConfigureEffectController();
+      if (!effectControllerInitialized) return;
+    }
+    effectAnimationController.ForceLoop = false;
+    effectAnimationController.PlayAnimation(effectKey, true, resolveInterrupts: false);
+  }
+
+  private void HandleProjectileTriggered(string projectileKey) {
+    if (string.IsNullOrEmpty(projectileKey) || projectileManager == null) return;
+    var spawnPosition = ResolveProjectileSpawnPosition();
+    var direction = ResolveProjectileDirection();
+    projectileManager.SpawnProjectile(projectileKey, spawnPosition, direction);
+  }
+
+  private Vector3 ResolveProjectileSpawnPosition() {
+    if (projectileSpawn != null) return projectileSpawn.position;
+    if (effectNode != null) return effectNode.transform.position;
+    return transform.position;
+  }
+
+  private Vector3 ResolveProjectileDirection() {
+    if (useFacingDirection) {
+      return IsFacingRight ? Vector3.right : Vector3.left;
+    }
+    if (projectileDirection.sqrMagnitude <= 0.0001f) return Vector3.right;
+    var dir = projectileDirection.normalized;
+    return new Vector3(dir.x, dir.y, 0f);
+  }
 }
