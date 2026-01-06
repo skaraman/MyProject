@@ -1,7 +1,21 @@
-# FMOD Build Crash Fix
+# FMOD Build Crash Fix - SOLUTION FOR NATIVE CRASH
+
+⚠️ **CRITICAL**: This fix resolves the "Native Crash Reporting" error during Unity builds.
 
 ## Problem
 The Unity build process crashes with a native mono runtime error because the required FMOD release libraries are missing for Windows and Linux platforms.
+
+**Error Message:**
+```
+Native Crash Reporting
+Got a UNKNOWN while executing native code. This usually indicates
+a fatal error in the mono runtime or one of the native libraries 
+used by your application.
+
+Managed Stacktrace:
+  at UnityEditor.BuildPipeline:BuildPlayerInternalNoCheck_Injected
+  at DefaultBuildMethods:BuildPlayer
+```
 
 ## Root Cause
 The FMOD plugin folder (`Assets/Plugins/FMOD/platforms/`) contains only development/logging versions of the native libraries:
@@ -10,6 +24,12 @@ The FMOD plugin folder (`Assets/Plugins/FMOD/platforms/`) contains only developm
 - **Mac**: ✅ Has both development and release versions
 
 The 'L' suffix indicates logging/development libraries. When Unity builds a player for Windows or Linux, it cannot find the required release versions, resulting in a native crash.
+
+## Quick Check
+Run the automated checker tool in Unity Editor:
+1. Open Unity Editor
+2. Go to menu: **Tools > FMOD > Check Release Libraries**
+3. The tool will list all missing libraries
 
 ## Solution
 
