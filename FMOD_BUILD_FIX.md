@@ -38,6 +38,8 @@ You need to download the FMOD Engine release libraries for your target platforms
 
 1. Visit: https://www.fmod.com/download
 2. Download **FMOD Engine** (not FMOD Studio) for your FMOD version (2.02.08)
+   - **FMOD Engine** provides the runtime libraries needed to play audio in your built game
+   - **FMOD Studio** is the authoring tool (you already have integration files)
 3. You need downloads for:
    - Windows
    - Linux
@@ -46,8 +48,8 @@ You need to download the FMOD Engine release libraries for your target platforms
 
 #### For Windows (x86_64):
 From the FMOD Engine download, extract and copy to `Assets/Plugins/FMOD/platforms/win/lib/x86_64/`:
-- `fmod.dll` (FMOD Core library - release)
-- `fmodstudio.dll` (FMOD Studio library - release)
+- `fmod.dll` (FMOD Core Engine - provides the low-level audio runtime)
+- `fmodstudio.dll` (FMOD Studio Runtime - provides the high-level Studio API for events and banks)
 
 #### For Windows (x86) - if building 32-bit:
 From the FMOD Engine download, extract and copy to `Assets/Plugins/FMOD/platforms/win/lib/x86/`:
@@ -56,8 +58,8 @@ From the FMOD Engine download, extract and copy to `Assets/Plugins/FMOD/platform
 
 #### For Linux (x86_64):
 From the FMOD Engine download, extract and copy to `Assets/Plugins/FMOD/platforms/linux/lib/x86_64/`:
-- `libfmod.so` (FMOD Core library - release)
-- `libfmodstudio.so` (FMOD Studio library - release)
+- `libfmod.so` (FMOD Core Engine - provides the low-level audio runtime)
+- `libfmodstudio.so` (FMOD Studio Runtime - provides the high-level Studio API for events and banks)
 
 ### Step 3: Configure Import Settings
 For each new DLL/SO file added, Unity should auto-generate `.meta` files. If not, or if you need to manually configure:

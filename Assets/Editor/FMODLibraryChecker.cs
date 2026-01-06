@@ -22,16 +22,20 @@ public class FMODLibraryChecker : EditorWindow
         "Assets/Plugins/FMOD/platforms/linux/lib/x86_64/libfmodstudio.so"
     };
 
-    [MenuItem("Tools/FMOD/Check Release Libraries")]
-    public static void CheckFMODLibraries()
+    private const string PREF_KEY_LIBRARIES_OK = "FMODLibraryChecker_LibrariesOK";
+
+    /// <summary>
+    /// Get list of missing FMOD libraries.
+    /// Returns empty list if FMOD is not present or all libraries are found.
+    /// </summary>
+    private static List<string> GetMissingLibraries()
     {
         List<string> missingLibraries = new List<string>();
 
         // Check if FMOD folder exists
         if (!Directory.Exists("Assets/Plugins/FMOD"))
         {
-            Debug.Log("FMOD plugin folder not found. If you're not using FMOD, this is OK.");
-            return;
+            return missingLibraries; // Not an error - FMOD not used
         }
 
         // Check Windows libraries
@@ -52,6 +56,14 @@ public class FMODLibraryChecker : EditorWindow
             }
         }
 
+        return missingLibraries;
+    }
+
+    [MenuItem("Tools/FMOD/Check Release Libraries")]
+    public static void CheckFMODLibraries()
+    {
+        List<string> missingLibraries = GetMissingLibraries();
+
         if (missingLibraries.Count > 0)
         {
             Debug.LogError("=== MISSING FMOD RELEASE LIBRARIES ===");
@@ -69,6 +81,9 @@ public class FMODLibraryChecker : EditorWindow
             Debug.LogError("Only the development/logging libraries (fmodstudioL.dll/libfmodstudioL.so) are present.");
             Debug.LogError("Builds require release versions (fmod.dll, fmodstudio.dll, libfmod.so, libfmodstudio.so).");
             
+            // Mark as not OK
+            EditorPrefs.SetBool(PREF_KEY_LIBRARIES_OK, false);
+            
             EditorUtility.DisplayDialog(
                 "Missing FMOD Libraries",
                 $"Found {missingLibraries.Count} missing FMOD release libraries.\n\n" +
@@ -80,6 +95,10 @@ public class FMODLibraryChecker : EditorWindow
         else
         {
             Debug.Log("✓ All required FMOD release libraries are present.");
+            
+            // Mark as OK to skip automatic checks
+            EditorPrefs.SetBool(PREF_KEY_LIBRARIES_OK, true);
+            
             EditorUtility.DisplayDialog(
                 "FMOD Libraries OK",
                 "All required FMOD release libraries are present.",
@@ -91,34 +110,29 @@ public class FMODLibraryChecker : EditorWindow
     [InitializeOnLoadMethod]
     private static void CheckOnLoad()
     {
-        // Automatically check on editor load (only show warnings, not dialogs)
+        // Skip check if libraries were previously confirmed OK
+        if (EditorPrefs.GetBool(PREF_KEY_LIBRARIES_OK, false))
+        {
+            return;
+        }
+
+        // Skip if FMOD folder doesn't exist
         if (!Directory.Exists("Assets/Plugins/FMOD"))
         {
             return;
         }
 
-        List<string> missingLibraries = new List<string>();
-
-        foreach (string lib in RequiredWindowsLibs)
-        {
-            if (!File.Exists(lib))
-            {
-                missingLibraries.Add(lib);
-            }
-        }
-
-        foreach (string lib in RequiredLinuxLibs)
-        {
-            if (!File.Exists(lib))
-            {
-                missingLibraries.Add(lib);
-            }
-        }
+        List<string> missingLibraries = GetMissingLibraries();
 
         if (missingLibraries.Count > 0)
         {
             Debug.LogWarning($"[FMOD] Missing {missingLibraries.Count} release libraries. " +
                            "This may cause build crashes. Run 'Tools > FMOD > Check Release Libraries' for details.");
+        }
+        else
+        {
+            // Libraries are present, mark as OK to skip future checks
+            EditorPrefs.SetBool(PREF_KEY_LIBRARIES_OK, true);
         }
     }
 }
