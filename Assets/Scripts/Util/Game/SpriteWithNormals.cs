@@ -1,8 +1,8 @@
-using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.U2D.Animation;
 #if UNITY_EDITOR
+using System.Collections.Generic;
 using UnityEditor;
 #endif
 

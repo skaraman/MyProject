@@ -51,7 +51,9 @@ public class PolygonPointLabeler : MonoBehaviour {
 
   void Update() {
     if (poly == null) return;
+#if UNITY_EDITOR
     if (!Application.isPlaying && !UnityEditorInternal.InternalEditorUtility.isApplicationActive) return;
+#endif
     if (poly.pathCount == 0) return;
     cam = cam == null ? Camera.main : cam;
 

@@ -8,7 +8,7 @@ public class EffectData {
 public static class Effects {
   // **** Esperanza Effects
   public static Dictionary<string, EffectData> Esperanza { get; } = new Dictionary<string, EffectData> {
-    ["SuperBlast"] = new EffectData { start = 1, end = 90, duration = 1f }
+    ["SuperBlast"] = new EffectData { start = 1, end = 90, duration = 1.5f }
   };
 
   //**** Things
