@@ -1,14 +1,13 @@
 fileFormatVersion: 2
-guid: ef31bc3f46d6047b29ff513e55daf05b
-AssetOrigin:
-  serializedVersion: 1
-  productId: 3595
-  packageName: LeanTween
-  packageVersion: 2.51
-  assetPath: Assets/Scripts/LeanTween/Examples/Material/Futoro_Ring.psd
-  uploadId: 469983
+guid: cb9659c9baaa15d4ebbf611b5123a331
 TextureImporter:
-  internalIDToNameTable: []
+  internalIDToNameTable:
+  - first:
+      213: -314495361553933694
+    second: Futoro_Ring_0
+  - first:
+      213: -4615936378761601639
+    second: Futoro_Ring_1
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -37,8 +36,8 @@ TextureImporter:
   generateCubemap: 6
   cubemapConvolution: 0
   seamlessCubemap: 0
-  textureFormat: -1
-  maxTextureSize: 256
+  textureFormat: 1
+  maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
     filterMode: 1
@@ -50,7 +49,7 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 1
+  spriteMode: 2
   spriteExtrude: 1
   spriteMeshType: 1
   alignment: 0
@@ -70,13 +69,13 @@ TextureImporter:
   compressionQualitySet: 0
   textureFormatSet: 0
   ignorePngGamma: 0
-  applyGammaDecoding: 1
+  applyGammaDecoding: 0
   swizzle: 50462976
-  cookieLightType: 1
+  cookieLightType: 0
   platformSettings:
   - serializedVersion: 4
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 256
+    maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 1
@@ -89,7 +88,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 4
     buildTarget: Standalone
-    maxTextureSize: 256
+    maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 1
@@ -102,12 +101,56 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
-    sprites: []
+    sprites:
+    - serializedVersion: 2
+      name: Futoro_Ring_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 149
+        height: 240
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 28ad11b8220b2abf0800000000000000
+      internalID: -314495361553933694
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Futoro_Ring_1
+      rect:
+        serializedVersion: 2
+        x: 170
+        y: 91
+        width: 86
+        height: 138
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 99d9c1ed156e0ffb0800000000000000
+      internalID: -4615936378761601639
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 5e97eb03825dee720800000000000000
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -116,9 +159,11 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      Futoro_Ring_0: -314495361553933694
+      Futoro_Ring_1: -4615936378761601639
   mipmapLimitGroupName: 
-  pSDRemoveMatte: 1
+  pSDRemoveMatte: 0
   userData: 
   assetBundleName: 
   assetBundleVariant: 

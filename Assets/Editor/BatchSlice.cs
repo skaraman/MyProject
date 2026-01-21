@@ -121,6 +121,37 @@ public class OptimizedBatchSpriteProcessor : EditorWindow
         EditorUtility.DisplayDialog("Process Complete", $"Processed {processed} of {total} textures.", "OK");
     }
 
+    private static void ClearSliceData(TextureImporter importer, ISpriteEditorDataProvider dataProvider)
+    {
+        // Reset sprite slicing data so stale metadata doesn't survive across runs.
+        dataProvider.SetSpriteRects(System.Array.Empty<SpriteRect>());
+
+        if (dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider)))
+        {
+            ISpriteNameFileIdDataProvider nfProv = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
+            nfProv.SetNameFileIdPairs(System.Array.Empty<SpriteNameFileIdPair>());
+        }
+
+        SerializedObject importerSerialized = new SerializedObject(importer);
+        SerializedProperty internalIdTable = importerSerialized.FindProperty("internalIDToNameTable");
+        if (internalIdTable != null && internalIdTable.isArray)
+            internalIdTable.arraySize = 0;
+
+        SerializedProperty spriteSheet = importerSerialized.FindProperty("spriteSheet");
+        if (spriteSheet != null)
+        {
+            SerializedProperty sprites = spriteSheet.FindPropertyRelative("sprites");
+            if (sprites != null && sprites.isArray)
+                sprites.arraySize = 0;
+
+            SerializedProperty nameFileIdTable = spriteSheet.FindPropertyRelative("nameFileIdTable");
+            if (nameFileIdTable != null && nameFileIdTable.isArray)
+                nameFileIdTable.arraySize = 0;
+        }
+
+        importerSerialized.ApplyModifiedPropertiesWithoutUndo();
+    }
+
     private bool ProcessTextureWithDataProvider(Texture2D texture)
     {
         string path = AssetDatabase.GetAssetPath(texture);
@@ -143,6 +174,8 @@ public class OptimizedBatchSpriteProcessor : EditorWindow
         if (dataProvider == null) return false;
 
         dataProvider.InitSpriteEditorDataProvider();
+
+        ClearSliceData(importer, dataProvider);
 
         // Build and assign all SpriteRects
         int w = texture.width, h = texture.height;
@@ -168,7 +201,7 @@ public class OptimizedBatchSpriteProcessor : EditorWindow
         if (dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider)))
         {
             ISpriteNameFileIdDataProvider nfProv = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
-            List<SpriteNameFileIdPair> pairs = nfProv.GetNameFileIdPairs().ToList();
+            List<SpriteNameFileIdPair> pairs = new List<SpriteNameFileIdPair>(rects.Count);
             foreach (SpriteRect r in rects)
                 pairs.Add(new SpriteNameFileIdPair(r.name, GUID.Generate()));
 

@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 17798810ba3629e4eb922b79cd5ad2cc
+guid: 1e0ebcee08dd19a40b926944d8421e08
 TextureImporter:
   internalIDToNameTable:
   - first:
@@ -120,32 +120,6 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
-    buildTarget: Android
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
-    buildTarget: iOS
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
@@ -219,12 +193,12 @@ TextureImporter:
       name: atlas_1_3
       rect:
         serializedVersion: 2
-        x: 1328
-        y: 290
-        width: 648
-        height: 496
+        x: 1752
+        y: 232
+        width: 176
+        height: 55
       alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -243,7 +217,7 @@ TextureImporter:
         serializedVersion: 2
         x: 1326
         y: 228
-        width: 213
+        width: 214
         height: 60
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
@@ -264,9 +238,9 @@ TextureImporter:
       rect:
         serializedVersion: 2
         x: 1540
-        y: 229
+        y: 231
         width: 212
-        height: 60
+        height: 56
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -307,10 +281,10 @@ TextureImporter:
       name: atlas_1_9
       rect:
         serializedVersion: 2
-        x: 1919
-        y: 1772
+        x: 1918
+        y: 1770
         width: 109
-        height: 109
+        height: 110
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -319,20 +293,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: d09d089b4943f5f4da24f3d75f43ffb2
-      internalID: 18311121
+      spriteID: baec9fc5dcb288a49b334ea4104fc4d1
+      internalID: -1696137370
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: atlas_1_7
+      name: atlas_1_10
       rect:
         serializedVersion: 2
-        x: 1753
-        y: 231
-        width: 173
-        height: 57
+        x: 1326
+        y: 290
+        width: 651
+        height: 497
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -341,8 +315,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 80c29ba88a8dba7429c5e90029c9ae72
-      internalID: -3489692761423441406
+      spriteID: df858a6f2e780b24796efd7dc0c9d763
+      internalID: 2019290948
       vertices: []
       indices: 
       edges: []
@@ -351,7 +325,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 199b61bf6c46e60468689061f4816a67
+    spriteID: afebaf84a5f58814cb15c18a416bbb31
     internalID: 0
     vertices: []
     indices: 
@@ -363,6 +337,7 @@ TextureImporter:
     nameFileIdTable:
       atlas_1_0: -8721964507169126584
       atlas_1_1: 3802224214994464000
+      atlas_1_10: 2019290948
       atlas_1_2: 7386717655610109217
       atlas_1_3: -132799328615222546
       atlas_1_4: 8572768910181654419
@@ -370,7 +345,7 @@ TextureImporter:
       atlas_1_6: 746008814824739231
       atlas_1_7: -3489692761423441406
       atlas_1_8: -3484025801836026305
-      atlas_1_9: 18311121
+      atlas_1_9: -1696137370
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
