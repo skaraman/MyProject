@@ -10,8 +10,6 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
   DefaultAsset selectedFolder;
   string targetSubfolder = "fL";
   string fileName = "1.png";
-  int selectedCategoryIndex;
-  string selectedCategoryName = string.Empty;
 
   [MenuItem("Tools/Import Into Sprite Library (Overwrite)")]
   public static void ShowWindow() {
@@ -25,22 +23,6 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
     EditorGUILayout.Space();
     
     originalLibrary = (SpriteLibraryAsset)EditorGUILayout.ObjectField("Target SpriteLibrary", originalLibrary, typeof(SpriteLibraryAsset), false);
-    var categoryNames = new List<string>();
-    if (originalLibrary != null) {
-      categoryNames = originalLibrary.GetCategoryNames().OrderBy(n => n).ToList();
-    }
-
-    if (categoryNames.Count > 0) {
-      if (selectedCategoryIndex >= categoryNames.Count) {
-        selectedCategoryIndex = 0;
-      }
-      selectedCategoryIndex = EditorGUILayout.Popup("Target Category", selectedCategoryIndex, categoryNames.ToArray());
-      selectedCategoryName = categoryNames[selectedCategoryIndex];
-    } else {
-      EditorGUILayout.Popup("Target Category", 0, new[] { "<no categories>" });
-      selectedCategoryName = string.Empty;
-    }
-
     selectedFolder = (DefaultAsset)EditorGUILayout.ObjectField("Scan Root Folder", selectedFolder, typeof(DefaultAsset), false);
     fileName = EditorGUILayout.TextField("Texture File Name", fileName);
     targetSubfolder = EditorGUILayout.TextField("Target Folder Name", targetSubfolder);
@@ -53,8 +35,6 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
         return;
       }
 
-      var library = originalLibrary;
-      var categoryName = selectedCategoryName;
       string rootPath = AssetDatabase.GetAssetPath(selectedFolder);
       if (!AssetDatabase.IsValidFolder(rootPath)) {
         EditorUtility.DisplayDialog("Error", "Invalid folder selected.", "OK");
@@ -64,7 +44,7 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
       // Use EditorApplication.delayCall to avoid GUI layout issues
       EditorApplication.delayCall += () => {
         try {
-          OverwriteLibrary(rootPath, library, categoryName);
+          OverwriteLibrary(rootPath, originalLibrary);
         } catch (System.Exception e) {
           EditorUtility.ClearProgressBar();
           Debug.LogError($"Error during import: {e.Message}\n{e.StackTrace}");
@@ -74,7 +54,7 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
     }
   }
 
-  void OverwriteLibrary(string rootPath, SpriteLibraryAsset sourceLibrary, string targetCategoryName) {
+  void OverwriteLibrary(string rootPath, SpriteLibraryAsset sourceLibrary) {
     try {
       string originalPath = AssetDatabase.GetAssetPath(sourceLibrary);
       if (string.IsNullOrEmpty(originalPath)) {
@@ -82,11 +62,29 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
         return;
       }
 
-      // Use selected category if provided, otherwise fall back to root folder name.
-      string category = string.IsNullOrEmpty(targetCategoryName)
-        ? Path.GetFileName(rootPath.TrimEnd('/', '\\'))
-        : targetCategoryName;
+      // Get the category name from the root folder (e.g., "Run" from ".../Ana/Run")
+      string category = Path.GetFileName(rootPath.TrimEnd('/', '\\'));
       Debug.Log($"Category will be: '{category}'");
+
+      // Create a NEW library and protect from unloading
+      var newLibrary = ScriptableObject.CreateInstance<SpriteLibraryAsset>();
+      newLibrary.hideFlags = HideFlags.DontUnloadUnusedAsset;
+
+      // Copy ALL existing categories from the source library
+      EditorUtility.DisplayProgressBar("Copying Library", "Copying existing categories...", 0.1f);
+      var existingCategories = sourceLibrary.GetCategoryNames().ToList();
+      Debug.Log($"Copying {existingCategories.Count} existing categories from source library...");
+      
+      foreach (var cat in existingCategories) {
+          var labels = sourceLibrary.GetCategoryLabelNames(cat).ToList();
+          foreach (var lbl in labels) {
+              var sprite = sourceLibrary.GetSprite(cat, lbl);
+              if (sprite != null) {
+                  newLibrary.AddCategoryLabel(sprite, cat, lbl);
+              }
+          }
+          Debug.Log($"  Copied category '{cat}' with {labels.Count} labels");
+      }
 
       // Find all target folders
       var absoluteRoot = Path.Combine(Directory.GetParent(Application.dataPath).FullName, rootPath);
@@ -134,38 +132,13 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
             })
             .ToArray();
         } else {
-          var baseName = Path.GetFileNameWithoutExtension(fileName);
-          var extension = Path.GetExtension(fileName);
-          int startIndex = 0;
-          var hasNumericBase = !string.IsNullOrEmpty(extension) && int.TryParse(baseName, out startIndex);
-
-          if (hasNumericBase) {
-            // Chain sequential files: 1.png, 2.png, 3.png, ...
-            var chainedFiles = new List<string>();
-            int currentIndex = startIndex;
-            while (true) {
-              var candidate = Path.Combine(folder, $"{currentIndex}{extension}");
-              if (!File.Exists(candidate)) {
-                break;
-              }
-              chainedFiles.Add(candidate);
-              currentIndex++;
-            }
-
-            if (chainedFiles.Count == 0) {
-              Debug.LogWarning($"File not found: {Path.Combine(folder, fileName)}");
-              continue;
-            }
-            filesToProcess = chainedFiles.ToArray();
-          } else {
-            // Original behavior: look for specific filename
-            var expectedFile = Path.Combine(folder, fileName);
-            if (!File.Exists(expectedFile)) {
-              Debug.LogWarning($"File not found: {expectedFile}");
-              continue;
-            }
-            filesToProcess = new[] { expectedFile };
+          // Original behavior: look for specific filename
+          var expectedFile = Path.Combine(folder, fileName);
+          if (!File.Exists(expectedFile)) {
+            Debug.LogWarning($"File not found: {expectedFile}");
+            continue;
           }
+          filesToProcess = new[] { expectedFile };
         }
 
         // Parse folder hierarchy once for this folder
@@ -216,132 +189,68 @@ public class SpriteLibraryImporterOverwrite : EditorWindow {
 
       if (spritesToAdd.Count == 0) {
         Debug.LogWarning("No sprites were found to add!");
+        newLibrary.hideFlags = HideFlags.None;
+        EditorUtility.UnloadUnusedAssetsImmediate();
         EditorUtility.DisplayDialog("Warning", "No sprites found matching the criteria.", "OK");
         return;
       }
 
-      EditorUtility.DisplayProgressBar("Updating Library", "Updating category...", 0.85f);
-      int spriteCount = spritesToAdd.Count;
-
-      if (!TryOverwriteSerializedCategory(sourceLibrary, category, spritesToAdd)) {
-        // Fallback for assets that do not expose SpriteLibrarySourceAsset data.
-        var existingLabelsInCategory = sourceLibrary.GetCategoryLabelNames(category)?.ToList();
-        if (existingLabelsInCategory != null && existingLabelsInCategory.Count > 0) {
-          Debug.Log($"Removing {existingLabelsInCategory.Count} existing labels from category '{category}'");
-          foreach (var lbl in existingLabelsInCategory) {
-            sourceLibrary.RemoveCategoryLabel(category, lbl, false);
-          }
+      // Remove old category labels if they exist in the new library
+      EditorUtility.DisplayProgressBar("Updating Library", "Removing old category...", 0.8f);
+      var existingLabelsInCategory = newLibrary.GetCategoryLabelNames(category)?.ToList();
+      if (existingLabelsInCategory != null && existingLabelsInCategory.Count > 0) {
+        Debug.Log($"Removing {existingLabelsInCategory.Count} existing labels from category '{category}'");
+        foreach (var lbl in existingLabelsInCategory) {
+          newLibrary.RemoveCategoryLabel(category, lbl, false);
         }
+      }
 
-        spriteCount = 0;
-        foreach (var (sprite, label) in spritesToAdd) {
-          try {
-            sourceLibrary.AddCategoryLabel(sprite, category, label);
-            spriteCount++;
-          } catch (System.Exception e) {
-            Debug.LogError($"Failed to add sprite '{sprite.name}' with label '{label}': {e.Message}");
-          }
+      // Add all new sprites to the new category
+      EditorUtility.DisplayProgressBar("Updating Library", "Adding new sprites...", 0.9f);
+      
+      int spriteCount = 0;
+      foreach (var (sprite, label) in spritesToAdd) {
+        try {
+          newLibrary.AddCategoryLabel(sprite, category, label);
+          spriteCount++;
+        } catch (System.Exception e) {
+          Debug.LogError($"Failed to add sprite '{sprite.name}' with label '{label}': {e.Message}");
         }
       }
 
       // VERIFY THE LIBRARY HAS DATA BEFORE SAVING
       Debug.Log("=== VERIFYING LIBRARY CONTENTS ===");
-      var finalCategories = sourceLibrary.GetCategoryNames().ToList();
+      var finalCategories = newLibrary.GetCategoryNames().ToList();
       Debug.Log($"Total categories in library: {finalCategories.Count}");
       foreach (var cat in finalCategories) {
-        var labelCount = sourceLibrary.GetCategoryLabelNames(cat).Count();
+        var labelCount = newLibrary.GetCategoryLabelNames(cat).Count();
         Debug.Log($"  Category '{cat}': {labelCount} labels");
       }
       Debug.Log("=================================");
 
-      EditorUtility.SetDirty(sourceLibrary);
+      // Delete the old asset and create the new one as .asset (not .spriteLib)
+      AssetDatabase.DeleteAsset(originalPath);
+      
+      // Change extension to .asset
+      string newPath = Path.ChangeExtension(originalPath, ".asset");
+      
+      AssetDatabase.CreateAsset(newLibrary, newPath);
       AssetDatabase.SaveAssets();
-      AssetDatabase.ImportAsset(originalPath, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
       AssetDatabase.Refresh();
 
-      Debug.Log($"Successfully updated SpriteLibraryAsset at: {originalPath}");
-      Debug.Log($"Added {spriteCount} sprites to category '{category}'");
+      // Cleanup
+      newLibrary.hideFlags = HideFlags.None;
+      EditorUtility.UnloadUnusedAssetsImmediate();
+      System.GC.Collect();
+
+      Debug.Log($"✔️ Successfully created SpriteLibraryAsset at: {newPath}");
+      Debug.Log($"📊 Added {spriteCount} sprites to category '{category}'");
       
       EditorUtility.DisplayDialog("Success", 
-        $"Updated category '{category}' with {spriteCount} sprites\nAsset: {originalPath}", 
+        $"Created library with {spriteCount} sprites in category '{category}'\nSaved to: {newPath}", 
         "OK");
     } finally {
       EditorUtility.ClearProgressBar();
-    }
-  }
-
-  bool TryOverwriteSerializedCategory(SpriteLibraryAsset sourceLibrary, string category, List<(Sprite sprite, string label)> spritesToAdd) {
-    var so = new SerializedObject(sourceLibrary);
-    so.Update();
-    var libraryProp = so.FindProperty("m_Library");
-    if (libraryProp == null || !libraryProp.isArray) return false;
-
-    SerializedProperty categoryProp = null;
-    for (int i = 0; i < libraryProp.arraySize; i++) {
-      var element = libraryProp.GetArrayElementAtIndex(i);
-      var nameProp = element.FindPropertyRelative("m_Name");
-      if (nameProp != null && nameProp.stringValue == category) {
-        categoryProp = element;
-        break;
-      }
-    }
-
-    if (categoryProp == null) {
-      libraryProp.arraySize++;
-      categoryProp = libraryProp.GetArrayElementAtIndex(libraryProp.arraySize - 1);
-    }
-
-    var categoryNameProp = categoryProp.FindPropertyRelative("m_Name");
-    if (categoryNameProp != null) categoryNameProp.stringValue = category;
-    var categoryHashProp = categoryProp.FindPropertyRelative("m_Hash");
-    if (categoryHashProp != null) categoryHashProp.intValue = Animator.StringToHash(category);
-    var fromMainProp = categoryProp.FindPropertyRelative("m_FromMain");
-    if (fromMainProp != null) fromMainProp.intValue = 0;
-
-    var overrideEntriesProp = categoryProp.FindPropertyRelative("m_OverrideEntries");
-    var categoryListProp = categoryProp.FindPropertyRelative("m_CategoryList");
-    bool useOverrides = overrideEntriesProp != null && overrideEntriesProp.isArray;
-    var targetList = useOverrides ? overrideEntriesProp : categoryListProp;
-    if (targetList == null || !targetList.isArray) return false;
-
-    ClearSerializedArray(targetList);
-    if (useOverrides && categoryListProp != null && categoryListProp.isArray) {
-      ClearSerializedArray(categoryListProp);
-    }
-    if (!useOverrides && overrideEntriesProp != null && overrideEntriesProp.isArray) {
-      ClearSerializedArray(overrideEntriesProp);
-    }
-
-    for (int i = 0; i < spritesToAdd.Count; i++) {
-      targetList.arraySize++;
-      var entry = targetList.GetArrayElementAtIndex(targetList.arraySize - 1);
-      var labelNameProp = entry.FindPropertyRelative("m_Name");
-      if (labelNameProp != null) labelNameProp.stringValue = spritesToAdd[i].label;
-      var labelHashProp = entry.FindPropertyRelative("m_Hash");
-      if (labelHashProp != null) labelHashProp.intValue = Animator.StringToHash(spritesToAdd[i].label);
-
-      var spriteProp = entry.FindPropertyRelative("m_Sprite");
-      if (spriteProp != null) spriteProp.objectReferenceValue = spritesToAdd[i].sprite;
-      var fromMainEntryProp = entry.FindPropertyRelative("m_FromMain");
-      if (fromMainEntryProp != null) fromMainEntryProp.intValue = 0;
-      if (useOverrides) {
-        var spriteOverrideProp = entry.FindPropertyRelative("m_SpriteOverride");
-        if (spriteOverrideProp != null) spriteOverrideProp.objectReferenceValue = spritesToAdd[i].sprite;
-      }
-    }
-
-    if (useOverrides) {
-      var countProp = categoryProp.FindPropertyRelative("m_EntryOverrideCount");
-      if (countProp != null) countProp.intValue = targetList.arraySize;
-    }
-
-    so.ApplyModifiedPropertiesWithoutUndo();
-    return true;
-  }
-
-  void ClearSerializedArray(SerializedProperty arrayProp) {
-    for (int i = arrayProp.arraySize - 1; i >= 0; i--) {
-      arrayProp.DeleteArrayElementAtIndex(i);
     }
   }
 

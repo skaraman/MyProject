@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 8905e854e6652a34aa4ef014b916a3dd
+guid: 48d18be541dbc27418703780ebab24bc
 TextureImporter:
   internalIDToNameTable:
   - first:
@@ -102,6 +102,32 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: iOS
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
@@ -109,10 +135,10 @@ TextureImporter:
       name: atlas_0
       rect:
         serializedVersion: 2
-        x: 2
-        y: 132
-        width: 1293
-        height: 322
+        x: 0
+        y: 130
+        width: 1296
+        height: 332
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -155,7 +181,7 @@ TextureImporter:
         serializedVersion: 2
         x: 0
         y: 1
-        width: 447
+        width: 449
         height: 129
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
@@ -175,10 +201,10 @@ TextureImporter:
       name: atlas_3
       rect:
         serializedVersion: 2
-        x: 450
+        x: 449
         y: 0
-        width: 443
-        height: 130
+        width: 442
+        height: 129
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -187,8 +213,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 188f08595aa57da4cacf7bf48d515e13
-      internalID: 1211608076
+      spriteID: f290b4386088d4e4aab8b59c63127046
+      internalID: -1099740231
       vertices: []
       indices: 
       edges: []
@@ -197,10 +223,10 @@ TextureImporter:
       name: atlas_4
       rect:
         serializedVersion: 2
-        x: 893
-        y: 53
-        width: 212
-        height: 67
+        x: 892
+        y: 50
+        width: 215
+        height: 73
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -209,8 +235,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 9fceaf32e79c4894b937ac4c5422045b
-      internalID: 600726001
+      spriteID: 58776a702b3e3d946a0d6c6fc5dde11d
+      internalID: -1939899295
       vertices: []
       indices: 
       edges: []
@@ -219,10 +245,10 @@ TextureImporter:
       name: atlas_5
       rect:
         serializedVersion: 2
-        x: 1108
-        y: 67
-        width: 172
-        height: 55
+        x: 1107
+        y: 65
+        width: 173
+        height: 58
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -231,8 +257,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 2f0814566219c3a4ea0e1552696ba7e4
-      internalID: -492519364
+      spriteID: bee3d05c3ee82f546b458bca75800332
+      internalID: 399994101
       vertices: []
       indices: 
       edges: []
@@ -241,7 +267,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 0ed86da9f64fc9e4491f9afaf4ec556c
+    spriteID: ee97131961b8a714bb60e192ee5d42a9
     internalID: 0
     vertices: []
     indices: 
@@ -254,9 +280,9 @@ TextureImporter:
       atlas_0: -997972493423046422
       atlas_1: -199644854353079308
       atlas_2: -217455086581007235
-      atlas_3: 1211608076
-      atlas_4: 600726001
-      atlas_5: -492519364
+      atlas_3: -1099740231
+      atlas_4: -1939899295
+      atlas_5: 399994101
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

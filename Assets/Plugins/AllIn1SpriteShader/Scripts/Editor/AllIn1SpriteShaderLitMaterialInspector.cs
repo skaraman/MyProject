@@ -51,9 +51,7 @@ namespace AllIn1SpriteShader
 
             GUILayout.Label("General Properties", bigLabelStyle);
             DrawProperty(0);
-			DrawProperty(172);
-
-			DrawProperty(1);
+            DrawProperty(1);
             //DrawProperty(2);
             DrawProperty(70);
 
@@ -81,7 +79,7 @@ namespace AllIn1SpriteShader
             EditorGUILayout.Separator();
             DrawLine(Color.grey, 1, 3);
             GUILayout.Label("Light Effect", bigLabelStyle);
-            GenericEffect("Normal Map", "NORMALMAP_ON", 189, 190);
+            GenericEffect("Normal Map", "NORMALMAP_ON", 181, 182);
 
             EditorGUILayout.Separator();
             DrawLine(Color.grey, 1, 3);
@@ -91,7 +89,7 @@ namespace AllIn1SpriteShader
             if(currEnabledDrawers[colorFxShapeDrawer])
             {
                 Glow("Glow", "GLOW_ON");
-                GenericEffect("Fade", "FADE_ON", 7, 13, extraProperties: new int[] { 173, 174 } );
+                GenericEffect("Fade", "FADE_ON", 7, 13);
                 Outline("Outline", "OUTBASE_ON");
                 GenericEffect("Alpha Outline", "ALPHAOUTLINE_ON", 26, 30, true, "A more performant but less flexible outline");
                 InnerOutline("Inner Outline", "INNEROUTLINE_ON", 66, 69);
@@ -110,7 +108,7 @@ namespace AllIn1SpriteShader
                 GenericEffect("Ghost", "GHOST_ON", 64, 65, true, "This effect will not affect the outline", new int[] { 157 });
                 GenericEffect("Hologram", "HOLOGRAM_ON", 73, 77, true, null, new int[] { 140, 158 });
                 GenericEffect("Chromatic Aberration", "CHROMABERR_ON", 78, 79);
-                GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139, 180 });
+                GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139, 172 });
                 GenericEffect("Flicker", "FLICKER_ON", 81, 83);
                 GenericEffect("Shadow", "SHADOW_ON", 84, 87);
                 GenericEffect("Shine", "SHINE_ON", 133, 138);
@@ -134,7 +132,7 @@ namespace AllIn1SpriteShader
                 GenericEffect("Radial Clipping / Radial Fill", "RADIALCLIPPING_ON", 164, 166);
                 GenericEffect("Texture Scroll", "TEXTURESCROLL_ON", 106, 107, true, "Set Texture Wrap Mode to Repeat");
                 GenericEffect("Zoom", "ZOOMUV_ON", 108, 108);
-                GenericEffect("Distortion", "DISTORT_ON", 109, 112, extraProperties: new int[] { 177 } );
+                GenericEffect("Distortion", "DISTORT_ON", 109, 112);
                 GenericEffect("Warp Distortion", "WARP_ON", 167, 169);
                 GenericEffect("Twist", "TWISTUV_ON", 113, 116);
                 GenericEffect("Rotate", "ROTATEUV_ON", 117, 117, true, "_Tip_ Use Clipping effect to avoid possible undesired parts");
@@ -300,7 +298,6 @@ namespace AllIn1SpriteShader
                     if(outlineTexture)
                     {
                         DrawProperty(19);
-						DrawProperty(175);
                         DrawProperty(20);
                         DrawProperty(21);
                     }
@@ -310,7 +307,6 @@ namespace AllIn1SpriteShader
                     if(outlineDistort)
                     {
                         DrawProperty(22);
-						DrawProperty(176);
                         DrawProperty(23);
                         DrawProperty(24);
                         DrawProperty(25);
@@ -747,17 +743,8 @@ namespace AllIn1SpriteShader
                     if(multModeOn) GUILayout.Label("Overlay is set to multiplicative mode", smallLabelStyle);
                     else GUILayout.Label("Overlay is set to additive mode", smallLabelStyle);
 
-
-					DrawProperty(160);
-					DrawProperty(178);
-					DrawProperty(161);
-					DrawProperty(162);
-					DrawProperty(163);
-
-					for (int i = 170; i <= 171; i++)
-					{
-						DrawProperty(i);
-					}
+                    for(int i = 160; i <= 163; i++) DrawProperty(i);
+                    for(int i = 170; i <= 171; i++) DrawProperty(i);
                 }
                 EditorGUILayout.EndVertical();
             }
