@@ -362,15 +362,7 @@ public class LeanTween : MonoBehaviour {
             }
         }
         tweens = null;
-        if (_tweenEmpty != null) {
-            if (Application.isPlaying) {
-                Destroy(_tweenEmpty);
-            }
-            else {
-                DestroyImmediate(_tweenEmpty);
-            }
-            _tweenEmpty = null;
-        }
+        Destroy(_tweenEmpty);
     }
 
     public void Update(){

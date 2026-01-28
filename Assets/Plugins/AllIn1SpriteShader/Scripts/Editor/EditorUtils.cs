@@ -5,6 +5,15 @@ namespace AllIn1SpriteShader
 {
 	public static class EditorUtils
 	{
+		public static string UnifyEOL(string text)
+		{
+			if(string.IsNullOrEmpty(text)) return text;
+
+			text = text.Replace("\r\n", "\n");
+			text = text.Replace("\r", "\n");
+			return text;
+		}
+
 		public static AllIn1ShaderPropertyType GetShaderTypeByMaterialProperty(MaterialProperty matProperty)
 		{
 			AllIn1ShaderPropertyType res;

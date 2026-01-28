@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using DentedPixel;
+using System.Data.SqlClient;
 
 namespace DentedPixel.LTExamples
 {
@@ -523,7 +524,7 @@ namespace DentedPixel.LTExamples
             Time.timeScale = 1f;
 
             int ltCount = 0;
-            GameObject[] allGos = FindObjectsByType<GameObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            GameObject[] allGos = FindObjectsByType<GameObject>(UnityEngine.FindObjectsSortMode.None);
             foreach (GameObject go in allGos)
             {
                 if (go.name == "~LeanTween")

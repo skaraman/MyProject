@@ -151,7 +151,7 @@ namespace AllIn1SpriteShader
 				string newShaderStr = File.ReadAllText(Path.Combine(currentFolder, shaderTemplatePath));
 				newShaderStr = newShaderStr.Replace($"Shader \"AllIn1SpriteShader/{shaderName}_BetterShader\"", $"Shader \"AllIn1SpriteShader/{shaderName}\"");
 
-				File.WriteAllText(Path.Combine(currentFolder, finalShaderPath), newShaderStr);
+				File.WriteAllText(Path.Combine(currentFolder, finalShaderPath), EditorUtils.UnifyEOL(newShaderStr));
 
 				AssetDatabase.SaveAssets();
 				AssetDatabase.Refresh();

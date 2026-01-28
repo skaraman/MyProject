@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using UnityEditor;
 #endif
 
+[ExecuteAlways]
 public class SpriteWithNormals : MonoBehaviour {
   public SpriteLibraryAsset colorLibrary;
   public SpriteLibraryAsset normalLibrary;
@@ -128,40 +129,51 @@ public class SpriteWithNormalsEditor : Editor {
       labelsDirty = true;
     }
 
+    var needsRefresh = false;
+
     EnsureCategoriesBuilt(t);
-    DrawCategoryDropdown(t);
+    DrawCategoryDropdown(t, ref needsRefresh);
 
     EnsureLabelsBuilt(t);
-    DrawLabelDropdown(t);
+    DrawLabelDropdown(t, ref needsRefresh);
 
     serializedObject.ApplyModifiedProperties();
+
+    if (needsRefresh) {
+      t.ForceUpdateSpriteAndNormal();
+    }
   }
 
   void EnsureCategoriesBuilt(SpriteWithNormals t) {
     if (!categoriesDirty && categoryDisplay != null && categoryDisplay.Length > 0) return;
 
     categoryValues.Clear();
+    categoryValues.Add("");
     var lib = colorLibraryProp.objectReferenceValue as SpriteLibraryAsset;
     if (lib != null) {
       foreach (var c in lib.GetCategoryNames()) {
-        if (!string.IsNullOrEmpty(c)) categoryValues.Add(c);
+        if (!string.IsNullOrEmpty(c) && !categoryValues.Contains(c)) categoryValues.Add(c);
       }
+    }
+
+    if (!string.IsNullOrEmpty(t.category) && !categoryValues.Contains(t.category)) {
+      categoryValues.Add(t.category);
     }
 
     if (categoryValues.Count == 0) {
-      if (!string.IsNullOrEmpty(t.category)) {
-        categoryValues.Add(t.category);
-      }
-      else {
-        categoryValues.Add("Default");
-      }
+      categoryValues.Add("Default");
     }
 
-    categoryDisplay = categoryValues.ToArray();
+    var displayList = new List<string>(categoryValues.Count);
+    foreach (var v in categoryValues) {
+      displayList.Add(v == "" ? "\"\"" : v);
+    }
+
+    categoryDisplay = displayList.ToArray();
     categoriesDirty = false;
   }
 
-  void DrawCategoryDropdown(SpriteWithNormals t) {
+  void DrawCategoryDropdown(SpriteWithNormals t, ref bool needsRefresh) {
     var current = categoryProp.stringValue;
     if (string.IsNullOrEmpty(current)) current = categoryValues.Count > 0 ? categoryValues[0] : "Default";
 
@@ -178,6 +190,7 @@ public class SpriteWithNormalsEditor : Editor {
           labelPrefixProp.stringValue = "";
           lastCategory = newValue;
           labelsDirty = true;
+          needsRefresh = true;
         }
       }
     }
@@ -202,17 +215,20 @@ public class SpriteWithNormalsEditor : Editor {
       }
     }
 
-    var displayList = new List<string>();
+    if (!string.IsNullOrEmpty(t.labelPrefix) && !labelValues.Contains(t.labelPrefix)) {
+      labelValues.Add(t.labelPrefix);
+    }
+
+    var displayList = new List<string>(labelValues.Count);
     foreach (var v in labelValues) {
-      if (v == "") displayList.Add("EmptyString");
-      else displayList.Add(v);
+      displayList.Add(v == "" ? "\"\"" : v);
     }
 
     labelDisplay = displayList.ToArray();
     labelsDirty = false;
   }
 
-  void DrawLabelDropdown(SpriteWithNormals t) {
+  void DrawLabelDropdown(SpriteWithNormals t, ref bool needsRefresh) {
     var current = labelPrefixProp.stringValue;
     if (string.IsNullOrEmpty(current)) current = "";
 
@@ -222,11 +238,12 @@ public class SpriteWithNormalsEditor : Editor {
     EditorGUI.BeginChangeCheck();
     var newIndex = EditorGUILayout.Popup("Label Prefix", index, labelDisplay);
     if (EditorGUI.EndChangeCheck()) {
-      if (newIndex >= 0 && newIndex < labelValues.Count) {
-        var newValue = labelValues[newIndex];
-        labelPrefixProp.stringValue = newValue;
+        if (newIndex >= 0 && newIndex < labelValues.Count) {
+          var newValue = labelValues[newIndex];
+          labelPrefixProp.stringValue = newValue;
+          needsRefresh = true;
+        }
       }
     }
   }
-}
 #endif

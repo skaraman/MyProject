@@ -135,7 +135,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: atlas_1_0
+      name: cloud
       rect:
         serializedVersion: 2
         x: 0
@@ -143,7 +143,7 @@ TextureImporter:
         width: 1920
         height: 817
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -157,7 +157,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: atlas_1_1
+      name: sky
       rect:
         serializedVersion: 2
         x: 0
@@ -165,7 +165,7 @@ TextureImporter:
         width: 1920
         height: 834
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -179,15 +179,15 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: atlas_1_2
+      name: reeds
       rect:
         serializedVersion: 2
-        x: 1202
+        x: 0
         y: 1
-        width: 718
+        width: 1920
         height: 269
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -200,33 +200,11 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
-    - serializedVersion: 2
-      name: atlas_1_3
-      rect:
-        serializedVersion: 2
-        x: 0
-        y: 1
-        width: 564
-        height: 161
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: ee2ba77d6b3382ef0800000000000000
-      internalID: -132799328615222546
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 6c4e5dae85fc8134eb8c3bfd9f7294fd
     internalID: 0
     vertices: []
     indices: 
@@ -236,10 +214,10 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      atlas_1_0: -8721964507169126584
-      atlas_1_1: 3802224214994464000
-      atlas_1_2: 7386717655610109217
       atlas_1_3: -132799328615222546
+      cloud: -8721964507169126584
+      reeds: 7386717655610109217
+      sky: 3802224214994464000
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
