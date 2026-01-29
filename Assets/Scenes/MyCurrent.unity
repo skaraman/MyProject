@@ -1548,7 +1548,7 @@ Transform:
   m_GameObject: {fileID: 10101587}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -15.770007, y: -4.5, z: 0}
+  m_LocalPosition: {x: -15.11, y: -5.43, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1708,8 +1708,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScaleIndex: 1
-  x: -15.770007
-  y: -4.5
+  x: -15.11
+  y: -5.43
   z: 0
   rx: -0
   ry: 0
@@ -1731,10 +1731,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_ComponentVersion: 2
   m_LightType: 3
-  m_BlendStyleIndex: 1
-  m_FalloffIntensity: 0.905
+  m_BlendStyleIndex: 0
+  m_FalloffIntensity: 0.72
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 0.56
+  m_Intensity: 0.92
   m_LightVolumeIntensity: 1
   m_LightVolumeEnabled: 0
   m_ApplyToSortingLayers: ffafe5bf
@@ -1757,8 +1757,8 @@ MonoBehaviour:
     m_Extent: {x: 0.9985302, y: 0.99853027, z: 0}
   m_PointLightInnerAngle: 360
   m_PointLightOuterAngle: 360
-  m_PointLightInnerRadius: 0
-  m_PointLightOuterRadius: 5.93
+  m_PointLightInnerRadius: 2.1
+  m_PointLightOuterRadius: 6.02
   m_ShapeLightParametricSides: 5
   m_ShapeLightParametricAngleOffset: 0
   m_ShapeLightParametricRadius: 1
@@ -15844,7 +15844,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 4335250483284255847, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: 4335250483284255847, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -15910,7 +15910,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: NrgExtendBot
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &134727005
 GameObject:
   m_ObjectHideFlags: 0
@@ -36015,7 +36015,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2850093654693141264, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: -2850093654693141264, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -36081,7 +36081,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: NrgCurveTop
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &295752714
 GameObject:
   m_ObjectHideFlags: 0
@@ -43430,8 +43430,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 1.2985474e-36
   m_SpriteKey: 0
   m_SpriteHash: 1040650907
 --- !u!114 &359029789
@@ -44854,6 +44854,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 367027218}
+  - component: {fileID: 367027219}
   m_Layer: 8
   m_Name: HealthAvatar
   m_TagString: Untagged
@@ -44878,6 +44879,33 @@ Transform:
   - {fileID: 1626832560}
   m_Father: {fileID: 2013027737}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &367027219
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 367027217}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17c4de7934e92124d8e99a2e88d46b8f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::HealthBarControl
+  Form: Aqua
+  objectsToChange:
+  - {fileID: 1947244020}
+  - {fileID: 1196078751}
+  - {fileID: 1666282534}
+  - {fileID: 1845215808}
+  - {fileID: 295530304}
+  - {fileID: 2069802822}
+  - {fileID: 1543813849}
+  - {fileID: 131972747}
+  - {fileID: 1906252483}
+  - {fileID: 1364197218}
+  characterState: {fileID: 689752590}
+  healthText: {fileID: 1803794154}
+  nrgText: {fileID: 84493666}
 --- !u!1 &367430752
 GameObject:
   m_ObjectHideFlags: 0
@@ -59973,8 +60001,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.1084466e-13
   m_SpriteKey: 0
   m_SpriteHash: 381666984
 --- !u!114 &491930976
@@ -123269,8 +123297,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 1.2985474e-36
   m_SpriteKey: 0
   m_SpriteHash: 1040650907
 --- !u!114 &981255434
@@ -134700,8 +134728,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &1053048519
@@ -135325,8 +135353,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 5.2479913e-30
   m_SpriteKey: 0
   m_SpriteHash: 856629102
 --- !u!114 &1061921761
@@ -156422,7 +156450,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 9093825842685103111, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: 9093825842685103111, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -156488,7 +156516,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: HpCurveBot
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &1196387949
 GameObject:
   m_ObjectHideFlags: 0
@@ -172930,7 +172958,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: AvatarBG
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!212 &1364197223
 SpriteRenderer:
   serializedVersion: 2
@@ -172980,7 +173008,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -983156657889264743, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: -983156657889264743, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -188191,8 +188219,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &1464547030
@@ -196336,7 +196364,7 @@ Transform:
   m_GameObject: {fileID: 1543813849}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -10.77, y: -3.153, z: 0}
+  m_LocalPosition: {x: -10.742, y: -3.172, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -196412,7 +196440,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -217455086581007235, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: -217455086581007235, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -196452,8 +196480,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScaleIndex: 1
-  x: -10.77
-  y: -3.153
+  x: -10.742
+  y: -3.172
   z: 0
   rx: -0
   ry: 0
@@ -196478,7 +196506,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: NrgExtendTop
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &1544482342
 GameObject:
   m_ObjectHideFlags: 0
@@ -198460,7 +198488,7 @@ Transform:
   m_GameObject: {fileID: 1563937995}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -12.79, y: -5.91, z: 0}
+  m_LocalPosition: {x: 0.17, y: -0.17, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -198579,9 +198607,9 @@ MonoBehaviour:
   m_ComponentVersion: 2
   m_LightType: 3
   m_BlendStyleIndex: 1
-  m_FalloffIntensity: 1
+  m_FalloffIntensity: 0
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1.02
+  m_Intensity: 4.5
   m_LightVolumeIntensity: 1
   m_LightVolumeEnabled: 0
   m_ApplyToSortingLayers: ffafe5bf
@@ -198605,7 +198633,7 @@ MonoBehaviour:
   m_PointLightInnerAngle: 360
   m_PointLightOuterAngle: 360
   m_PointLightInnerRadius: 1.73
-  m_PointLightOuterRadius: 61.14
+  m_PointLightOuterRadius: 20.6
   m_ShapeLightParametricSides: 5
   m_ShapeLightParametricAngleOffset: 0
   m_ShapeLightParametricRadius: 1
@@ -204684,7 +204712,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1626832560
 Transform:
   m_ObjectHideFlags: 0
@@ -208265,8 +208293,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 3.3980116e-13
   m_SpriteKey: 0
   m_SpriteHash: 392476590
 --- !u!114 &1659698143
@@ -209405,8 +209433,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &1665229238
@@ -209704,7 +209732,7 @@ Transform:
   m_GameObject: {fileID: 1666282534}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -10.499, y: -8.206, z: 0}
+  m_LocalPosition: {x: -10.508, y: -8.211, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -209780,7 +209808,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -199644854353079308, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: -199644854353079308, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -209820,8 +209848,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScaleIndex: 1
-  x: -10.499
-  y: -8.206
+  x: -10.508
+  y: -8.211
   z: 0
   rx: -0
   ry: 0
@@ -209846,7 +209874,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: HpExtendTop
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &1666616272
 GameObject:
   m_ObjectHideFlags: 0
@@ -219589,7 +219617,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee158225ee1e59f4791627785501d950, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  currentShaderType: 3
+  currentShaderType: 0
   normalStrength: 5
   normalSmoothing: 1
   computingNormal: 0
@@ -229248,7 +229276,7 @@ Transform:
   m_GameObject: {fileID: 1845215808}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -10.707, y: -8.989, z: 0}
+  m_LocalPosition: {x: -10.735, y: -8.956, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -229324,7 +229352,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -997972493423046422, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: -997972493423046422, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -229364,8 +229392,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScaleIndex: 1
-  x: -10.707
-  y: -8.989
+  x: -10.735
+  y: -8.956
   z: 0
   rx: -0
   ry: 0
@@ -229390,7 +229418,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: HpExtendBot
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &1848492049
 GameObject:
   m_ObjectHideFlags: 0
@@ -232892,8 +232920,8 @@ Transform:
   m_Children:
   - {fileID: 1656298271}
   - {fileID: 305724303}
-  - {fileID: 223569628}
   - {fileID: 1290114014}
+  - {fileID: 223569628}
   - {fileID: 1386008010}
   - {fileID: 1906252484}
   - {fileID: 1364197219}
@@ -233208,8 +233236,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &1886018090
@@ -236910,7 +236938,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 21
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: d7cdf749b22a49a469bfcaf1aacba9b0, type: 3}
+  m_Sprite: {fileID: -733386185, guid: 578781f3331628741a31fbf507f4f9f4, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -236918,7 +236946,7 @@ SpriteRenderer:
   m_Size: {x: 4.6, y: 5.2}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 0
+  m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
 --- !u!114 &1906252488
 MonoBehaviour:
@@ -236969,13 +236997,13 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   colorLibrary: {fileID: 7108339969198208228, guid: 6e5ba93dc2e9e9f48a29b9731e1b60da,
     type: 3}
-  normalLibrary: {fileID: 7108339969198208228, guid: 464d3d291165ad949b1ff0cec31ed7be,
+  normalLibrary: {fileID: 7108339969198208228, guid: 8beaa6bc8d348b14f9c4a6f00ab3982c,
     type: 3}
-  category: Happy
-  labelPrefix: base
+  category: Normal
+  labelPrefix: Aqua
 --- !u!114 &1906252491
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -238232,7 +238260,7 @@ Transform:
   m_GameObject: {fileID: 1923021524}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -10.849, y: -3.573, z: 0}
+  m_LocalPosition: {x: -10.84, y: -3.573, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -238364,7 +238392,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee158225ee1e59f4791627785501d950, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  currentShaderType: 3
+  currentShaderType: 0
   normalStrength: 5
   normalSmoothing: 1
   computingNormal: 0
@@ -238381,7 +238409,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   timeScaleIndex: 1
-  x: -10.849
+  x: -10.84
   y: -3.573
   z: 0
   rx: -0
@@ -242031,8 +242059,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 4.883062e-21
   m_SpriteKey: 0
   m_SpriteHash: 543393592
 --- !u!114 &1939616025
@@ -243188,7 +243216,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: HpCurveTop
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!114 &1947244024
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -243259,7 +243287,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 3150387745278999259, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: 3150387745278999259, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -256892,7 +256920,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 20
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 3210994475073176143, guid: 1dca10cafd56add479632a3912286b44,
+  m_Sprite: {fileID: 3210994475073176143, guid: c4c275e9759ef3446abf89834cf7c5c7,
     type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -256958,7 +256986,7 @@ MonoBehaviour:
   normalLibrary: {fileID: 7108339969198208228, guid: 3f473d544e5f56747821140a66b25afc,
     type: 3}
   category: NrgCurveBot
-  labelPrefix: Base
+  labelPrefix: Aqua
 --- !u!1 &2070474453
 GameObject:
   m_ObjectHideFlags: 0
@@ -262231,8 +262259,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed8b1ae4e4e52b34ea557c1c11e076fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_CategoryHash: 1.5718032e-34
-  m_labelHash: 2.0399594e-14
+  m_CategoryHash: 4.237263e-35
+  m_labelHash: 8.840178e-23
   m_SpriteKey: 0
   m_SpriteHash: 655246113
 --- !u!114 &2101482254

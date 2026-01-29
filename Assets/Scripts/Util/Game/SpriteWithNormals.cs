@@ -186,8 +186,9 @@ public class SpriteWithNormalsEditor : Editor {
       if (newIndex >= 0 && newIndex < categoryValues.Count) {
         var newValue = categoryValues[newIndex];
         if (newValue != categoryProp.stringValue) {
+          var previousLabel = labelPrefixProp.stringValue;
           categoryProp.stringValue = newValue;
-          labelPrefixProp.stringValue = "";
+          labelPrefixProp.stringValue = ResolveLabelForCategory(newValue, previousLabel);
           lastCategory = newValue;
           labelsDirty = true;
           needsRefresh = true;
@@ -245,5 +246,23 @@ public class SpriteWithNormalsEditor : Editor {
         }
       }
     }
+
+  string ResolveLabelForCategory(string category, string currentLabel) {
+    if (string.IsNullOrEmpty(currentLabel)) return "";
+    if (IsNumericOnly(currentLabel)) return "";
+    var lib = colorLibraryProp.objectReferenceValue as SpriteLibraryAsset;
+    if (lib == null || string.IsNullOrEmpty(category)) return "";
+    foreach (var label in lib.GetCategoryLabelNames(category)) {
+      if (label == currentLabel) return label;
+    }
+    return "";
   }
+
+  bool IsNumericOnly(string value) {
+    for (var i = 0; i < value.Length; i++) {
+      if (!char.IsDigit(value[i])) return false;
+    }
+    return value.Length > 0;
+  }
+}
 #endif
