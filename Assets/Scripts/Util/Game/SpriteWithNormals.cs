@@ -16,18 +16,34 @@ public class SpriteWithNormals : MonoBehaviour {
   SpriteRenderer _renderer;
   MaterialPropertyBlock _mpb;
   StringBuilder label = new();
+#if UNITY_EDITOR
+  bool _editorUpdateQueued;
+#endif
 
   void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
     _mpb = new MaterialPropertyBlock();
-    UpdateSpriteAndNormal(0);
+  }
+
+  void Start() {
+    if (Application.isPlaying) UpdateSpriteAndNormal(0);
+  }
+
+  void OnEnable() {
+    if (!Application.isPlaying) {
+      QueueEditorUpdate();
+    }
   }
 
   void OnValidate() {
     if (colorLibrary == null || normalLibrary == null) return;
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     if (_renderer == null) return;
-    UpdateSpriteAndNormal(0);
+    if (Application.isPlaying) {
+      UpdateSpriteAndNormal(0);
+      return;
+    }
+    QueueEditorUpdate();
   }
 
   public void SetAnimation(string name) {
@@ -84,6 +100,20 @@ public class SpriteWithNormals : MonoBehaviour {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     _renderer.flipX = flip;
   }
+
+#if UNITY_EDITOR
+  void QueueEditorUpdate() {
+    if (_editorUpdateQueued) return;
+    _editorUpdateQueued = true;
+    EditorApplication.delayCall += PerformEditorUpdate;
+  }
+
+  void PerformEditorUpdate() {
+    _editorUpdateQueued = false;
+    if (this == null) return;
+    UpdateSpriteAndNormal(0);
+  }
+#endif
 }
 
 #if UNITY_EDITOR
