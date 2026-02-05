@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 1895520500905497515}
   - component: {fileID: 3160820946819878659}
   - component: {fileID: 7970054738290227453}
+  - component: {fileID: 2645369141433550132}
   m_Layer: 8
   m_Name: image
   m_TagString: Untagged
@@ -41,19 +42,20 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3954664992722931752}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colorLibrary: {fileID: 7108339969198208228, guid: 861113bb3aff0db48b4088a33063b6fb,
+  colorLibrary: {fileID: 7108339969198208228, guid: 16216df0f245b754e872844924442b71,
     type: 3}
-  normalLibrary: {fileID: 7108339969198208228, guid: 7e65a9518a764d24ea1bee023f08c2b4,
+  normalLibrary: {fileID: 7108339969198208228, guid: c76ea02e0c3456b41bdadcea22243eb0,
     type: 3}
-  category: StatsName
-  labelPrefix: base
+  category: Arms
+  labelPrefix: Cold_ab
 --- !u!212 &3160820946819878659
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -77,7 +79,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 4a75250726584014f8b605e62de3fdba, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -98,17 +100,18 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1416751659
   m_SortingLayer: 4
-  m_SortingOrder: 3
-  m_Sprite: {fileID: 21300000, guid: 4d40698803922df45b99419432663af8, type: 3}
+  m_SortingOrder: 4
+  m_MaskInteraction: 0
+  m_Sprite: {fileID: -217455086581007235, guid: 16883a8e8b4dddb4d9d899cd9642756f,
+    type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 2.63, y: 0.8}
+  m_Size: {x: 0.96, y: 0.91}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &7970054738290227453
 MonoBehaviour:
@@ -122,10 +125,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee158225ee1e59f4791627785501d950, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  currentShaderType: 0
+  currentShaderType: 3
   normalStrength: 5
   normalSmoothing: 1
   computingNormal: 0
+--- !u!114 &2645369141433550132
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3954664992722931752}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations: []
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &7838333566284654677
 GameObject:
   m_ObjectHideFlags: 0
@@ -174,12 +198,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   colorLibrary: {fileID: 7108339969198208228, guid: 861113bb3aff0db48b4088a33063b6fb,
     type: 3}
-  normalLibrary: {fileID: 7108339969198208228, guid: 7e65a9518a764d24ea1bee023f08c2b4,
+  normalLibrary: {fileID: 7108339969198208228, guid: 760b2bddf5f01b543afee244ed7e3899,
     type: 3}
   category: StatsName
   labelPrefix: base
 --- !u!212 &7184360051580117179
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -203,7 +228,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 4a75250726584014f8b605e62de3fdba, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -224,17 +249,18 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1416751659
   m_SortingLayer: 4
-  m_SortingOrder: 2
-  m_Sprite: {fileID: 21300000, guid: 4d40698803922df45b99419432663af8, type: 3}
+  m_SortingOrder: 3
+  m_MaskInteraction: 0
+  m_Sprite: {fileID: 3150387745278999259, guid: d4ecde9f7c081bd40bdd0f77fb18c8d5,
+    type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 2.63, y: 0.8}
+  m_Size: {x: 1.77, y: 0.59}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &674556020812798310
 MonoBehaviour:
@@ -248,7 +274,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee158225ee1e59f4791627785501d950, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  currentShaderType: 0
+  currentShaderType: 3
   normalStrength: 5
   normalSmoothing: 1
   computingNormal: 0
@@ -300,12 +326,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   colorLibrary: {fileID: 7108339969198208228, guid: 861113bb3aff0db48b4088a33063b6fb,
     type: 3}
-  normalLibrary: {fileID: 7108339969198208228, guid: 7e65a9518a764d24ea1bee023f08c2b4,
+  normalLibrary: {fileID: 7108339969198208228, guid: 760b2bddf5f01b543afee244ed7e3899,
     type: 3}
   category: SubStatName
   labelPrefix: base
 --- !u!212 &7761580881761900832
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -329,7 +356,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 4a75250726584014f8b605e62de3fdba, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -351,16 +378,17 @@ SpriteRenderer:
   m_SortingLayerID: -1416751659
   m_SortingLayer: 4
   m_SortingOrder: 2
-  m_Sprite: {fileID: 21300000, guid: 0d49942a9ce9e2446a9406ddd41d20a9, type: 3}
+  m_MaskInteraction: 0
+  m_Sprite: {fileID: -2850093654693141264, guid: d4ecde9f7c081bd40bdd0f77fb18c8d5,
+    type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 2.63, y: 0.8}
+  m_Size: {x: 1.75, y: 0.57}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &1878152615928401690
 MonoBehaviour:
@@ -374,7 +402,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee158225ee1e59f4791627785501d950, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  currentShaderType: 0
+  currentShaderType: 3
   normalStrength: 5
   normalSmoothing: 1
   computingNormal: 0
