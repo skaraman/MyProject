@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace CustomInspector.Editor
 {
-    [CustomPropertyDrawer(typeof(TitleAttribute))]
+    [CustomPropertyDrawer(typeof(Header2Attribute))]
     public class TitleAttributeDrawer : PropertyDrawer
     {
         const float underlineThickness = 1;
@@ -12,7 +12,7 @@ namespace CustomInspector.Editor
         {
             label = PropertyValues.ValidateLabel(label, property);
 
-            TitleAttribute t = (TitleAttribute)attribute;
+            Header2Attribute t = (Header2Attribute)attribute;
 
             GUIContent title = new(t.content, t.tooltip);
 
@@ -74,7 +74,7 @@ namespace CustomInspector.Editor
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            TitleAttribute t = (TitleAttribute)attribute;
+            Header2Attribute t = (Header2Attribute)attribute;
 
             //style
             GUIStyle titleStyle = new(EditorStyles.boldLabel);

@@ -9,10 +9,6 @@ onBoardingDoNotAskAgain = true
 showPackageIndexes = false
 showStatusBar = false
 scopes = {
-	"picker_window_position_offset.00000000" = "469;43;618;550"
-	"picker_visibility_flags.00000000" = "0"
-	"picker_item_size.00000000" = "1"
-	"picker_inspector.00000000" = "0"
 }
 providers = {
 	asset = {
@@ -45,12 +41,12 @@ providers = {
 		priority = 90
 		defaultAction = null
 	}
-	profilermarkers = {
+	performance = {
 		active = false
 		priority = 100
 		defaultAction = null
 	}
-	performance = {
+	profilermarkers = {
 		active = false
 		priority = 100
 		defaultAction = null
@@ -63,26 +59,6 @@ providers = {
 	log = {
 		active = false
 		priority = 210
-		defaultAction = null
-	}
-	menu = {
-		active = true
-		priority = 80
-		defaultAction = null
-	}
-	settings = {
-		active = true
-		priority = 100
-		defaultAction = null
-	}
-	calculator = {
-		active = true
-		priority = 10
-		defaultAction = null
-	}
-	static_methods = {
-		active = false
-		priority = 85
 		defaultAction = null
 	}
 }

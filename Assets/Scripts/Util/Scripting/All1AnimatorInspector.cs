@@ -301,7 +301,25 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     if (effectiveTime >= seq.duration) FinalizeStep(anim);
   }
 
-  void FinalizeStep(dynamic anim) {
+  void FinalizeStep(FloatAnimation anim) {
+    anim.timer = 0f;
+    anim.currentSequenceIndex++;
+    if (anim.currentSequenceIndex >= anim.sequences.Count) {
+      anim.currentSequenceIndex = 0;
+      anim.isDone = true;
+    }
+  }
+
+  void FinalizeStep(ColorAnimation anim) {
+    anim.timer = 0f;
+    anim.currentSequenceIndex++;
+    if (anim.currentSequenceIndex >= anim.sequences.Count) {
+      anim.currentSequenceIndex = 0;
+      anim.isDone = true;
+    }
+  }
+
+  void FinalizeStep(VectorAnimation anim) {
     anim.timer = 0f;
     anim.currentSequenceIndex++;
     if (anim.currentSequenceIndex >= anim.sequences.Count) {

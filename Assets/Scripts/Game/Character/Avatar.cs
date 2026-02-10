@@ -20,7 +20,7 @@ public class Avatar : MonoBehaviour {
 
   private void UpdateSprite() {
     // Update the sprite based on the current gear
-    spriteWithNormals.labelPrefix = EsperanzaForms.GetActive();
+    spriteWithNormals.form = EsperanzaForms.GetActive();
     spriteWithNormals.ForceUpdateSpriteAndNormal();
   }
 

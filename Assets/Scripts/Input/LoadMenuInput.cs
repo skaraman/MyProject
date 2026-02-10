@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class LoadMenuInput : ButtonGroup {
   int activeIndexLoadMenu = -1;
@@ -38,13 +37,13 @@ public class LoadMenuInput : ButtonGroup {
 
   void HandleMouseInput() {
     // Handle mouse press start
-    if (Mouse.current.leftButton.wasPressedThisFrame) {
+    if (Input.GetMouseButtonDown(0)) {
       BeginClick();
     }
 
     // Handle dragging while pressed
-    if (pressed && Mouse.current.leftButton.isPressed) {
-      var currentPos = Mouse.current.position.ReadValue();
+    if (pressed && Input.GetMouseButton(0)) {
+      Vector2 currentPos = Input.mousePosition;
       var dist = Vector2.Distance(currentPos, pressPosition);
 
       if (!dragging && dist > dragThreshold) {
@@ -71,7 +70,7 @@ public class LoadMenuInput : ButtonGroup {
     }
 
     // Handle mouse release
-    if (Mouse.current.leftButton.wasReleasedThisFrame && pressed) {
+    if (Input.GetMouseButtonUp(0) && pressed) {
       if (!dragging) {
         // Only trigger click if we weren't dragging
         DetectClickOnChild();
@@ -84,7 +83,7 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void BeginClick() {
-    pressPosition = Mouse.current.position.ReadValue();
+    pressPosition = Input.mousePosition;
     pressed = true;
     dragging = false;
   }
@@ -94,7 +93,7 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void DetectClickOnChild() {
-    var screenPos = Mouse.current.position.ReadValue();
+    Vector2 screenPos = Input.mousePosition;
 
     if (Camera.main == null) {
       Debug.LogError("Camera.main is null - cannot convert screen to world position");

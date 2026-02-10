@@ -13,7 +13,6 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - GLOW_ON
-  - GRADIENT2COL_ON
   - GRADIENT_ON
   m_InvalidKeywords:
   - GLOWLIGHT_ON
@@ -138,8 +137,8 @@ Material:
     - _GlowAffectLight: 1
     - _GlowGlobal: 1
     - _GradBlend: 1
-    - _GradBoostX: 1.2
-    - _GradBoostY: 0.73
+    - _GradBoostX: 5
+    - _GradBoostY: 0.34
     - _GradIsRadial: 0
     - _GrassManualAnim: 1
     - _GrassManualToggle: 0
@@ -250,10 +249,10 @@ Material:
     - _FadeBurnTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _FadeTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _GlowColor: {r: 1, g: 1, b: 1, a: 1}
-    - _GradBotLeftCol: {r: 1, g: 0, b: 0.11461401, a: 1}
-    - _GradBotRightCol: {r: 1, g: 1, b: 0, a: 1}
-    - _GradTopLeftCol: {r: 1, g: 0.7666347, b: 0.12941177, a: 1}
-    - _GradTopRightCol: {r: 1, g: 1, b: 0, a: 1}
+    - _GradBotLeftCol: {r: 1, g: 0, b: 0.5718689, a: 1}
+    - _GradBotRightCol: {r: 1, g: 0.7647059, b: 0.12941177, a: 1}
+    - _GradTopLeftCol: {r: 1, g: 0.14044955, b: 0, a: 1}
+    - _GradTopRightCol: {r: 1, g: 0.7647059, b: 0.12941177, a: 1}
     - _GreyscaleTintColor: {r: 1, g: 1, b: 1, a: 1}
     - _HitEffectColor: {r: 1, g: 1, b: 1, a: 1}
     - _HologramStripeColor: {r: 0, g: 1, b: 1, a: 1}

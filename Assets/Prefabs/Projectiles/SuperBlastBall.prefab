@@ -49,10 +49,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
-  colorLibrary: {fileID: 7108339969198208228, guid: 121104959bb90eb4dbaf468e8c65a26c,
-    type: 3}
-  normalLibrary: {fileID: 7108339969198208228, guid: 4e12b849ea7f8504295ac126d611e427,
-    type: 3}
+  colorKey: Effects
+  normalKey: 
   category: SuperBlastBall
   labelPrefix: 
 --- !u!114 &6807759890696001026
@@ -131,8 +129,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -3919779002189068522, guid: a776557e43477ae4aa3f0ecde179630b,
-    type: 3}
+  m_Sprite: {fileID: -3919779002189068522, guid: a776557e43477ae4aa3f0ecde179630b, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -140,7 +137,7 @@ SpriteRenderer:
   m_Size: {x: 0.7, y: 0.71}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!210 &5139290945509360972
 SortingGroup:
@@ -151,7 +148,7 @@ SortingGroup:
   m_GameObject: {fileID: 7967227520933354192}
   m_Enabled: 1
   m_SortingLayerID: -1567155121
-  m_SortingLayer: 2
+  m_SortingLayer: 0
   m_SortingOrder: 48
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0

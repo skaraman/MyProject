@@ -1,0 +1,25 @@
+Sprite Streaming Editor Actions (Memory-Safe)
+
+1) Keep deprecated preloaded sprite catalog disabled
+- Open Project Settings > Player > Other Settings > Preloaded Assets.
+- Remove any reference to Assets/Sprites/SpriteLibraries/SpriteLibraryCatalog.asset.
+
+2) Rebuild the runtime index only after scripts compile clean
+- Use Tools > Sprite Streaming > Rebuild Runtime Index.
+- Watch Console for SpriteIndexBuilder errors and resolve them before entering Play Mode.
+
+3) Build Addressables content after index rebuild
+- Open Window > Asset Management > Addressables > Groups.
+((I AM HERE))
+- Run Build > New Build > Default Build Script.
+
+4) Verify one known mapping before broad testing
+- In a test scene, select a SpriteWithNormals component.
+- Set Name Part, Form, Animation to a known tuple.
+- Click Refresh Sprite + Normal.
+- Confirm both color and normal sprites apply.
+
+5) If a rebuild crashes, do not continue iterating blindly
+- Re-open latest Crash/Crash_*/Editor.log.
+- Confirm whether failure is texture upload/memory residency.
+- Fix data/build path issues first, then rerun rebuild once.

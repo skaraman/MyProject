@@ -43,6 +43,8 @@ public static class ComponentFieldWatcher {
   }
 
   static void OnEditorUpdate() {
+    if (BuildPipeline.isBuildingPlayer)
+      return;
     if (EditorApplication.timeSinceStartup - lastUpdateTime < UPDATE_INTERVAL)
       return;
 

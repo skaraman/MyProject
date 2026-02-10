@@ -21,7 +21,7 @@ public class SaveSlotView : MonoBehaviour {
   void Start() {
     actions.Add(MessageBus.On("openLoadMenu", o => ArrangeSlots()));
 
-    var path = Application.persistentDataPath + "/";
+    var path = Application.persistentDataPath + "/Saves/";
     var dirs = Directory.GetDirectories(path);
     // Sort directories numerically by folder name
     Array.Sort(dirs, (x, y) => {

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using Unity.Mathematics;
 using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 public class GameplayInput : MonoBehaviour {
   private enum MoveMode {
@@ -92,12 +94,59 @@ public class GameplayInput : MonoBehaviour {
 
   bool _IsPressed(object o) {
     if (o == null) return true;
+#if ENABLE_INPUT_SYSTEM
+    if (o is InputAction.CallbackContext ctx) {
+      if (ctx.valueType == typeof(Vector2)) return ctx.ReadValue<Vector2>().sqrMagnitude > 0.25f;
+      if (ctx.valueType == typeof(Vector3)) return ctx.ReadValue<Vector3>().sqrMagnitude > 0.25f;
+      if (ctx.valueType == typeof(float)) return ctx.ReadValue<float>() > 0.5f;
+      if (ctx.valueType == typeof(int)) return ctx.ReadValue<int>() != 0;
+      if (ctx.valueType == typeof(bool)) return ctx.ReadValue<float>() > 0.5f;
+      return _IsPressed(ctx.ReadValueAsObject());
+    }
+#endif
     if (o is bool b) return b;
     if (o is float f) return f > 0.5f;
+    if (o is double d) return d > 0.5d;
     if (o is int i) return i != 0;
     if (o is Vector2 v) return v.sqrMagnitude > 0.25f;
     if (o is Vector3 v3) return v3.sqrMagnitude > 0.25f;
     return true;
+  }
+
+  float _ReadDirectionalValue(object value, bool horizontalAxis, bool positiveDirection) {
+    if (value == null) return 0f;
+
+#if ENABLE_INPUT_SYSTEM
+    if (value is InputAction.CallbackContext ctx) {
+      if (ctx.valueType == typeof(Vector2)) {
+        return _ReadDirectionalValue(ctx.ReadValue<Vector2>(), horizontalAxis, positiveDirection);
+      }
+      if (ctx.valueType == typeof(float)) {
+        return Mathf.Clamp01(ctx.ReadValue<float>());
+      }
+      if (ctx.valueType == typeof(int)) {
+        return Mathf.Clamp01(ctx.ReadValue<int>());
+      }
+      if (ctx.valueType == typeof(bool)) {
+        return ctx.ReadValue<float>() > 0.5f ? 1f : 0f;
+      }
+      return _ReadDirectionalValue(ctx.ReadValueAsObject(), horizontalAxis, positiveDirection);
+    }
+#endif
+
+    if (value is Vector2 v2) {
+      float axis = horizontalAxis ? v2.x : v2.y;
+      return Mathf.Clamp01(positiveDirection ? axis : -axis);
+    }
+    if (value is Vector3 v3) {
+      float axis = horizontalAxis ? v3.x : v3.y;
+      return Mathf.Clamp01(positiveDirection ? axis : -axis);
+    }
+    if (value is float f) return Mathf.Clamp01(f);
+    if (value is double d) return Mathf.Clamp01((float)d);
+    if (value is int i) return Mathf.Clamp01(i);
+    if (value is bool b) return b ? 1f : 0f;
+    return 0f;
   }
 
   void OnDisable() {
@@ -182,15 +231,15 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void charUp(object value) {
-    rawUp = (float)value;
+    rawUp = _ReadDirectionalValue(value, horizontalAxis: false, positiveDirection: true);
   }
 
   void charDown(object value) {
-    rawDown = (float)value;
+    rawDown = _ReadDirectionalValue(value, horizontalAxis: false, positiveDirection: false);
   }
 
   void charLeft(object value) {
-    float newValue = (float)value;
+    float newValue = _ReadDirectionalValue(value, horizontalAxis: true, positiveDirection: false);
     bool wasPressed = rawLeft > 0f;
     rawLeft = newValue;
 
@@ -208,7 +257,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void charRight(object value) {
-    float newValue = (float)value;
+    float newValue = _ReadDirectionalValue(value, horizontalAxis: true, positiveDirection: true);
     bool wasPressed = rawRight > 0f;
     rawRight = newValue;
 
@@ -269,7 +318,7 @@ public class GameplayInput : MonoBehaviour {
       return;
     }
 
-    var input = math.abs(moveInput.x) + math.abs(moveInput.y);
+    var input = Mathf.Abs(moveInput.x) + Mathf.Abs(moveInput.y);
     if (input <= 0f) {
       _TryPlayLocomotion("Breathe");
       return;
@@ -291,7 +340,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _UpdateRunSprint(Vector2 moveInput) {
-    bool inputMoving = math.abs(moveInput.x) + math.abs(moveInput.y) > 0f;
+    bool inputMoving = Mathf.Abs(moveInput.x) + Mathf.Abs(moveInput.y) > 0f;
 
     if (inputMoving) {
       if (!wasInputMoving) {

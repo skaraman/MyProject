@@ -1,11 +1,12 @@
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
-using UnityEngine.U2D.Animation;
 
 public class FontCharacter : MonoBehaviour {
-  public SpriteResolver spriteResolver;
+  public Component spriteResolver;
   public char character { set; get; } = 'T';
   public string font { set; get; } = "Hand";
+  private MethodInfo setCategoryAndLabelMethod;
 
   public Dictionary<char, string> cacheBank = new Dictionary<char, string> { // char.ToString() is too expensive, this is faster
     // Lowercase letters a-z
@@ -32,12 +33,27 @@ public class FontCharacter : MonoBehaviour {
     {'~', "~"}
   };
   void Reset() {
-    spriteResolver = GetComponent<SpriteResolver>();
+    EnsureSpriteResolver();
   }
 
   [ForceUpdate]
   public void UpdateSprite() {
-    if (spriteResolver) spriteResolver.SetCategoryAndLabel(font, cacheBank[character]);
+    EnsureSpriteResolver();
+    if (spriteResolver == null || setCategoryAndLabelMethod == null) return;
+    if (!cacheBank.TryGetValue(character, out string label)) return;
+
+    setCategoryAndLabelMethod.Invoke(spriteResolver, new object[] { font, label });
+  }
+
+  void EnsureSpriteResolver() {
+    if (spriteResolver == null) {
+      spriteResolver = GetComponent("SpriteResolver");
+    }
+
+    if (spriteResolver != null && setCategoryAndLabelMethod == null) {
+      setCategoryAndLabelMethod = spriteResolver.GetType().GetMethod("SetCategoryAndLabel",
+          new[] { typeof(string), typeof(string) });
+    }
   }
 }
 

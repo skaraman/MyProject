@@ -5,11 +5,14 @@ using UnityEngine;
 using CustomInspector;
 
 public class ComponentPropagator : MonoBehaviour {
+  public bool propagateOnce = true;
   [Serializable]
   public class ComponentToggle {
     public Component component;
     public bool propagate;
   }
+
+  private bool propagateOn = true;
 
   [SerializeField] public List<ComponentToggle> components = new();
   [Button(nameof(ForcePropagation), label = "Refresh")][HideField] public bool _bool;
@@ -17,8 +20,13 @@ public class ComponentPropagator : MonoBehaviour {
   int _fieldsSkippedCulling;
   int _propertiesSkippedCulling;
 
-  void Start() {
-    ForcePropagation();
+  void FixedUpdate() {
+    if (propagateOn) {
+      ForcePropagation();
+      if (propagateOnce) {  
+        propagateOn = false;
+      }
+    } 
   }
 
   public void ForcePropagation() {

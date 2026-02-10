@@ -18,6 +18,9 @@ public class TransformWrapper : TimeScaledTransform {
 
   [ForceUpdate]
   void Update() {
+#if UNITY_EDITOR
+    if (UnityEditor.BuildPipeline.isBuildingPlayer) return;
+#endif
     if (cachedTransform == null) cachedTransform = transform;
 
     var targetPos = new Vector3(x, y, z);

@@ -1,117 +1,296 @@
-using System.Text;
+using System.Collections;
 using UnityEngine;
-using UnityEngine.U2D.Animation;
+using UnityEngine.Serialization;
 #if UNITY_EDITOR
-using System.Collections.Generic;
 using UnityEditor;
 #endif
 
-[ExecuteAlways]
 public class SpriteWithNormals : MonoBehaviour {
-  public SpriteLibraryAsset colorLibrary;
-  public SpriteLibraryAsset normalLibrary;
-  public string category = "Breathe";
-  public string labelPrefix = "";
+
+  [FormerlySerializedAs("colorKey")]
+  public string namepart = "";
+
+  [FormerlySerializedAs("labelPrefix")]
+  public string form = "";
+
+  [FormerlySerializedAs("category")]
+  public new string animation = "Breathe";
 
   SpriteRenderer _renderer;
   MaterialPropertyBlock _mpb;
-  StringBuilder label = new();
-#if UNITY_EDITOR
-  bool _editorUpdateQueued;
-#endif
+  int _lastRequestedFrame;
+  int _lastExternalRequestFrame = int.MinValue;
+  bool _isInternalTickRequest;
+
+  const int ExternalDriverHoldFrames = 2;
+
+  int _requestVersion;
+  string _targetColorAddress = "";
+  string _targetNormalAddress = "";
+  string _pendingColorAddress = "";
+  string _pendingNormalAddress = "";
+  string _lastResolveError = "";
+  bool _hasDeferredRequest;
+  SpriteAddressPair _deferredRequest;
+
+  Coroutine _pendingLoadRoutine;
+  TextureResidencyCache.Lease _pendingColorLease;
+  TextureResidencyCache.Lease _pendingNormalLease;
+  TextureResidencyCache.Lease _activeColorLease;
+  TextureResidencyCache.Lease _activeNormalLease;
 
   void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
     _mpb = new MaterialPropertyBlock();
   }
 
-  void Start() {
-    if (Application.isPlaying) UpdateSpriteAndNormal(0);
-  }
-
-  void OnEnable() {
-    if (!Application.isPlaying) {
-      QueueEditorUpdate();
+  void Update() {
+    if (!Application.isPlaying) return;
+    if (!enabled || !gameObject.activeInHierarchy) return;
+    if (Time.frameCount - _lastExternalRequestFrame <= ExternalDriverHoldFrames) return;
+    _isInternalTickRequest = true;
+    try {
+      UpdateSpriteAndNormal(_lastRequestedFrame);
+    }
+    finally {
+      _isInternalTickRequest = false;
     }
   }
 
-  void OnValidate() {
-    if (colorLibrary == null || normalLibrary == null) return;
-    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer == null) return;
-    if (Application.isPlaying) {
-      UpdateSpriteAndNormal(0);
-      return;
-    }
-    QueueEditorUpdate();
+  void OnDisable() {
+    if (!Application.isPlaying) return;
+    CancelPendingRequest();
+    ReleaseActiveLeases();
+    TextureResidencyCache.PurgeUnpinned();
   }
 
-  public void SetAnimation(string name) {
-    category = name;
+  void OnDestroy() {
+    CancelPendingRequest();
+    ReleaseActiveLeases();
+    TextureResidencyCache.PurgeUnpinned();
   }
 
-  [ForceUpdate]
+  public void SetAnimation(string value) {
+    animation = value;
+  }
+
+  public void SetNamePart(string value) {
+    namepart = value;
+  }
+
+  public void SetForm(string value) {
+    form = value;
+  }
+
   public void ForceUpdateSpriteAndNormal() {
-    UpdateSpriteAndNormal(0);
-  }
-
-  string GetLabel(int frame) {
-    label.Clear();
-    label.Append(labelPrefix);
-    if (frame != 0 && labelPrefix != "") {
-      label.Append("_").Append(frame);
-    }
-    else if (frame != 0 && labelPrefix == "") {
-      label.Append(frame);
-    }
-    var result = label.ToString();
-    return result;
+    _targetColorAddress = "";
+    _targetNormalAddress = "";
+    UpdateSpriteAndNormal(_lastRequestedFrame);
   }
 
   public void UpdateSpriteAndNormal(int frame) {
+    _lastRequestedFrame = frame;
+    if (Application.isPlaying && !_isInternalTickRequest) {
+      _lastExternalRequestFrame = Time.frameCount;
+    }
+    if (Application.isPlaying && (!enabled || !gameObject.activeInHierarchy)) return;
+
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    var currentLabel = GetLabel(frame);
-    if (colorLibrary == null || normalLibrary == null) {
-      Debug.LogError("Sprite libraries are not assigned! " + gameObject.name + " " + gameObject.transform.parent?.name);
+    if (_renderer == null) return;
+
+    var lookupKey = new SpriteLookupKey(namepart, form, animation, frame);
+    if (!TryResolvePair(lookupKey, out var pair)) {
+      ReportResolveError(lookupKey);
       return;
     }
-    var colorSprite = colorLibrary.GetSprite(category, currentLabel);
-    var normalSprite = normalLibrary.GetSprite(category, currentLabel);
-    if (colorSprite == null) {
-      //Debug.LogWarning("[SpriteWithNormals] Color sprite is null for category=" + category + " label=" + currentLabel + " on " + gameObject.name);
+    _lastResolveError = "";
+
+    if (pair.colorAddress == _targetColorAddress && pair.normalAddress == _targetNormalAddress) {
       return;
     }
-    if (normalSprite == null) {
-      Debug.LogError("Normal sprite not found for category '" + category + "' with label '" + currentLabel + "' " + gameObject.name);
+
+    _targetColorAddress = pair.colorAddress ?? "";
+    _targetNormalAddress = pair.normalAddress ?? "";
+
+    if (Application.isPlaying) {
+      QueueRuntimeLoad(pair);
+      return;
     }
-    _renderer.sprite = colorSprite;
-    _mpb ??= new MaterialPropertyBlock();
-    _renderer.GetPropertyBlock(_mpb);
-    if (normalSprite != null && normalSprite.texture != null) {
-      _mpb.SetTexture("_NormalMap", normalSprite.texture);
-    }
-    else {
-      Debug.LogError("Normal sprite or its texture is missing. " + gameObject.name);
-    }
-    _renderer.SetPropertyBlock(_mpb);
+
+#if UNITY_EDITOR
+    ApplyEditorPreview(pair, lookupKey);
+#endif
   }
 
   public void FlipSprite(bool flip) {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    if (_renderer == null) return;
     _renderer.flipX = flip;
   }
 
-#if UNITY_EDITOR
-  void QueueEditorUpdate() {
-    if (_editorUpdateQueued) return;
-    _editorUpdateQueued = true;
-    EditorApplication.delayCall += PerformEditorUpdate;
+  void QueueRuntimeLoad(SpriteAddressPair pair) {
+    if (_pendingLoadRoutine != null) {
+      if (AddressEquals(_pendingColorAddress, pair.colorAddress) && AddressEquals(_pendingNormalAddress, pair.normalAddress)) {
+        return;
+      }
+      _deferredRequest = pair;
+      _hasDeferredRequest = true;
+      return;
+    }
+
+    StartRuntimeLoad(pair);
   }
 
-  void PerformEditorUpdate() {
-    _editorUpdateQueued = false;
-    if (this == null) return;
-    UpdateSpriteAndNormal(0);
+  void StartRuntimeLoad(SpriteAddressPair pair) {
+    CancelPendingRequest();
+    _pendingColorAddress = pair.colorAddress ?? "";
+    _pendingNormalAddress = pair.normalAddress ?? "";
+
+    var colorLease = TextureResidencyCache.AcquireAsync(pair.colorAddress);
+    if (colorLease == null) {
+      Debug.LogError("[SpriteWithNormals] Failed to request color address '" + pair.colorAddress + "' on " + gameObject.name);
+      _pendingColorAddress = "";
+      _pendingNormalAddress = "";
+      TryStartDeferredRequest();
+      return;
+    }
+
+    var normalLease = string.IsNullOrWhiteSpace(pair.normalAddress) ? null : TextureResidencyCache.AcquireAsync(pair.normalAddress);
+    if (!string.IsNullOrWhiteSpace(pair.normalAddress) && normalLease == null) {
+      Debug.LogError("[SpriteWithNormals] Failed to request normal address '" + pair.normalAddress + "' on " + gameObject.name);
+    }
+
+    _pendingColorLease = colorLease;
+    _pendingNormalLease = normalLease;
+    _requestVersion++;
+    var localVersion = _requestVersion;
+    _pendingLoadRoutine = StartCoroutine(ApplyLoadedSprites(localVersion, colorLease, normalLease, pair));
+  }
+
+  IEnumerator ApplyLoadedSprites(int requestVersion, TextureResidencyCache.Lease colorLease, TextureResidencyCache.Lease normalLease, SpriteAddressPair pair) {
+    while ((colorLease != null && !colorLease.IsDone) || (normalLease != null && !normalLease.IsDone)) {
+      yield return null;
+    }
+
+    if (requestVersion != _requestVersion) {
+      ReleaseLease(ref colorLease);
+      ReleaseLease(ref normalLease);
+      yield break;
+    }
+
+    ClearPendingState();
+
+    var colorSprite = colorLease != null && colorLease.IsSuccess ? colorLease.Sprite : null;
+    if (colorSprite == null) {
+      Debug.LogError("[SpriteWithNormals] Failed to load color sprite '" + pair.colorAddress + "' on " + gameObject.name);
+      ReleaseLease(ref colorLease);
+      ReleaseLease(ref normalLease);
+      TryStartDeferredRequest();
+      yield break;
+    }
+
+    var normalSprite = normalLease != null && normalLease.IsSuccess ? normalLease.Sprite : null;
+    if (normalLease != null && normalSprite == null) {
+      Debug.LogError("[SpriteWithNormals] Failed to load normal sprite '" + pair.normalAddress + "' on " + gameObject.name);
+    }
+
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    if (_renderer != null) {
+      ApplySprites(colorSprite, normalSprite);
+    }
+
+    ReleaseActiveLeases();
+    _activeColorLease = colorLease;
+    _activeNormalLease = normalLease;
+    TryStartDeferredRequest();
+  }
+
+  void ApplySprites(Sprite colorSprite, Sprite normalSprite) {
+    _renderer.sprite = colorSprite;
+    _mpb ??= new MaterialPropertyBlock();
+    _renderer.GetPropertyBlock(_mpb);
+
+    if (normalSprite != null && normalSprite.texture != null) {
+      _mpb.SetTexture("_NormalMap", normalSprite.texture);
+    }
+
+    _renderer.SetPropertyBlock(_mpb);
+  }
+
+  void CancelPendingRequest() {
+    if (_pendingLoadRoutine != null) {
+      StopCoroutine(_pendingLoadRoutine);
+      _pendingLoadRoutine = null;
+    }
+    ReleaseLease(ref _pendingColorLease);
+    ReleaseLease(ref _pendingNormalLease);
+    _pendingColorAddress = "";
+    _pendingNormalAddress = "";
+    _hasDeferredRequest = false;
+    _deferredRequest = default;
+    _requestVersion++;
+  }
+
+  void ReleaseActiveLeases() {
+    ReleaseLease(ref _activeColorLease);
+    ReleaseLease(ref _activeNormalLease);
+  }
+
+  static void ReleaseLease(ref TextureResidencyCache.Lease lease) {
+    if (lease == null) return;
+    lease.Release();
+    lease = null;
+  }
+
+  void ClearPendingState() {
+    _pendingLoadRoutine = null;
+    _pendingColorLease = null;
+    _pendingNormalLease = null;
+    _pendingColorAddress = "";
+    _pendingNormalAddress = "";
+  }
+
+  void TryStartDeferredRequest() {
+    if (!_hasDeferredRequest) return;
+    var deferred = _deferredRequest;
+    _hasDeferredRequest = false;
+    _deferredRequest = default;
+    QueueRuntimeLoad(deferred);
+  }
+
+  static bool AddressEquals(string left, string right) {
+    return string.Equals(NormalizeAddress(left), NormalizeAddress(right), System.StringComparison.OrdinalIgnoreCase);
+  }
+
+  static string NormalizeAddress(string value) {
+    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+  }
+
+  void ReportResolveError(SpriteLookupKey lookupKey) {
+    var error = lookupKey.ToString();
+    if (error == _lastResolveError) return;
+    _lastResolveError = error;
+    Debug.LogError("[SpriteWithNormals] No sprite mapping found for " + error + " on " + gameObject.name);
+  }
+
+  static bool TryResolvePair(SpriteLookupKey lookupKey, out SpriteAddressPair pair) {
+    return SpriteAddressResolver.TryResolve(lookupKey, out pair);
+  }
+
+#if UNITY_EDITOR
+  void ApplyEditorPreview(SpriteAddressPair pair, SpriteLookupKey lookupKey) {
+    if (!SpriteAddressResolver.TryLoadEditorSprite(pair.colorAddress, out var colorSprite) || colorSprite == null) {
+      Debug.LogError("[SpriteWithNormals] Editor preview color sprite not found for '" + pair.colorAddress + "' (" + lookupKey + ")");
+      return;
+    }
+
+    Sprite normalSprite = null;
+    if (!string.IsNullOrWhiteSpace(pair.normalAddress) &&
+        !SpriteAddressResolver.TryLoadEditorSprite(pair.normalAddress, out normalSprite)) {
+      Debug.LogError("[SpriteWithNormals] Editor preview normal sprite not found for '" + pair.normalAddress + "' (" + lookupKey + ")");
+    }
+
+    ApplySprites(colorSprite, normalSprite);
   }
 #endif
 }
@@ -119,180 +298,30 @@ public class SpriteWithNormals : MonoBehaviour {
 #if UNITY_EDITOR
 [CustomEditor(typeof(SpriteWithNormals))]
 public class SpriteWithNormalsEditor : Editor {
-  SerializedProperty colorLibraryProp;
-  SerializedProperty normalLibraryProp;
-  SerializedProperty categoryProp;
-  SerializedProperty labelPrefixProp;
-
-  List<string> categoryValues = new();
-  string[] categoryDisplay;
-
-  List<string> labelValues = new();
-  string[] labelDisplay;
-
-  SpriteLibraryAsset lastColorLibrary;
-  string lastCategory;
-  bool categoriesDirty = true;
-  bool labelsDirty = true;
+  SerializedProperty namepartProp;
+  SerializedProperty formProp;
+  SerializedProperty animationProp;
 
   void OnEnable() {
-    colorLibraryProp = serializedObject.FindProperty("colorLibrary");
-    normalLibraryProp = serializedObject.FindProperty("normalLibrary");
-    categoryProp = serializedObject.FindProperty("category");
-    labelPrefixProp = serializedObject.FindProperty("labelPrefix");
-    categoriesDirty = true;
-    labelsDirty = true;
+    namepartProp = serializedObject.FindProperty("namepart");
+    formProp = serializedObject.FindProperty("form");
+    animationProp = serializedObject.FindProperty("animation");
   }
 
   public override void OnInspectorGUI() {
     serializedObject.Update();
 
-    EditorGUILayout.PropertyField(colorLibraryProp);
-    EditorGUILayout.PropertyField(normalLibraryProp);
-
-    var t = (SpriteWithNormals)target;
-
-    var currentLib = colorLibraryProp.objectReferenceValue as SpriteLibraryAsset;
-    if (currentLib != lastColorLibrary) {
-      lastColorLibrary = currentLib;
-      categoriesDirty = true;
-      labelsDirty = true;
-    }
-
-    var needsRefresh = false;
-
-    EnsureCategoriesBuilt(t);
-    DrawCategoryDropdown(t, ref needsRefresh);
-
-    EnsureLabelsBuilt(t);
-    DrawLabelDropdown(t, ref needsRefresh);
+    namepartProp.stringValue = EditorGUILayout.DelayedTextField("Name Part", namepartProp.stringValue);
+    formProp.stringValue = EditorGUILayout.DelayedTextField("Form", formProp.stringValue);
+    animationProp.stringValue = EditorGUILayout.DelayedTextField("Animation", animationProp.stringValue);
 
     serializedObject.ApplyModifiedProperties();
 
-    if (needsRefresh) {
-      t.ForceUpdateSpriteAndNormal();
+    var targetComponent = (SpriteWithNormals)target;
+    if (!Application.isPlaying && GUILayout.Button("Refresh Sprite + Normal")) {
+      targetComponent.ForceUpdateSpriteAndNormal();
+      EditorUtility.SetDirty(targetComponent);
     }
-  }
-
-  void EnsureCategoriesBuilt(SpriteWithNormals t) {
-    if (!categoriesDirty && categoryDisplay != null && categoryDisplay.Length > 0) return;
-
-    categoryValues.Clear();
-    categoryValues.Add("");
-    var lib = colorLibraryProp.objectReferenceValue as SpriteLibraryAsset;
-    if (lib != null) {
-      foreach (var c in lib.GetCategoryNames()) {
-        if (!string.IsNullOrEmpty(c) && !categoryValues.Contains(c)) categoryValues.Add(c);
-      }
-    }
-
-    if (!string.IsNullOrEmpty(t.category) && !categoryValues.Contains(t.category)) {
-      categoryValues.Add(t.category);
-    }
-
-    if (categoryValues.Count == 0) {
-      categoryValues.Add("Default");
-    }
-
-    var displayList = new List<string>(categoryValues.Count);
-    foreach (var v in categoryValues) {
-      displayList.Add(v == "" ? "\"\"" : v);
-    }
-
-    categoryDisplay = displayList.ToArray();
-    categoriesDirty = false;
-  }
-
-  void DrawCategoryDropdown(SpriteWithNormals t, ref bool needsRefresh) {
-    var current = categoryProp.stringValue;
-    if (string.IsNullOrEmpty(current)) current = categoryValues.Count > 0 ? categoryValues[0] : "Default";
-
-    var index = categoryValues.IndexOf(current);
-    if (index < 0) index = 0;
-
-    EditorGUI.BeginChangeCheck();
-    var newIndex = EditorGUILayout.Popup("Category", index, categoryDisplay);
-    if (EditorGUI.EndChangeCheck()) {
-      if (newIndex >= 0 && newIndex < categoryValues.Count) {
-        var newValue = categoryValues[newIndex];
-        if (newValue != categoryProp.stringValue) {
-          var previousLabel = labelPrefixProp.stringValue;
-          categoryProp.stringValue = newValue;
-          labelPrefixProp.stringValue = ResolveLabelForCategory(newValue, previousLabel);
-          lastCategory = newValue;
-          labelsDirty = true;
-          needsRefresh = true;
-        }
-      }
-    }
-  }
-
-  void EnsureLabelsBuilt(SpriteWithNormals t) {
-    var cat = categoryProp.stringValue;
-    if (cat != lastCategory) {
-      lastCategory = cat;
-      labelsDirty = true;
-    }
-
-    if (!labelsDirty && labelDisplay != null && labelDisplay.Length > 0) return;
-
-    labelValues.Clear();
-    labelValues.Add("");
-
-    var lib = colorLibraryProp.objectReferenceValue as SpriteLibraryAsset;
-    if (lib != null && !string.IsNullOrEmpty(cat)) {
-      foreach (var l in lib.GetCategoryLabelNames(cat)) {
-        if (!string.IsNullOrEmpty(l)) labelValues.Add(l);
-      }
-    }
-
-    if (!string.IsNullOrEmpty(t.labelPrefix) && !labelValues.Contains(t.labelPrefix)) {
-      labelValues.Add(t.labelPrefix);
-    }
-
-    var displayList = new List<string>(labelValues.Count);
-    foreach (var v in labelValues) {
-      displayList.Add(v == "" ? "\"\"" : v);
-    }
-
-    labelDisplay = displayList.ToArray();
-    labelsDirty = false;
-  }
-
-  void DrawLabelDropdown(SpriteWithNormals t, ref bool needsRefresh) {
-    var current = labelPrefixProp.stringValue;
-    if (string.IsNullOrEmpty(current)) current = "";
-
-    var index = labelValues.IndexOf(current);
-    if (index < 0) index = 0;
-
-    EditorGUI.BeginChangeCheck();
-    var newIndex = EditorGUILayout.Popup("Label Prefix", index, labelDisplay);
-    if (EditorGUI.EndChangeCheck()) {
-        if (newIndex >= 0 && newIndex < labelValues.Count) {
-          var newValue = labelValues[newIndex];
-          labelPrefixProp.stringValue = newValue;
-          needsRefresh = true;
-        }
-      }
-    }
-
-  string ResolveLabelForCategory(string category, string currentLabel) {
-    if (string.IsNullOrEmpty(currentLabel)) return "";
-    if (IsNumericOnly(currentLabel)) return "";
-    var lib = colorLibraryProp.objectReferenceValue as SpriteLibraryAsset;
-    if (lib == null || string.IsNullOrEmpty(category)) return "";
-    foreach (var label in lib.GetCategoryLabelNames(category)) {
-      if (label == currentLabel) return label;
-    }
-    return "";
-  }
-
-  bool IsNumericOnly(string value) {
-    for (var i = 0; i < value.Length; i++) {
-      if (!char.IsDigit(value[i])) return false;
-    }
-    return value.Length > 0;
   }
 }
 #endif

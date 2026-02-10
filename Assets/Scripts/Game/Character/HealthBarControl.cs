@@ -50,7 +50,7 @@ public class HealthBarControl : MonoBehaviour {
       if (target == null) continue;
       var sprite = target.GetComponent<SpriteWithNormals>();
       if (sprite == null) continue;
-      sprite.labelPrefix = labelPrefix;
+      sprite.form = labelPrefix;
       sprite.ForceUpdateSpriteAndNormal();
     }
   }

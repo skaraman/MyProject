@@ -144,7 +144,7 @@ public class GearController : MonoBehaviour {
       foreach (GameObject go in GearObjects) {
         var sn = go.GetComponent<SpriteWithNormals>();
         if (sn != null) {
-          sn.labelPrefix = "";
+          sn.form = "";
         }
       }
     }
@@ -171,7 +171,7 @@ public class GearController : MonoBehaviour {
           if (go != null && go.name.Equals(part)) {
             var spriteWithNormals = go.GetComponent<SpriteWithNormals>();
             var shaderAnimator = go.GetComponent<AllIn1AnimatorInspector>();
-            if (spriteWithNormals != null) spriteWithNormals.labelPrefix = equip.Value.gearId;
+            if (spriteWithNormals != null) spriteWithNormals.form = equip.Value.gearId;
             else Debug.LogWarning($"GameObject {go.name} does not have a SpriteWithNormals component attached.");
             if (shaderAnimator != null) {
               shaderAnimator.ResetActive();
