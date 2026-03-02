@@ -4,6 +4,10 @@ using UnityEngine;
 
 [RequireComponent(typeof(Renderer))]
 public class AllIn1AnimatorInspector : MonoBehaviour {
+  const sbyte StaticEvalUnknown = 0;
+  const sbyte StaticEvalDynamic = -1;
+  const sbyte StaticEvalStatic = 1;
+
   [System.Serializable]
   public class Sequence<T> {
     public T from;
@@ -33,6 +37,8 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     public int currentSequenceIndex = 0;
     public float timer = 0f;
     public float lastValue;
+    [HideInInspector] public sbyte staticEvaluationState = StaticEvalUnknown;
+    [HideInInspector] public float staticValue;
     public bool isDone;
     public void CacheHash() {
       propHash = Shader.PropertyToID(prop);
@@ -49,6 +55,8 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     public int currentSequenceIndex = 0;
     public float timer = 0f;
     public Color lastValue;
+    [HideInInspector] public sbyte staticEvaluationState = StaticEvalUnknown;
+    [HideInInspector] public Color staticValue;
     public bool isDone;
     public void CacheHash() {
       propHash = Shader.PropertyToID(prop);
@@ -65,6 +73,8 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     public int currentSequenceIndex = 0;
     public float timer = 0f;
     public Vector4 lastValue;
+    [HideInInspector] public sbyte staticEvaluationState = StaticEvalUnknown;
+    [HideInInspector] public Vector4 staticValue;
     public bool isDone;
     public void CacheHash() {
       propHash = Shader.PropertyToID(prop);
@@ -83,6 +93,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   [Button(nameof(Refresh), label = "Refresh")][HideField] public bool _bool;
+  [SerializeField] bool animateWhenNotVisible;
 
   public List<KeywordToggle> keywordToggles = new();
   public List<FloatAnimation> floatAnimations = new();
@@ -124,6 +135,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     BuildDictionaries();
     ResetAnimationStates();
     BuildActiveLists(true);
+    SetUpdateActiveState();
     ApplyAllProperties(true);
   }
 
@@ -131,6 +143,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     activeFloatAnimations.Clear();
     activeColorAnimations.Clear();
     activeVectorAnimations.Clear();
+    SetUpdateActiveState();
   }
 
   public void Reset() {
@@ -180,6 +193,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     anim.isDone = false;
     anim.currentSequenceIndex = 0;
     anim.lastValue = 0f;
+    anim.staticEvaluationState = StaticEvalUnknown;
   }
 
   void ResetAnim(ColorAnimation anim) {
@@ -187,6 +201,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     anim.isDone = false;
     anim.currentSequenceIndex = 0;
     anim.lastValue = default;
+    anim.staticEvaluationState = StaticEvalUnknown;
   }
 
   void ResetAnim(VectorAnimation anim) {
@@ -194,12 +209,14 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     anim.isDone = false;
     anim.currentSequenceIndex = 0;
     anim.lastValue = default;
+    anim.staticEvaluationState = StaticEvalUnknown;
   }
 
   void StartAnimationsInternal(bool restartSequences) {
     _hasStarted = true;
     if (restartSequences) ResetAnimationStates();
     BuildActiveLists();
+    SetUpdateActiveState();
     ApplyAllProperties(true);
   }
 
@@ -217,16 +234,156 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void Update() {
-    if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
     if (_renderer == null) _renderer = GetComponent<Renderer>();
+    if (_renderer == null) return;
+    if (!HasPotentialActiveAnimations()) {
+      SetUpdateActiveState();
+      return;
+    }
+    if (!ShouldAnimateThisFrame()) return;
+
+    if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
     _renderer.GetPropertyBlock(_propBlock);
     changed = false;
     deltaTime = Time.deltaTime;
-    for (int i = activeFloatAnimations.Count - 1; i >= 0; i--) AnimateFloat(activeFloatAnimations[i]);
-    for (int i = activeColorAnimations.Count - 1; i >= 0; i--) AnimateColor(activeColorAnimations[i]);
-    for (int i = activeVectorAnimations.Count - 1; i >= 0; i--) AnimateVector(activeVectorAnimations[i]);
+
+    for (int i = activeFloatAnimations.Count - 1; i >= 0; i--) {
+      var anim = activeFloatAnimations[i];
+      if (anim == null || anim.sequences == null || anim.sequences.Count == 0) {
+        activeFloatAnimations.RemoveAt(i);
+        continue;
+      }
+      if (TryGetStaticFloatValue(anim, out var staticValue)) {
+        _propBlock.SetFloat(anim.propHash, staticValue);
+        anim.lastValue = staticValue;
+        changed = true;
+        activeFloatAnimations.RemoveAt(i);
+        continue;
+      }
+      AnimateFloat(anim);
+      if (anim.isDone && !anim.loop) activeFloatAnimations.RemoveAt(i);
+    }
+
+    for (int i = activeColorAnimations.Count - 1; i >= 0; i--) {
+      var anim = activeColorAnimations[i];
+      if (anim == null || anim.sequences == null || anim.sequences.Count == 0) {
+        activeColorAnimations.RemoveAt(i);
+        continue;
+      }
+      if (TryGetStaticColorValue(anim, out var staticValue)) {
+        _propBlock.SetColor(anim.propHash, staticValue);
+        anim.lastValue = staticValue;
+        changed = true;
+        activeColorAnimations.RemoveAt(i);
+        continue;
+      }
+      AnimateColor(anim);
+      if (anim.isDone && !anim.loop) activeColorAnimations.RemoveAt(i);
+    }
+
+    for (int i = activeVectorAnimations.Count - 1; i >= 0; i--) {
+      var anim = activeVectorAnimations[i];
+      if (anim == null || anim.sequences == null || anim.sequences.Count == 0) {
+        activeVectorAnimations.RemoveAt(i);
+        continue;
+      }
+      if (TryGetStaticVectorValue(anim, out var staticValue)) {
+        _propBlock.SetVector(anim.propHash, staticValue);
+        anim.lastValue = staticValue;
+        changed = true;
+        activeVectorAnimations.RemoveAt(i);
+        continue;
+      }
+      AnimateVector(anim);
+      if (anim.isDone && !anim.loop) activeVectorAnimations.RemoveAt(i);
+    }
 
     if (changed) _renderer.SetPropertyBlock(_propBlock);
+    if (!HasPotentialActiveAnimations()) SetUpdateActiveState();
+  }
+
+  bool HasPotentialActiveAnimations() {
+    return activeFloatAnimations.Count > 0 || activeColorAnimations.Count > 0 || activeVectorAnimations.Count > 0;
+  }
+
+  bool ShouldAnimateThisFrame() {
+    if (animateWhenNotVisible) return true;
+    if (_renderer == null || !_renderer.enabled) return false;
+    return _renderer.isVisible;
+  }
+
+  void SetUpdateActiveState() {
+    enabled = HasPotentialActiveAnimations();
+  }
+
+  static bool TryGetStaticFloatValue(FloatAnimation anim, out float value) {
+    value = 0f;
+    if (anim == null || anim.sequences == null || anim.sequences.Count == 0) return false;
+    if (anim.staticEvaluationState == StaticEvalStatic) {
+      value = anim.staticValue;
+      return true;
+    }
+    if (anim.staticEvaluationState == StaticEvalDynamic) return false;
+
+    value = anim.sequences[0].to;
+    for (int i = 0; i < anim.sequences.Count; i++) {
+      var seq = anim.sequences[i];
+      if (Mathf.Abs(seq.to - seq.from) > 0.0001f) {
+        anim.staticEvaluationState = StaticEvalDynamic;
+        return false;
+      }
+      value = seq.to;
+    }
+    anim.staticValue = value;
+    anim.staticEvaluationState = StaticEvalStatic;
+    return true;
+  }
+
+  static bool TryGetStaticColorValue(ColorAnimation anim, out Color value) {
+    value = default;
+    if (anim == null || anim.sequences == null || anim.sequences.Count == 0) return false;
+    if (anim.staticEvaluationState == StaticEvalStatic) {
+      value = anim.staticValue;
+      return true;
+    }
+    if (anim.staticEvaluationState == StaticEvalDynamic) return false;
+
+    value = anim.sequences[0].to;
+    for (int i = 0; i < anim.sequences.Count; i++) {
+      var seq = anim.sequences[i];
+      var delta = seq.to - seq.from;
+      if (((Vector4)delta).sqrMagnitude > 0.0001f) {
+        anim.staticEvaluationState = StaticEvalDynamic;
+        return false;
+      }
+      value = seq.to;
+    }
+    anim.staticValue = value;
+    anim.staticEvaluationState = StaticEvalStatic;
+    return true;
+  }
+
+  static bool TryGetStaticVectorValue(VectorAnimation anim, out Vector4 value) {
+    value = default;
+    if (anim == null || anim.sequences == null || anim.sequences.Count == 0) return false;
+    if (anim.staticEvaluationState == StaticEvalStatic) {
+      value = anim.staticValue;
+      return true;
+    }
+    if (anim.staticEvaluationState == StaticEvalDynamic) return false;
+
+    value = anim.sequences[0].to;
+    for (int i = 0; i < anim.sequences.Count; i++) {
+      var seq = anim.sequences[i];
+      if ((seq.to - seq.from).sqrMagnitude > 0.0001f) {
+        anim.staticEvaluationState = StaticEvalDynamic;
+        return false;
+      }
+      value = seq.to;
+    }
+    anim.staticValue = value;
+    anim.staticEvaluationState = StaticEvalStatic;
+    return true;
   }
 
   void AnimateFloat(FloatAnimation anim) {
@@ -382,12 +539,15 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
       anim.currentSequenceIndex = 0;
       anim.timer = 0f;
       anim.isDone = false;
+      anim.staticEvaluationState = StaticEvalUnknown;
     }
     anim.loop = loop;
     anim.autoPlay = autoPlay;
     anim.sequences.Add(new Sequence<float> { from = from, to = to, duration = duration, delay = delay, easing = easing ?? AnimationCurve.Linear(0, 0, 1, 1) });
     anim.isDone = false;
+    anim.staticEvaluationState = StaticEvalUnknown;
     if (ShouldActivateOnAdd(anim.autoPlay) && !activeFloatAnimations.Contains(anim)) activeFloatAnimations.Add(anim);
+    SetUpdateActiveState();
   }
 
   public void AddColorSequence(string prop, Color from, Color to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null, bool replaceExisting = true, bool autoPlay = true) {
@@ -402,12 +562,15 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
       anim.currentSequenceIndex = 0;
       anim.timer = 0f;
       anim.isDone = false;
+      anim.staticEvaluationState = StaticEvalUnknown;
     }
     anim.loop = loop;
     anim.autoPlay = autoPlay;
     anim.sequences.Add(new Sequence<Color> { from = from, to = to, duration = duration, delay = delay, easing = easing ?? AnimationCurve.Linear(0, 0, 1, 1) });
     anim.isDone = false;
+    anim.staticEvaluationState = StaticEvalUnknown;
     if (ShouldActivateOnAdd(anim.autoPlay) && !activeColorAnimations.Contains(anim)) activeColorAnimations.Add(anim);
+    SetUpdateActiveState();
   }
 
   public void AddVectorSequence(string prop, Vector4 from, Vector4 to, float duration, float delay = 0f, bool loop = false, AnimationCurve easing = null, bool replaceExisting = true, bool autoPlay = true) {
@@ -422,12 +585,15 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
       anim.currentSequenceIndex = 0;
       anim.timer = 0f;
       anim.isDone = false;
+      anim.staticEvaluationState = StaticEvalUnknown;
     }
     anim.loop = loop;
     anim.autoPlay = autoPlay;
     anim.sequences.Add(new Sequence<Vector4> { from = from, to = to, duration = duration, delay = delay, easing = easing ?? AnimationCurve.Linear(0, 0, 1, 1) });
     anim.isDone = false;
+    anim.staticEvaluationState = StaticEvalUnknown;
     if (ShouldActivateOnAdd(anim.autoPlay) && !activeVectorAnimations.Contains(anim)) activeVectorAnimations.Add(anim);
+    SetUpdateActiveState();
   }
 
   public void AddTextureAssignment(string prop, Sprite texture) {

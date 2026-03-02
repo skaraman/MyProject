@@ -74,6 +74,7 @@ public class AnimateFields : MonoBehaviour {
     else {
       Play();
     }
+    SetRuntimeUpdateState();
   }
 
   MemberInfo GetCachedMember(string key) {
@@ -215,15 +216,21 @@ public class AnimateFields : MonoBehaviour {
     hasValidTarget = target != null;
     currentTimeScale = TimeScale.Factors[timeScaleIndex];
     if (sequenceCount > 0) GenerateAnimationFromStep(sequence[sequenceIt], true);
+    SetRuntimeUpdateState();
   }
 
   public void Stop() {
     paused = true;
     Restart();
+    SetRuntimeUpdateState();
   }
 
   void Update() {
-    if (paused || !hasValidTarget || sequenceCount == 0) return;
+    if (paused || sequenceCount == 0 || target == null) {
+      hasValidTarget = target != null;
+      SetRuntimeUpdateState();
+      return;
+    }
     timer += Time.deltaTime * currentTimeScale;
     if (stepDuration <= 0f) {
       ProcessStepComplete();
@@ -255,5 +262,10 @@ public class AnimateFields : MonoBehaviour {
     else {
       GenerateAnimationFromStep(sequence[sequenceIt], false);
     }
+  }
+
+  void SetRuntimeUpdateState() {
+    if (!Application.isPlaying) return;
+    enabled = !paused && hasValidTarget && sequenceCount > 0;
   }
 }

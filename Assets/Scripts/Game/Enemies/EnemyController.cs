@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CustomInspector;
 using UnityEngine;
@@ -28,6 +29,9 @@ public class EnemyController : MonoBehaviour {
   public string enemyType;
   public string defaultAnimation = "Idle";
   public bool playOnStart = true;
+  [Header("Streaming Warmup")]
+  [SerializeField] bool prewarmEnemyAnimationStarts = true;
+  [SerializeField, Min(1)] int prewarmFramesPerAnimation = 1;
 
   private AnimationController animationController = new();
   private AnimationController effectAnimationController = new();
@@ -36,22 +40,41 @@ public class EnemyController : MonoBehaviour {
   private Dictionary<string, AnimData> animationData;
   private Dictionary<string, Dictionary<string, string>> interruptData;
   private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData;
+  private EnemyInfo enemyInfo;
+  private string appearanceOwnerId;
+  private string effectAppearanceOwnerId;
+  static readonly HashSet<string> prewarmedEnemyTypes = new(StringComparer.OrdinalIgnoreCase);
 
   public string CurrentAnimation => animationController != null ? animationController.CurrentAnimation : null;
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
 
   void Awake() {
-    LoadAnimationData();
-    ConfigureAnimationController();
+    enemyInfo = GetComponent<EnemyInfo>();
+    appearanceOwnerId = "enemy:" + gameObject.GetInstanceID().ToString();
+    effectAppearanceOwnerId = effectNode != null ? "effect:" + effectNode.GetInstanceID().ToString() : "";
+    ResetDebugPlaybackFlags();
+    ResolveEnemyTypeFromComponent();
     ConfigureEffectController();
     HookAnimationEvents();
   }
 
   void Start() {
-    enemyType = GetComponent<EnemyInfo>().enemyType;
-    if (playOnStart && !string.IsNullOrEmpty(defaultAnimation)) {
+    ResolveEnemyTypeFromComponent();
+    PrimeEnemyAnimationWarmupOnce();
+    if (playOnStart && animationData != null && !string.IsNullOrEmpty(defaultAnimation)) {
       PlayAnimation(defaultAnimation, true);
     }
+  }
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetWarmupCacheOnDomainReload() {
+    prewarmedEnemyTypes.Clear();
+  }
+
+  void ResetDebugPlaybackFlags() {
+    // Prevent accidentally persisted inspector debug flags from throttling runtime animation speed.
+    slowDown = false;
+    forceLoop = false;
   }
 
   void Update() {
@@ -72,18 +95,72 @@ public class EnemyController : MonoBehaviour {
     }
   }
 
-  private void LoadAnimationData() {
-    animationData = Animations.Enemies.ContainsKey(enemyType) ? Animations.Enemies[enemyType] : null;
-    if (animationData == null) {
-      Debug.LogWarning($"[EnemyController] No animation data found for enemy type '{enemyType}'.");
+  public bool SetEnemyType(string value, bool playDefaultImmediately = false) {
+    var normalized = NormalizeEnemyType(value);
+    var changed = !string.Equals(enemyType, normalized, StringComparison.OrdinalIgnoreCase);
+    enemyType = normalized;
+
+    if (enemyInfo == null) {
+      enemyInfo = GetComponent<EnemyInfo>();
     }
-    interruptData = Interrupts.Enemies.ContainsKey(enemyType) ? Interrupts.Enemies[enemyType] : new Dictionary<string, Dictionary<string, string>>();
-    hBoxData = HBoxes.Enemies.ContainsKey(enemyType) ? HBoxes.Enemies[enemyType] : null;
+    if (enemyInfo != null && !string.Equals(enemyInfo.enemyType, enemyType, StringComparison.OrdinalIgnoreCase)) {
+      enemyInfo.enemyType = enemyType;
+    }
+
+    if (changed) {
+      animationController?.StopAnimation(false);
+    }
+
+    LoadAnimationData();
     ConfigureAnimationController();
+
+    if (playDefaultImmediately && animationData != null && !string.IsNullOrEmpty(defaultAnimation)) {
+      return PlayAnimation(defaultAnimation, true);
+    }
+
+    return animationData != null;
+  }
+
+  private void ResolveEnemyTypeFromComponent() {
+    var current = NormalizeEnemyType(enemyType);
+    if (!string.IsNullOrWhiteSpace(current)) {
+      SetEnemyType(current, playDefaultImmediately: false);
+      return;
+    }
+
+    if (enemyInfo == null) {
+      enemyInfo = GetComponent<EnemyInfo>();
+    }
+
+    var fromInfo = enemyInfo != null ? NormalizeEnemyType(enemyInfo.enemyType) : "";
+    SetEnemyType(fromInfo, playDefaultImmediately: false);
+  }
+
+  private void LoadAnimationData() {
+    var normalizedType = NormalizeEnemyType(enemyType);
+    enemyType = normalizedType;
+
+    if (string.IsNullOrWhiteSpace(normalizedType)) {
+      animationData = null;
+      interruptData = new Dictionary<string, Dictionary<string, string>>();
+      hBoxData = null;
+      return;
+    }
+
+    animationData = Animations.Enemies.TryGetValue(normalizedType, out var anims) ? anims : null;
+    if (animationData == null) {
+      Debug.LogWarning($"[EnemyController] No animation data found for enemy type '{normalizedType}'.");
+    }
+
+    interruptData = Interrupts.Enemies.TryGetValue(normalizedType, out var interrupts)
+      ? interrupts
+      : new Dictionary<string, Dictionary<string, string>>();
+    hBoxData = HBoxes.Enemies.TryGetValue(normalizedType, out var hboxes) ? hboxes : null;
   }
 
   private void ConfigureAnimationController() {
     if (animationController == null) return;
+    var enemyOwnerId = SpriteStreamingRuntimeSettings.PinAllSpawnedEnemies ? appearanceOwnerId : "";
     animationController.Initialize(
       transform,
       spriteObjects,
@@ -94,8 +171,25 @@ public class EnemyController : MonoBehaviour {
       null,
       hBoxData,
       defaultAnimation,
-      false
+      false,
+      enemyOwnerId,
+      TextureResidencyCache.PinClass.Enemy
     );
+  }
+
+  void PrimeEnemyAnimationWarmupOnce() {
+    if (!Application.isPlaying || !prewarmEnemyAnimationStarts) return;
+    if (animationController == null || animationData == null || animationData.Count <= 0) return;
+
+    var normalizedType = NormalizeEnemyType(enemyType);
+    if (string.IsNullOrWhiteSpace(normalizedType)) return;
+    if (!prewarmedEnemyTypes.Add(normalizedType)) return;
+
+    var warmFrames = Mathf.Max(prewarmFramesPerAnimation, 1);
+    animationController.PrimeAllAnimationStarts(warmFrames);
+    if (effectControllerInitialized) {
+      effectAnimationController.PrimeAllAnimationStarts(1);
+    }
   }
 
   public bool PlayAnimation(string animationName, bool forceRestart = false) {
@@ -171,7 +265,9 @@ public class EnemyController : MonoBehaviour {
       null,
       new Dictionary<string, Dictionary<string, List<HBox>>>(),
       "",
-      false
+      false,
+      effectAppearanceOwnerId,
+      TextureResidencyCache.PinClass.Effect
     );
     effectControllerInitialized = true;
   }
@@ -225,5 +321,9 @@ public class EnemyController : MonoBehaviour {
     if (projectileDirection.sqrMagnitude <= 0.0001f) return Vector3.right;
     var dir = projectileDirection.normalized;
     return new Vector3(dir.x, dir.y, 0f);
+  }
+
+  static string NormalizeEnemyType(string value) {
+    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
   }
 }

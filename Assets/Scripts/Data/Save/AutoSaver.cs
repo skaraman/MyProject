@@ -78,7 +78,7 @@ public class AutoSaver : MonoBehaviour {
     if (characterState != null) {
       gameData["level"] = characterState.level;
     }
-    gameData["location"] = LocationTracker.currentLocation;
+    gameData["location"] = LocationManager.currentLocation;
     SaveSlotManager.Save("slot", gameData);
   }
 }

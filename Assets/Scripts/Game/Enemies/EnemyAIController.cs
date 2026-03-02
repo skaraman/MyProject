@@ -18,12 +18,13 @@ public class EnemyAIController : MonoBehaviour {
   private EnemyInfo info;
   private Coroutine aiRoutine;
   private float nextAttackTime;
+  private string cachedEnemyType = "";
 
   void Awake() {
     rb = GetComponent<Rigidbody2D>();
     enemyController ??= GetComponent<EnemyController>();
     info = GetComponent<EnemyInfo>();
-    closingDistance = ResolveClosingDistance();
+    RefreshClosingDistance(force: true);
   }
 
   void OnEnable() {
@@ -43,6 +44,7 @@ public class EnemyAIController : MonoBehaviour {
         yield return null;
         continue;
       }
+      RefreshClosingDistance();
 
       float distance = Vector2.Distance(transform.position, player.position);
       FacePlayer();
@@ -142,8 +144,20 @@ public class EnemyAIController : MonoBehaviour {
     enemyController.FaceDirection(delta);
   }
 
-  private float ResolveClosingDistance() {
+  private void RefreshClosingDistance(bool force = false) {
+    var resolvedType = ResolveEnemyType();
+    if (!force && string.Equals(cachedEnemyType, resolvedType, System.StringComparison.OrdinalIgnoreCase)) return;
+
+    cachedEnemyType = resolvedType;
+    closingDistance = ResolveClosingDistanceForType(resolvedType);
+  }
+
+  private string ResolveEnemyType() {
     var type = enemyController != null ? enemyController.enemyType : info?.enemyType;
+    return string.IsNullOrWhiteSpace(type) ? "" : type.Trim();
+  }
+
+  private float ResolveClosingDistanceForType(string type) {
     if (!string.IsNullOrEmpty(type) && AllStatValues.Enemies.TryGetValue(type, out var stats) && stats.TryGetValue("CDST", out var cd)) {
       return cd;
     }

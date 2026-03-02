@@ -309,6 +309,9 @@ namespace EZhex1991.EZSoftBone
         [SerializeField]
         private float m_SleepThreshold = 0.005f;
         public float sleepThreshold { get { return m_SleepThreshold; } set { m_SleepThreshold = Mathf.Max(0, value); } }
+        [SerializeField]
+        private bool m_UpdateWhenInvisible = false;
+        public bool updateWhenInvisible { get { return m_UpdateWhenInvisible; } set { m_UpdateWhenInvisible = value; } }
         #endregion
 
         #region Gravity
@@ -341,21 +344,40 @@ namespace EZhex1991.EZSoftBone
         public CustomForce customForce;
 
         private List<Bone> m_Structures = new List<Bone>();
+        private Renderer[] m_CachedRenderers = new Renderer[0];
+        private bool m_ShouldSimulate = true;
+        private bool m_WasSimulatingLastFrame = true;
 
         private void Awake()
         {
+            CacheRenderers();
             InitStructures();
         }
         private void OnEnable()
         {
+            CacheRenderers();
+            m_ShouldSimulate = true;
+            m_WasSimulatingLastFrame = true;
             SetRestState();
         }
         private void Update()
         {
+            m_ShouldSimulate = ShouldSimulateThisFrame();
+            if (!m_ShouldSimulate)
+            {
+                m_WasSimulatingLastFrame = false;
+                return;
+            }
+            if (!m_WasSimulatingLastFrame)
+            {
+                SetRestState();
+                m_WasSimulatingLastFrame = true;
+            }
             RevertTransforms(startDepth);
         }
         private void LateUpdate()
         {
+            if (!m_ShouldSimulate) return;
             switch (deltaTimeMode)
             {
                 case DeltaTimeMode.DeltaTime:
@@ -373,6 +395,28 @@ namespace EZhex1991.EZSoftBone
         private void OnDisable()
         {
             RevertTransforms(startDepth);
+        }
+
+        private void CacheRenderers()
+        {
+            m_CachedRenderers = GetComponentsInChildren<Renderer>(true);
+        }
+        private bool ShouldSimulateThisFrame()
+        {
+            if (!Application.isPlaying || updateWhenInvisible) return true;
+            if (m_CachedRenderers == null || m_CachedRenderers.Length == 0)
+            {
+                CacheRenderers();
+                if (m_CachedRenderers == null || m_CachedRenderers.Length == 0) return true;
+            }
+
+            for (int i = 0; i < m_CachedRenderers.Length; i++)
+            {
+                Renderer renderer = m_CachedRenderers[i];
+                if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                if (renderer.isVisible) return true;
+            }
+            return false;
         }
 
 #if UNITY_EDITOR

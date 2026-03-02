@@ -8,6 +8,7 @@ public class InputProcessor : MonoBehaviour {
   public string defaultMap;
   private string activeMap;
   Dictionary<InputAction, string> cachedNames = new();
+  public string ActiveMap => activeMap;
 
   void OnEnable() {
     input = new TestActions();

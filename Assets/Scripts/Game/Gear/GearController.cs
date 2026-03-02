@@ -29,28 +29,45 @@ public class GearController : MonoBehaviour {
   public GameObject HairSkin;
   public Dictionary<string, Dictionary<string, GearItem>> lastGear = new Dictionary<string, Dictionary<string, GearItem>>();
   public bool needsFlip;
+  [Header("Streaming Warmup")]
+  [SerializeField] bool prewarmAnimationStartsOnLoad = true;
+  [SerializeField, Min(1)] int prewarmFramesPerAnimation = 1;
   private GameObject[] combinedBounces;
   private SaveData gameData = new();
   private AnimationController animationController = new();
   private AnimationController effectAnimationController = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private bool effectControllerInitialized;
+  private string appearanceOwnerId;
+  private string effectAppearanceOwnerId;
+  private int appearanceRevision = 1;
 
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
+  public int AppearanceRevision => appearanceRevision;
 
-  void Awake() {
-    combinedBounces = (HairObjects ?? Array.Empty<GameObject>()).Concat(OtherBounceGearObjects ?? Array.Empty<GameObject>()).ToArray();
-    ConfigureAnimationController();
-    ConfigureEffectController();
-    HookAnimationEvents();
-  }
 
   void Start() {
+    ResetDebugPlaybackFlags();
+    appearanceOwnerId = "player:" + gameObject.GetInstanceID().ToString();
+    effectAppearanceOwnerId = effectNode != null ? "effect:" + effectNode.GetInstanceID().ToString() : "";
+    combinedBounces = (HairObjects ?? Array.Empty<GameObject>()).Concat(OtherBounceGearObjects ?? Array.Empty<GameObject>()).ToArray();
+    NormalizeSkinSpriteDefaultsForRuntime();
+    PrimeSpriteStreamingWarmup();
+    ConfigureAnimationController();
+    ConfigureEffectController();
+    PrimeControllerAnimationWarmup();
+    HookAnimationEvents();
     if (Application.isPlaying) {
       LeanTween.reset();
       LeanTween.init(4000);
     }
     animationController.PlayAnimation(defaultAnimation, true);
+  }
+
+  void ResetDebugPlaybackFlags() {
+    // Prevent accidentally persisted inspector debug flags from throttling runtime animation speed.
+    slowDown = false;
+    forceLoop = false;
   }
 
   void Update() {
@@ -66,18 +83,22 @@ public class GearController : MonoBehaviour {
       animationController.QueueFlip();
       needsFlip = false;
     }
+
+    TickControllers(Time.deltaTime);
   }
 
-  void FixedUpdate() {
-    animationController?.Tick(Time.deltaTime);
+  void TickControllers(float deltaTime) {
+    if (deltaTime <= 0f) return;
+    animationController?.Tick(deltaTime);
     if (effectControllerInitialized) {
-      effectAnimationController.Tick(Time.deltaTime);
+      effectAnimationController.Tick(deltaTime);
     }
   }
 
   private void ConfigureAnimationController() {
     if (animationController == null) return;
-    var spriteTargets = (GearObjects ?? Array.Empty<GameObject>()).Concat(SkinObjects ?? Array.Empty<GameObject>());
+    // Prioritize skin targets first so core body animation continuity is protected under pin budgets.
+    var spriteTargets = (SkinObjects ?? Array.Empty<GameObject>()).Concat(GearObjects ?? Array.Empty<GameObject>());
     animationController.Initialize(
       transform,
       spriteTargets,
@@ -88,11 +109,68 @@ public class GearController : MonoBehaviour {
       BounceAdjustments.Esperanza,
       HBoxes.Esperanza,
       defaultAnimation,
-      false
+      false,
+      appearanceOwnerId,
+      TextureResidencyCache.PinClass.Player
     );
   }
 
+  private void NormalizeSkinSpriteDefaultsForRuntime() {
+    if (!Application.isPlaying) return;
+    NormalizeSpriteDefaultsForRuntime(SkinObjects);
+    NormalizeSpriteDefaultsForRuntime(GearObjects);
+  }
+
+  static void NormalizeSpriteDefaultsForRuntime(GameObject[] objects) {
+    if (objects == null || objects.Length == 0) return;
+
+    for (var i = 0; i < objects.Length; i++) {
+      var go = objects[i];
+      if (go == null) continue;
+      var sn = go.GetComponent<SpriteWithNormals>();
+      if (sn == null) continue;
+
+      sn.SetIsAnimation(true);
+    }
+  }
+
+  private void PrimeSpriteStreamingWarmup() {
+    if (!Application.isPlaying) return;
+
+    var libraries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    CollectLibraries(GearObjects, libraries);
+    CollectLibraries(SkinObjects, libraries);
+    if (effectNode != null && !string.IsNullOrWhiteSpace(effectNode.libraryName)) {
+      libraries.Add(effectNode.libraryName.Trim());
+    }
+
+    SpriteRuntimeResolver.WarmupLibraries(libraries);
+  }
+
+  private void PrimeControllerAnimationWarmup() {
+    if (!Application.isPlaying || !prewarmAnimationStartsOnLoad) return;
+    var warmFrames = Mathf.Max(prewarmFramesPerAnimation, 1);
+    animationController?.PrimeAllAnimationStarts(warmFrames);
+    if (effectControllerInitialized) {
+      effectAnimationController?.PrimeAllAnimationStarts(1);
+    }
+  }
+
+  static void CollectLibraries(GameObject[] objects, HashSet<string> libraries) {
+    if (objects == null || libraries == null) return;
+    for (var i = 0; i < objects.Length; i++) {
+      var go = objects[i];
+      if (go == null) continue;
+      var sn = go.GetComponent<SpriteWithNormals>();
+      if (sn == null || string.IsNullOrWhiteSpace(sn.libraryName)) continue;
+      libraries.Add(sn.libraryName.Trim());
+    }
+  }
+
   public void LoadGear() {
+     if (!Application.isPlaying) {
+      Start();
+    }
     GetSavedGearState();
     RefreshGear();
     MessageBus.Send("gearReady");
@@ -132,19 +210,25 @@ public class GearController : MonoBehaviour {
     EquippedItems.AllGearForms[EsperanzaForms.GetActive()][slot] = gearItem;
     gameData.SetComplex("allGear", EquippedItems.AllGearForms);
     SaveSlotManager.Save("equippedGear", gameData);
+    MarkAppearanceRevision();
   }
 
   public void RefreshGear() {
     UnequipGear();
     EquipGear();
+    MarkAppearanceRevision();
   }
 
   public void UnequipGear() {
+    if (Application.isPlaying) {
+      TextureResidencyCache.PurgeAll();
+    }
     if (GearObjects != null) {
       foreach (GameObject go in GearObjects) {
         var sn = go.GetComponent<SpriteWithNormals>();
         if (sn != null) {
-          sn.form = "";
+          sn.SetLabelPrefix("");
+          sn.SetDoNotRender(true);
         }
       }
     }
@@ -171,7 +255,12 @@ public class GearController : MonoBehaviour {
           if (go != null && go.name.Equals(part)) {
             var spriteWithNormals = go.GetComponent<SpriteWithNormals>();
             var shaderAnimator = go.GetComponent<AllIn1AnimatorInspector>();
-            if (spriteWithNormals != null) spriteWithNormals.form = equip.Value.gearId;
+            if (spriteWithNormals != null) {
+              var formId = equip.Value != null ? equip.Value.gearId : "";
+              spriteWithNormals.SetDoNotRender(false);
+              spriteWithNormals.SetIsAnimation(true);
+              spriteWithNormals.SetLabelPrefix(formId);
+            }
             else Debug.LogWarning($"GameObject {go.name} does not have a SpriteWithNormals component attached.");
             if (shaderAnimator != null) {
               shaderAnimator.ResetActive();
@@ -195,7 +284,7 @@ public class GearController : MonoBehaviour {
             child.gameObject.SetActive(true);
             var spriteRenderer = child.gameObject.GetComponent<SpriteRenderer>();
             var shaderAnimator = child.gameObject.GetComponent<AllIn1AnimatorInspector>();
-            if (shaderAnimator != null && equip.Value != null || gearId == activeForm + "_no_Head") {
+            if (shaderAnimator != null && (equip.Value != null || gearId == activeForm + "_no_Head")) {
               var gearColor = "";
               shaderAnimator.ResetActive();
               shaderAnimator.Reset();
@@ -263,7 +352,9 @@ public class GearController : MonoBehaviour {
       null,
       new Dictionary<string, Dictionary<string, List<HBox>>>(),
       "",
-      false
+      false,
+      effectAppearanceOwnerId,
+      TextureResidencyCache.PinClass.Effect
     );
     effectControllerInitialized = true;
   }
@@ -317,5 +408,13 @@ public class GearController : MonoBehaviour {
     if (projectileDirection.sqrMagnitude <= 0.0001f) return Vector3.right;
     var dir = projectileDirection.normalized;
     return new Vector3(dir.x, dir.y, 0f);
+  }
+
+  void MarkAppearanceRevision() {
+    if (appearanceRevision == int.MaxValue) {
+      appearanceRevision = 1;
+      return;
+    }
+    appearanceRevision++;
   }
 }

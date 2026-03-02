@@ -80,12 +80,27 @@ public class TimeScaledTransform : MonoBehaviour {
 
   void LateUpdate() {
     if (cachedTransform == null) cachedTransform = transform;
-    if (!TimeScale.Factors.ContainsKey(timeScaleIndex)) return;
-    var factor = TimeScale.Factors[timeScaleIndex];
+    if (!TimeScale.Factors.TryGetValue(timeScaleIndex, out var factor)) return;
 
-    var posDiff = cachedTransform.position - prevPosition;
-    var rotDiff = cachedTransform.eulerAngles - prevRotation;
-    var scaleDiff = cachedTransform.localScale - prevScale;
+    var currentPosition = cachedTransform.position;
+    var currentRotation = cachedTransform.eulerAngles;
+    var currentScale = cachedTransform.localScale;
+
+    if (Mathf.Abs(factor - 1f) <= 0.0001f) {
+      prevPosition = currentPosition;
+      prevRotation = currentRotation;
+      prevScale = currentScale;
+      return;
+    }
+
+    var posDiff = currentPosition - prevPosition;
+    var rotDiff = currentRotation - prevRotation;
+    var scaleDiff = currentScale - prevScale;
+    if (posDiff.sqrMagnitude <= 0.0000001f &&
+        rotDiff.sqrMagnitude <= 0.0000001f &&
+        scaleDiff.sqrMagnitude <= 0.0000001f) {
+      return;
+    }
 
     var newPos = prevPosition + posDiff * factor;
     var newRot = prevRotation + rotDiff * factor;

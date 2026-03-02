@@ -13,6 +13,11 @@ public class HealthBarControl : MonoBehaviour {
   void OnValidate() {
     if (Application.isPlaying) return;
     lastLabelPrefix = Form;
+  }
+
+  void OnEnable() {
+    if (Application.isPlaying) return;
+    lastLabelPrefix = Form;
     RefreshSprites(lastLabelPrefix);
   }
 
@@ -50,7 +55,7 @@ public class HealthBarControl : MonoBehaviour {
       if (target == null) continue;
       var sprite = target.GetComponent<SpriteWithNormals>();
       if (sprite == null) continue;
-      sprite.form = labelPrefix;
+      sprite.labelPrefix = labelPrefix;
       sprite.ForceUpdateSpriteAndNormal();
     }
   }

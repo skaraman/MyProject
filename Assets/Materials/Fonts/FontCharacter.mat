@@ -14,6 +14,7 @@ Material:
   m_ValidKeywords:
   - BLURISHD_ON
   - OUTBASEPIXELPERF_ON
+  - OUTBASE_ON
   - POSTERIZEOUTLINE_ON
   - SHADOW_ON
   m_InvalidKeywords:
@@ -178,14 +179,14 @@ Material:
     - _OnlyInnerOutline: 0
     - _OnlyOutline: 0
     - _Outline8Directions: 0
-    - _OutlineAlpha: 0
+    - _OutlineAlpha: 1
     - _OutlineDistortAmount: 0.5
     - _OutlineDistortTexXSpeed: 5
     - _OutlineDistortTexYSpeed: 5
     - _OutlineDistortToggle: 0
     - _OutlineGlow: 1
     - _OutlineIsPixel: 0
-    - _OutlinePixelWidth: 0
+    - _OutlinePixelWidth: 1
     - _OutlineTexGrey: 0
     - _OutlineTexToggle: 0
     - _OutlineTexXSpeed: 10

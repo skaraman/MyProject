@@ -479,9 +479,35 @@ class AA:
                 def D():B=_A4 if A.sprite_overwrite_auto.get()else _A5;A.sprite_overwrite_category_combo.configure(state=B);A.sprite_overwrite_category_button.configure(state=B)
                 ttk.Checkbutton(C,text='Auto-match categories by folder name',variable=A.sprite_overwrite_auto,command=D).grid(row=B,column=0,columnspan=3,sticky=_D);B+=1;A._entry_with_button(C,B,A.sprite_overwrite_root,label='Scan Root Folder:',button_cmd=lambda:A._pick(A.sprite_overwrite_root));B+=1;ttk.Label(C,text='Texture File Name:').grid(row=B,column=0,sticky=_D);ttk.Entry(C,textvariable=A.sprite_overwrite_file,width=20).grid(row=B,column=1,sticky=_D);B+=1;ttk.Label(C,text='Target Folder Name:').grid(row=B,column=0,sticky=_D);ttk.Entry(C,textvariable=A.sprite_overwrite_target,width=20).grid(row=B,column=1,sticky=_D);B+=1;ttk.Label(C,text="Example: Assets/Sprites/Characters/Ana/Run/Aqua/aa/fL/1.png\nIf category is blank, the root folder name is used.\nAuto mode scans for folders that match category names.\nFile name can be '1.png' or an extension like 'png'.").grid(row=B,column=0,columnspan=3,sticky=_D);B+=1;ttk.Button(C,text='Overwrite Library with New Labels',command=A._start_overwrite_sprite_library).grid(row=B,column=0,columnspan=3);B+=1;ttk.Label(C,textvariable=A.sprite_overwrite_status).grid(row=B,column=0,columnspan=3,sticky=_D)
         def _spritelib_renumber(A):
-                C=A._tab('Sprite Library Renumber');A.sprite_renumber_path=tk.StringVar(A.r);A.sprite_renumber_category=tk.StringVar(A.r);A.sprite_renumber_prefix=tk.StringVar(A.r);A.sprite_renumber_suffix=tk.StringVar(A.r);A.sprite_renumber_status=tk.StringVar(A.r,_O);A.sprite_renumber_auto=tk.BooleanVar(A.r,_B);B=0;A._entry_with_button(C,B,A.sprite_renumber_path,label=_AT,button_cmd=A._pick_sprite_library_renumber);B+=1;ttk.Label(C,text='Category to renumber:').grid(row=B,column=0,sticky=_D);A.sprite_renumber_category_combo=ttk.Combobox(C,textvariable=A.sprite_renumber_category,width=28);A.sprite_renumber_category_combo.grid(row=B,column=1,sticky=_D);A.sprite_renumber_category_button=ttk.Button(C,text=_AI,command=A._load_sprite_library_categories_renumber);A.sprite_renumber_category_button.grid(row=B,column=2);B+=1
-                def D():B=_A4 if A.sprite_renumber_auto.get()else _A5;A.sprite_renumber_category_combo.configure(state=B);A.sprite_renumber_category_button.configure(state=B)
-                ttk.Checkbutton(C,text='Auto: renumber all categories',variable=A.sprite_renumber_auto,command=D).grid(row=B,column=0,columnspan=3,sticky=_D);B+=1;ttk.Button(C,text='Remove non-skin labels',command=A._start_remove_non_skin_labels).grid(row=B,column=0,columnspan=3,sticky=_K);B+=1;ttk.Label(C,text='Prefix (optional):').grid(row=B,column=0,sticky=_D);ttk.Entry(C,textvariable=A.sprite_renumber_prefix,width=20).grid(row=B,column=1,sticky=_D);B+=1;ttk.Label(C,text='Suffix (optional):').grid(row=B,column=0,sticky=_D);ttk.Entry(C,textvariable=A.sprite_renumber_suffix,width=20).grid(row=B,column=1,sticky=_D);B+=1;ttk.Label(C,text='Renames labels in the chosen category to prefix + number + suffix\nwith numbering starting at 1.').grid(row=B,column=0,columnspan=3,sticky=_D);B+=1;ttk.Button(C,text='Renumber Labels',command=A._start_renumber_sprite_library).grid(row=B,column=0,columnspan=3);B+=1;ttk.Label(C,textvariable=A.sprite_renumber_status).grid(row=B,column=0,columnspan=3,sticky=_D)
+                C=A._tab('Sprite Library Resorter')
+                A.sprite_renumber_path=tk.StringVar(A.r)
+                A.sprite_renumber_category=tk.StringVar(A.r)
+                A.sprite_renumber_prefix=tk.StringVar(A.r)
+                A.sprite_renumber_suffix=tk.StringVar(A.r)
+                A.sprite_renumber_status=tk.StringVar(A.r,_O)
+                A.sprite_renumber_auto=tk.BooleanVar(A.r,_B)
+                A.sprite_renumber_alpha=tk.BooleanVar(A.r,_B)
+                B=0
+                A._entry_with_button(C,B,A.sprite_renumber_path,label=_AT,button_cmd=A._pick_sprite_library_renumber);B+=1
+                ttk.Label(C,text='Category to resort:').grid(row=B,column=0,sticky=_D)
+                A.sprite_renumber_category_combo=ttk.Combobox(C,textvariable=A.sprite_renumber_category,width=28)
+                A.sprite_renumber_category_combo.grid(row=B,column=1,sticky=_D)
+                A.sprite_renumber_category_button=ttk.Button(C,text=_AI,command=A._load_sprite_library_categories_renumber)
+                A.sprite_renumber_category_button.grid(row=B,column=2);B+=1
+                def D():
+                        B=_A4 if A.sprite_renumber_auto.get()else _A5
+                        A.sprite_renumber_category_combo.configure(state=B)
+                        A.sprite_renumber_category_button.configure(state=B)
+                ttk.Checkbutton(C,text='Auto: resort all categories',variable=A.sprite_renumber_auto,command=D).grid(row=B,column=0,columnspan=3,sticky=_D);B+=1
+                ttk.Button(C,text='Remove non-skin labels',command=A._start_remove_non_skin_labels).grid(row=B,column=0,columnspan=3,sticky=_K);B+=1
+                ttk.Label(C,text='Prefix (optional):').grid(row=B,column=0,sticky=_D)
+                ttk.Entry(C,textvariable=A.sprite_renumber_prefix,width=20).grid(row=B,column=1,sticky=_D);B+=1
+                ttk.Label(C,text='Suffix (optional):').grid(row=B,column=0,sticky=_D)
+                ttk.Entry(C,textvariable=A.sprite_renumber_suffix,width=20).grid(row=B,column=1,sticky=_D);B+=1
+                ttk.Checkbutton(C,text='Use alphabetic labels (A, B, ..., AA)',variable=A.sprite_renumber_alpha).grid(row=B,column=0,columnspan=3,sticky=_D);B+=1
+                ttk.Label(C,text='Renames labels in the chosen category to prefix + number + suffix\nor prefix + letter + suffix, starting at 1 or A.').grid(row=B,column=0,columnspan=3,sticky=_D);B+=1
+                ttk.Button(C,text='Resort Labels',command=A._start_renumber_sprite_library).grid(row=B,column=0,columnspan=3);B+=1
+                ttk.Label(C,textvariable=A.sprite_renumber_status).grid(row=B,column=0,columnspan=3,sticky=_D)
         def _pick_sprite_library_source(A):
                 B=filedialog.askopenfilename(title=_A6,filetypes=[(_A7,_A8),(_Y,_Z)])
                 if B:A.sprite_lib_source_path.set(B);A._load_sprite_library_categories()
@@ -668,31 +694,37 @@ class AA:
                         if D or E or F:messagebox.showwarning(S,B)
                 C._run(lambda:C.sprite_overwrite_status.set(_P),Q,R)
         def _start_renumber_sprite_library(A):
-                H='total_updated';B=A.sprite_renumber_path.get().strip();C=A.sprite_renumber_category.get().strip();E=A.sprite_renumber_prefix.get();F=A.sprite_renumber_suffix.get();D=A.sprite_renumber_auto.get()
+                H='total_updated'
+                B=A.sprite_renumber_path.get().strip()
+                C=A.sprite_renumber_category.get().strip()
+                E=A.sprite_renumber_prefix.get()
+                F=A.sprite_renumber_suffix.get()
+                D=A.sprite_renumber_auto.get()
+                G=A.sprite_renumber_alpha.get()
                 if not B or not os.path.isfile(B):messagebox.showerror(_g,_h);return
                 if not D and not C:messagebox.showerror(_AU,_AV);return
                 if D:
-                        try:G=A._extract_sprite_library_categories(B)
-                        except Exception as I:messagebox.showerror(_c,str(I));return
-                        if not G:messagebox.showerror(_AW,_y);return
+                        try:I=A._extract_sprite_library_categories(B)
+                        except Exception as J:messagebox.showerror(_c,str(J));return
+                        if not I:messagebox.showerror(_AW,_y);return
                 def J():
                         if D:
-                                I=0;J=0;K=0
-                                for L in G:
-                                        M,N=A._renumber_sprite_library_category(B,L,E,F);J+=1
-                                        if not N:K+=1
-                                        I+=M
-                                return{_AA:_C,H:I,_a:J,_AB:K}
-                        return A._renumber_sprite_library_category(B,C,E,F)
+                                K=0;L=0;M=0
+                                for N in I:
+                                        O,P=A._renumber_sprite_library_category(B,N,E,F,G);L+=1
+                                        if not P:M+=1
+                                        K+=O
+                                return{_AA:_C,H:K,_a:L,_AB:M}
+                        return A._renumber_sprite_library_category(B,C,E,F,G)
                 def K(result):
                         B=result
                         if isinstance(B,dict)and B.get(_AA):
-                                F=B.get(H,0);G=B.get(_a,0);D=B.get(_AB,0);E=f"DONE - renamed {F} label(s) across {G} category(ies)."
+                                F=B.get(H,0);G=B.get(_a,0);D=B.get(_AB,0);E=f"DONE - resorted {F} label(s) across {G} category(ies)."
                                 if D:E+=f" {D} category(ies) not found."
                                 A.sprite_renumber_status.set(E);return
                         I,J=B
                         if not J:A.sprite_renumber_status.set(f"Category not found: {C}");return
-                        A.sprite_renumber_status.set(f"DONE - renamed {I} label(s).")
+                        A.sprite_renumber_status.set(f"DONE - resorted {I} label(s).")
                 A._run(lambda:A.sprite_renumber_status.set(_P),J,K)
         def _overwrite_sprite_library_from_folders(A,sprite_lib_path,category_name,root_folder,target_subfolder,file_name):
                 I=root_folder;C=category_name;D=[]
@@ -1352,7 +1384,15 @@ class AA:
                                 if A:H[A]=M;A=_A
                                 else:C=M
                 return H
-        def _renumber_sprite_library_category(D,sprite_lib_path,category_name,prefix,suffix):
+        def _index_to_alpha_label(B,index):
+                A=index
+                if A<=0:return''
+                C=[]
+                while A>0:
+                        A-=1;C.append(chr(ord('A')+A%26));A//=26
+                C.reverse()
+                return''.join(C)
+        def _renumber_sprite_library_category(D,sprite_lib_path,category_name,prefix,suffix,use_alpha=_B):
                 J=sprite_lib_path
                 with open(J,_G,encoding=_F,errors=_H,newline='')as E:F=E.readlines()
                 G=0;H=_B;K=_B;A=_B;C=_B;I=1;M=D._normalize_entry_name(category_name)
@@ -1364,7 +1404,8 @@ class AA:
                                 if A:H=_C;I=1
                                 C=_B;continue
                         if A and L==_T:C=_C;continue
-                        if A and C and B.startswith(_R):P=f"{prefix}{I}{suffix}";F[N]=D._replace_sprite_label_line(B,P);G+=1;I+=1
+                        if A and C and B.startswith(_R):
+                                P=D._index_to_alpha_label(I)if use_alpha else str(I);Q=f"{prefix}{P}{suffix}";F[N]=D._replace_sprite_label_line(B,Q);G+=1;I+=1
                 if H and G>0:
                         with open(J,_D,encoding=_F,newline='')as E:E.writelines(F)
                 return G,H

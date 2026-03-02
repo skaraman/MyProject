@@ -23,6 +23,23 @@ namespace AssetUsageDetectorNamespace
 	{
 		#region Helper Classes
 		[Serializable]
+		public class ScriptFieldConstraint
+		{
+			public MonoScript script = null;
+			public string declaringTypeName = null;
+			public string fieldName = null;
+			public string fieldTypeName = null;
+			public Object value = null;
+			public string stringValue = null;
+			public bool boolValue = false;
+			public long longValue = 0L;
+			public float floatValue = 0f;
+			public double doubleValue = 0d;
+			public string enumValueName = null;
+			public string textValue = null;
+		}
+
+		[Serializable]
 		public class Parameters
 		{
 			public Object[] objectsToSearch = null;
@@ -40,6 +57,7 @@ namespace AssetUsageDetectorNamespace
 			public int searchDepthLimit = 32;
 
 			public bool searchUnusedMaterialProperties = true;
+			public ScriptFieldConstraint[] scriptFieldConstraints = null;
 
 			public SearchRefactoring searchRefactoring = null;
 

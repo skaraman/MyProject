@@ -49,10 +49,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
-  colorKey: Effects
-  normalKey: 
+  libraryName: Esperanza/Effects
+  labelPrefix: A
   category: SuperBlastBall
-  labelPrefix: 
+  isAnimation: 0
+  doNotRender: 0
 --- !u!114 &6807759890696001026
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -129,15 +130,15 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -3919779002189068522, guid: a776557e43477ae4aa3f0ecde179630b, type: 3}
+  m_Sprite: {fileID: 8995154407686431259, guid: 5e516c402b4b0714ab01942294c2fc05, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 0.7, y: 0.71}
+  m_Size: {x: 0.01, y: 0.01}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 0
+  m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
 --- !u!210 &5139290945509360972
 SortingGroup:

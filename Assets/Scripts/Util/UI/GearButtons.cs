@@ -29,7 +29,7 @@ public class GearButtons : ButtonGroup {
         button.GetComponent<SpriteRenderer>().sprite = null;
         continue;
       }
-      button.GetComponent<SpriteWithNormals>().form = slot.Value.gearId;
+      button.GetComponent<SpriteWithNormals>().labelPrefix = slot.Value.gearId;
       var shaderAnimator = button.GetComponent<AllIn1AnimatorInspector>();
       var newColor = ShaderColors.myColors[slot.Value.gearColor];
       shaderAnimator.ResetActive();

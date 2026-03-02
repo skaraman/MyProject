@@ -80,7 +80,7 @@ public class PauseMenuInput : MonoBehaviour {
       if (formButtons.activeIndex == formHoverIndex) return;
       formButtons.SetActiveIndex(formHoverIndex);
       foreach (var ui in changingUI) {
-        ui.GetComponent<SpriteWithNormals>().form = formButtons.buttons[formHoverIndex].name.ToLower();
+        ui.GetComponent<SpriteWithNormals>().labelPrefix = formButtons.buttons[formHoverIndex].name.ToLower();
         ui.GetComponent<SpriteWithNormals>().ForceUpdateSpriteAndNormal();
       }
       foreach (var ui in primaryUIText) {

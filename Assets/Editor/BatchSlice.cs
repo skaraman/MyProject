@@ -129,12 +129,10 @@ public class OptimizedBatchSpriteProcessor : EditorWindow
 
         Debug.Log($"Processing: {path}");
 
-        // Configure importer for multiple sprites
-        importer.textureType = TextureImporterType.Sprite;
-        importer.spriteImportMode = SpriteImportMode.Multiple;
-        importer.mipmapEnabled = false;
-        importer.filterMode = FilterMode.Point;
-        importer.SaveAndReimport();
+        // Apply the same importer policy used by sprite streaming hotset tooling.
+        bool importerChanged = SpriteStreamingTextureImportPolicy.Apply(importer, forceMultipleSpriteImportMode: true);
+        if (importerChanged)
+            importer.SaveAndReimport();
 
         // Set up the data-provider factory & get the sprite editor provider
         SpriteDataProviderFactories factory = new SpriteDataProviderFactories();

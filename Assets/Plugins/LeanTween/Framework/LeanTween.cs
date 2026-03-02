@@ -258,6 +258,7 @@ public class LeanTween : MonoBehaviour {
     private static int maxSequences = 400;
     private static int frameRendered= -1;
     private static GameObject _tweenEmpty;
+    private const string TweenEmptyName = "~LeanTween";
     public static float dtEstimated = -1f;
     public static float dtManual;
     #if UNITY_3_5 || UNITY_4_0 || UNITY_4_0_1 || UNITY_4_1 || UNITY_4_2 || UNITY_4_3 || UNITY_4_5
@@ -324,13 +325,12 @@ public class LeanTween : MonoBehaviour {
             tweens = new LTDescr[maxTweens];
             tweensFinished = new int[maxTweens];
             tweensFinishedIds = new int[maxTweens];
+            cleanupTweenEmpties();
             _tweenEmpty = new GameObject();
-            _tweenEmpty.name = "~LeanTween";
+            _tweenEmpty.name = TweenEmptyName;
             _tweenEmpty.AddComponent(typeof(LeanTween));
             _tweenEmpty.isStatic = true;
-            #if !UNITY_EDITOR
             _tweenEmpty.hideFlags = HideFlags.HideAndDontSave;
-            #endif
             #if UNITY_EDITOR
             if(Application.isPlaying)
                 DontDestroyOnLoad( _tweenEmpty );
@@ -362,7 +362,8 @@ public class LeanTween : MonoBehaviour {
             }
         }
         tweens = null;
-        Destroy(_tweenEmpty);
+        cleanupTweenEmpties();
+        _tweenEmpty = null;
     }
 
     public void Update(){
@@ -381,6 +382,25 @@ public class LeanTween : MonoBehaviour {
     }
 
     private static int maxTweenReached;
+
+    private static void cleanupTweenEmpties(){
+        LeanTween[] existingTweens = (LeanTween[])Resources.FindObjectsOfTypeAll(typeof(LeanTween));
+        for(int i = 0; i < existingTweens.Length; i++){
+            LeanTween existingTween = existingTweens[i];
+            if(existingTween==null || existingTween.gameObject==null || existingTween.gameObject.name != TweenEmptyName){
+                continue;
+            }
+            #if UNITY_EDITOR
+            if(Application.isPlaying){
+                Destroy(existingTween.gameObject);
+            }else{
+                DestroyImmediate(existingTween.gameObject);
+            }
+            #else
+            Destroy(existingTween.gameObject);
+            #endif
+        }
+    }
 
     public static void update() {
         if(frameRendered != Time.frameCount){ // make sure update is only called once per frame

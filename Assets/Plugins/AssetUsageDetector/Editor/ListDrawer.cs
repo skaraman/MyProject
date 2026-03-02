@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 using UnityEditor;
+using System;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace AssetUsageDetectorNamespace
 {
@@ -196,6 +198,9 @@ namespace AssetUsageDetectorNamespace
 
 		protected override void PostElementDrawer( ObjectToSearch element )
 		{
+			if( element.obj is MonoScript )
+				element.RefreshScriptFieldFilters();
+
 			List<ObjectToSearch.SubAsset> subAssetsToSearch = element.subAssets;
 			if( subAssetsToSearch.Count > 0 )
 			{
@@ -247,6 +252,65 @@ namespace AssetUsageDetectorNamespace
 					}
 				}
 			}
+
+			List<ObjectToSearch.ScriptFieldFilter> scriptFieldFilters = element.scriptFieldFilters;
+			if( scriptFieldFilters != null && scriptFieldFilters.Count > 0 )
+			{
+				GUILayout.BeginHorizontal();
+				GUILayout.Space( 6f );
+				element.showScriptFieldFiltersFoldout = EditorGUILayout.Foldout( element.showScriptFieldFiltersFoldout, "Filter script fields:", true );
+				GUILayout.EndHorizontal();
+
+				if( element.showScriptFieldFiltersFoldout )
+				{
+					EditorGUILayout.HelpBox( "Checked fields are required. String/numeric filters are partial matches. For Object/Text fields, checked + empty means the field must be empty.", MessageType.None );
+
+					for( int i = 0; i < scriptFieldFilters.Count; i++ )
+					{
+						ObjectToSearch.ScriptFieldFilter fieldFilter = scriptFieldFilters[i];
+						Type fieldType = fieldFilter.EffectiveFieldType;
+
+						GUILayout.BeginHorizontal();
+						fieldFilter.shouldFilter = EditorGUILayout.Toggle( fieldFilter.shouldFilter, Utilities.GL_WIDTH_25 );
+						if( fieldFilter.IsObjectReference )
+							fieldFilter.value = EditorGUILayout.ObjectField( fieldFilter.Label, fieldFilter.value, fieldFilter.FieldType, true );
+						else if( fieldType == typeof( string ) )
+							fieldFilter.stringValue = EditorGUILayout.TextField( fieldFilter.Label, fieldFilter.stringValue ?? string.Empty );
+						else if( fieldType == typeof( bool ) )
+							fieldFilter.boolValue = EditorGUILayout.Toggle( fieldFilter.Label, fieldFilter.boolValue );
+						else if( fieldType == typeof( float ) )
+							fieldFilter.floatValue = EditorGUILayout.FloatField( fieldFilter.Label, fieldFilter.floatValue );
+						else if( fieldType == typeof( double ) )
+							fieldFilter.doubleValue = EditorGUILayout.DoubleField( fieldFilter.Label, fieldFilter.doubleValue );
+						else if( IsIntegralFieldType( fieldType ) )
+							fieldFilter.longValue = EditorGUILayout.LongField( fieldFilter.Label, fieldFilter.longValue );
+						else if( fieldType.IsEnum )
+						{
+							string[] enumNames = Enum.GetNames( fieldType );
+							if( enumNames.Length > 0 )
+							{
+								int selectedIndex = Array.IndexOf( enumNames, fieldFilter.enumValueName );
+								if( selectedIndex < 0 )
+									selectedIndex = 0;
+
+								selectedIndex = EditorGUILayout.Popup( fieldFilter.Label, selectedIndex, enumNames );
+								fieldFilter.enumValueName = enumNames[selectedIndex];
+							}
+							else
+								EditorGUILayout.LabelField( fieldFilter.Label, "<empty enum>" );
+						}
+						else
+							fieldFilter.textValue = EditorGUILayout.TextField( fieldFilter.Label, fieldFilter.textValue ?? string.Empty );
+						GUILayout.EndHorizontal();
+					}
+				}
+			}
+		}
+
+		private static bool IsIntegralFieldType( Type type )
+		{
+			return type == typeof( byte ) || type == typeof( sbyte ) || type == typeof( short ) || type == typeof( ushort ) ||
+				   type == typeof( int ) || type == typeof( uint ) || type == typeof( long );
 		}
 	}
 }

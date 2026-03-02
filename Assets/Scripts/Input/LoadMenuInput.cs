@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class LoadMenuInput : ButtonGroup {
   int activeIndexLoadMenu = -1;
@@ -36,14 +37,17 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void HandleMouseInput() {
+    var mouse = Mouse.current;
+    if (mouse == null) return;
+
     // Handle mouse press start
-    if (Input.GetMouseButtonDown(0)) {
+    if (mouse.leftButton.wasPressedThisFrame) {
       BeginClick();
     }
 
     // Handle dragging while pressed
-    if (pressed && Input.GetMouseButton(0)) {
-      Vector2 currentPos = Input.mousePosition;
+    if (pressed && mouse.leftButton.isPressed) {
+      Vector2 currentPos = mouse.position.ReadValue();
       var dist = Vector2.Distance(currentPos, pressPosition);
 
       if (!dragging && dist > dragThreshold) {
@@ -70,7 +74,7 @@ public class LoadMenuInput : ButtonGroup {
     }
 
     // Handle mouse release
-    if (Input.GetMouseButtonUp(0) && pressed) {
+    if (mouse.leftButton.wasReleasedThisFrame && pressed) {
       if (!dragging) {
         // Only trigger click if we weren't dragging
         DetectClickOnChild();
@@ -83,7 +87,10 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void BeginClick() {
-    pressPosition = Input.mousePosition;
+    var mouse = Mouse.current;
+    if (mouse == null) return;
+
+    pressPosition = mouse.position.ReadValue();
     pressed = true;
     dragging = false;
   }
@@ -93,7 +100,10 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void DetectClickOnChild() {
-    Vector2 screenPos = Input.mousePosition;
+    var mouse = Mouse.current;
+    if (mouse == null) return;
+
+    Vector2 screenPos = mouse.position.ReadValue();
 
     if (Camera.main == null) {
       Debug.LogError("Camera.main is null - cannot convert screen to world position");
@@ -116,7 +126,7 @@ public class LoadMenuInput : ButtonGroup {
 
     foreach (var hit in hits) {
       if (hit?.gameObject == null) continue;
-      var hitIndex = buttons.FindIndex(b => b != null && b == hit.gameObject);
+      var hitIndex = ResolveButtonIndex(hit.gameObject);
       if (hitIndex >= 0) {
         activeIndexLoadMenu = hitIndex;
         SetActiveIndex(hitIndex);
@@ -127,7 +137,7 @@ public class LoadMenuInput : ButtonGroup {
 
     foreach (var hit in hits) {
       if (hit?.gameObject != null) {
-        if (hit.gameObject == closeButton) {
+        if (IsObjectOrChildOf(hit.gameObject, closeButton)) {
           BackOut();
         }
       }
@@ -139,14 +149,17 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void DeleteDir() {
-    if (activeIndexLoadMenu >= 0) {
-      SaveSlotManager.Delete(activeIndexLoadMenu);
+    if (TryResolveSelectedSlotNumber(out var slotNumber)) {
+      SaveSlotManager.Delete(slotNumber);
     }
   }
 
   void MouseHover(object target) {
     if (target is GameObject go) {
-      activeIndexLoadMenu = buttons.IndexOf(go);
+      activeIndexLoadMenu = ResolveButtonIndex(go);
+      if (activeIndexLoadMenu >= 0) {
+        SetActiveIndex(activeIndexLoadMenu);
+      }
     }
   }
 
@@ -179,11 +192,66 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void Select() {
-    if (activeIndexLoadMenu >= 0) {
-      SaveSlotManager.SetSlot(activeIndexLoadMenu + 1);
+    if (TryResolveSelectedSlotNumber(out var slotNumber)) {
+      SaveSlotManager.SetSlot(slotNumber);
+      ApplyLocationFromSelectedSlot();
       Debug.Log($"Slot set {SaveSlotManager.slot}");
       MessageBus.Send("loadGame");
       MessageBus.Send("startGame");
     }
+  }
+
+  void ApplyLocationFromSelectedSlot() {
+    var loadedSlot = SaveSlotManager.Load("slot");
+    if (loadedSlot == null || !loadedSlot.TryGetValue("location", out var locationValue)) return;
+
+    var requestedLocation = Convert.ToString(locationValue);
+    if (string.IsNullOrWhiteSpace(requestedLocation)) return;
+
+    var resolvedLocation = LocationEnemyData.ResolveRequestedOrDefault(requestedLocation);
+    if (string.IsNullOrWhiteSpace(resolvedLocation)) return;
+
+    LocationManager.UpdateLocation(resolvedLocation);
+    MessageBus.Send("RequestLocationLoad", resolvedLocation);
+  }
+
+  int ResolveButtonIndex(GameObject hitObject) {
+    if (hitObject == null) return -1;
+
+    var directIndex = buttons.IndexOf(hitObject);
+    if (directIndex >= 0) return directIndex;
+
+    var hitTransform = hitObject.transform;
+    for (int i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) continue;
+      if (hitTransform.IsChildOf(button.transform)) {
+        return i;
+      }
+    }
+
+    return -1;
+  }
+
+  bool IsObjectOrChildOf(GameObject hitObject, GameObject targetRoot) {
+    if (hitObject == null || targetRoot == null) return false;
+    return hitObject == targetRoot || hitObject.transform.IsChildOf(targetRoot.transform);
+  }
+
+  bool TryResolveSelectedSlotNumber(out int slotNumber) {
+    slotNumber = -1;
+
+    if (activeIndexLoadMenu < 0 || activeIndexLoadMenu >= buttons.Count) return false;
+
+    var selectedButton = buttons[activeIndexLoadMenu];
+    if (selectedButton == null) return false;
+
+    var slot = selectedButton.GetComponent<SaveSlot>();
+    if (slot != null && int.TryParse(slot.saveNumber, out slotNumber)) {
+      return true;
+    }
+
+    slotNumber = activeIndexLoadMenu + 1;
+    return true;
   }
 }

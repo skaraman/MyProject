@@ -353,24 +353,48 @@ public static class SaveSlotManager {
     set => _slot = value;
   }
 
+  static string BuildSlotDirectory(int slotNumber) {
+    return Path.Combine(Application.persistentDataPath, slotNumber.ToString());
+  }
+
+  static string BuildLegacySlotDirectory(int slotNumber) {
+    return Path.Combine(Application.persistentDataPath, "Saves", slotNumber.ToString());
+  }
+
+  static string BuildSavePath(string directoryPath, string name) {
+    return Path.Combine(directoryPath, $"{name}.sav");
+  }
+
   public static void SetSlot(int newSlot) {
     slot = newSlot;
   }
 
   public static void Save(string name, SaveData table) {
-    var path = Application.persistentDataPath + $"/{slot}/{name}.sav";
+    var path = BuildSavePath(BuildSlotDirectory(slot), name);
     table.Save(path);
   }
 
   public static SaveData Load(string name) {
-    var path = Application.persistentDataPath + $"/{slot}/{name}.sav";
-    return SaveData.Load(path);
+    var mainPath = BuildSavePath(BuildSlotDirectory(slot), name);
+    var mainData = SaveData.Load(mainPath);
+    if (mainData.Count > 0 || File.Exists(mainPath)) {
+      return mainData;
+    }
+
+    var legacyPath = BuildSavePath(BuildLegacySlotDirectory(slot), name);
+    return SaveData.Load(legacyPath);
   }
 
   public static void Delete(int deleteSlot) {
-    var path = Application.persistentDataPath + $"/{deleteSlot}/";
-    var dir = Path.GetDirectoryName(path);
-    if (Directory.Exists(dir)) Directory.Delete(dir, true);
+    var mainDirectory = BuildSlotDirectory(deleteSlot);
+    if (Directory.Exists(mainDirectory)) {
+      Directory.Delete(mainDirectory, true);
+    }
+
+    var legacyDirectory = BuildLegacySlotDirectory(deleteSlot);
+    if (Directory.Exists(legacyDirectory)) {
+      Directory.Delete(legacyDirectory, true);
+    }
   }
 
 }

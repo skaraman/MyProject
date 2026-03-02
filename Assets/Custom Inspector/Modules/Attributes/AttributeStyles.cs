@@ -188,7 +188,7 @@ namespace CustomInspector
         Unity,
         Update,
         Visual_effect,
-        WindZone
+        Wind
     }
 }
 namespace CustomInspector.Extensions
@@ -371,7 +371,7 @@ namespace CustomInspector.Extensions
                 nameof(InspectorIcon.Unity) => "d_Scene",
                 nameof(InspectorIcon.Update) => "Update-Available",
                 nameof(InspectorIcon.Visual_effect) => "VisualEffect Gizmo",
-                nameof(InspectorIcon.WindZone) => "WindZone Gizmo",
+                nameof(InspectorIcon.Wind) => "Wind Gizmo",
                 _ => iconName,
             };
         }

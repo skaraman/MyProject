@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
@@ -13,12 +14,40 @@ public class ComponentPropagator : MonoBehaviour {
   }
 
   private bool propagateOn = true;
+  [SerializeField] bool verboseLogging;
+  [SerializeField] float initialDelaySeconds = .5f;
+  [SerializeField] int initialDelayFrames = 0;
 
   [SerializeField] public List<ComponentToggle> components = new();
   [Button(nameof(ForcePropagation), label = "Refresh")][HideField] public bool _bool;
 
   int _fieldsSkippedCulling;
   int _propertiesSkippedCulling;
+
+  void OnEnable() {
+    StartPropagationDelay();
+  }
+
+  void StartPropagationDelay() {
+    StopAllCoroutines();
+    // If no delay configured, keep current behaviour.
+    if (initialDelaySeconds <= 0f && initialDelayFrames <= 0) {
+      propagateOn = true;
+      return;
+    }
+    propagateOn = false;
+    StartCoroutine(EnablePropagationAfterDelay());
+  }
+
+  IEnumerator EnablePropagationAfterDelay() {
+    for (int i = 0; i < initialDelayFrames; i++) {
+      yield return null; // wait a frame so dynamically-created children appear
+    }
+    if (initialDelaySeconds > 0f) {
+      yield return new WaitForSeconds(initialDelaySeconds);
+    }
+    propagateOn = true;
+  }
 
   void FixedUpdate() {
     if (propagateOn) {
@@ -72,7 +101,9 @@ public class ComponentPropagator : MonoBehaviour {
         InvokeForceUpdate(target);
       }
     }
-    Debug.Log($"[ComponentPropagator] Skips due to culling-related members fields={_fieldsSkippedCulling} properties={_propertiesSkippedCulling}");
+    if (verboseLogging) {
+      Debug.Log($"[ComponentPropagator] Skips due to culling-related members fields={_fieldsSkippedCulling} properties={_propertiesSkippedCulling}");
+    }
   }
 
   bool IsCullingRelatedName(string nLower) {

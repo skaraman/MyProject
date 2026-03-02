@@ -11,7 +11,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: 202ffec9202f22e478034613d6beb49c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - GLOWLIGHT_ON
   m_InvalidKeywords:
   - _GLOWAFFECTLIGHT_ON
   m_LightmapFlags: 4
@@ -115,7 +116,7 @@ Material:
     - _DistortAmount: 0.5
     - _DistortTexXSpeed: 5
     - _DistortTexYSpeed: 5
-    - _EditorDrawers: 7
+    - _EditorDrawers: 15
     - _FadeAmount: -0.1
     - _FadeBurnGlow: 2
     - _FadeBurnTransition: 0.075

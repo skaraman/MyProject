@@ -13,7 +13,6 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - BLURISHD_ON
-  - OUTBASE_ON
   - POSTERIZEOUTLINE_ON
   - SHADOW_ON
   m_InvalidKeywords:
@@ -80,7 +79,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Alpha: 1
+    - _Alpha: 0
     - _AlphaCutoffValue: 0.342
     - _AlphaOutlineBlend: 1
     - _AlphaOutlineGlow: 1
@@ -113,7 +112,7 @@ Material:
     - _DistortAmount: 0.05
     - _DistortTexXSpeed: 1
     - _DistortTexYSpeed: 0.9
-    - _EditorDrawers: 6
+    - _EditorDrawers: 0
     - _FadeAmount: -0.1
     - _FadeBurnGlow: 2
     - _FadeBurnTransition: 0.075
@@ -127,6 +126,7 @@ Material:
     - _GhostTransparency: 0
     - _GlitchAmount: 16.3
     - _GlitchSize: 2.96
+    - _GlitchSpeed: 20
     - _Glow: 10
     - _GlowGlobal: 1
     - _GlowTexUsed: 0

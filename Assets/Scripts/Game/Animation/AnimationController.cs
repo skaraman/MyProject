@@ -8,6 +8,9 @@ using UnityEngine;
 /// Generic animation driver (non-MonoBehaviour). Host behaviours must call Tick/Cleanup and wire data/targets.
 /// </summary>
 public class AnimationController {
+  const int MaxTargetsForGateReadinessChecks = 96;
+  const int MinAppearancePinAddressBudget = 32;
+
   public string defaultAnimation = "Idle";
   public bool playOnStart;
   public bool SlowDown { get; set; }
@@ -31,6 +34,8 @@ public class AnimationController {
   private GameObject[] bounceObjects = Array.Empty<GameObject>();
   private GameObject[] hBoxObjects = Array.Empty<GameObject>();
   private readonly List<SpriteWithNormals> spriteTargets = new();
+  private readonly List<SpriteWithNormals> criticalSpriteTargets = new();
+  private readonly Dictionary<SpriteWithNormals, SpriteRenderer> spriteTargetRenderers = new();
   private readonly Dictionary<GameObject, List<int>> activeTweens = new();
 
   private string currentAnimation;
@@ -45,6 +50,37 @@ public class AnimationController {
   private int lastFrame = int.MinValue;
   private bool effectTriggered;
   private bool projectileTriggered;
+  private bool hadEnabledSpriteTargetsLastTick;
+
+  private bool hasPendingAnimationSwitch;
+  private string pendingAnimation;
+  private string pendingQueuedAnimation;
+  private string pendingCategory;
+  private int pendingStartFrame;
+  private int pendingReadyEndFrame;
+  private float pendingSwitchStartTime;
+  private float pendingSwitchDeadline;
+  private string appearanceOwnerId;
+  private TextureResidencyCache.PinClass appearancePinClass = TextureResidencyCache.PinClass.Enemy;
+  private int appearancePinRefreshOffset;
+  private readonly List<string> appearancePinAddressBuffer = new(512);
+  private readonly HashSet<string> appearancePinAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  private readonly HashSet<string> predictedAnimations = new(StringComparer.Ordinal);
+  private bool pinSnapshotStreamingEnabled;
+  private int pinSnapshotWindowFrames = int.MinValue;
+  private int pinSnapshotPredictedAnimations = int.MinValue;
+  private string pinSnapshotCurrentAnimation;
+  private int pinSnapshotCurrentFrameBucket = int.MinValue;
+  private bool pinSnapshotHasPendingSwitch;
+  private string pinSnapshotPendingAnimation;
+  private int pinSnapshotPendingStartFrame = int.MinValue;
+  private int pinSnapshotPendingReadyEndFrame = int.MinValue;
+  private string pinSnapshotQueuedAnimation;
+
+  static bool runtimeSettingsLoaded;
+  static int runtimeWarmupFrames = 24;
+  static int runtimeSwitchGateMs = 120;
+  const int MaxSwitchReadinessWindowFrames = 12;
 
   public void Initialize(
     Transform root,
@@ -56,7 +92,9 @@ public class AnimationController {
     Dictionary<string, Dictionary<string, List<BounceFrame>>> bouncesData,
     Dictionary<string, Dictionary<string, List<HBox>>> hBoxesData,
     string defaultAnim,
-    bool autoPlay
+    bool autoPlay,
+    string appearanceOwnerId = null,
+    TextureResidencyCache.PinClass appearancePinClass = TextureResidencyCache.PinClass.Enemy
   ) {
     rootTransform = root;
     baseScale = root != null ? root.localScale : Vector3.one;
@@ -66,6 +104,13 @@ public class AnimationController {
     ConfigureData(animations, interrupts, bouncesData, hBoxesData);
     defaultAnimation = defaultAnim;
     playOnStart = autoPlay;
+    this.appearanceOwnerId = string.IsNullOrWhiteSpace(appearanceOwnerId) ? "" : appearanceOwnerId.Trim();
+    this.appearancePinClass = appearancePinClass;
+    appearancePinRefreshOffset = root != null ? Mathf.Abs(root.GetInstanceID()) : 0;
+    appearancePinAddressBuffer.Clear();
+    appearancePinAddressSet.Clear();
+    predictedAnimations.Clear();
+    InvalidateAppearancePinSnapshot();
     if (playOnStart && !string.IsNullOrEmpty(defaultAnimation) && animationData.Count > 0) {
       PlayAnimation(defaultAnimation, true);
     }
@@ -81,11 +126,13 @@ public class AnimationController {
     interruptData = interrupts ?? new Dictionary<string, Dictionary<string, string>>();
     bounceData = bounces ?? new Dictionary<string, Dictionary<string, List<BounceFrame>>>();
     hBoxData = hboxes ?? new Dictionary<string, Dictionary<string, List<HBox>>>();
+    InvalidateAppearancePinSnapshot();
   }
 
   public void SetSpriteObjects(IEnumerable<GameObject> targets) {
     spriteObjects = targets != null ? targets.ToArray() : Array.Empty<GameObject>();
     CacheSpriteTargets();
+    InvalidateAppearancePinSnapshot();
   }
 
   public void SetBounceObjects(IEnumerable<GameObject> targets) {
@@ -97,45 +144,88 @@ public class AnimationController {
   }
 
   public void Tick(float deltaTime) {
+    TextureResidencyCache.Pump();
+    var hasEnabledSpriteTargets = HasEnabledSpriteTargets();
+    if (!hasEnabledSpriteTargets) {
+      if (hadEnabledSpriteTargetsLastTick) {
+        ReleaseAppearancePins();
+      }
+      hadEnabledSpriteTargetsLastTick = false;
+    }
+    else {
+      hadEnabledSpriteTargetsLastTick = true;
+      RefreshAppearancePins();
+    }
     AdvanceAnimation(deltaTime);
   }
 
   public bool PlayAnimation(string animationName, bool forceRestart = false, bool resolveInterrupts = true) {
-    if (animationData == null || !animationData.ContainsKey(animationName)) {
+    if (!TryGetAnimationKey(animationName, out var requestedAnimation)) {
       Debug.LogWarning($"[AnimationController] Animation '{animationName}' missing.");
       return false;
     }
-    if (!forceRestart && isPlaying && animationName == currentAnimation) return true;
 
-    if (!resolveInterrupts || forceRestart) {
-      currentAnimation = animationName;
-      queuedAnimation = null;
-    }
-    else {
-      if (TryResolveInterrupt(animationName, out var resolvedAnimation, out var queued)) {
-        currentAnimation = resolvedAnimation;
-        queuedAnimation = queued;
-
-      }
-      else {
+    string resolvedAnimation = requestedAnimation;
+    string queued = null;
+    if (resolveInterrupts && !forceRestart) {
+      if (!TryResolveInterrupt(requestedAnimation, out resolvedAnimation, out queued)) {
         return false;
       }
     }
 
+    if (!TryGetAnimationKey(resolvedAnimation, out resolvedAnimation)) {
+      resolvedAnimation = requestedAnimation;
+    }
 
-    animationTimer = 0f;
-    pingPong = false;
-    isPlaying = true;
-    var anim = animationData[currentAnimation];
-    currentFrame = anim.start;
+    if (string.IsNullOrWhiteSpace(resolvedAnimation) || !animationData.ContainsKey(resolvedAnimation)) {
+      Debug.LogWarning($"[AnimationController] Animation '{resolvedAnimation}' missing. '{animationName}'");
+      return false;
+    }
 
-    var category = anim.To == 1 ? "To" : anim.To == 2 ? "To2" : currentAnimation;
-    SetAnimationCategory(category);
-    UpdateSprites(currentFrame);
-    SetBounces();
-    ResetAnimationEvents(anim);
-    TryTriggerFrameEvents(anim, lastFrame, currentFrame);
-    lastFrame = currentFrame;
+    if (!forceRestart &&
+        isPlaying &&
+        string.Equals(resolvedAnimation, currentAnimation, StringComparison.Ordinal) &&
+        !hasPendingAnimationSwitch) {
+      return true;
+    }
+
+    if (!forceRestart &&
+        hasPendingAnimationSwitch &&
+        string.Equals(resolvedAnimation, pendingAnimation, StringComparison.Ordinal)) {
+      if (!string.IsNullOrWhiteSpace(queued)) {
+        pendingQueuedAnimation = queued;
+      }
+      return true;
+    }
+
+    EnsureRuntimeSwitchSettings();
+    var anim = animationData[resolvedAnimation];
+    var category = ResolveAnimationCategory(resolvedAnimation, anim);
+    var enabledTargetCount = CountEnabledSpriteTargets();
+
+    var canGate = Application.isPlaying &&
+                  !forceRestart &&
+                  !string.IsNullOrEmpty(currentAnimation) &&
+                  !string.Equals(currentAnimation, resolvedAnimation, StringComparison.Ordinal) &&
+                  enabledTargetCount > 0 &&
+                  enabledTargetCount <= MaxTargetsForGateReadinessChecks;
+
+    if (canGate) {
+      PrimeTargetsForAnimation(category, anim.start, anim.end);
+      var gateMs = Math.Max(runtimeSwitchGateMs, 0);
+      var readinessEndFrame = CalculateSwitchReadinessEndFrame(anim.start, anim.end);
+      var ready = AreTargetsReadyForWindow(category, anim.start, readinessEndFrame);
+      if (!ready && gateMs > 0) {
+        BeginPendingAnimationSwitch(resolvedAnimation, queued, category, anim.start, readinessEndFrame, gateMs);
+        return true;
+      }
+      SpriteStreamingDiagnostics.RecordAnimationSwitchWait(0f, false);
+    }
+    else {
+      ClearPendingAnimationSwitch();
+    }
+
+    CommitAnimationSwitch(resolvedAnimation, queued, category);
     return true;
   }
 
@@ -145,8 +235,17 @@ public class AnimationController {
     PlayAnimation(anim, forceRestart: true, resolveInterrupts: false);
   }
 
+  public void ReleaseAppearancePins() {
+    if (string.IsNullOrWhiteSpace(appearanceOwnerId)) return;
+    TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+    appearancePinAddressBuffer.Clear();
+    appearancePinAddressSet.Clear();
+    InvalidateAppearancePinSnapshot();
+  }
+
   public void PauseAnimation() {
     isPlaying = false;
+    ClearPendingAnimationSwitch();
     CancelAllTweens();
   }
 
@@ -160,6 +259,7 @@ public class AnimationController {
   public void StopAnimation(bool resetToDefault = false) {
     isPlaying = false;
     queuedAnimation = null;
+    ClearPendingAnimationSwitch();
     animationTimer = 0f;
     currentFrame = 0;
     CancelAllTweens();
@@ -202,6 +302,8 @@ public class AnimationController {
   }
 
   public void Cleanup(bool resetLeanTweenManager) {
+    ReleaseAppearancePins();
+    ClearPendingAnimationSwitch();
     CancelAllTweens();
     if (resetLeanTweenManager && !hasResetLeanTween) {
       LeanTween.reset();
@@ -210,6 +312,7 @@ public class AnimationController {
   }
 
   private void AdvanceAnimation(float deltaTime) {
+    TryFinalizePendingAnimationSwitch();
     if (!isPlaying || string.IsNullOrEmpty(currentAnimation) || animationData == null) return;
     if (!animationData.TryGetValue(currentAnimation, out var anim)) return;
 
@@ -226,7 +329,14 @@ public class AnimationController {
           var next = queuedAnimation;
           queuedAnimation = null;
           currentAnimation = null;
-          PlayAnimation(next);
+          if (!PlayAnimation(next, resolveInterrupts: false)) {
+            if (!string.IsNullOrWhiteSpace(defaultAnimation) && animationData.ContainsKey(defaultAnimation)) {
+              PlayAnimation(defaultAnimation, forceRestart: true, resolveInterrupts: false);
+            }
+            else {
+              isPlaying = false;
+            }
+          }
           return;
         }
         if (anim.loop || ForceLoop) {
@@ -279,14 +389,383 @@ public class AnimationController {
     queued = null;
     if (string.IsNullOrEmpty(currentAnimation)) return true;
     if (interruptData != null && interruptData.TryGetValue(currentAnimation, out var nextMap)) {
-      if (!nextMap.TryGetValue(requestedAnimation, out resolvedAnimation)) {
-        return false;
+      if (!nextMap.TryGetValue(requestedAnimation, out var mappedAnimation)) return true;
+      if (!TryGetAnimationKey(mappedAnimation, out resolvedAnimation)) {
+        resolvedAnimation = requestedAnimation;
+        return true;
       }
-      if (resolvedAnimation != requestedAnimation) {
+      if (!string.Equals(resolvedAnimation, requestedAnimation, StringComparison.Ordinal)) {
         queued = requestedAnimation;
       }
     }
     return true;
+  }
+
+  bool TryGetAnimationKey(string candidate, out string resolved) {
+    resolved = "";
+    if (animationData == null || animationData.Count == 0) return false;
+
+    var normalized = NormalizeAnimationName(candidate);
+    if (string.IsNullOrWhiteSpace(normalized)) return false;
+
+    if (animationData.ContainsKey(normalized)) {
+      resolved = normalized;
+      return true;
+    }
+
+    foreach (var key in animationData.Keys) {
+      if (!string.Equals(key, normalized, StringComparison.OrdinalIgnoreCase)) continue;
+      resolved = key;
+      return true;
+    }
+
+    return false;
+  }
+
+  static string NormalizeAnimationName(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+    return value
+      .Replace("\u200B", "")
+      .Replace("\uFEFF", "")
+      .Trim();
+  }
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetRuntimeSwitchSettingsCache() {
+    runtimeSettingsLoaded = false;
+    runtimeWarmupFrames = 24;
+    runtimeSwitchGateMs = 120;
+  }
+
+  static void EnsureRuntimeSwitchSettings() {
+    if (runtimeSettingsLoaded) return;
+    runtimeSettingsLoaded = true;
+    runtimeWarmupFrames = SpriteStreamingRuntimeSettings.AnimationWarmupFrames;
+    runtimeSwitchGateMs = SpriteStreamingRuntimeSettings.AnimationSwitchGateMs;
+  }
+
+  void BeginPendingAnimationSwitch(
+    string nextAnimation,
+    string nextQueuedAnimation,
+    string nextCategory,
+    int startFrame,
+    int readyEndFrame,
+    int gateMs
+  ) {
+    if (hasPendingAnimationSwitch &&
+        string.Equals(pendingAnimation, nextAnimation, StringComparison.Ordinal) &&
+        string.Equals(pendingCategory, nextCategory, StringComparison.Ordinal) &&
+        pendingStartFrame == startFrame &&
+        pendingReadyEndFrame == readyEndFrame) {
+      if (!string.IsNullOrWhiteSpace(nextQueuedAnimation)) {
+        pendingQueuedAnimation = nextQueuedAnimation;
+      }
+      return;
+    }
+
+    hasPendingAnimationSwitch = true;
+    pendingAnimation = nextAnimation ?? "";
+    pendingQueuedAnimation = nextQueuedAnimation ?? "";
+    pendingCategory = nextCategory ?? "";
+    pendingStartFrame = startFrame;
+    pendingReadyEndFrame = Math.Max(readyEndFrame, startFrame);
+    pendingSwitchStartTime = Time.realtimeSinceStartup;
+    pendingSwitchDeadline = pendingSwitchStartTime + Math.Max(gateMs, 0) / 1000f;
+  }
+
+  void TryFinalizePendingAnimationSwitch() {
+    if (!hasPendingAnimationSwitch) return;
+    if (animationData == null || string.IsNullOrWhiteSpace(pendingAnimation) || !animationData.ContainsKey(pendingAnimation)) {
+      ClearPendingAnimationSwitch();
+      return;
+    }
+
+    var now = Time.realtimeSinceStartup;
+    PrimeTargetsForAnimation(pendingCategory, pendingStartFrame, pendingReadyEndFrame);
+    var isReady = AreTargetsReadyForWindow(pendingCategory, pendingStartFrame, pendingReadyEndFrame);
+    if (!isReady && now < pendingSwitchDeadline && isPlaying) return;
+
+    var waitMs = Mathf.Max((now - pendingSwitchStartTime) * 1000f, 0f);
+    SpriteStreamingDiagnostics.RecordAnimationSwitchWait(waitMs, waitMs > 0.1f);
+    CommitAnimationSwitch(pendingAnimation, pendingQueuedAnimation, pendingCategory);
+    ClearPendingAnimationSwitch();
+  }
+
+  void PrimeTargetsForAnimation(string targetCategory, int startFrame, int endFrame) {
+    var warmupFrames = Math.Max(runtimeWarmupFrames, 1);
+    var clampedStart = Math.Max(startFrame, 1);
+    var clampedEnd = Math.Max(endFrame, clampedStart);
+    var targetEnd = Math.Min(clampedEnd, clampedStart + warmupFrames - 1);
+
+    foreach (var target in spriteTargets) {
+      if (!IsSpriteTargetEnabled(target)) continue;
+      target.PrimeAnimationWindow(targetCategory, clampedStart, targetEnd, 0);
+    }
+  }
+
+  public void PrimeAllAnimationStarts(int framesPerAnimation = 1, int maxAnimations = 0) {
+    if (!Application.isPlaying) return;
+    if (animationData == null || animationData.Count == 0 || spriteTargets.Count == 0) return;
+
+    var warmFrames = Math.Max(framesPerAnimation, 1);
+    var primed = 0;
+    foreach (var pair in animationData) {
+      var animationName = pair.Key;
+      var anim = pair.Value;
+      if (anim == null || string.IsNullOrWhiteSpace(animationName)) continue;
+
+      var categoryName = ResolveAnimationCategory(animationName, anim);
+      var startFrame = Math.Max(anim.start, 1);
+      var endFrame = Math.Max(startFrame, startFrame + warmFrames - 1);
+      PrimeTargetsForAnimation(categoryName, startFrame, endFrame);
+
+      primed++;
+      if (maxAnimations > 0 && primed >= maxAnimations) break;
+    }
+  }
+
+  bool AreTargetsReadyForFrame(string targetCategory, int frame) {
+    return AreTargetsReadyForWindow(targetCategory, frame, frame);
+  }
+
+  bool AreTargetsReadyForWindow(string targetCategory, int startFrame, int endFrame) {
+    var minFrame = Math.Max(startFrame, 1);
+    var maxFrame = Math.Max(endFrame, minFrame);
+    var hasCriticalTargets = false;
+    for (var i = 0; i < criticalSpriteTargets.Count; i++) {
+      var target = criticalSpriteTargets[i];
+      if (!IsSpriteTargetEnabled(target)) continue;
+      hasCriticalTargets = true;
+      for (var frame = minFrame; frame <= maxFrame; frame++) {
+        if (!target.IsFrameReady(frame, targetCategory)) return false;
+      }
+    }
+
+    if (hasCriticalTargets) return true;
+
+    foreach (var target in spriteTargets) {
+      if (!IsSpriteTargetEnabled(target)) continue;
+      for (var frame = minFrame; frame <= maxFrame; frame++) {
+        if (!target.IsFrameReady(frame, targetCategory)) return false;
+      }
+    }
+    return true;
+  }
+
+  static int CalculateSwitchReadinessEndFrame(int startFrame, int endFrame) {
+    var clampedStart = Math.Max(startFrame, 1);
+    var clampedClipEnd = Math.Max(endFrame, clampedStart);
+    var readinessFrames = Math.Max(1, Math.Min(runtimeWarmupFrames, MaxSwitchReadinessWindowFrames));
+    return Math.Min(clampedClipEnd, clampedStart + readinessFrames - 1);
+  }
+
+  void CommitAnimationSwitch(string nextAnimation, string nextQueuedAnimation, string targetCategory) {
+    currentAnimation = nextAnimation;
+    queuedAnimation = string.IsNullOrWhiteSpace(nextQueuedAnimation) ? null : nextQueuedAnimation;
+
+    animationTimer = 0f;
+    pingPong = false;
+    isPlaying = true;
+    var anim = animationData[currentAnimation];
+    currentFrame = anim.start;
+
+    SetAnimationCategory(targetCategory);
+    UpdateSprites(currentFrame);
+    SetBounces();
+    ResetAnimationEvents(anim);
+    TryTriggerFrameEvents(anim, lastFrame, currentFrame);
+    lastFrame = currentFrame;
+  }
+
+  static string ResolveAnimationCategory(string animationName, AnimData anim) {
+    return anim.To == 1 ? "To" : anim.To == 2 ? "To2" : animationName;
+  }
+
+  void ClearPendingAnimationSwitch() {
+    hasPendingAnimationSwitch = false;
+    pendingAnimation = null;
+    pendingQueuedAnimation = null;
+    pendingCategory = null;
+    pendingStartFrame = 0;
+    pendingReadyEndFrame = 0;
+    pendingSwitchStartTime = 0f;
+    pendingSwitchDeadline = 0f;
+  }
+
+  void RefreshAppearancePins() {
+    if (!Application.isPlaying) return;
+    if (string.IsNullOrWhiteSpace(appearanceOwnerId)) return;
+    var pinWindowFrames = Math.Max(SpriteStreamingRuntimeSettings.PinWindowFrames, 1);
+    var maxPredicted = Math.Max(SpriteStreamingRuntimeSettings.PinPredictedNextAnimations, 0);
+    var pinRefreshBucketSize = Math.Max(SpriteStreamingRuntimeSettings.PinRefreshFrameBucketSize, 1);
+    var maxPinAddresses = Math.Max(SpriteStreamingRuntimeSettings.MaxPinnedAddressesPerOwner, MinAppearancePinAddressBudget);
+    var currentFrameBucket = Mathf.Max(Time.frameCount + appearancePinRefreshOffset, 0) / pinRefreshBucketSize;
+
+    if (!SpriteStreamingRuntimeSettings.EnableAppearanceSetStreaming ||
+        !SpriteStreamingRuntimeSettings.EnablePinnedHotset) {
+      if (IsAppearancePinSnapshotCurrent(false, pinWindowFrames, maxPredicted, currentFrameBucket)) return;
+      TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+      appearancePinAddressBuffer.Clear();
+      appearancePinAddressSet.Clear();
+      UpdateAppearancePinSnapshot(false, pinWindowFrames, maxPredicted, currentFrameBucket);
+      return;
+    }
+
+    if (animationData == null || animationData.Count == 0 || spriteTargets.Count == 0) {
+      if (IsAppearancePinSnapshotCurrent(true, pinWindowFrames, maxPredicted, currentFrameBucket)) return;
+      TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+      appearancePinAddressBuffer.Clear();
+      appearancePinAddressSet.Clear();
+      UpdateAppearancePinSnapshot(true, pinWindowFrames, maxPredicted, currentFrameBucket);
+      return;
+    }
+
+    if (IsAppearancePinSnapshotCurrent(true, pinWindowFrames, maxPredicted, currentFrameBucket)) return;
+
+    appearancePinAddressBuffer.Clear();
+    appearancePinAddressSet.Clear();
+
+    if (!string.IsNullOrWhiteSpace(currentAnimation) && animationData.TryGetValue(currentAnimation, out var currentAnim)) {
+      var currentCategory = ResolveAnimationCategory(currentAnimation, currentAnim);
+      var currentStart = isPlaying ? Mathf.Clamp(currentFrame, currentAnim.start, currentAnim.end) : currentAnim.start;
+      CollectWindowAddresses(currentCategory, currentStart, currentAnim.end, pinWindowFrames, maxPinAddresses);
+      CollectPredictedInterruptWindows(currentAnimation, pinWindowFrames, maxPredicted, maxPinAddresses);
+    }
+
+    if (appearancePinAddressBuffer.Count < maxPinAddresses &&
+        hasPendingAnimationSwitch &&
+        !string.IsNullOrWhiteSpace(pendingAnimation) &&
+        animationData.TryGetValue(pendingAnimation, out var pendingAnim)) {
+      var pendingCategoryName = string.IsNullOrWhiteSpace(pendingCategory)
+        ? ResolveAnimationCategory(pendingAnimation, pendingAnim)
+        : pendingCategory;
+      var pendingStart = Mathf.Clamp(Math.Max(pendingStartFrame, pendingAnim.start), pendingAnim.start, pendingAnim.end);
+      CollectWindowAddresses(pendingCategoryName, pendingStart, pendingAnim.end, pinWindowFrames, maxPinAddresses);
+    }
+
+    if (appearancePinAddressBuffer.Count < maxPinAddresses &&
+        !string.IsNullOrWhiteSpace(queuedAnimation) &&
+        animationData.TryGetValue(queuedAnimation, out var queuedAnim)) {
+      var queuedCategory = ResolveAnimationCategory(queuedAnimation, queuedAnim);
+      CollectWindowAddresses(queuedCategory, queuedAnim.start, queuedAnim.end, pinWindowFrames, maxPinAddresses);
+    }
+
+    if (appearancePinAddressBuffer.Count <= 0) {
+      TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+      UpdateAppearancePinSnapshot(true, pinWindowFrames, maxPredicted, currentFrameBucket);
+      return;
+    }
+
+    TextureResidencyCache.UpdateOwnerPins(
+      appearanceOwnerId,
+      appearancePinClass,
+      appearancePinAddressBuffer,
+      TextureResidencyCache.LoadPriority.Warmup
+    );
+    UpdateAppearancePinSnapshot(true, pinWindowFrames, maxPredicted, currentFrameBucket);
+  }
+
+  void CollectWindowAddresses(string categoryName, int startFrame, int maxClipFrame, int pinWindowFrames, int maxPinAddresses) {
+    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+    var clampedStart = Math.Max(startFrame, 1);
+    var clampedMax = Math.Max(maxClipFrame, clampedStart);
+    var clampedEnd = Math.Min(clampedMax, clampedStart + pinWindowFrames - 1);
+
+    // Frame-first + critical-first collection protects core body continuity (Skin*) during switch windows.
+    for (var frame = clampedStart; frame <= clampedEnd; frame++) {
+      CollectWindowAddressesForTargetSet(criticalSpriteTargets, categoryName, frame, maxPinAddresses);
+      if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+      CollectWindowAddressesForTargetSet(spriteTargets, categoryName, frame, maxPinAddresses, skipCriticalTargets: true);
+      if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+    }
+  }
+
+  void CollectWindowAddressesForTargetSet(
+    List<SpriteWithNormals> targets,
+    string categoryName,
+    int frame,
+    int maxPinAddresses,
+    bool skipCriticalTargets = false
+  ) {
+    if (targets == null || targets.Count == 0) return;
+    for (var i = 0; i < targets.Count; i++) {
+      if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+      var target = targets[i];
+      if (target == null) continue;
+      if (skipCriticalTargets && IsCriticalSpriteTarget(target)) continue;
+      if (!IsSpriteTargetEnabled(target)) continue;
+      if (!target.TryGetFrameAddressPair(frame, out var pair, categoryName)) continue;
+
+      AddAppearancePinAddress(pair.colorAddress, maxPinAddresses);
+      AddAppearancePinAddress(pair.normalAddress, maxPinAddresses);
+    }
+  }
+
+  void CollectPredictedInterruptWindows(string sourceAnimation, int pinWindowFrames, int maxPredicted, int maxPinAddresses) {
+    if (maxPredicted <= 0) return;
+    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+    if (interruptData == null || !interruptData.TryGetValue(sourceAnimation, out var nextMap) || nextMap == null || nextMap.Count == 0) return;
+
+    predictedAnimations.Clear();
+    foreach (var pair in nextMap) {
+      var predictedAnimationName = pair.Value;
+      if (string.IsNullOrWhiteSpace(predictedAnimationName)) continue;
+      if (!predictedAnimations.Add(predictedAnimationName)) continue;
+      if (!animationData.TryGetValue(predictedAnimationName, out var predictedAnim)) continue;
+
+      var predictedCategory = ResolveAnimationCategory(predictedAnimationName, predictedAnim);
+      CollectWindowAddresses(predictedCategory, predictedAnim.start, predictedAnim.end, pinWindowFrames, maxPinAddresses);
+      if (appearancePinAddressBuffer.Count >= maxPinAddresses) break;
+      if (predictedAnimations.Count >= maxPredicted) break;
+    }
+  }
+
+  void AddAppearancePinAddress(string address, int maxPinAddresses) {
+    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+    if (string.IsNullOrWhiteSpace(address)) return;
+    var normalized = address;
+    if (!appearancePinAddressSet.Add(normalized)) return;
+    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+    appearancePinAddressBuffer.Add(normalized);
+  }
+
+  bool IsAppearancePinSnapshotCurrent(bool streamingEnabled, int pinWindowFrames, int maxPredicted, int currentFrameBucket) {
+    return pinSnapshotStreamingEnabled == streamingEnabled &&
+           pinSnapshotWindowFrames == pinWindowFrames &&
+           pinSnapshotPredictedAnimations == maxPredicted &&
+           pinSnapshotCurrentFrameBucket == currentFrameBucket &&
+           pinSnapshotHasPendingSwitch == hasPendingAnimationSwitch &&
+           string.Equals(pinSnapshotCurrentAnimation, currentAnimation, StringComparison.Ordinal) &&
+           string.Equals(pinSnapshotPendingAnimation, pendingAnimation, StringComparison.Ordinal) &&
+           pinSnapshotPendingStartFrame == pendingStartFrame &&
+           pinSnapshotPendingReadyEndFrame == pendingReadyEndFrame &&
+           string.Equals(pinSnapshotQueuedAnimation, queuedAnimation, StringComparison.Ordinal);
+  }
+
+  void UpdateAppearancePinSnapshot(bool streamingEnabled, int pinWindowFrames, int maxPredicted, int currentFrameBucket) {
+    pinSnapshotStreamingEnabled = streamingEnabled;
+    pinSnapshotWindowFrames = pinWindowFrames;
+    pinSnapshotPredictedAnimations = maxPredicted;
+    pinSnapshotCurrentAnimation = currentAnimation;
+    pinSnapshotCurrentFrameBucket = currentFrameBucket;
+    pinSnapshotHasPendingSwitch = hasPendingAnimationSwitch;
+    pinSnapshotPendingAnimation = pendingAnimation;
+    pinSnapshotPendingStartFrame = pendingStartFrame;
+    pinSnapshotPendingReadyEndFrame = pendingReadyEndFrame;
+    pinSnapshotQueuedAnimation = queuedAnimation;
+  }
+
+  void InvalidateAppearancePinSnapshot() {
+    pinSnapshotStreamingEnabled = false;
+    pinSnapshotWindowFrames = int.MinValue;
+    pinSnapshotPredictedAnimations = int.MinValue;
+    pinSnapshotCurrentAnimation = null;
+    pinSnapshotCurrentFrameBucket = int.MinValue;
+    pinSnapshotHasPendingSwitch = false;
+    pinSnapshotPendingAnimation = null;
+    pinSnapshotPendingStartFrame = int.MinValue;
+    pinSnapshotPendingReadyEndFrame = int.MinValue;
+    pinSnapshotQueuedAnimation = null;
   }
 
   private void SetAnimationCategory(string category) {
@@ -320,7 +799,7 @@ public class AnimationController {
 
   private void UpdateSprites(int frame) {
     foreach (var target in spriteTargets) {
-      if (target == null) continue;
+      if (!IsSpriteTargetEnabled(target)) continue;
       target.UpdateSpriteAndNormal(frame);
     }
   }
@@ -475,18 +954,60 @@ public class AnimationController {
 
   private void CacheSpriteTargets() {
     spriteTargets.Clear();
+    criticalSpriteTargets.Clear();
+    spriteTargetRenderers.Clear();
     if (spriteObjects != null && spriteObjects.Length > 0) {
       foreach (var go in spriteObjects) {
         if (go == null) continue;
         var sprite = go.GetComponent<SpriteWithNormals>();
-        if (sprite != null) spriteTargets.Add(sprite);
+        if (sprite != null) {
+          spriteTargets.Add(sprite);
+          if (IsCriticalSpriteTarget(sprite)) criticalSpriteTargets.Add(sprite);
+          spriteTargetRenderers[sprite] = go.GetComponent<SpriteRenderer>();
+        }
       }
     }
     if (spriteTargets.Count == 0 && rootTransform != null) {
       foreach (var sprite in rootTransform.GetComponentsInChildren<SpriteWithNormals>()) {
-        if (sprite != null) spriteTargets.Add(sprite);
+        if (sprite != null) {
+          spriteTargets.Add(sprite);
+          if (IsCriticalSpriteTarget(sprite)) criticalSpriteTargets.Add(sprite);
+          spriteTargetRenderers[sprite] = sprite.GetComponent<SpriteRenderer>();
+        }
       }
     }
+  }
+
+  static bool IsCriticalSpriteTarget(SpriteWithNormals target) {
+    if (target == null) return false;
+    var lib = target.libraryName;
+    if (string.IsNullOrWhiteSpace(lib)) return false;
+    return lib.IndexOf("/Skin/", StringComparison.OrdinalIgnoreCase) >= 0;
+  }
+
+  bool HasEnabledSpriteTargets() {
+    for (var i = 0; i < spriteTargets.Count; i++) {
+      if (IsSpriteTargetEnabled(spriteTargets[i])) return true;
+    }
+    return false;
+  }
+
+  int CountEnabledSpriteTargets() {
+    var count = 0;
+    for (var i = 0; i < spriteTargets.Count; i++) {
+      if (IsSpriteTargetEnabled(spriteTargets[i])) count++;
+    }
+    return count;
+  }
+
+  bool IsSpriteTargetEnabled(SpriteWithNormals target) {
+    if (target == null || !target.isActiveAndEnabled || target.DoNotRender) return false;
+    if (!spriteTargetRenderers.TryGetValue(target, out var renderer) || renderer == null) {
+      renderer = target.GetComponent<SpriteRenderer>();
+      spriteTargetRenderers[target] = renderer;
+    }
+    if (renderer == null) return target.gameObject.activeInHierarchy;
+    return renderer.gameObject.activeInHierarchy;
   }
 
   private void ApplyFlip() {

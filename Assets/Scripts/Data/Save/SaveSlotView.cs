@@ -2,10 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using NUnit.Framework.Internal;
 using UnityEngine;
 
 public class SaveSlotView : MonoBehaviour {
+  const string SaveFileName = "slot.sav";
+
   public GameObject saveSlotPrefab;
   public GameObject saveSlotWrap;
   public MainMenuInput mainMenuGroup;
@@ -16,73 +17,145 @@ public class SaveSlotView : MonoBehaviour {
   public int SavesCount { set; get; } = 0;
 
   private float initialY = 5.34f;
-  private List<Action> actions = new();
+  private readonly List<Action> actions = new();
 
   void Start() {
     actions.Add(MessageBus.On("openLoadMenu", o => ArrangeSlots()));
+    ConfigureLoadButtonState(false);
 
-    var path = Application.persistentDataPath + "/Saves/";
-    var dirs = Directory.GetDirectories(path);
-    // Sort directories numerically by folder name
-    Array.Sort(dirs, (x, y) => {
-      var xName = Path.GetFileName(x);
-      var yName = Path.GetFileName(y);
+    var slotDirectories = FindSlotDirectories();
+    SavesCount = slotDirectories.Count;
+    ConfigureLoadButtonState(SavesCount > 0);
 
-      if (int.TryParse(xName, out int xNum) && int.TryParse(yName, out int yNum)) {
-        return xNum.CompareTo(yNum);
-      }
+    BuildSlotItems(slotDirectories);
 
-      // Fallback to string comparison if parsing fails
-      return string.Compare(xName, yName, StringComparison.Ordinal);
-    });
-    //Debug.Log($"Found {dirs.Length} directories in: {path}");
-    SavesCount = dirs.Length;
-    var shader = loadButton.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(0);
+    SaveSlotManager.SetSlot(SavesCount + 1);
+    //Debug.Log($"Slot set {SaveSlotManager.slot}");
+  }
 
-    if (SavesCount > 0) {
-      mainMenuGroup.buttons.Insert(1, loadButton);
-      shader.SetKeyword("GREYSCALE_ON", false);
+  void OnDestroy() {
+    for (int i = 0; i < actions.Count; i++) {
+      actions[i].Invoke();
     }
-    else {
-      shader.SetKeyword("GREYSCALE_ON", true);
-    }
+    actions.Clear();
+  }
 
-    for (int i = 0; i < SavesCount; i++) {
-      var dir = dirs[i];
-      var folderName = Path.GetFileName(dir);
-      if (!int.TryParse(folderName, out var slotNumber)) {
-        throw new FormatException($"Invalid save folder name: {folderName}");
-      }
+  List<string> FindSlotDirectories() {
+    var sortedSlots = new SortedDictionary<int, string>();
+    CollectSlotDirectories(Path.Combine(Application.persistentDataPath, "Saves"), sortedSlots);
+    CollectSlotDirectories(Application.persistentDataPath, sortedSlots);
+
+    var ordered = new List<string>(sortedSlots.Count);
+    foreach (var pair in sortedSlots) {
+      ordered.Add(pair.Value);
+    }
+    return ordered;
+  }
+
+  void CollectSlotDirectories(string rootPath, SortedDictionary<int, string> slotsByNumber) {
+    if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath)) return;
+
+    var directories = Directory.GetDirectories(rootPath);
+    for (int i = 0; i < directories.Length; i++) {
+      var directory = directories[i];
+      var folderName = Path.GetFileName(directory);
+
+      if (!int.TryParse(folderName, out var slotNumber) || slotNumber <= 0) continue;
+      if (!File.Exists(Path.Combine(directory, SaveFileName))) continue;
+      if (slotsByNumber.ContainsKey(slotNumber)) continue;
+
+      slotsByNumber.Add(slotNumber, directory);
+    }
+  }
+
+  void BuildSlotItems(List<string> slotDirectories) {
+    if (saveSlotPrefab == null || saveSlotWrap == null || loadMenuGroup == null) return;
+
+    loadMenuGroup.buttons.Clear();
+
+    for (int i = 0; i < slotDirectories.Count; i++) {
+      var directory = slotDirectories[i];
+      var folderName = Path.GetFileName(directory);
+      if (!int.TryParse(folderName, out var slotNumber)) continue;
 
       var go = Instantiate(saveSlotPrefab, saveSlotWrap.transform);
-      var t = go.transform;
-      t.localPosition = new Vector3(-.11f, initialY, -0.01f * i);
-      t.localScale = new Vector3(1.85f, 1.85f, 1.85f);
+      var transformRef = go.transform;
+      transformRef.localPosition = new Vector3(-0.11f, initialY, -0.01f * i);
+      transformRef.localScale = new Vector3(1.85f, 1.85f, 1.85f);
 
       var slot = go.GetComponent<SaveSlot>();
-      SaveSlotManager.SetSlot(slotNumber);
-      var loaded = SaveSlotManager.Load("slot");
-      slot.saveNumber = folderName;
-      var hours = loaded["playtimeHours"];
-      var minutes = loaded["playtimeMinutes"];
-      var seconds = loaded["playtimeSeconds"];
-      if ((int)hours < 10) hours = $"0{hours}";
-      if ((int)minutes < 10) minutes = $"0{minutes}";
-      if ((int)seconds < 10) seconds = $"0{seconds}";
-      slot.playtime = $"{hours}:{minutes}:{seconds}";
-      slot.level = Convert.ToString(loaded["level"]);
-      slot.location = Convert.ToString(loaded["location"]);
-      slot.UpdateSlotInfo();
+      if (slot != null) {
+        var loaded = LoadSlotData(slotNumber, directory);
+        slot.saveNumber = folderName;
+        slot.playtime = FormatPlaytime(loaded);
+        slot.level = Convert.ToString(GetValueOrDefault(loaded, "level", "-"));
+        slot.location = Convert.ToString(GetValueOrDefault(loaded, "location", "-"));
+        slot.UpdateSlotInfo();
+      }
+      else {
+        Debug.LogWarning("[SaveSlotView] Save slot prefab is missing SaveSlot component.");
+      }
+
       loadMenuGroup.buttons.Add(go);
 
       var propagators = go.GetComponentsInChildren<ComponentPropagator>();
       for (int j = 0; j < propagators.Length; j++) {
-        propagators[j].ForcePropagation(); // Call this manually
+        propagators[j].ForcePropagation();
       }
     }
+  }
 
-    SaveSlotManager.SetSlot(SavesCount + 1);
-    //Debug.Log($"Slot set {SaveSlotManager.slot}");
+  SaveData LoadSlotData(int slotNumber, string directoryPath) {
+    SaveSlotManager.SetSlot(slotNumber);
+    var fromSlotManager = SaveSlotManager.Load("slot");
+    if (fromSlotManager != null && fromSlotManager.Count > 0) {
+      return fromSlotManager;
+    }
+
+    return SaveData.Load(Path.Combine(directoryPath, SaveFileName));
+  }
+
+  void ConfigureLoadButtonState(bool hasSaves) {
+    if (mainMenuGroup != null) {
+      mainMenuGroup.SetLoadButtonState(loadButton, hasSaves);
+    }
+
+    if (loadButton == null) return;
+
+    var shaderList = loadButton.GetComponent<ReferenceListAllIn1AnimatorInspector>();
+    var shader = shaderList != null ? shaderList.Get(0) : null;
+    if (shader != null) {
+      shader.SetKeyword("GREYSCALE_ON", !hasSaves);
+    }
+
+    var collider = loadButton.GetComponent<Collider2D>();
+    if (collider != null) {
+      collider.enabled = hasSaves;
+    }
+  }
+
+  string FormatPlaytime(SaveData loaded) {
+    var hours = CoerceInt(GetValueOrDefault(loaded, "playtimeHours", 0));
+    var minutes = CoerceInt(GetValueOrDefault(loaded, "playtimeMinutes", 0));
+    var seconds = CoerceInt(GetValueOrDefault(loaded, "playtimeSeconds", 0));
+    return $"{hours:00}:{minutes:00}:{seconds:00}";
+  }
+
+  object GetValueOrDefault(SaveData loaded, string key, object fallbackValue) {
+    if (loaded == null) return fallbackValue;
+    if (!loaded.TryGetValue(key, out var value)) return fallbackValue;
+    return value;
+  }
+
+  int CoerceInt(object value) {
+    if (value is int i) return i;
+    if (value is float f) return Mathf.RoundToInt(f);
+    if (value is double d) return Mathf.RoundToInt((float)d);
+
+    if (int.TryParse(Convert.ToString(value), out var parsed)) {
+      return parsed;
+    }
+    return 0;
   }
 
   IEnumerator ArrangeSlotsCoroutine() {

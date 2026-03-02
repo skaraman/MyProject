@@ -46,10 +46,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colorKey: Items
-  normalKey: ItemsN
-  category: Head
+  libraryName: Items/Items
   labelPrefix: Base_ac
+  category: Head
+  isAnimation: 0
+  doNotRender: 0
 --- !u!212 &3160820946819878659
 SpriteRenderer:
   serializedVersion: 2
@@ -175,10 +176,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colorKey: CharUI
-  normalKey: CharUIN
+  libraryName: FormsUI/CharUI
+  labelPrefix: Base
   category: StatsName
-  labelPrefix: base
+  isAnimation: 0
+  doNotRender: 0
 --- !u!212 &7184360051580117179
 SpriteRenderer:
   serializedVersion: 2
@@ -283,10 +285,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colorKey: CharUI
-  normalKey: CharUIN
+  libraryName: FormsUI/CharUI
+  labelPrefix: Base
   category: SubStatName
-  labelPrefix: base
+  isAnimation: 0
+  doNotRender: 0
 --- !u!212 &7761580881761900832
 SpriteRenderer:
   serializedVersion: 2
