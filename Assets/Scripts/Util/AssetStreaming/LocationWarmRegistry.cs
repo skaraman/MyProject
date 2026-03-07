@@ -81,6 +81,29 @@ public static class LocationWarmRegistryRuntime {
       runtimeFallbackDefault = ScriptableObject.CreateInstance<LocationWarmProfile>();
       runtimeFallbackDefault.name = "LocationWarmProfile_RuntimeFallback_DomeCity";
       runtimeFallbackDefault.hideFlags = HideFlags.HideAndDontSave;
+      // populate with any globally configured critical labels so we at least warm
+      // something when an unknown location is played.  reflection is needed because
+      // the lists are private; this is purely a best‑effort shim.
+      try {
+        var type = typeof(LocationWarmProfile);
+        var labelsField = type.GetField("criticalAddressableLabels",
+                                       System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        if (labelsField != null) {
+          var list = labelsField.GetValue(runtimeFallbackDefault) as List<string>;
+          if (list != null) {
+            list.AddRange(SpriteStreamingRuntimeSettings.CriticalAddressableLabels ?? Array.Empty<string>());
+          }
+        }
+        var addrsField = type.GetField("criticalDirectAddresses",
+                                       System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        if (addrsField != null) {
+          var list = addrsField.GetValue(runtimeFallbackDefault) as List<string>;
+          if (list != null) {
+            // no global direct addresses defined today, but leave placeholder
+          }
+        }
+      } catch (Exception ) {
+      }
     }
 
     if (!string.IsNullOrWhiteSpace(normalized)) {
@@ -95,9 +118,6 @@ public static class LocationWarmRegistryRuntime {
 
   static void WarnMissingLocationOnce(string locationId, string fallbackLabel) {
     if (!missingLocationWarnings.Add(locationId)) return;
-    Debug.LogWarning(
-      "[LocationWarmRegistryRuntime] No warm profile mapping for location '" +
-      locationId + "'. Using " + fallbackLabel + "."
-    );
+
   }
 }

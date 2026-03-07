@@ -25,7 +25,6 @@ public class FontText : MonoBehaviour {
   private List<float> totalWidths = new();
   private List<float> lineHeights = new();
   private List<int> lineCharCounts = new(); // Track chars per line
-  private Dictionary<char, float> charWidthCache = new();
 
   private int line = 1;
   private float width = 0;
@@ -59,11 +58,12 @@ public class FontText : MonoBehaviour {
       var c = content[i];
 
       if (c == ' ') {
-        if (maxWidth > 0 && width + spaceWidth > maxWidth) {
+        if (maxWidth > 0 && lineCharCounts[line - 1] > 0 && width + spaceWidth > maxWidth) {
           NextLine();
         }
         width += spaceWidth;
         totalWidths[line - 1] = width;
+        if (actualWidth < width) actualWidth = width;
         continue;
       }
 
@@ -74,21 +74,30 @@ public class FontText : MonoBehaviour {
 
       var obj = GetCharFromPool();
       var fc = obj.GetComponent<FontCharacter>();
-      fc.font = font;
-      fc.character = c;
-      fc.Invoke("UpdateSprite", 0);
-
       var sr = obj.GetComponent<SpriteRenderer>();
-      var charWidth = GetCharWidth(c, sr);
-      var charHeight = sr.sprite.bounds.size.y * obj.transform.localScale.y;
+      if (!TryGetCharacterMetrics(fc, sr, c, out var charWidth, out var charHeight)) {
+        if (maxWidth > 0 && lineCharCounts[line - 1] > 0 && width + spaceWidth > maxWidth) {
+          NextLine();
+        }
+        width += spaceWidth;
+        totalWidths[line - 1] = width;
+        if (actualWidth < width) actualWidth = width;
+        obj.SetActive(false);
+        charPool.Push(obj);
+        continue;
+      }
+
+      var advanceWidth = mono > 0 ? Mathf.Max(mono, charWidth) : charWidth;
+      var rightEdge = width + advanceWidth;
 
       // Check if character fits on current line
-      if (maxWidth > 0 && width + charWidth > maxWidth && lineCharCounts[line - 1] > 0) {
+      if (maxWidth > 0 && lineCharCounts[line - 1] > 0 && rightEdge > maxWidth) {
         NextLine();
+        rightEdge = width + advanceWidth;
       }
 
       // Position character at current width position
-      var x = width + charWidth * 0.5f + offsetX; // Center the character
+      var x = width + advanceWidth * 0.5f + offsetX;
       obj.transform.localPosition = new Vector3(x, 0, 0);
 
       // Update line statistics
@@ -98,10 +107,10 @@ public class FontText : MonoBehaviour {
       activeChars.Add(obj);
       lineCharCounts[line - 1]++;
 
-      // Advance width for next character
-      width += charWidth + padding;
-      totalWidths[line - 1] = width;
-      if (actualWidth < width) actualWidth = width;
+      // Advance pen position; line width excludes trailing padding.
+      width = rightEdge + padding;
+      totalWidths[line - 1] = rightEdge;
+      if (actualWidth < rightEdge) actualWidth = rightEdge;
     }
 
     actualHeight = 0;
@@ -143,11 +152,23 @@ public class FontText : MonoBehaviour {
     }
   }
 
-  float GetCharWidth(char c, SpriteRenderer sr) {
-    if (charWidthCache.TryGetValue(c, out var cached)) return cached;
-    var w = sr.sprite.bounds.size.x * sr.transform.localScale.x;
-    charWidthCache[c] = w;
-    return w;
+  bool TryGetCharacterMetrics(FontCharacter fc, SpriteRenderer sr, char c, out float charWidth, out float charHeight) {
+    charWidth = 0;
+    charHeight = 0;
+    if (fc == null || sr == null) return false;
+
+    fc.CancelInvoke("UpdateSprite");
+    fc.font = font;
+    fc.character = c;
+    fc.UpdateSprite();
+
+    var sprite = sr.sprite;
+    if (sprite == null) return false;
+
+    var scale = sr.transform.localScale;
+    charWidth = Mathf.Abs(sprite.bounds.size.x * scale.x);
+    charHeight = Mathf.Abs(sprite.bounds.size.y * scale.y);
+    return true;
   }
 
   void DoAlign() {
@@ -184,11 +205,14 @@ public class FontText : MonoBehaviour {
 
   void NextLine() {
     height -= tallest;
+    var currentLineIndex = line - 1;
+    if (currentLineIndex >= 0 && currentLineIndex < totalWidths.Count && actualWidth < totalWidths[currentLineIndex]) {
+      actualWidth = totalWidths[currentLineIndex];
+    }
     line += 1;
     totalWidths.Add(0);
     lineHeights.Add(0);
     lineCharCounts.Add(0);
-    if (actualWidth < width) actualWidth = width;
     width = 0;
     tallest = 0;
   }

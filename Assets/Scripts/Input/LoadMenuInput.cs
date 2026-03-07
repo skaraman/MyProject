@@ -15,8 +15,10 @@ public class LoadMenuInput : ButtonGroup {
   Vector2 pressPosition;
   float lastRatioY;
   float dragThreshold = 5f;
+  bool slotSelectionLocked;
 
   void Start() {
+    actions.Add(MessageBus.On("openLoadMenu", o => ResetSaveSlotInteractionLock()));
     actions.Add(MessageBus.On("loadMenu.cancel", o => BackOut()));
     actions.Add(MessageBus.On("loadMenu.delete", o => DeleteDir()));
     actions.Add(MessageBus.On("loadMenu.down", o => MenuDown()));
@@ -24,7 +26,7 @@ public class LoadMenuInput : ButtonGroup {
     actions.Add(MessageBus.On("loadMenu.up", o => MenuUp()));
     actions.Add(MessageBus.On("loadMenu.hover", o => MouseHover(o)));
     actions.Add(MessageBus.On("loadMenu.click", o => BeginClick()));
-
+    ResetSaveSlotInteractionLock();
   }
 
   void OnDestroy() {
@@ -87,6 +89,7 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void BeginClick() {
+    if (slotSelectionLocked) return;
     var mouse = Mouse.current;
     if (mouse == null) return;
 
@@ -124,14 +127,16 @@ public class LoadMenuInput : ButtonGroup {
       return b.transform.position.z.CompareTo(a.transform.position.z);
     });
 
-    foreach (var hit in hits) {
-      if (hit?.gameObject == null) continue;
-      var hitIndex = ResolveButtonIndex(hit.gameObject);
-      if (hitIndex >= 0) {
-        activeIndexLoadMenu = hitIndex;
-        SetActiveIndex(hitIndex);
-        Select();
-        return;
+    if (!slotSelectionLocked) {
+      foreach (var hit in hits) {
+        if (hit?.gameObject == null) continue;
+        var hitIndex = ResolveButtonIndex(hit.gameObject);
+        if (hitIndex >= 0) {
+          activeIndexLoadMenu = hitIndex;
+          SetActiveIndex(hitIndex);
+          Select();
+          return;
+        }
       }
     }
 
@@ -149,12 +154,14 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void DeleteDir() {
+    if (slotSelectionLocked) return;
     if (TryResolveSelectedSlotNumber(out var slotNumber)) {
       SaveSlotManager.Delete(slotNumber);
     }
   }
 
   void MouseHover(object target) {
+    if (slotSelectionLocked) return;
     if (target is GameObject go) {
       activeIndexLoadMenu = ResolveButtonIndex(go);
       if (activeIndexLoadMenu >= 0) {
@@ -174,6 +181,7 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void MenuDown() {
+    if (slotSelectionLocked) return;
     if (buttons.Count == 0) return;
 
     if (activeIndexLoadMenu < 0) activeIndexLoadMenu = 0;
@@ -183,6 +191,7 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void MenuUp() {
+    if (slotSelectionLocked) return;
     if (buttons.Count == 0) return;
 
     if (activeIndexLoadMenu < 0) activeIndexLoadMenu = buttons.Count - 1;
@@ -192,12 +201,39 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void Select() {
+    if (slotSelectionLocked) return;
     if (TryResolveSelectedSlotNumber(out var slotNumber)) {
+      LockSaveSlotInteraction();
       SaveSlotManager.SetSlot(slotNumber);
       ApplyLocationFromSelectedSlot();
       Debug.Log($"Slot set {SaveSlotManager.slot}");
-      MessageBus.Send("loadGame");
       MessageBus.Send("startGame");
+    }
+  }
+
+  void ResetSaveSlotInteractionLock() {
+    slotSelectionLocked = false;
+    SetSaveSlotInteractionEnabled(true);
+  }
+
+  void LockSaveSlotInteraction() {
+    if (slotSelectionLocked) return;
+    slotSelectionLocked = true;
+    SetSaveSlotInteractionEnabled(false);
+    pressed = false;
+    dragging = false;
+  }
+
+  void SetSaveSlotInteractionEnabled(bool enabled) {
+    for (int i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) continue;
+      var colliders = button.GetComponentsInChildren<Collider2D>(includeInactive: true);
+      for (int j = 0; j < colliders.Length; j++) {
+        var collider = colliders[j];
+        if (collider == null) continue;
+        collider.enabled = enabled;
+      }
     }
   }
 

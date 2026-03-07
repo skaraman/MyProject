@@ -7,6 +7,12 @@ public static class SpriteStreamingDiagnostics {
   static long totalLoadStarts;
   static long cacheHits;
   static long cacheMisses;
+  static long atlasLoadStarts;
+  static long atlasLoadCompletions;
+  static long atlasCacheHits;
+  static long atlasCacheMisses;
+  static long residentSliceLookups;
+  static long gameplayColdAtlasMisses;
   static int queuedLoads;
   static int inFlightLoads;
   static int peakQueuedLoads;
@@ -58,6 +64,12 @@ public static class SpriteStreamingDiagnostics {
     totalLoadStarts = 0;
     cacheHits = 0;
     cacheMisses = 0;
+    atlasLoadStarts = 0;
+    atlasLoadCompletions = 0;
+    atlasCacheHits = 0;
+    atlasCacheMisses = 0;
+    residentSliceLookups = 0;
+    gameplayColdAtlasMisses = 0;
     queuedLoads = 0;
     inFlightLoads = 0;
     peakQueuedLoads = 0;
@@ -151,6 +163,37 @@ public static class SpriteStreamingDiagnostics {
     else cacheMisses++;
   }
 
+  public static void RecordAtlasLoadStarted() {
+    if (!IsEnabled) return;
+    SpriteStreamingDiagnosticsRunner.EnsureInstance();
+    atlasLoadStarts++;
+  }
+
+  public static void RecordAtlasLoadCompleted() {
+    if (!IsEnabled) return;
+    SpriteStreamingDiagnosticsRunner.EnsureInstance();
+    atlasLoadCompletions++;
+  }
+
+  public static void RecordAtlasCacheLookup(bool hit) {
+    if (!IsEnabled) return;
+    SpriteStreamingDiagnosticsRunner.EnsureInstance();
+    if (hit) atlasCacheHits++;
+    else atlasCacheMisses++;
+  }
+
+  public static void RecordResidentSliceLookup() {
+    if (!IsEnabled) return;
+    SpriteStreamingDiagnosticsRunner.EnsureInstance();
+    residentSliceLookups++;
+  }
+
+  public static void RecordGameplayColdAtlasMiss() {
+    if (!IsEnabled) return;
+    SpriteStreamingDiagnosticsRunner.EnsureInstance();
+    gameplayColdAtlasMisses++;
+  }
+
   public static void RecordAnimationSwitchWait(float waitMs, bool delayed) {
     if (!IsEnabled) return;
     SpriteStreamingDiagnosticsRunner.EnsureInstance();
@@ -230,53 +273,7 @@ public static class SpriteStreamingDiagnostics {
     var missRatePct = totalLookups > 0 ? (100f * cacheMisses / totalLookups) : 0f;
     var avgSwitchWait = switchWaitSamples > 0 ? (totalSwitchWaitMs / switchWaitSamples) : 0f;
 
-    Debug.Log(
-      "[SpriteStreamingDiagnostics] csv" +
-      ",loads_total=" + totalLoadStarts +
-      ",loads_frame_peak=" + peakLoadStartsPerFrame +
-      ",queued=" + queuedLoads +
-      ",queued_peak=" + peakQueuedLoads +
-      ",inflight=" + inFlightLoads +
-      ",inflight_peak=" + peakInFlightLoads +
-      ",cache_hits=" + cacheHits +
-      ",cache_misses=" + cacheMisses +
-      ",cache_miss_rate_pct=" + missRatePct.ToString("0.0") +
-      ",switch_wait_avg_ms=" + avgSwitchWait.ToString("0.0") +
-      ",switch_wait_max_ms=" + maxSwitchWaitMs.ToString("0.0") +
-      ",switch_delayed_count=" + delayedSwitchCount +
-      ",pinned_owner_count=" + pinnedOwnerCount +
-      ",pinned_address_count=" + pinnedAddressCount +
-      ",pinned_player_addresses=" + pinnedPlayerAddresses +
-      ",pinned_enemy_addresses=" + pinnedEnemyAddresses +
-      ",pinned_ui_addresses=" + pinnedUiAddresses +
-      ",pinned_effect_addresses=" + pinnedEffectAddresses +
-      ",pin_demotions=" + pinDemotions +
-      ",pin_budget_player_addresses=" + pinBudgetPlayerAddresses +
-      ",pin_budget_enemy_addresses=" + pinBudgetEnemyAddresses +
-      ",pin_budget_ui_addresses=" + pinBudgetUiAddresses +
-      ",pin_budget_effect_addresses=" + pinBudgetEffectAddresses +
-      ",pin_saturation_player_pct=" + pinSaturationPlayerPct.ToString("0.0") +
-      ",pin_saturation_enemy_pct=" + pinSaturationEnemyPct.ToString("0.0") +
-      ",pin_saturation_ui_pct=" + pinSaturationUiPct.ToString("0.0") +
-      ",pin_saturation_effect_pct=" + pinSaturationEffectPct.ToString("0.0") +
-      ",pin_class_budget_hits=" + pinClassBudgetHitCount +
-      ",pin_class_budget_dropped_addresses=" + pinClassBudgetDroppedAddresses +
-      ",warm_request_count=" + warmRequestCount +
-      ",warm_timeout_count=" + warmTimeoutCount +
-      ",warm_last_context=" + warmLastContext +
-      ",warm_last_ready_ratio=" + warmLastReadyRatio.ToString("0.000") +
-      ",warm_last_elapsed_ms=" + warmLastElapsedMs.ToString("0.0") +
-      ",warm_last_ready_count=" + warmLastReadyCount +
-      ",warm_last_total_count=" + warmLastTotalCount +
-      ",warm_last_critical_ready_count=" + warmLastCriticalReadyCount +
-      ",warm_last_critical_total_count=" + warmLastCriticalTotalCount +
-      ",warm_last_player_critical_ready=" + (warmLastCriticalReady ? 1 : 0) +
-      ",warm_last_hard_timeout_bypass=" + (warmLastHardTimeoutBypassUsed ? 1 : 0) +
-      ",warm_last_failure_reason=" + warmLastFailureReason +
-      ",atlas_expansion_count=" + atlasExpansionCount +
-      ",atlas_expansion_addresses_queued=" + atlasExpansionAddressesQueued +
-      ",atlas_expansion_fallback_count=" + atlasExpansionFallbackCount
-    );
+    
   }
 
   internal static string BuildHudLine() {
@@ -300,6 +297,10 @@ public static class SpriteStreamingDiagnostics {
     hudBuilder.Append(" BudgetDrop=").Append(pinClassBudgetDroppedAddresses);
     hudBuilder.Append(" Warm=").Append(warmLastContext);
     hudBuilder.Append(" WarmR=").Append((warmLastReadyRatio * 100f).ToString("0"));
+    hudBuilder.Append(" AtlasLd=").Append(atlasLoadCompletions).Append('/').Append(atlasLoadStarts);
+    hudBuilder.Append(" AtlasC=").Append(atlasCacheHits).Append('/').Append(atlasCacheMisses);
+    hudBuilder.Append(" AtlasMiss=").Append(gameplayColdAtlasMisses);
+    hudBuilder.Append(" SliceHit=").Append(residentSliceLookups);
     hudBuilder.Append(" AtlasExp=").Append(atlasExpansionCount);
     hudBuilder.Append(" AtlasQ=").Append(atlasExpansionAddressesQueued);
     hudBuilder.Append(" AtlasFb=").Append(atlasExpansionFallbackCount);

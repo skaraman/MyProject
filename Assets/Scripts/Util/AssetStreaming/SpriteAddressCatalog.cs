@@ -5,8 +5,41 @@ using UnityEngine;
 public struct SpriteAddressPair {
   public string colorAddress;
   public string normalAddress;
+  public string colorAtlasAddress;
+  public string colorSpriteName;
+  public string normalAtlasAddress;
+  public string normalSpriteName;
 
-  public bool HasColor => !string.IsNullOrWhiteSpace(colorAddress);
+  public bool HasColor => !string.IsNullOrWhiteSpace(RuntimeColorAddress);
+  public bool HasNormal => !string.IsNullOrWhiteSpace(RuntimeNormalAddress);
+  public string RuntimeColorAddress => !string.IsNullOrWhiteSpace(colorAtlasAddress) ? colorAtlasAddress : Normalize(colorAddress);
+  public string RuntimeNormalAddress => !string.IsNullOrWhiteSpace(normalAtlasAddress) ? normalAtlasAddress : Normalize(normalAddress);
+
+  public static SpriteAddressPair Create(string colorAddress, string normalAddress) {
+    var pair = new SpriteAddressPair {
+      colorAddress = Normalize(colorAddress),
+      normalAddress = Normalize(normalAddress)
+    };
+    PopulateRuntimeRef(pair.colorAddress, out pair.colorAtlasAddress, out pair.colorSpriteName);
+    PopulateRuntimeRef(pair.normalAddress, out pair.normalAtlasAddress, out pair.normalSpriteName);
+    return pair;
+  }
+
+  static void PopulateRuntimeRef(string rawAddress, out string atlasAddress, out string spriteName) {
+    atlasAddress = "";
+    spriteName = "";
+    if (string.IsNullOrWhiteSpace(rawAddress)) return;
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(rawAddress, out atlasAddress, out spriteName)) {
+      atlasAddress = Normalize(atlasAddress);
+      spriteName = Normalize(spriteName);
+      return;
+    }
+    atlasAddress = Normalize(rawAddress);
+  }
+
+  static string Normalize(string value) {
+    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+  }
 }
 
 public readonly struct SpriteLookupKey {

@@ -13,33 +13,46 @@ MonoBehaviour:
   m_Name: SpriteStreamingSettings
   m_EditorClassIdentifier: 
   manifestAddress: SpriteRuntimeIndex/Manifest
+  criticalAddressableLabels: []
+  warmAddressableLabels: []
+  warmUiAddressableLabels: []
   maxLoadedShards: 48
   softTextureBudgetMb: 1024
   hardTextureBudgetMb: 1536
-  maxAddressableStartsPerFrame: 16
+  maxAddressableStartsPerFrame: 8
   animationWarmupFrames: 24
-  animationSwitchGateMs: 90
+  animationSwitchGateMs: 0
   keepLoadedSpritesForSession: 1
   enableStreamingDiagnostics: 0
   enableLoadingScreenLogs: 1
   enableAddressableLoadLogs: 0
   logAddressableLoadsOutsideWarmGate: 1
   loadingProgressLogIntervalMs: 500
-  loadingOverlayMaxAddressableStartsPerFrame: 16
+  loadingOverlayMaxAddressableStartsPerFrame: 24
+  usePlatformAddressableStartPresets: 1
+  desktopMaxAddressableStartsPerFrame: 8
+  desktopLoadingOverlayMaxAddressableStartsPerFrame: 24
+  mobileMaxAddressableStartsPerFrame: 6
+  mobileLoadingOverlayMaxAddressableStartsPerFrame: 12
   enableAtlasExpansionOnSliceRequest: 1
   atlasExpansionMaxSiblingAddresses: 256
   enableAtlasExpansionLogs: 0
   enableAppearanceSetStreaming: 1
   enablePinnedHotset: 1
   pinWindowFrames: 16
-  pinPredictedNextAnimations: 3
+  pinPredictedNextAnimations: 12
   pinRefreshFrameBucketSize: 8
-  maxPinnedAddressesPerOwner: 640
-  pinBudgetPlayerAddresses: 1024
-  pinBudgetEnemyAddresses: 4096
+  maxPinnedAddressesPerOwner: 960
+  pinBudgetPlayerAddresses: 1536
+  pinBudgetEnemyAddresses: 3072
   pinBudgetUiAddresses: 1024
-  pinBudgetEffectAddresses: 1024
-  pinAllSpawnedEnemies: 1
+  pinBudgetEffectAddresses: 1536
+  pinAllSpawnedEnemies: 0
+  enableDynamicEnemyResidency: 1
+  pinVisibleEnemiesBeyondDistance: 1
+  enemyPinNearDistance: 25
+  enemyPinReleaseDistance: 40
+  enemyResidencyRefreshFrameInterval: 8
   pinAllUi: 1
   uiPinRefreshMs: 250
   pinDemoteBatchSize: 32

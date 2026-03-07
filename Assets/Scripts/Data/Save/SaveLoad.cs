@@ -41,7 +41,6 @@ public class SaveData : Dictionary<string, object> {
       }
       else {
         writer.Write((byte)0);
-        Debug.LogWarning("Unsupported value type: " + value?.GetType());
       }
     }
   }

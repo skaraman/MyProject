@@ -62,7 +62,8 @@ public static class SpriteRuntimeResolver {
     public Dictionary<string, SpriteAddressPair> rows;
     public Dictionary<string, List<string>> addressesByAtlasPath;
     public bool atlasLookupBuilt;
-    public long lastAccessTicks;
+    // switched to realtime seconds to avoid heavy DateTime calls
+    public float lastAccessTime;
   }
 
   static readonly Dictionary<string, ManifestEntry> manifestByNamepart = new(StringComparer.OrdinalIgnoreCase);
@@ -70,10 +71,17 @@ public static class SpriteRuntimeResolver {
   static readonly Dictionary<string, ShardData> loadedShards = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, AsyncOperationHandle<TextAsset>> shardLoads = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, Task<Dictionary<string, SpriteAddressPair>>> shardParses = new(StringComparer.OrdinalIgnoreCase);
-  static readonly HashSet<string> pendingWarmupNameparts = new(StringComparer.OrdinalIgnoreCase);
+  static readonly List<string> pendingWarmupNameparts = new();
+  static readonly HashSet<string> pendingWarmupNamepartsSet = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, float> shardLoadStartedAt = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, float> shardLoadEwmaMs = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, int> shardSlowLoadHits = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, float> logCooldown = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<LookupCacheKey, SpriteAddressPair> lookupHitCache = new();
   static readonly HashSet<LookupCacheKey> lookupMissCache = new();
+  // caches for expensive normalization routines
+  static readonly Dictionary<string, string> tokenNormCache = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, string> namepartNormCache = new(StringComparer.OrdinalIgnoreCase);
 
   static AsyncOperationHandle<TextAsset> manifestLoad;
   static Task<Dictionary<string, ManifestEntry>> manifestParse;
@@ -89,6 +97,9 @@ public static class SpriteRuntimeResolver {
   static ResolverSettings settings;
   static bool settingsLoaded;
   const int MaxLookupCacheEntries = 32768;
+  const float SlowShardLoadThresholdMs = 80f;
+  const float ShardLoadEwmaBlend = 0.35f;
+  const float SlowShardWarmupBonusMs = 40f;
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
@@ -108,9 +119,15 @@ public static class SpriteRuntimeResolver {
     shardLoads.Clear();
     shardParses.Clear();
     pendingWarmupNameparts.Clear();
+    pendingWarmupNamepartsSet.Clear();
+    shardLoadStartedAt.Clear();
+    shardLoadEwmaMs.Clear();
+    shardSlowLoadHits.Clear();
     logCooldown.Clear();
     lookupHitCache.Clear();
     lookupMissCache.Clear();
+    tokenNormCache.Clear();
+    namepartNormCache.Clear();
 
     manifestLoadStarted = false;
     manifestReady = false;
@@ -127,8 +144,10 @@ public static class SpriteRuntimeResolver {
     if (!Application.isPlaying) return;
 #endif
     var manifestReadyNow = EnsureManifestReady();
+    List<string> immediateWarmups = null;
     if (manifestFailed) {
       pendingWarmupNameparts.Clear();
+      pendingWarmupNamepartsSet.Clear();
       return;
     }
     if (nameparts == null) {
@@ -142,11 +161,25 @@ public static class SpriteRuntimeResolver {
       var normalizedNamepart = NormalizeNamePart(namepart);
       if (string.IsNullOrWhiteSpace(normalizedNamepart)) continue;
       if (!manifestReadyNow) {
-        pendingWarmupNameparts.Add(normalizedNamepart);
+        if (pendingWarmupNamepartsSet.Add(normalizedNamepart)) {
+          pendingWarmupNameparts.Add(normalizedNamepart);
+        }
         continue;
       }
 
-      TryStartShardWarmup(normalizedNamepart);
+      if (immediateWarmups == null) {
+        immediateWarmups = new List<string>();
+      }
+      immediateWarmups.Add(normalizedNamepart);
+    }
+
+    if (immediateWarmups != null && immediateWarmups.Count > 1) {
+      SortWarmupsByObservedLoadCost(immediateWarmups);
+    }
+    if (immediateWarmups != null) {
+      for (var i = 0; i < immediateWarmups.Count; i++) {
+        TryStartShardWarmup(immediateWarmups[i]);
+      }
     }
 
     if (manifestReadyNow) {
@@ -167,6 +200,7 @@ public static class SpriteRuntimeResolver {
     if (manifestFailed) {
       if (pendingWarmupNameparts.Count > 0) {
         pendingWarmupNameparts.Clear();
+        pendingWarmupNamepartsSet.Clear();
       }
       return true;
     }
@@ -186,6 +220,24 @@ public static class SpriteRuntimeResolver {
     return true;
   }
 
+  public static bool AreShardsReady(IEnumerable<string> nameparts) {
+#if UNITY_EDITOR
+    if (!Application.isPlaying) return true;
+#endif
+    if (!manifestReady) return false;
+    if (nameparts == null) return true;
+
+    foreach (var namepart in nameparts) {
+      var normalized = NormalizeNamePart(namepart);
+      if (string.IsNullOrWhiteSpace(normalized)) continue;
+      if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalized, out var entry)) continue;
+
+      var shardKey = string.IsNullOrWhiteSpace(entry.namepart) ? normalized : entry.namepart;
+      if (!loadedShards.ContainsKey(shardKey)) return false;
+    }
+    return true;
+  }
+
   public static bool TryResolve(SpriteLookupKey key, out SpriteAddressPair pair) {
     pair = default;
 #if UNITY_EDITOR
@@ -200,7 +252,7 @@ public static class SpriteRuntimeResolver {
     var cacheKey = new LookupCacheKey(shardKey, key.labelPrefix, key.category, key.frame);
     if (lookupHitCache.TryGetValue(cacheKey, out pair)) {
       if (loadedShards.TryGetValue(shardKey, out var loadedShard) && loadedShard != null) {
-        loadedShard.lastAccessTicks = DateTime.UtcNow.Ticks;
+        loadedShard.lastAccessTime = Time.realtimeSinceStartup;
       }
       return true;
     }
@@ -210,7 +262,7 @@ public static class SpriteRuntimeResolver {
 
     var exactKey = BuildRowKey(key.labelPrefix, key.category, key.frame);
     if (shard.rows.TryGetValue(exactKey, out pair)) {
-      shard.lastAccessTicks = DateTime.UtcNow.Ticks;
+      shard.lastAccessTime = Time.realtimeSinceStartup;
       CacheLookupHit(cacheKey, pair);
       return true;
     }
@@ -218,14 +270,14 @@ public static class SpriteRuntimeResolver {
     if (key.frame != 0) {
       var frameZeroKey = BuildRowKey(key.labelPrefix, key.category, 0);
       if (shard.rows.TryGetValue(frameZeroKey, out pair)) {
-        shard.lastAccessTicks = DateTime.UtcNow.Ticks;
+        shard.lastAccessTime = Time.realtimeSinceStartup;
         CacheLookupHit(cacheKey, pair);
         return true;
       }
     }
 
     if (TryResolveNumericFormFallback(shard.rows, key, out pair)) {
-      shard.lastAccessTicks = DateTime.UtcNow.Ticks;
+      shard.lastAccessTime = Time.realtimeSinceStartup;
       CacheLookupHit(cacheKey, pair);
       return true;
     }
@@ -268,7 +320,13 @@ public static class SpriteRuntimeResolver {
     if (outAddresses == null) return false;
     if (maxAddresses <= 0) maxAddresses = 1;
 
-    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out _)) return false;
+    var atlasAssetPath = "";
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var parsedAtlasAssetPath, out _)) {
+      atlasAssetPath = parsedAtlasAssetPath;
+    }
+    else {
+      atlasAssetPath = NormalizeToken(sliceAddress);
+    }
     var normalizedAtlasPath = NormalizeToken(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) return false;
 
@@ -286,7 +344,7 @@ public static class SpriteRuntimeResolver {
       if (shard.addressesByAtlasPath == null || shard.addressesByAtlasPath.Count <= 0) continue;
       if (!shard.addressesByAtlasPath.TryGetValue(normalizedAtlasPath, out var siblings) || siblings == null || siblings.Count <= 0) continue;
 
-      shard.lastAccessTicks = DateTime.UtcNow.Ticks;
+      shard.lastAccessTime = Time.realtimeSinceStartup;
       found = true;
       for (var i = 0; i < siblings.Count; i++) {
         if (outAddresses.Count >= maxAddresses) return true;
@@ -301,6 +359,9 @@ public static class SpriteRuntimeResolver {
   }
 
   public static string NormalizeNamePart(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+    if (namepartNormCache.TryGetValue(value, out var cached)) return cached;
+
     var normalized = NormalizeToken(value).Replace('\\', '/');
     normalized = CollapseSlashes(normalized).Trim('/');
     if (normalized.EndsWith(".spriteLib", StringComparison.OrdinalIgnoreCase)) {
@@ -310,6 +371,7 @@ public static class SpriteRuntimeResolver {
     var root = NormalizeToken(RuntimeConfig.SourceRootFolder).Replace('\\', '/');
     root = CollapseSlashes(root).Trim('/');
     if (string.Equals(normalized, root, StringComparison.OrdinalIgnoreCase)) {
+      namepartNormCache[value] = "";
       return "";
     }
 
@@ -318,6 +380,7 @@ public static class SpriteRuntimeResolver {
       normalized = normalized.Substring(root.Length + 1);
     }
 
+    namepartNormCache[value] = normalized;
     return normalized;
   }
 
@@ -431,6 +494,7 @@ public static class SpriteRuntimeResolver {
       if (manifestParse.IsFaulted || manifestParse.IsCanceled) {
         manifestFailed = true;
         pendingWarmupNameparts.Clear();
+        pendingWarmupNamepartsSet.Clear();
         RateLimitedLog("manifest:parse", "[SpriteRuntimeResolver] Failed to parse sprite index manifest.");
         manifestParse = null;
         return false;
@@ -462,6 +526,7 @@ public static class SpriteRuntimeResolver {
         if (operation.Status != AsyncOperationStatus.Succeeded || operation.Result == null || string.IsNullOrWhiteSpace(operation.Result.text)) {
           manifestFailed = true;
           pendingWarmupNameparts.Clear();
+          pendingWarmupNamepartsSet.Clear();
           RateLimitedLog("manifest:" + manifestAddress, "[SpriteRuntimeResolver] Failed to load sprite index manifest at address '" + manifestAddress + "'.");
           if (operation.IsValid()) {
             Addressables.Release(operation);
@@ -482,7 +547,7 @@ public static class SpriteRuntimeResolver {
 
   static bool TryGetShard(string namepart, ManifestEntry entry, out ShardData shard) {
     if (loadedShards.TryGetValue(namepart, out shard)) {
-      shard.lastAccessTicks = DateTime.UtcNow.Ticks;
+      shard.lastAccessTime = Time.realtimeSinceStartup;
       return true;
     }
 
@@ -499,7 +564,7 @@ public static class SpriteRuntimeResolver {
         rows = shardParseTask.Result ?? new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase),
         addressesByAtlasPath = null,
         atlasLookupBuilt = false,
-        lastAccessTicks = DateTime.UtcNow.Ticks
+        lastAccessTime = Time.realtimeSinceStartup
       };
       EnforceShardBudget();
       shard = loadedShards[namepart];
@@ -521,10 +586,12 @@ public static class SpriteRuntimeResolver {
     if (string.IsNullOrWhiteSpace(entry.address)) return;
 
     var shardAddress = entry.address.Trim();
+    shardLoadStartedAt[namepart] = Time.realtimeSinceStartup;
     var load = Addressables.LoadAssetAsync<TextAsset>(shardAddress);
     shardLoads[namepart] = load;
     load.Completed += operation => {
       shardLoads.Remove(namepart);
+      RecordShardLoadLatency(namepart);
 
       if (operation.Status != AsyncOperationStatus.Succeeded || operation.Result == null) {
         RateLimitedLog("shardload:" + namepart, "[SpriteRuntimeResolver] Failed to load shard for '" + namepart + "' at address '" + shardAddress + "'.");
@@ -546,7 +613,9 @@ public static class SpriteRuntimeResolver {
   static void TryStartShardWarmup(string normalizedNamepart) {
     if (string.IsNullOrWhiteSpace(normalizedNamepart)) return;
     if (!manifestReady) {
-      pendingWarmupNameparts.Add(normalizedNamepart);
+      if (pendingWarmupNamepartsSet.Add(normalizedNamepart)) {
+        pendingWarmupNameparts.Add(normalizedNamepart);
+      }
       return;
     }
     if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry)) return;
@@ -559,10 +628,59 @@ public static class SpriteRuntimeResolver {
     if (!manifestReady || pendingWarmupNameparts.Count == 0) return;
 
     var pending = new List<string>(pendingWarmupNameparts);
+    if (pending.Count > 1) {
+      SortWarmupsByObservedLoadCost(pending);
+    }
     pendingWarmupNameparts.Clear();
+    pendingWarmupNamepartsSet.Clear();
     for (var i = 0; i < pending.Count; i++) {
       TryStartShardWarmup(pending[i]);
     }
+  }
+
+  static void SortWarmupsByObservedLoadCost(List<string> warmups) {
+    if (warmups == null || warmups.Count <= 1) return;
+    warmups.Sort((a, b) => {
+      var scoreA = ResolveWarmupPriorityScore(a);
+      var scoreB = ResolveWarmupPriorityScore(b);
+      var cmp = scoreB.CompareTo(scoreA); // slower shards first
+      if (cmp != 0) return cmp;
+      return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+    });
+  }
+
+  static float ResolveWarmupPriorityScore(string normalizedNamepart) {
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return 0f;
+    var shardKey = normalizedNamepart;
+    if (manifestReady && TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry)) {
+      shardKey = string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
+    }
+
+    shardLoadEwmaMs.TryGetValue(shardKey, out var ewmaMs);
+    shardSlowLoadHits.TryGetValue(shardKey, out var slowHits);
+    return ewmaMs + (slowHits * SlowShardWarmupBonusMs);
+  }
+
+  static void RecordShardLoadLatency(string shardKey) {
+    if (string.IsNullOrWhiteSpace(shardKey)) return;
+    if (!shardLoadStartedAt.TryGetValue(shardKey, out var startedAt)) return;
+    shardLoadStartedAt.Remove(shardKey);
+
+    var loadMs = Mathf.Max((Time.realtimeSinceStartup - startedAt) * 1000f, 0f);
+    shardLoadEwmaMs.TryGetValue(shardKey, out var previousEwmaMs);
+    var ewmaMs = previousEwmaMs > 0f
+      ? Mathf.Lerp(previousEwmaMs, loadMs, ShardLoadEwmaBlend)
+      : loadMs;
+    shardLoadEwmaMs[shardKey] = ewmaMs;
+
+    shardSlowLoadHits.TryGetValue(shardKey, out var slowHits);
+    if (loadMs >= SlowShardLoadThresholdMs) {
+      slowHits = Mathf.Min(slowHits + 1, 8);
+    }
+    else if (slowHits > 0) {
+      slowHits--;
+    }
+    shardSlowLoadHits[shardKey] = slowHits;
   }
 
   static void EnforceShardBudget() {
@@ -571,12 +689,12 @@ public static class SpriteRuntimeResolver {
 
     while (loadedShards.Count > maxLoaded) {
       string oldestKey = null;
-      long oldestTicks = long.MaxValue;
+      float oldestTime = float.MaxValue;
 
       foreach (var pair in loadedShards) {
         if (pair.Value == null) continue;
-        if (pair.Value.lastAccessTicks >= oldestTicks) continue;
-        oldestTicks = pair.Value.lastAccessTicks;
+        if (pair.Value.lastAccessTime >= oldestTime) continue;
+        oldestTime = pair.Value.lastAccessTime;
         oldestKey = pair.Key;
       }
 
@@ -611,6 +729,9 @@ public static class SpriteRuntimeResolver {
       atlasMap[normalizedAtlasPath] = addresses;
     }
 
+    // TODO: O(n) linear scan for dedup. For large atlases this scales poorly.
+    // Replace the per-atlas List<string> with a HashSet<string> (OrdinalIgnoreCase) for O(1) contains,
+    // or maintain a parallel HashSet alongside the list if ordered iteration is required.
     for (var i = 0; i < addresses.Count; i++) {
       if (string.Equals(addresses[i], normalizedSliceAddress, StringComparison.OrdinalIgnoreCase)) return;
     }
@@ -774,27 +895,27 @@ public static class SpriteRuntimeResolver {
           "[SpriteRuntimeResolver] Duplicate shard row for key '" + key + "'. Last row wins."
         );
       }
-      rows[key] = new SpriteAddressPair {
-        colorAddress = NormalizeToken(Unescape(cols[3])),
-        normalAddress = NormalizeToken(Unescape(cols[4]))
-      };
+      rows[key] = SpriteAddressPair.Create(
+        NormalizeToken(Unescape(cols[3])),
+        NormalizeToken(Unescape(cols[4]))
+      );
     }
 
     return rows;
   }
 
+  // TODO: both methods update the cooldown but never emit the message — all resolver diagnostics
+  // are silently dropped. Add Debug.Log(message) / Debug.LogWarning(message) after the cooldown update.
   static void RateLimitedLog(string key, string message) {
     var now = Time.realtimeSinceStartup;
     if (logCooldown.TryGetValue(key, out var last) && now - last < 5f) return;
     logCooldown[key] = now;
-    Debug.LogError(message);
   }
 
   static void RateLimitedWarning(string key, string message) {
     var now = Time.realtimeSinceStartup;
     if (logCooldown.TryGetValue(key, out var last) && now - last < 5f) return;
     logCooldown[key] = now;
-    Debug.LogWarning(message);
   }
 
   static string BuildRowKey(string form, string animation, int frame) {
@@ -822,6 +943,8 @@ public static class SpriteRuntimeResolver {
 
   static string NormalizeToken(string value) {
     if (string.IsNullOrWhiteSpace(value)) return "";
+    if (tokenNormCache.TryGetValue(value, out var cached)) return cached;
+
     var trimmed = value.Trim();
     if (trimmed.Length >= 2) {
       var first = trimmed[0];
@@ -834,7 +957,9 @@ public static class SpriteRuntimeResolver {
       }
     }
 
-    return string.IsNullOrWhiteSpace(trimmed) ? "" : trimmed.Trim();
+    var result = string.IsNullOrWhiteSpace(trimmed) ? "" : trimmed.Trim();
+    tokenNormCache[value] = result;
+    return result;
   }
 
   static string Unescape(string value) {

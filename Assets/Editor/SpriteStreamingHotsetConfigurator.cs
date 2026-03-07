@@ -13,37 +13,47 @@ public static class SpriteStreamingHotsetConfigurator {
   const string DefaultGameplayScenePath = "Assets/Scenes/MyCurrent.unity";
   static readonly Regex guidRegex = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
 
-  [MenuItem("Tools/Sprite Streaming/4) Apply Hotset (Labels + Import)")]
+  [MenuItem("Tools/Sprite Streaming/4) Apply Hotset (Scenes + Location Prefabs)")]
   public static void ApplyPerformanceHotsetMenu() {
+    ApplyPerformanceHotset(rebuildRuntimeIndexFirst: true, saveAndRefreshAtEnd: true, logResult: true);
+  }
+
+  public static bool ApplyPerformanceHotset(bool rebuildRuntimeIndexFirst, bool saveAndRefreshAtEnd, bool logResult) {
     try {
-      EditorUtility.DisplayProgressBar("Sprite Streaming", "Rebuilding runtime index...", 0.1f);
-      var rebuildOk = SpriteIndexBuilder.RebuildRuntimeIndex(logResult: true, failOnError: false);
-      if (!rebuildOk) {
-        Debug.LogWarning("[SpriteStreamingHotsetConfigurator] Runtime index rebuild reported errors. Continuing with best-effort hotset pass.");
+      LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: false, saveAndRefresh: saveAndRefreshAtEnd);
+
+      if (rebuildRuntimeIndexFirst) {
+        EditorUtility.DisplayProgressBar("Sprite Streaming", "Rebuilding runtime index...", 0.1f);
+        var rebuildOk = SpriteIndexBuilder.RebuildRuntimeIndex(logResult: true, failOnError: false);
+        if (!rebuildOk) {
+          Debug.LogWarning("[SpriteStreamingHotsetConfigurator] Runtime index rebuild reported errors. Continuing with best-effort hotset pass.");
+        }
       }
 
-      EditorUtility.DisplayProgressBar("Sprite Streaming", "Collecting scene libraries...", 0.25f);
-      var requestedNameparts = CollectSceneNameparts();
+      EditorUtility.DisplayProgressBar("Sprite Streaming", "Collecting gameplay and location libraries...", 0.25f);
+      var requestedNameparts = CollectGameplayAndLocationNameparts();
       IncludeOptionalNameparts(requestedNameparts);
 
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Loading runtime index manifest...", 0.4f);
       var shardPathByNamepart = LoadManifestShardMap();
       if (shardPathByNamepart.Count == 0) {
         Debug.LogError("[SpriteStreamingHotsetConfigurator] Manifest map is empty. Rebuild runtime index first.");
-        return;
+        return false;
       }
 
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Resolving hotset textures...", 0.6f);
       var hotsetTexturePaths = ResolveHotsetTextureAssetPaths(requestedNameparts, shardPathByNamepart);
       if (hotsetTexturePaths.Count == 0) {
         Debug.LogWarning("[SpriteStreamingHotsetConfigurator] No hotset texture assets were resolved.");
-        return;
+        return false;
       }
 
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Applying texture importer settings...", 0.8f);
       var changedTexturePaths = ApplyStreamingImporterSettings(hotsetTexturePaths);
-      AssetDatabase.SaveAssets();
-      AssetDatabase.Refresh();
+      if (saveAndRefreshAtEnd && changedTexturePaths.Count > 0) {
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+      }
 
       var changedGuids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
       foreach (var path in changedTexturePaths) {
@@ -52,54 +62,69 @@ public static class SpriteStreamingHotsetConfigurator {
       }
 
       var sizeBucket = EstimateSizeDeltaBucket(changedTexturePaths.Count);
-      Debug.Log(
-        "[SpriteStreamingHotsetConfigurator] Applied performance hotset." +
-        " requestedNameparts=" + requestedNameparts.Count +
-        " resolvedTextures=" + hotsetTexturePaths.Count +
-        " changedTextures=" + changedTexturePaths.Count +
-        " changedGuids=" + changedGuids.Count +
-        " sizeDeltaBucket=" + sizeBucket
-      );
+      if (logResult) {
+        Debug.Log(
+          "[SpriteStreamingHotsetConfigurator] Applied performance hotset." +
+          " requestedNameparts=" + requestedNameparts.Count +
+          " resolvedTextures=" + hotsetTexturePaths.Count +
+          " changedTextures=" + changedTexturePaths.Count +
+          " changedGuids=" + changedGuids.Count +
+          " sizeDeltaBucket=" + sizeBucket +
+          " rebuiltIndex=" + rebuildRuntimeIndexFirst
+        );
+      }
+      return true;
     }
     catch (Exception ex) {
       Debug.LogError("[SpriteStreamingHotsetConfigurator] Failed: " + ex);
+      return false;
     }
     finally {
       EditorUtility.ClearProgressBar();
     }
   }
 
-  [MenuItem("Tools/Sprite Streaming/5) Apply Unified Import Flow (All Sprite Textures)")]
+  [MenuItem("Tools/Sprite Streaming/3) Apply Unified Import Flow (All Sprite Textures)")]
   public static void ApplyUnifiedImportFlowMenu() {
+    ApplyUnifiedImportFlow(saveAndRefreshAtEnd: true, logResult: true);
+  }
+
+  public static bool ApplyUnifiedImportFlow(bool saveAndRefreshAtEnd, bool logResult) {
     try {
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Collecting sprite textures...", 0.2f);
       var texturePaths = CollectSourceRootTextureAssetPaths();
       if (texturePaths.Count == 0) {
-        Debug.LogWarning("[SpriteStreamingHotsetConfigurator] No sprite textures were found under '" + SpriteStreamingConfig.SourceRootFolder + "'.");
-        return;
+        Debug.LogWarning("[SpriteStreamingHotsetConfigurator] No sprite textures were found under '" + SpriteStreamingConfig.TextureSourceRootFolder + "'.");
+        return false;
       }
 
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Applying unified importer policy...", 0.6f);
       var changedTexturePaths = ApplyStreamingImporterSettings(texturePaths);
-      AssetDatabase.SaveAssets();
-      AssetDatabase.Refresh();
+      if (saveAndRefreshAtEnd && changedTexturePaths.Count > 0) {
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+      }
 
-      Debug.Log(
-        "[SpriteStreamingHotsetConfigurator] Applied unified import flow." +
-        " scannedTextures=" + texturePaths.Count +
-        " changedTextures=" + changedTexturePaths.Count +
-        " sourceRoot='" + SpriteStreamingConfig.SourceRootFolder + "'"
-      );
+      if (logResult) {
+        Debug.Log(
+          "[SpriteStreamingHotsetConfigurator] Applied unified import flow." +
+          " scannedTextures=" + texturePaths.Count +
+          " changedTextures=" + changedTexturePaths.Count +
+          " sourceRoot='" + SpriteStreamingConfig.TextureSourceRootFolder + "'"
+        );
+      }
+      return true;
     }
     catch (Exception ex) {
       Debug.LogError("[SpriteStreamingHotsetConfigurator] Failed to apply unified import flow: " + ex);
+      return false;
     }
     finally {
       EditorUtility.ClearProgressBar();
     }
   }
 
-  static HashSet<string> CollectSceneNameparts() {
+  static HashSet<string> CollectGameplayAndLocationNameparts() {
     var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var spriteWithNormalsGuid = AssetDatabase.AssetPathToGUID(SpriteWithNormalsScriptPath);
     if (string.IsNullOrWhiteSpace(spriteWithNormalsGuid)) return result;
@@ -109,6 +134,7 @@ public static class SpriteStreamingHotsetConfigurator {
     var configuredScenes = EditorBuildSettings.scenes
       .Where(scene => scene != null && scene.enabled && !string.IsNullOrWhiteSpace(scene.path))
       .Select(scene => NormalizePath(scene.path));
+    Debug.Log($"[SpriteStreamingHotsetConfigurator] CollectGameplayAndLocationNameparts: Found {configuredScenes.Count()} configured scenes.");
     foreach (var scenePath in configuredScenes) {
       if (!string.IsNullOrWhiteSpace(scenePath)) scenes.Add(scenePath);
     }
@@ -119,11 +145,49 @@ public static class SpriteStreamingHotsetConfigurator {
     }
 
     foreach (var scenePath in scenes) {
-      if (!File.Exists(scenePath)) continue;
+      if (!File.Exists(scenePath)) {
+        Debug.LogWarning($"[SpriteStreamingHotsetConfigurator] CollectGameplayAndLocationNameparts: Scene path not found: {scenePath}");
+        continue;
+      }
+      int countBefore = result.Count;
       CollectLibraryNamesFromSerializedFile(scenePath, spriteWithNormalsGuid, guidToNamepart, result);
+      int added = result.Count - countBefore;
+      if (added > 0) Debug.Log($"[SpriteStreamingHotsetConfigurator] Scene '{scenePath}' contributed {added} nameparts.");
     }
 
+    CollectLocationPrefabNameparts(spriteWithNormalsGuid, guidToNamepart, result);
+
+    Debug.Log($"[SpriteStreamingHotsetConfigurator] CollectGameplayAndLocationNameparts: Total unique nameparts collected: {result.Count}");
     return result;
+  }
+
+  static void CollectLocationPrefabNameparts(
+    string spriteWithNormalsGuid,
+    Dictionary<string, string> guidToNamepart,
+    HashSet<string> target
+  ) {
+    if (target == null) return;
+
+    var profileGuids = AssetDatabase.FindAssets("t:LocationWarmProfile", new[] { "Assets/Resources" });
+    for (var i = 0; i < profileGuids.Length; i++) {
+      var assetPath = NormalizePath(AssetDatabase.GUIDToAssetPath(profileGuids[i]));
+      if (string.IsNullOrWhiteSpace(assetPath)) continue;
+
+      var profile = AssetDatabase.LoadAssetAtPath<LocationWarmProfile>(assetPath);
+      if (profile == null || profile.LocationPrefab == null) continue;
+
+      var prefabPath = NormalizePath(AssetDatabase.GetAssetPath(profile.LocationPrefab));
+      if (string.IsNullOrWhiteSpace(prefabPath) || !File.Exists(prefabPath)) continue;
+
+      var countBefore = target.Count;
+      CollectLibraryNamesFromSerializedFile(prefabPath, spriteWithNormalsGuid, guidToNamepart, target);
+      var added = target.Count - countBefore;
+      if (added > 0) {
+        Debug.Log(
+          $"[SpriteStreamingHotsetConfigurator] Location prefab '{prefabPath}' contributed {added} nameparts."
+        );
+      }
+    }
   }
 
   static void IncludeOptionalNameparts(HashSet<string> target) {
@@ -304,10 +368,15 @@ public static class SpriteStreamingHotsetConfigurator {
     if (requestedNameparts == null || requestedNameparts.Count == 0) return texturePaths;
     if (shardPathByNamepart == null || shardPathByNamepart.Count == 0) return texturePaths;
 
+    Debug.Log($"[SpriteStreamingHotsetConfigurator] ResolveHotsetTextureAssetPaths: Processing {requestedNameparts.Count} requested nameparts against {shardPathByNamepart.Count} shards.");
+
     foreach (var requested in requestedNameparts) {
       var normalizedRequested = SpriteAddressResolver.NormalizeNamePart(requested);
       if (string.IsNullOrWhiteSpace(normalizedRequested)) continue;
-      if (!TryResolveShardPath(normalizedRequested, shardPathByNamepart, out var shardPath)) continue;
+      if (!TryResolveShardPath(normalizedRequested, shardPathByNamepart, out var shardPath)) {
+        Debug.LogWarning($"[SpriteStreamingHotsetConfigurator] ResolveHotsetTextureAssetPaths: Could not resolve shard path for namepart '{normalizedRequested}'.");
+        continue;
+      }
 
       var shardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(shardPath);
       var shardText = shardAsset != null ? shardAsset.text : "";
@@ -336,13 +405,14 @@ public static class SpriteStreamingHotsetConfigurator {
 
   static HashSet<string> CollectSourceRootTextureAssetPaths() {
     var texturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    var sourceRoot = NormalizePath(SpriteStreamingConfig.SourceRootFolder);
+    var sourceRoot = NormalizePath(SpriteStreamingConfig.TextureSourceRootFolder);
     if (string.IsNullOrWhiteSpace(sourceRoot)) return texturePaths;
 
     var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { sourceRoot });
     for (var i = 0; i < guids.Length; i++) {
       var path = NormalizePath(AssetDatabase.GUIDToAssetPath(guids[i]));
       if (!string.IsNullOrWhiteSpace(path)) {
+        if (path.StartsWith(NormalizePath(SpriteStreamingConfig.SourceRootFolder) + "/", StringComparison.OrdinalIgnoreCase)) continue;
         texturePaths.Add(path);
       }
     }
@@ -375,6 +445,7 @@ public static class SpriteStreamingHotsetConfigurator {
 
     var orderedPaths = texturePaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
 
+    var pendingImportPaths = new List<string>();
     for (var i = 0; i < orderedPaths.Count; i++) {
       var texturePath = orderedPaths[i];
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Updating sprite importers...", 0.8f + 0.2f * ((float)(i + 1) / orderedPaths.Count));
@@ -384,8 +455,25 @@ public static class SpriteStreamingHotsetConfigurator {
 
       var importerChanged = SpriteStreamingTextureImportPolicy.Apply(importer, forceMultipleSpriteImportMode: false);
       if (!importerChanged) continue;
-      importer.SaveAndReimport();
+      AssetDatabase.WriteImportSettingsIfDirty(texturePath);
+      pendingImportPaths.Add(texturePath);
       changed.Add(texturePath);
+    }
+
+    if (pendingImportPaths.Count <= 0) {
+      return changed;
+    }
+
+    try {
+      AssetDatabase.StartAssetEditing();
+      for (var i = 0; i < pendingImportPaths.Count; i++) {
+        var texturePath = pendingImportPaths[i];
+        EditorUtility.DisplayProgressBar("Sprite Streaming", "Reimporting changed textures...", 0.9f + 0.1f * ((float)(i + 1) / pendingImportPaths.Count));
+        AssetDatabase.ImportAsset(texturePath, ImportAssetOptions.ForceUpdate);
+      }
+    }
+    finally {
+      AssetDatabase.StopAssetEditing();
     }
 
     return changed;

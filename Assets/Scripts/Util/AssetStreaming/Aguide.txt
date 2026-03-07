@@ -1,129 +1,78 @@
-how to actually load in thousands of assets using adressables in unity, is there a limit?No hard limit 
-Addressables has no built-in cap on total assets or groups. Real-world projects routinely use it with 
-20k–60k+ addressable assets (and even more).
-The actual constraints are practical:
+Addressables at scale (thousands of assets): quick guide
 
-Memory (biggest one): Every loaded AssetBundle has overhead. Loading thousands at once will spike RAM and 
-can crash the game on mobile/VR.
-Catalog size & load time: 1000s of tiny bundles = huge catalog.json → slower startup/downloads.
-Editor performance: The Addressables Groups window and builds slow down above ~10k–15k entries.
+Q: Is there a hard limit?
+- No built-in hard cap on asset count or groups.
+- Practical limits are memory, catalog size, build time, and editor responsiveness.
 
-But with smart grouping + on-demand / batched loading, you can easily handle tens of thousands while 
-keeping memory low and load times fast.
-1. Organize Properly (This is 80% of the solution)
+What usually breaks first
+- RAM spikes: too many bundles/assets loaded at once.
+- Catalog bloat: too many tiny bundles slows startup/update checks.
+- Editor slowdown: large group lists become painful to manage.
 
-Mark everything Addressable (right-click → Addressables → Mark as Addressable).
-Use Labels aggressively:
-"Characters_Common", "Weapons_Tier1", "LevelPack_01", "UI_Icons_Food", etc.
+Core rule
+- Group assets by lifecycle: load together, unload together.
 
-In your Addressable Group settings:
-Bundle Mode = Pack Together By Label (best for thousands of similar assets — creates one bundle per label).
-Or Pack Separately if assets are truly independent.
-Avoid Pack Together on huge groups unless they all load/unload together (e.g. one full level).
+Recommended structure
+- Use labels as your primary loading unit (feature, level, category).
+- Prefer `Pack Together By Label` for related content.
+- Use `Pack Separately` only for truly independent assets.
+- Avoid one giant "pack together" group unless always used together.
 
+Loading patterns (broad strokes)
+1) Label-based load (small/moderate sets)
+```
+handle = LoadAssetsAsync(label)
+wait handle
+use results
+release handle when category is no longer needed
+```
 
-Rule of thumb:
-Group assets that you load AND unload at the same time.
-2. How to Actually Load Thousands
-Option A: Load an entire category by Label (simple & fast for moderate numbers)
-C#using UnityEngine;
-using UnityEngine.AddressableAssets;
-using UnityEngine.ResourceManagement.AsyncOperations;
-using System.Collections.Generic;
+2) Batched load (large sets, 1000+)
+```
+locations = ResolveLocations(addresses/keys)
+for each chunk in locations (start with 50-200):
+    batchHandle = LoadAssetsAsync(chunk)
+    wait batchHandle
+    process/store only what is needed
+    release batchHandle if not retained
+release locations handle
+```
 
-public class AddressableLoader : MonoBehaviour
-{
-    public void LoadAllWithLabel(string label)
-    {
-        // This loads EVERY asset with that label
-        AsyncOperationHandle<IList<GameObject>> handle = Addressables.LoadAssetsAsync<GameObject>(
-            label, 
-            null // callback per asset (optional)
-        );
+3) On-demand cache (very large games)
+```
+if key in cache: return cached
+handle = LoadAssetAsync(key)
+wait handle
+cache result
+return result
+```
 
-        handle.Completed += (op) =>
-        {
-            if (op.Status == AsyncOperationStatus.Succeeded)
-            {
-                Debug.Log($"Loaded {op.Result.Count} assets with label {label}");
-                // Store them in a Dictionary or List for later use
-            }
-            else
-            {
-                Debug.LogError("Load failed: " + op.OperationException);
-            }
-        };
+Critical operating rules
+- Never load "everything" at boot.
+- Always release handles when done.
+- Profile with Addressables Event Viewer + Memory Profiler.
+- Tune chunk size per platform (mobile/VR usually smaller).
 
-        // IMPORTANT: Release when you're done with the whole batch
-        // Addressables.Release(handle);  ← call this later
-    }
-}
-Option B: Load thousands of specific assets in batches (recommended for 1000+)
-Never load 5000+ at once. Do it in chunks (50–200 per frame/batch).
-C#public async void LoadThousandsInBatches(List<string> allAddresses, int batchSize = 100)
-{
-    // Step 1: Get locations (very fast, doesn't load assets yet)
-    var locHandle = Addressables.LoadResourceLocationsAsync(allAddresses, Addressables.MergeMode.Union);
-    await locHandle.Task;
+Build/pack tips
+- Use LZ4 for faster runtime reads.
+- Use remote groups for large live content.
+- Keep bundle count reasonable (not one-asset-per-bundle).
 
-    IList<IResourceLocation> locations = locHandle.Result;
+Scale expectations
+- Tens of thousands of addressable assets is normal if:
+  - content is label-organized,
+  - loads are batched/on-demand,
+  - memory is actively profiled and released.
 
-    // Step 2: Load in batches
-    for (int i = 0; i < locations.Count; i += batchSize)
-    {
-        var batch = new List<IResourceLocation>();
-        for (int j = 0; j < batchSize && i + j < locations.Count; j++)
-            batch.Add(locations[i + j]);
+--- Implementation Review (AssetStreaming/) ---
+Status: VALIDATED
 
-        var batchHandle = Addressables.LoadAssetsAsync<Object>(batch, null);
-        await batchHandle.Task;
+Correct Implementations:
+1. Batching: `StreamingWarmOrchestrator` and `SingleSceneManager` use 100-item chunks (matches 50-200 guidance).
+2. Lifecycle: `StreamingWarmOrchestrator` sorts by lifecycle labels (spawn/idle) before loading.
+3. Catalog Scale: `SpriteRuntimeResolver` implements a sharded manifest system to mitigate catalog bloat.
+4. Smoothness: `AnimationController` implements lookahead (pinning) to prevent frame drops.
 
-        if (batchHandle.Status == AsyncOperationStatus.Succeeded)
-        {
-            // Process the batch (store in your manager, instantiate, etc.)
-            foreach (var asset in batchHandle.Result)
-                Debug.Log("Loaded: " + asset.name);
-        }
-
-        Addressables.Release(batchHandle); // release immediately if you don't need to keep them loaded
-    }
-
-    Addressables.Release(locHandle);
-}
-Option C: True on-demand (best for huge games)
-Use Addressables.LoadAssetAsync only when the player actually needs something (e.g. opens inventory, enters
- zone). Cache results in a Dictionary<string, Object>.
-C#private Dictionary<string, Object> loadedCache = new();
-
-public async UniTask<T> GetOrLoad<T>(string address) where T : Object
-{
-    if (loadedCache.TryGetValue(address, out var cached))
-        return cached as T;
-
-    var handle = Addressables.LoadAssetAsync<T>(address);
-    await handle.Task;
-
-    if (handle.Status == AsyncOperationStatus.Succeeded)
-    {
-        loadedCache[address] = handle.Result;
-        return handle.Result;
-    }
-    return null;
-}
-3. Critical Rules
-
-Always release — Addressables.Release(handle) when you no longer need the assets (or the whole batch).
-Use the Addressables Event Viewer (Window → Asset Management → Addressables → Event Viewer) + Memory 
-Profiler to watch what's actually in memory.
-Enable Contiguous Bundles in Addressables Settings (helps a lot with load speed).
-Use LZ4 compression + remote content for big games.
-
-4. Pro Tips from People Who've Done This
-
-For editor slowdown with 20k+ assets → write an editor script to auto-assign addresses/labels instead of 
-using the GUI.
-On mobile: smaller bundles = better (but not one-asset-per-bundle).
-For 50k+ items → many studios use procedural address generation ("Item_" + itemId).
-
-You can 100% handle thousands (or tens of thousands) of assets with Addressables — just don't treat it like 
-Resources folder and dump everything into memory at once.
+Notes/Warnings:
+- `SingleSceneManager` pre-unlock prefetch (12k addresses) is aggressive; monitor memory on low-end devices.
+- Ensure `TextureResidencyCache` properly releases handles from `RequestLoadBatchThrottled` to avoid leaks (Guide: "Always release handles").

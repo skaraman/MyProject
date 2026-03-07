@@ -77,9 +77,6 @@ public class LocationPrefabData {
     if (string.IsNullOrWhiteSpace(path)) return null;
     resourceLoadAttempted = true;
     prefab = Resources.Load<GameObject>(path);
-    if (prefab == null) {
-      Debug.LogWarning("[LocationEnemyData] Location prefab not found at Resources path '" + path + "'.");
-    }
     return prefab;
   }
 }
@@ -157,7 +154,7 @@ public class LocationInfo {
 
 public static class LocationEnemyData {
   public const string MainMenuLocationId = "mainmenu";
-  public const string DomeCityLocationId = "domecity";
+  public const string DomeCityLocationId = "DomeCity";
 
   public static Dictionary<string, LocationInfo> locations { get; } = new(StringComparer.OrdinalIgnoreCase) {
     {

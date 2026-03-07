@@ -1,7 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 public enum WarmContext {
   StartGame = 0,
@@ -13,6 +16,7 @@ public enum WarmContext {
 public readonly struct WarmRequest {
   public readonly WarmContext context;
   public readonly GearController playerController;
+  public readonly EnemyController[] criticalEnemyControllers;
   public readonly EnemyController[] enemyControllers;
   public readonly Dictionary<string, GameObject> enemyArchetypePrefabsByType;
   public readonly float timeoutSeconds;
@@ -30,10 +34,15 @@ public readonly struct WarmRequest {
   public readonly bool allowHardTimeoutBypass;
   public readonly string idempotencyToken;
   public readonly bool skipIfTokenAlreadyWarm;
+  public readonly List<string> extraCriticalLabels;
+  public readonly List<string> extraWarmLabels;
+  public readonly List<string> criticalPlayerEffectKeys;
+  public readonly bool allowCriticalReadySoftTimeout;
 
   public WarmRequest(
     WarmContext context,
     GearController playerController = null,
+    EnemyController[] criticalEnemyControllers = null,
     EnemyController[] enemyControllers = null,
     Dictionary<string, GameObject> enemyArchetypePrefabsByType = null,
     float timeoutSeconds = 2.5f,
@@ -50,10 +59,15 @@ public readonly struct WarmRequest {
     float hardTimeoutSeconds = 6.0f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
-    bool skipIfTokenAlreadyWarm = false
+    bool skipIfTokenAlreadyWarm = false,
+    List<string> extraCriticalLabels = null,
+    List<string> extraWarmLabels = null,
+    List<string> criticalPlayerEffectKeys = null,
+    bool allowCriticalReadySoftTimeout = true
   ) {
     this.context = context;
     this.playerController = playerController;
+    this.criticalEnemyControllers = criticalEnemyControllers;
     this.enemyControllers = enemyControllers;
     this.enemyArchetypePrefabsByType = enemyArchetypePrefabsByType;
     this.timeoutSeconds = timeoutSeconds;
@@ -71,10 +85,15 @@ public readonly struct WarmRequest {
     this.allowHardTimeoutBypass = allowHardTimeoutBypass;
     this.idempotencyToken = idempotencyToken;
     this.skipIfTokenAlreadyWarm = skipIfTokenAlreadyWarm;
+    this.extraCriticalLabels = extraCriticalLabels;
+    this.extraWarmLabels = extraWarmLabels;
+    this.criticalPlayerEffectKeys = criticalPlayerEffectKeys;
+    this.allowCriticalReadySoftTimeout = allowCriticalReadySoftTimeout;
   }
 
   public static WarmRequest CreateStartGame(
     GearController playerController,
+    EnemyController[] criticalEnemyControllers = null,
     EnemyController[] enemyControllers = null,
     Dictionary<string, GameObject> enemyArchetypePrefabsByType = null,
     float timeoutSeconds = 3.0f,
@@ -86,11 +105,16 @@ public readonly struct WarmRequest {
     float hardTimeoutSeconds = 6.0f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
-    bool skipIfTokenAlreadyWarm = false
+    bool skipIfTokenAlreadyWarm = false,
+    List<string> extraCriticalLabels = null,
+    List<string> extraWarmLabels = null,
+    List<string> criticalPlayerEffectKeys = null,
+    bool allowCriticalReadySoftTimeout = false
   ) {
     return new WarmRequest(
       context: WarmContext.StartGame,
       playerController: playerController,
+      criticalEnemyControllers: criticalEnemyControllers,
       enemyControllers: enemyControllers,
       enemyArchetypePrefabsByType: enemyArchetypePrefabsByType,
       timeoutSeconds: timeoutSeconds,
@@ -98,7 +122,7 @@ public readonly struct WarmRequest {
       playerWarmFrames: 1,
       enemyWarmFrames: 1,
       effectWarmFrames: 1,
-      maxRequestedAddresses: 32768,
+      maxRequestedAddresses: 262144,
       includeEffects: true,
       extraCriticalLibraries: extraCriticalLibraries,
       extraCriticalAddresses: extraCriticalAddresses,
@@ -107,12 +131,17 @@ public readonly struct WarmRequest {
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
-      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm
+      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
+      extraCriticalLabels: extraCriticalLabels,
+      extraWarmLabels: extraWarmLabels,
+      criticalPlayerEffectKeys: criticalPlayerEffectKeys,
+      allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
   }
 
   public static WarmRequest CreateLoadSave(
     GearController playerController,
+    EnemyController[] criticalEnemyControllers = null,
     EnemyController[] enemyControllers = null,
     Dictionary<string, GameObject> enemyArchetypePrefabsByType = null,
     float timeoutSeconds = 3.5f,
@@ -124,11 +153,16 @@ public readonly struct WarmRequest {
     float hardTimeoutSeconds = 6.5f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
-    bool skipIfTokenAlreadyWarm = false
+    bool skipIfTokenAlreadyWarm = false,
+    List<string> extraCriticalLabels = null,
+    List<string> extraWarmLabels = null,
+    List<string> criticalPlayerEffectKeys = null,
+    bool allowCriticalReadySoftTimeout = false
   ) {
     return new WarmRequest(
       context: WarmContext.LoadSave,
       playerController: playerController,
+      criticalEnemyControllers: criticalEnemyControllers,
       enemyControllers: enemyControllers,
       enemyArchetypePrefabsByType: enemyArchetypePrefabsByType,
       timeoutSeconds: timeoutSeconds,
@@ -136,7 +170,7 @@ public readonly struct WarmRequest {
       playerWarmFrames: 1,
       enemyWarmFrames: 1,
       effectWarmFrames: 1,
-      maxRequestedAddresses: 32768,
+      maxRequestedAddresses: 262144,
       includeEffects: true,
       extraCriticalLibraries: extraCriticalLibraries,
       extraCriticalAddresses: extraCriticalAddresses,
@@ -145,7 +179,11 @@ public readonly struct WarmRequest {
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
-      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm
+      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
+      extraCriticalLabels: extraCriticalLabels,
+      extraWarmLabels: extraWarmLabels,
+      criticalPlayerEffectKeys: criticalPlayerEffectKeys,
+      allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
   }
 
@@ -160,11 +198,16 @@ public readonly struct WarmRequest {
     float hardTimeoutSeconds = 4.5f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
-    bool skipIfTokenAlreadyWarm = false
+    bool skipIfTokenAlreadyWarm = false,
+    List<string> extraCriticalLabels = null,
+    List<string> extraWarmLabels = null,
+    List<string> criticalPlayerEffectKeys = null,
+    bool allowCriticalReadySoftTimeout = false
   ) {
     return new WarmRequest(
       context: WarmContext.GearApplyReturn,
       playerController: playerController,
+      criticalEnemyControllers: null,
       enemyControllers: null,
       enemyArchetypePrefabsByType: null,
       timeoutSeconds: timeoutSeconds,
@@ -172,7 +215,7 @@ public readonly struct WarmRequest {
       playerWarmFrames: 1,
       enemyWarmFrames: 0,
       effectWarmFrames: 1,
-      maxRequestedAddresses: 16384,
+      maxRequestedAddresses: 131072,
       includeEffects: true,
       extraCriticalLibraries: extraCriticalLibraries,
       extraCriticalAddresses: extraCriticalAddresses,
@@ -181,7 +224,11 @@ public readonly struct WarmRequest {
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
-      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm
+      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
+      extraCriticalLabels: extraCriticalLabels,
+      extraWarmLabels: extraWarmLabels,
+      criticalPlayerEffectKeys: criticalPlayerEffectKeys,
+      allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
   }
 
@@ -197,11 +244,16 @@ public readonly struct WarmRequest {
     float hardTimeoutSeconds = 4.5f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
-    bool skipIfTokenAlreadyWarm = true
+    bool skipIfTokenAlreadyWarm = true,
+    List<string> extraCriticalLabels = null,
+    List<string> extraWarmLabels = null,
+    List<string> criticalPlayerEffectKeys = null,
+    bool allowCriticalReadySoftTimeout = true
   ) {
     return new WarmRequest(
       context: WarmContext.EnemyWaveSpawn,
       playerController: null,
+      criticalEnemyControllers: null,
       enemyControllers: null,
       enemyArchetypePrefabsByType: enemyArchetypePrefabsByType,
       timeoutSeconds: timeoutSeconds,
@@ -209,7 +261,7 @@ public readonly struct WarmRequest {
       playerWarmFrames: 0,
       enemyWarmFrames: enemyWarmFrames,
       effectWarmFrames: 2,
-      maxRequestedAddresses: 32768,
+      maxRequestedAddresses: 262144,
       includeEffects: true,
       extraCriticalLibraries: extraCriticalLibraries,
       extraCriticalAddresses: extraCriticalAddresses,
@@ -218,7 +270,11 @@ public readonly struct WarmRequest {
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
-      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm
+      skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
+      extraCriticalLabels: extraCriticalLabels,
+      extraWarmLabels: extraWarmLabels,
+      criticalPlayerEffectKeys: criticalPlayerEffectKeys,
+      allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
   }
 }
@@ -314,26 +370,67 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
   readonly HashSet<string> warmLibrarySet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> warmAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> warmLabelSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> highPriorityAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> highPriorityLabelSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> readyAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> readyLabelSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> criticalReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> criticalReadyLabelSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> playerCriticalAtlasSeedAddresses = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> playerWarmAtlasSeedAddresses = new(StringComparer.OrdinalIgnoreCase);
-  readonly List<string> atlasSiblingScratch = new(512);
+  readonly HashSet<string> scheduledAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> scheduledReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> scheduledCriticalReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> warmAddressBatch = new(2048);
 
   Coroutine activeRoutine;
   Action<WarmResult> activeCallback;
   int activeMaxRequestedAddresses;
+  int activeCriticalReadyAddressCap;
+  int activeHighPriorityAddressCap;
   int activeFrameAddressProbeBudget;
   int warmPlanFrameAddressProbeCount;
-  bool warmPlanProbeBudgetExceeded;
-  bool warmPlanAddressCapReached;
   int warmPlanDroppedAddresses;
+  int warmPlanDroppedCriticalReadyAddresses;
+  int warmPlanDroppedHighPriorityAddresses;
+
+  // scratch buffers used to reduce GC pressure in hot paths.
+  static readonly List<string> archetypeKeyBuffer = new();
+  static readonly List<string> sliceScratch = new();
+  static readonly List<string> sortedLabelBuffer = new();
+  static readonly List<string> highPriorityAddressBatchBuffer = new();
+  static readonly List<string> rescueAddressBuffer = new();
+  static readonly HashSet<string> rescueSeenAddressBuffer = new(StringComparer.OrdinalIgnoreCase);
+  static readonly List<EnemyController> rescueEnemyControllerBuffer = new();
+  static readonly List<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation> locationBuffer = new();
 
   const int MinWarmPlanFrameAddressProbeBudget = 32768;
   const int MaxWarmPlanFrameAddressProbeBudget = 1000000;
   const int MaxAnimationSamplesPerClip = 8;
+  const int DesktopWarmOutstandingTarget = 1500;
+  const int MobileWarmOutstandingTarget = 900;
+  const int ThreadedWarmPlanMinAddressCount = 512;
+  const int ThreadedWarmPlanMinProcessorCount = 4;
+
+  sealed class ThreadedWarmPlanSnapshot {
+    public readonly List<string> warmAddressBatch;
+    public readonly HashSet<string> scheduledAddressSet;
+    public readonly HashSet<string> scheduledReadyAddressSet;
+    public readonly HashSet<string> scheduledCriticalReadyAddressSet;
+
+    public ThreadedWarmPlanSnapshot(
+      List<string> warmAddressBatch,
+      HashSet<string> scheduledAddressSet,
+      HashSet<string> scheduledReadyAddressSet,
+      HashSet<string> scheduledCriticalReadyAddressSet
+    ) {
+      this.warmAddressBatch = warmAddressBatch ?? new List<string>();
+      this.scheduledAddressSet = scheduledAddressSet ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      this.scheduledReadyAddressSet = scheduledReadyAddressSet ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      this.scheduledCriticalReadyAddressSet = scheduledCriticalReadyAddressSet ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    }
+  }
 
   public static StreamingWarmOrchestrator Instance {
     get {
@@ -362,17 +459,19 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
   public static string BuildEnemyArchetypeToken(string locationId, Dictionary<string, GameObject> enemyArchetypePrefabsByType) {
     var normalizedLocation = NormalizeToken(locationId);
-    var keys = new List<string>();
+    archetypeKeyBuffer.Clear();
     if (enemyArchetypePrefabsByType != null) {
+      var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
       foreach (var pair in enemyArchetypePrefabsByType) {
         var key = NormalizeToken(pair.Key);
         if (string.IsNullOrWhiteSpace(key)) continue;
-        if (keys.Contains(key)) continue;
-        keys.Add(key);
+        if (!seenKeys.Add(key)) continue;
+        archetypeKeyBuffer.Add(key);
       }
     }
-    keys.Sort(StringComparer.OrdinalIgnoreCase);
-    var keyCsv = keys.Count > 0 ? string.Join(",", keys) : "none";
+    archetypeKeyBuffer.Sort(StringComparer.OrdinalIgnoreCase);
+    var keyCsv = archetypeKeyBuffer.Count > 0 ? string.Join(",", archetypeKeyBuffer) : "none";
+    archetypeKeyBuffer.Clear();
     return "location:" + normalizedLocation + "|enemies:" + keyCsv;
   }
 
@@ -462,19 +561,27 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var softTimeoutAt = startedAt + Mathf.Max(request.timeoutSeconds, 0.25f);
     var hardTimeoutAt = startedAt + Mathf.Max(request.hardTimeoutSeconds, request.timeoutSeconds);
     ClearScratch();
-    activeMaxRequestedAddresses = Mathf.Max(request.maxRequestedAddresses, 256);
+    activeMaxRequestedAddresses = ResolveActiveMaxRequestedAddresses(context, request.maxRequestedAddresses);
+    activeHighPriorityAddressCap = ResolveHighPriorityAddressCap(context);
+    activeCriticalReadyAddressCap = ResolveCriticalReadyAddressCap(context, activeHighPriorityAddressCap);
     activeFrameAddressProbeBudget = Mathf.Clamp(activeMaxRequestedAddresses * 4, MinWarmPlanFrameAddressProbeBudget, MaxWarmPlanFrameAddressProbeBudget);
     var debugLogs = ShouldLogLoadingDebug();
     var logIntervalSeconds = Mathf.Max(SpriteStreamingRuntimeSettings.LoadingProgressLogIntervalMs, 100) / 1000f;
 
     warmPlanFrameAddressProbeCount = 0;
-    warmPlanProbeBudgetExceeded = false;
-    warmPlanAddressCapReached = false;
     warmPlanDroppedAddresses = 0;
+    warmPlanDroppedCriticalReadyAddresses = 0;
+    warmPlanDroppedHighPriorityAddresses = 0;
+    // Build a minimal first-pass scope first; ideal startup keeps this pass
+    // focused on first-contact visuals so soft timeout can be met consistently.
     BuildWarmPlan(request, includeResolvedAddressSweeps: false);
 
     if (warmLibrarySet.Count > 0) {
-      SpriteRuntimeResolver.WarmupLibraries(warmLibrarySet);
+      yield return ResolveLibraryAtlasDependenciesRoutine(hardTimeoutAt, debugLogs);
+    }
+
+    if (warmLabelSet.Count > 0) {
+      yield return ResolveLabelAddressesRoutine(hardTimeoutAt, debugLogs);
     }
 
     var resolverWaitFrames = 0;
@@ -523,65 +630,55 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
         " idle=" + (resolverIdleForAddressSweep ? 1 : 0)
       );
     }
-    if (debugLogs && warmPlanProbeBudgetExceeded) {
-      Debug.LogWarning(
-        "[StreamingWarmOrchestrator] Warm plan frame-address probe budget reached." +
-        " context=" + context +
-        " probes=" + warmPlanFrameAddressProbeCount +
-        " budget=" + activeFrameAddressProbeBudget
-      );
-    }
-    if (debugLogs && warmPlanAddressCapReached) {
-      Debug.LogWarning(
-        "[StreamingWarmOrchestrator] Warm plan address cap reached." +
-        " context=" + context +
-        " cap=" + activeMaxRequestedAddresses +
-        " dropped=" + warmPlanDroppedAddresses
-      );
-    }
+
     ExpandPlayerAtlasSeeds();
 
     if (debugLogs) {
+      var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
       Debug.Log(
         "[StreamingWarmOrchestrator] Start context=" + context +
         " timeout_s=" + request.timeoutSeconds.ToString("0.00") +
         " hard_timeout_s=" + request.hardTimeoutSeconds.ToString("0.00") +
         " required_ratio=" + request.requiredReadyRatio.ToString("0.00") +
+        " player_manifest=Data/Animations.cs:Animations.Esperanza" +
+        " priority_mode=single_warmup_queue" +
+        " address_cap=" + activeMaxRequestedAddresses +
+        " high_priority_cap=" + activeHighPriorityAddressCap +
+        " critical_cap=" + activeCriticalReadyAddressCap +
         " libraries=" + warmLibrarySet.Count +
         " addresses=" + warmAddressSet.Count +
-        " critical=" + criticalReadyAddressSet.Count
+        " critical=" + criticalReadyAddressSet.Count +
+        " dropped=" + warmPlanDroppedAddresses +
+        " dropped_high_priority=" + warmPlanDroppedHighPriorityAddresses +
+        " dropped_critical=" + warmPlanDroppedCriticalReadyAddresses +
+        " deferred_pending=" + deferredSnapshot.pendingCount +
+        " deferred_flushed_frame=" + deferredSnapshot.flushedThisFrame +
+        " deferred_total=" + deferredSnapshot.totalDeferredCount +
+        " deferred_requests_total=" + deferredSnapshot.totalDeferralRequestCount +
+        " deferred_promoted=" + deferredSnapshot.totalPromotedCount
       );
     }
 
-    var highPriorityEnqueueBudget = ResolveEnqueueBudgetPerFrame(highPriorityAddressSet.Count, isHighPriority: true);
-    IEnumerator highPriorityEnqueue = null;
-    if (highPriorityAddressSet.Count > 0) {
-      highPriorityEnqueue = TextureResidencyCache.RequestLoadBatchThrottled(
-        highPriorityAddressSet,
-        TextureResidencyCache.LoadPriority.Immediate,
-        allowAtlasExpansion: true,
-        enqueueBudgetPerFrame: highPriorityEnqueueBudget
-      );
-    }
+    // Session total is finalized after warm batching/trimming so progress reflects
+    // the addresses actually scheduled this gate.
 
-    warmAddressBatch.Clear();
-    foreach (var address in warmAddressSet) {
-      if (highPriorityAddressSet.Contains(address)) continue;
-      warmAddressBatch.Add(address);
-    }
+    yield return FinalizeWarmPlanForEnqueue(context, hardTimeoutAt, debugLogs);
+
+    // Initialize the loading session with the total known count of addresses to warm.
+    // This allows the loading screen to show a more accurate progress bar.
+    TextureResidencyCache.BeginSession(scheduledAddressSet.Count);
 
     var warmEnqueueBudget = ResolveEnqueueBudgetPerFrame(warmAddressBatch.Count, isHighPriority: false);
     IEnumerator warmEnqueue = null;
     if (warmAddressBatch.Count > 0) {
-      warmEnqueue = TextureResidencyCache.RequestLoadBatchThrottled(
-        warmAddressBatch,
-        TextureResidencyCache.LoadPriority.Warmup,
-        allowAtlasExpansion: true,
-        enqueueBudgetPerFrame: warmEnqueueBudget
-      );
+      // enqueue the warm set in sub‑batches instead of all at once.  each chunk will
+      // be submitted sequentially so the first frames have a chance to finish early.
+      warmEnqueue = BatchedEnqueue(warmAddressBatch,
+                                   TextureResidencyCache.LoadPriority.Warmup,
+                                   allowAtlasExpansion: true,
+                                   enqueueBudgetPerFrame: warmEnqueueBudget);
     }
 
-    StepEnqueue(ref highPriorityEnqueue);
     StepEnqueue(ref warmEnqueue);
     TextureResidencyCache.Pump();
 
@@ -590,9 +687,9 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var softTimedOut = false;
     var hardTimedOut = false;
     var readyCount = 0;
-    var totalCount = readyAddressSet.Count;
+    var totalCount = scheduledReadyAddressSet.Count;
     var criticalReadyCount = 0;
-    var criticalTotalCount = criticalReadyAddressSet.Count;
+    var criticalTotalCount = scheduledCriticalReadyAddressSet.Count;
     var ratio = totalCount > 0 ? 0f : 1f;
     var criticalReady = criticalTotalCount <= 0;
     var nextProgressLogAt = startedAt + logIntervalSeconds;
@@ -600,14 +697,13 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var nextProgressSampleFrame = Time.frameCount;
 
     while (true) {
-      StepEnqueue(ref highPriorityEnqueue);
       StepEnqueue(ref warmEnqueue);
       TextureResidencyCache.Pump();
       var frame = Time.frameCount;
       var shouldSampleProgress = frame >= nextProgressSampleFrame;
       if (shouldSampleProgress) {
-        readyCount = CountReadyAddresses(readyAddressSet, pumpEntries: false);
-        criticalReadyCount = CountReadyAddresses(criticalReadyAddressSet, pumpEntries: false);
+        readyCount = CountReadyAddresses(scheduledReadyAddressSet, pumpEntries: false);
+        criticalReadyCount = CountReadyAddresses(scheduledCriticalReadyAddressSet, pumpEntries: false);
         ratio = totalCount > 0 ? ((float)readyCount / totalCount) : 1f;
         criticalReady = criticalTotalCount <= 0 || criticalReadyCount >= criticalTotalCount;
         reachedThreshold = criticalReady && ratio >= requiredReadyRatio;
@@ -628,12 +724,18 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
       var now = Time.realtimeSinceStartup;
       if (shouldSampleProgress && debugLogs && now >= nextProgressLogAt && !reachedThreshold) {
+        var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
         Debug.Log(
           "[StreamingWarmOrchestrator] Progress context=" + context +
           " ready=" + readyCount + "/" + totalCount +
           " critical=" + criticalReadyCount + "/" + criticalTotalCount +
           " ratio=" + ratio.ToString("0.000") +
-          " soft_timeout=" + (softTimedOut ? 1 : 0)
+          " soft_timeout=" + (softTimedOut ? 1 : 0) +
+          " deferred_pending=" + deferredSnapshot.pendingCount +
+          " deferred_flushed_frame=" + deferredSnapshot.flushedThisFrame +
+          " deferred_total=" + deferredSnapshot.totalDeferredCount +
+          " deferred_requests_total=" + deferredSnapshot.totalDeferralRequestCount +
+          " deferred_promoted=" + deferredSnapshot.totalPromotedCount
         );
         nextProgressLogAt = now + logIntervalSeconds;
       }
@@ -642,13 +744,15 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       if (!softTimedOut && now >= softTimeoutAt) {
         softTimedOut = true;
       }
-      if (softTimedOut && criticalReady) break;
+      if (softTimedOut && criticalReady && request.allowCriticalReadySoftTimeout) break;
       if (now >= hardTimeoutAt) {
         hardTimedOut = true;
         break;
       }
       yield return null;
     }
+
+    TextureResidencyCache.EndSession();
 
     var elapsedMs = Mathf.Max((Time.realtimeSinceStartup - startedAt) * 1000f, 0f);
     var hardTimeoutBypassUsed = false;
@@ -681,7 +785,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       totalCount: totalCount,
       criticalReadyCount: criticalReadyCount,
       criticalTotalCount: criticalTotalCount,
-      requestedAddressCount: warmAddressSet.Count,
+      requestedAddressCount: scheduledAddressSet.Count,
       elapsedMs: elapsedMs,
       hardTimeoutBypassUsed: hardTimeoutBypassUsed,
       failureReason: failureReason
@@ -694,6 +798,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
     SpriteStreamingDiagnostics.RecordWarmCheckpoint(result);
     if (debugLogs) {
+      var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
       Debug.Log(
         "[StreamingWarmOrchestrator] Complete context=" + context +
         " reached_threshold=" + result.reachedReadyThreshold +
@@ -702,7 +807,12 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
         " critical=" + result.criticalReadyCount + "/" + result.criticalTotalCount +
         " hard_bypass=" + (result.hardTimeoutBypassUsed ? 1 : 0) +
         " failure_reason='" + result.failureReason + "'" +
-        " elapsed_ms=" + result.elapsedMs.ToString("0.0")
+        " elapsed_ms=" + result.elapsedMs.ToString("0.0") +
+        " deferred_pending=" + deferredSnapshot.pendingCount +
+        " deferred_flushed_frame=" + deferredSnapshot.flushedThisFrame +
+        " deferred_total=" + deferredSnapshot.totalDeferredCount +
+        " deferred_requests_total=" + deferredSnapshot.totalDeferralRequestCount +
+        " deferred_promoted=" + deferredSnapshot.totalPromotedCount
       );
     }
 
@@ -716,8 +826,17 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   }
 
   void BuildWarmPlan(WarmRequest request, bool includeResolvedAddressSweeps) {
+    // Ideal warm plans stay narrow: critical first-frame visuals first, then
+    // nearby enemies/effects. A broad set increases queue tail and timeout risk.
     AddLibraries(request.extraCriticalLibraries);
     AddLibraries(request.extraWarmLibraries);
+    CollectLabels(request.extraCriticalLabels, markCritical: true);
+    CollectLabels(request.extraWarmLabels, markCritical: false);
+    CollectLabels(SpriteStreamingRuntimeSettings.CriticalAddressableLabels, markCritical: true);
+    CollectLabels(SpriteStreamingRuntimeSettings.WarmAddressableLabels, markCritical: false);
+    CollectLabels(SpriteStreamingRuntimeSettings.WarmUiAddressableLabels, markCritical: false);
+    // TODO(smooth-first-play): Keep these label sets populated with first-contact animations
+    // (spawn/idle/locomotion) so warm gates bias toward frames seen immediately after unlock.
     if (HasReachedWarmAddressCap()) return;
     AddDirectAddresses(request.extraCriticalAddresses, markCritical: true, markHighPriority: true);
     if (HasReachedWarmAddressCap()) return;
@@ -725,14 +844,42 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     if (HasReachedWarmAddressCap()) return;
 
     if (request.playerController != null) {
-      CollectPlayerWarmPlan(request.playerController, request.playerWarmFrames, request.effectWarmFrames, request.includeEffects, includeResolvedAddressSweeps);
+      CollectPlayerWarmPlan(
+        request.playerController,
+        request.playerWarmFrames,
+        request.effectWarmFrames,
+        request.includeEffects,
+        includeResolvedAddressSweeps,
+        request.criticalPlayerEffectKeys
+      );
       if (HasReachedWarmAddressCap()) return;
+    }
+
+    if (request.criticalEnemyControllers != null && request.criticalEnemyControllers.Length > 0) {
+      for (var i = 0; i < request.criticalEnemyControllers.Length; i++) {
+        if (HasReachedWarmAddressCap()) return;
+        CollectEnemyControllerWarmPlan(
+          request.criticalEnemyControllers[i],
+          request.enemyWarmFrames,
+          request.effectWarmFrames,
+          request.includeEffects,
+          includeResolvedAddressSweeps,
+          markCritical: true
+        );
+      }
     }
 
     if (request.enemyControllers != null && request.enemyControllers.Length > 0) {
       for (var i = 0; i < request.enemyControllers.Length; i++) {
         if (HasReachedWarmAddressCap()) return;
-        CollectEnemyControllerWarmPlan(request.enemyControllers[i], request.enemyWarmFrames, request.effectWarmFrames, request.includeEffects, includeResolvedAddressSweeps);
+        CollectEnemyControllerWarmPlan(
+          request.enemyControllers[i],
+          request.enemyWarmFrames,
+          request.effectWarmFrames,
+          request.includeEffects,
+          includeResolvedAddressSweeps,
+          markCritical: false
+        );
       }
     }
 
@@ -747,10 +894,13 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     int warmFrames,
     int effectWarmFrames,
     bool includeEffects,
-    bool includeResolvedAddressSweeps
+    bool includeResolvedAddressSweeps,
+    List<string> criticalPlayerEffectKeys
   ) {
     if (controller == null) return;
     if (HasReachedWarmAddressCap()) return;
+    // Player animation manifest source of truth is Data/Animations.cs (Animations.Esperanza).
+    var playerAnimationManifest = Animations.Esperanza;
     AddLibrariesFromGameObjects(controller.SkinObjects);
     AddLibrariesFromGameObjects(controller.GearObjects);
     if (HasReachedWarmAddressCap()) return;
@@ -760,21 +910,73 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     if (HasReachedWarmAddressCap()) return;
     if (!includeResolvedAddressSweeps) return;
 
-    CollectAtlasSeedAddressesForObjects(controller.SkinObjects, Animations.Esperanza, warmFrames, playerCriticalAtlasSeedAddresses);
+    CollectAtlasSeedAddressesForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, playerCriticalAtlasSeedAddresses);
     if (HasReachedWarmAddressCap()) return;
-    CollectAtlasSeedAddressesForObjects(controller.GearObjects, Animations.Esperanza, warmFrames, playerWarmAtlasSeedAddresses);
+    CollectAtlasSeedAddressesForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, playerWarmAtlasSeedAddresses);
     if (HasReachedWarmAddressCap()) return;
-    CollectAnimationStartsForObjects(controller.SkinObjects, Animations.Esperanza, warmFrames, markCritical: true);
+    CollectAnimationStartsForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, markCritical: true);
     if (HasReachedWarmAddressCap()) return;
-    CollectAnimationStartsForObjects(controller.GearObjects, Animations.Esperanza, warmFrames, markCritical: false);
+    CollectAnimationStartsForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, markCritical: false);
     if (HasReachedWarmAddressCap()) return;
 
     if (includeEffects && controller.effectNode != null) {
-      CollectEffectStartsForTarget(controller.effectNode, Effects.Esperanza, effectWarmFrames, markCritical: false);
+      var criticalEffectKeySet = BuildNormalizedTokenSet(criticalPlayerEffectKeys);
+      if (criticalEffectKeySet != null && criticalEffectKeySet.Count > 0) {
+        CollectEffectStartsForTarget(
+          controller.effectNode,
+          Effects.Esperanza,
+          effectWarmFrames,
+          markCritical: true,
+          allowInactive: false,
+          includedEffectKeys: criticalEffectKeySet
+        );
+        if (HasReachedWarmAddressCap()) return;
+        CollectEffectStartsForTarget(
+          controller.effectNode,
+          Effects.Things,
+          effectWarmFrames,
+          markCritical: true,
+          allowInactive: false,
+          includedEffectKeys: criticalEffectKeySet
+        );
+        if (HasReachedWarmAddressCap()) return;
+        CollectEffectStartsForTarget(
+          controller.effectNode,
+          Effects.Imp,
+          effectWarmFrames,
+          markCritical: true,
+          allowInactive: false,
+          includedEffectKeys: criticalEffectKeySet
+        );
+        if (HasReachedWarmAddressCap()) return;
+      }
+
+      CollectEffectStartsForTarget(
+        controller.effectNode,
+        Effects.Esperanza,
+        effectWarmFrames,
+        markCritical: false,
+        allowInactive: false,
+        excludedEffectKeys: criticalEffectKeySet
+      );
       if (HasReachedWarmAddressCap()) return;
-      CollectEffectStartsForTarget(controller.effectNode, Effects.Things, effectWarmFrames, markCritical: false);
+      CollectEffectStartsForTarget(
+        controller.effectNode,
+        Effects.Things,
+        effectWarmFrames,
+        markCritical: false,
+        allowInactive: false,
+        excludedEffectKeys: criticalEffectKeySet
+      );
       if (HasReachedWarmAddressCap()) return;
-      CollectEffectStartsForTarget(controller.effectNode, Effects.Imp, effectWarmFrames, markCritical: false);
+      CollectEffectStartsForTarget(
+        controller.effectNode,
+        Effects.Imp,
+        effectWarmFrames,
+        markCritical: false,
+        allowInactive: false,
+        excludedEffectKeys: criticalEffectKeySet
+      );
     }
   }
 
@@ -783,7 +985,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     int warmFrames,
     int effectWarmFrames,
     bool includeEffects,
-    bool includeResolvedAddressSweeps
+    bool includeResolvedAddressSweeps,
+    bool markCritical
   ) {
     if (controller == null) return;
     if (controller.spriteObjects == null || controller.spriteObjects.Length == 0) return;
@@ -800,11 +1003,11 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     if (HasReachedWarmAddressCap()) return;
     if (!includeResolvedAddressSweeps) return;
 
-    CollectAnimationStartsForObjects(controller.spriteObjects, enemyAnimations, warmFrames, markCritical: false);
+    CollectAnimationStartsForObjects(controller.spriteObjects, enemyAnimations, warmFrames, markCritical);
     if (HasReachedWarmAddressCap()) return;
 
     if (includeEffects && controller.effectNode != null) {
-      CollectEffectStartsForTarget(controller.effectNode, ResolveEnemyEffectAnimations(enemyType), effectWarmFrames, markCritical: false);
+      CollectEffectStartsForTarget(controller.effectNode, ResolveEnemyEffectAnimations(enemyType), effectWarmFrames, markCritical);
     }
   }
 
@@ -877,7 +1080,6 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   ) {
     if (!IsTargetWarmable(target, allowInactive)) return;
     if (animations == null || animations.Count == 0) return;
-    var requestedSamples = Mathf.Clamp(Mathf.Max(warmFrames, 1), 1, MaxAnimationSamplesPerClip);
 
     if (!target.IsAnimation) {
       if (!TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) return;
@@ -894,20 +1096,9 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       var category = ResolveAnimationCategory(animationName, anim);
       var clipStart = Mathf.Max(anim.start, 1);
       var clipEnd = Mathf.Max(anim.end, clipStart);
-      var clipLength = Mathf.Max(clipEnd - clipStart + 1, 1);
-      var sampleCount = Mathf.Clamp(requestedSamples, 1, clipLength);
-      var sampleDenominator = Mathf.Max(sampleCount - 1, 1);
-      var lastFrame = int.MinValue;
-
-      for (var sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {
+      var frameEnd = Mathf.Min(clipEnd, clipStart + Mathf.Max(warmFrames, 1) - 1);
+      for (var frame = clipStart; frame <= frameEnd; frame++) {
         if (HasReachedWarmAddressCap()) return;
-        var frame = sampleCount <= 1
-          ? clipStart
-          : Mathf.RoundToInt(Mathf.Lerp(clipStart, clipEnd, sampleIndex / (float)sampleDenominator));
-        frame = Mathf.Clamp(frame, clipStart, clipEnd);
-        if (frame == lastFrame) continue;
-        lastFrame = frame;
-
         if (!TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) continue;
         AddPairAddresses(addressPair, markCritical);
       }
@@ -919,37 +1110,47 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     Dictionary<string, EffectData> effects,
     int warmFrames,
     bool markCritical,
-    bool allowInactive = false
+    bool allowInactive = false,
+    ISet<string> includedEffectKeys = null,
+    ISet<string> excludedEffectKeys = null
   ) {
     if (!IsTargetWarmable(target, allowInactive)) return;
     if (effects == null || effects.Count == 0) return;
-    var requestedSamples = Mathf.Clamp(Mathf.Max(warmFrames, 1), 1, MaxAnimationSamplesPerClip);
 
     foreach (var pair in effects) {
       if (HasReachedWarmAddressCap()) return;
       var effectName = pair.Key;
       var effect = pair.Value;
       if (effect == null || string.IsNullOrWhiteSpace(effectName)) continue;
+      var normalizedEffectName = NormalizeToken(effectName);
+      if (includedEffectKeys != null &&
+          includedEffectKeys.Count > 0 &&
+          !includedEffectKeys.Contains(normalizedEffectName)) {
+        continue;
+      }
+      if (excludedEffectKeys != null && excludedEffectKeys.Contains(normalizedEffectName)) {
+        continue;
+      }
       var clipStart = Mathf.Max(effect.start, 1);
       var clipEnd = Mathf.Max(effect.end, clipStart);
-      var clipLength = Mathf.Max(clipEnd - clipStart + 1, 1);
-      var sampleCount = Mathf.Clamp(requestedSamples, 1, clipLength);
-      var sampleDenominator = Mathf.Max(sampleCount - 1, 1);
-      var lastFrame = int.MinValue;
-
-      for (var sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {
+      var frameEnd = Mathf.Min(clipEnd, clipStart + Mathf.Max(warmFrames, 1) - 1);
+      for (var frame = clipStart; frame <= frameEnd; frame++) {
         if (HasReachedWarmAddressCap()) return;
-        var frame = sampleCount <= 1
-          ? clipStart
-          : Mathf.RoundToInt(Mathf.Lerp(clipStart, clipEnd, sampleIndex / (float)sampleDenominator));
-        frame = Mathf.Clamp(frame, clipStart, clipEnd);
-        if (frame == lastFrame) continue;
-        lastFrame = frame;
-
         if (!TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, effectName)) continue;
         AddPairAddresses(addressPair, markCritical);
       }
     }
+  }
+
+  static HashSet<string> BuildNormalizedTokenSet(List<string> values) {
+    if (values == null || values.Count <= 0) return null;
+    var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < values.Count; i++) {
+      var normalized = NormalizeToken(values[i]);
+      if (string.IsNullOrWhiteSpace(normalized)) continue;
+      set.Add(normalized);
+    }
+    return set.Count > 0 ? set : null;
   }
 
   bool TryGetFrameAddressPairBudgeted(SpriteWithNormals target, int frame, out SpriteAddressPair pair, string categoryOverride = null) {
@@ -957,7 +1158,6 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     if (target == null) return false;
     if (HasReachedWarmAddressCap()) return false;
     if (warmPlanFrameAddressProbeCount >= activeFrameAddressProbeBudget) {
-      warmPlanProbeBudgetExceeded = true;
       return false;
     }
     warmPlanFrameAddressProbeCount++;
@@ -965,15 +1165,23 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   }
 
   void AddPairAddresses(SpriteAddressPair pair, bool markCritical) {
-    if (!AddReadyAddress(pair.colorAddress, markCritical, markCritical)) return;
-    AddWarmAddress(pair.normalAddress, markHighPriority: false);
+    if (!AddReadyAddress(pair.RuntimeColorAddress, markCritical, markCritical)) return;
+    AddWarmAddress(pair.RuntimeNormalAddress, markHighPriority: false);
   }
 
   bool AddReadyAddress(string address, bool markCritical, bool markHighPriority) {
-    if (!AddWarmAddress(address, markHighPriority)) return false;
+    // Warm gate runs as a single-tier preload queue: no per-source priority classes.
+    if (!AddWarmAddress(address, markHighPriority: false)) return false;
     var normalized = NormalizeToken(address);
     if (string.IsNullOrWhiteSpace(normalized)) return false;
     readyAddressSet.Add(normalized);
+    if (markCritical &&
+        !criticalReadyAddressSet.Contains(normalized) &&
+        activeCriticalReadyAddressCap > 0 &&
+        criticalReadyAddressSet.Count >= activeCriticalReadyAddressCap) {
+      markCritical = false;
+      warmPlanDroppedCriticalReadyAddresses++;
+    }
     if (markCritical) criticalReadyAddressSet.Add(normalized);
     return true;
   }
@@ -982,7 +1190,6 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var normalized = NormalizeToken(address);
     if (string.IsNullOrWhiteSpace(normalized)) return false;
     if (warmAddressSet.Contains(normalized)) {
-      if (markHighPriority) highPriorityAddressSet.Add(normalized);
       return true;
     }
     if (HasReachedWarmAddressCap()) {
@@ -990,14 +1197,12 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       return false;
     }
     warmAddressSet.Add(normalized);
-    if (markHighPriority) highPriorityAddressSet.Add(normalized);
     return true;
   }
 
   bool HasReachedWarmAddressCap() {
     if (activeMaxRequestedAddresses <= 0) return false;
     if (warmAddressSet.Count < activeMaxRequestedAddresses) return false;
-    warmPlanAddressCapReached = true;
     return true;
   }
 
@@ -1045,8 +1250,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
     if (!target.IsAnimation) {
       if (!TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) return;
-      AddAtlasSeedAddress(staticPair.colorAddress, seedSet);
-      AddAtlasSeedAddress(staticPair.normalAddress, seedSet);
+      AddAtlasSeedAddress(staticPair.RuntimeColorAddress, seedSet);
+      AddAtlasSeedAddress(staticPair.RuntimeNormalAddress, seedSet);
       return;
     }
 
@@ -1074,8 +1279,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
         lastFrame = frame;
 
         if (!TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) continue;
-        AddAtlasSeedAddress(addressPair.colorAddress, seedSet);
-        AddAtlasSeedAddress(addressPair.normalAddress, seedSet);
+        AddAtlasSeedAddress(addressPair.RuntimeColorAddress, seedSet);
+        AddAtlasSeedAddress(addressPair.RuntimeNormalAddress, seedSet);
       }
     }
   }
@@ -1088,28 +1293,18 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   void ExpandPlayerAtlasSeeds() {
     if (!SpriteStreamingRuntimeSettings.EnableAtlasExpansionOnSliceRequest) return;
     if (HasReachedWarmAddressCap()) return;
-    var maxSiblings = Mathf.Max(SpriteStreamingRuntimeSettings.AtlasExpansionMaxSiblingAddresses, 1);
-    if (IsWarmGateRunning || SpriteStreamingLoadingState.IsLoadingOverlayActive) {
-      maxSiblings = Mathf.Min(maxSiblings, 48);
-    }
-    ExpandAtlasSeedSet(playerCriticalAtlasSeedAddresses, markHighPriority: false, maxSiblings);
+    ExpandAtlasSeedSet(playerCriticalAtlasSeedAddresses, markHighPriority: false);
     if (HasReachedWarmAddressCap()) return;
-    ExpandAtlasSeedSet(playerWarmAtlasSeedAddresses, markHighPriority: false, maxSiblings);
+    ExpandAtlasSeedSet(playerWarmAtlasSeedAddresses, markHighPriority: false);
   }
 
-  void ExpandAtlasSeedSet(HashSet<string> seedSet, bool markHighPriority, int maxSiblings) {
+  void ExpandAtlasSeedSet(HashSet<string> seedSet, bool markHighPriority) {
     if (seedSet == null || seedSet.Count <= 0) return;
     foreach (var seedAddress in seedSet) {
       if (HasReachedWarmAddressCap()) return;
       if (string.IsNullOrWhiteSpace(seedAddress)) continue;
-      atlasSiblingScratch.Clear();
-      if (!SpriteRuntimeResolver.TryCollectAtlasSiblingAddresses(seedAddress, atlasSiblingScratch, maxSiblings)) continue;
-      for (var i = 0; i < atlasSiblingScratch.Count; i++) {
-        if (HasReachedWarmAddressCap()) return;
-        AddWarmAddress(atlasSiblingScratch[i], markHighPriority);
-      }
+      AddWarmAddress(seedAddress, markHighPriority);
     }
-    atlasSiblingScratch.Clear();
   }
 
   void AddLibrariesFromGameObjects(GameObject[] objects) {
@@ -1141,6 +1336,16 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var normalized = NormalizeToken(libraryName);
     if (string.IsNullOrWhiteSpace(normalized)) return;
     warmLibrarySet.Add(normalized);
+  }
+
+  void CollectLabels(IReadOnlyList<string> labels, bool markCritical) {
+    if (labels == null || labels.Count <= 0) return;
+    for (var i = 0; i < labels.Count; i++) {
+      var normalized = NormalizeToken(labels[i]);
+      if (string.IsNullOrWhiteSpace(normalized)) continue;
+      warmLabelSet.Add(normalized);
+      if (markCritical) criticalReadyLabelSet.Add(normalized);
+    }
   }
 
   static bool IsTargetWarmable(SpriteWithNormals target, bool allowInactive = false) {
@@ -1195,6 +1400,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     return new WarmRequest(
       context: request.context,
       playerController: request.playerController,
+      criticalEnemyControllers: request.criticalEnemyControllers,
       enemyControllers: request.enemyControllers,
       enemyArchetypePrefabsByType: request.enemyArchetypePrefabsByType,
       timeoutSeconds: timeoutSeconds,
@@ -1211,20 +1417,399 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: request.allowHardTimeoutBypass,
       idempotencyToken: request.idempotencyToken,
-      skipIfTokenAlreadyWarm: request.skipIfTokenAlreadyWarm
+      skipIfTokenAlreadyWarm: request.skipIfTokenAlreadyWarm,
+      extraCriticalLabels: request.extraCriticalLabels,
+      extraWarmLabels: request.extraWarmLabels,
+      criticalPlayerEffectKeys: request.criticalPlayerEffectKeys,
+      allowCriticalReadySoftTimeout: request.allowCriticalReadySoftTimeout
     );
+  }
+
+  // helper used by TODO sorting and batching
+  static int CompareByLifecycleLabel(string a, string b) {
+    // simple priority order; addresses containing these substrings
+    // will be requested earlier.  more sophisticated label lookup can
+    // be added when the data model exposes it.
+    int Rank(string addr) {
+      if (addr.IndexOf("spawn", StringComparison.OrdinalIgnoreCase) >= 0) return 0;
+      if (addr.IndexOf("locomotion", StringComparison.OrdinalIgnoreCase) >= 0) return 1;
+      if (addr.IndexOf("idle", StringComparison.OrdinalIgnoreCase) >= 0) return 2;
+      return 3;
+    }
+    return Rank(a).CompareTo(Rank(b));
+  }
+
+  IEnumerator FinalizeWarmPlanForEnqueue(WarmContext context, float hardTimeoutAt, bool debugLogs) {
+    if (!ShouldUseThreadedWarmPlanFinalize()) {
+      BuildWarmPlanBatchesSync();
+      yield break;
+    }
+
+    var warmAddresses = new List<string>(warmAddressSet);
+    var readyAddresses = new List<string>(readyAddressSet);
+    var finalizeTask = Task.Run(() => BuildThreadedWarmPlanSnapshot(warmAddresses, readyAddresses));
+    var waitedFrames = 0;
+
+    while (!finalizeTask.IsCompleted) {
+      if (Time.realtimeSinceStartup >= hardTimeoutAt) {
+        if (debugLogs) {
+          Debug.LogWarning(
+            "[StreamingWarmOrchestrator] Threaded warm-plan finalize timed out; falling back to synchronous finalize." +
+            " context=" + context +
+            " addresses=" + warmAddresses.Count +
+            " waited_frames=" + waitedFrames
+          );
+        }
+        BuildWarmPlanBatchesSync();
+        yield break;
+      }
+
+      TextureResidencyCache.Pump();
+      waitedFrames++;
+      yield return null;
+    }
+
+    if (finalizeTask.IsFaulted || finalizeTask.IsCanceled || finalizeTask.Result == null) {
+      if (debugLogs) {
+        Debug.LogWarning(
+          "[StreamingWarmOrchestrator] Threaded warm-plan finalize failed; falling back to synchronous finalize." +
+          " context=" + context +
+          " addresses=" + warmAddresses.Count +
+          " waited_frames=" + waitedFrames +
+          " faulted=" + (finalizeTask.IsFaulted ? 1 : 0) +
+          " canceled=" + (finalizeTask.IsCanceled ? 1 : 0)
+        );
+      }
+      BuildWarmPlanBatchesSync();
+      yield break;
+    }
+
+    ApplyThreadedWarmPlanSnapshot(finalizeTask.Result);
+    if (debugLogs) {
+      Debug.Log(
+        "[StreamingWarmOrchestrator] Threaded warm-plan finalize complete." +
+        " context=" + context +
+        " addresses=" + warmAddresses.Count +
+        " batch=" + warmAddressBatch.Count +
+        " ready=" + scheduledReadyAddressSet.Count +
+        " critical=" + scheduledCriticalReadyAddressSet.Count +
+        " waited_frames=" + waitedFrames
+      );
+    }
+  }
+
+  bool ShouldUseThreadedWarmPlanFinalize() {
+    if (warmAddressSet.Count < ThreadedWarmPlanMinAddressCount) return false;
+    return SystemInfo.processorCount >= ThreadedWarmPlanMinProcessorCount;
+  }
+
+  void BuildWarmPlanBatchesSync() {
+    warmAddressBatch.Clear();
+    warmAddressBatch.AddRange(warmAddressSet);
+    if (warmAddressBatch.Count > 1) {
+      warmAddressBatch.Sort(CompareByLifecycleLabel);
+    }
+    BuildScheduledAddressSets();
+  }
+
+  static ThreadedWarmPlanSnapshot BuildThreadedWarmPlanSnapshot(
+    List<string> warmAddresses,
+    List<string> readyAddresses
+  ) {
+    var batch = warmAddresses ?? new List<string>();
+    if (batch.Count > 1) {
+      batch.Sort(CompareByLifecycleLabel);
+    }
+
+    var scheduledAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < batch.Count; i++) {
+      var address = NormalizeToken(batch[i]);
+      if (string.IsNullOrWhiteSpace(address)) continue;
+      scheduledAddresses.Add(address);
+    }
+
+    var scheduledReadyAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (readyAddresses != null) {
+      for (var i = 0; i < readyAddresses.Count; i++) {
+        var address = NormalizeToken(readyAddresses[i]);
+        if (string.IsNullOrWhiteSpace(address) || !scheduledAddresses.Contains(address)) continue;
+        scheduledReadyAddresses.Add(address);
+      }
+    }
+
+    var scheduledCriticalAddresses = new HashSet<string>(scheduledReadyAddresses, StringComparer.OrdinalIgnoreCase);
+    return new ThreadedWarmPlanSnapshot(batch, scheduledAddresses, scheduledReadyAddresses, scheduledCriticalAddresses);
+  }
+
+  void ApplyThreadedWarmPlanSnapshot(ThreadedWarmPlanSnapshot snapshot) {
+    warmAddressBatch.Clear();
+    scheduledAddressSet.Clear();
+    scheduledReadyAddressSet.Clear();
+    scheduledCriticalReadyAddressSet.Clear();
+    if (snapshot == null) return;
+
+    warmAddressBatch.AddRange(snapshot.warmAddressBatch);
+    foreach (var address in snapshot.scheduledAddressSet) {
+      scheduledAddressSet.Add(address);
+    }
+    foreach (var address in snapshot.scheduledReadyAddressSet) {
+      scheduledReadyAddressSet.Add(address);
+    }
+    foreach (var address in snapshot.scheduledCriticalReadyAddressSet) {
+      scheduledCriticalReadyAddressSet.Add(address);
+    }
+  }
+
+  // creates a single enumerator that processes a list of addresses in chunks.
+  IEnumerator BatchedEnqueue(List<string> addresses,
+                             TextureResidencyCache.LoadPriority priority,
+                             bool allowAtlasExpansion,
+                             int enqueueBudgetPerFrame) {
+    const int chunkSize = 100; // within 50-200 guidance
+    for (int start = 0; start < addresses.Count; start += chunkSize) {
+      int count = Math.Min(chunkSize, addresses.Count - start);
+      sliceScratch.Clear();
+      for (var i = 0; i < count; i++) {
+        sliceScratch.Add(addresses[start + i]);
+      }
+      var inner = TextureResidencyCache.RequestLoadBatchThrottled(
+          sliceScratch, priority, allowAtlasExpansion: allowAtlasExpansion,
+          enqueueBudgetPerFrame: enqueueBudgetPerFrame,
+          warmGateManaged: true);
+      while (inner.MoveNext()) {
+        yield return inner.Current;
+      }
+      // allow other work between chunks
+      yield return null;
+    }
+    sliceScratch.Clear();
+  }
+
+  void ScheduleFirstAnimationRescue(WarmRequest request) {
+    // best effort attempt to bump start-frame addresses to immediate priority
+    // so the player and any nearby enemies don't have blank frames after a
+    // soft timeout. This is largely a placeholder until proper instrumentation
+    // and heuristics are in place.
+
+    rescueAddressBuffer.Clear();
+    rescueSeenAddressBuffer.Clear();
+
+    if (request.playerController != null && request.playerController.Controller != null) {
+      request.playerController.Controller.CollectAnimationStartAddresses(
+        rescueAddressBuffer, rescueSeenAddressBuffer, framesPerAnimation: 1, maxAnimations: 4, maxAddresses: 32
+      );
+    }
+
+    if (request.enemyControllers != null && request.enemyControllers.Length > 0) {
+      rescueEnemyControllerBuffer.Clear();
+      rescueEnemyControllerBuffer.AddRange(request.enemyControllers);
+      if (request.playerController != null) {
+        var playerPos = request.playerController.transform.position;
+        rescueEnemyControllerBuffer.Sort((a, b) => {
+          if (a == null || b == null) return 0;
+          var distA = (a.transform.position - playerPos).sqrMagnitude;
+          var distB = (b.transform.position - playerPos).sqrMagnitude;
+          return distA.CompareTo(distB);
+        });
+      }
+
+      var enemyCount = rescueEnemyControllerBuffer.Count;
+      for (var i = 0; i < enemyCount && i < 5; i++) {
+        var enemy = rescueEnemyControllerBuffer[i];
+        if (enemy == null || enemy.Controller == null) continue;
+        enemy.Controller.CollectAnimationStartAddresses(
+          rescueAddressBuffer, rescueSeenAddressBuffer, framesPerAnimation: 1, maxAnimations: 1, maxAddresses: 16
+        );
+      }
+    }
+
+    if (rescueAddressBuffer.Count > 0) {
+      StartCoroutine(TextureResidencyCache.RequestLoadBatchThrottled(
+        new List<string>(rescueAddressBuffer), // Copy to new list as buffer will be cleared
+        TextureResidencyCache.LoadPriority.Immediate,
+        // Rescue loads should hydrate full atlas families, not single slices, to prevent immediate re-stalls.
+        allowAtlasExpansion: true,
+        enqueueBudgetPerFrame: 32,
+        warmGateManaged: true
+      ));
+    }
+
+    rescueAddressBuffer.Clear();
+    rescueSeenAddressBuffer.Clear();
+    rescueEnemyControllerBuffer.Clear();
+  }
+
+  int ResolveWarmOutstandingTarget() {
+    var target = Application.isMobilePlatform ? MobileWarmOutstandingTarget : DesktopWarmOutstandingTarget;
+    var memoryMb = Math.Max(SystemInfo.systemMemorySize, 0);
+    if (memoryMb > 0 && memoryMb <= 4096) target = Math.Min(target, 700);
+    else if (memoryMb > 0 && memoryMb <= 8192) target = Math.Min(target, 1100);
+    return Math.Max(target, 256);
+  }
+
+  int ResolveActiveMaxRequestedAddresses(WarmContext context, int requestedMax) {
+    var requested = Math.Max(requestedMax, 256);
+    // Full warm-set mode: honor request cap directly so loading overlay can preload
+    // all declared addresses for instant gameplay playback.
+    return Mathf.Clamp(requested, 256, 1048576);
+  }
+
+  int ResolveHighPriorityAddressCap(WarmContext context) {
+    var outstandingTarget = ResolveWarmOutstandingTarget();
+    switch (context) {
+      case WarmContext.LoadSave:
+        return Mathf.Clamp(Mathf.RoundToInt(outstandingTarget * 0.45f), 256, 900);
+      case WarmContext.GearApplyReturn:
+        return Mathf.Clamp(Mathf.RoundToInt(outstandingTarget * 0.35f), 192, 640);
+      case WarmContext.EnemyWaveSpawn:
+        return Mathf.Clamp(Mathf.RoundToInt(outstandingTarget * 0.50f), 256, 900);
+      default:
+        return Mathf.Clamp(Mathf.RoundToInt(outstandingTarget * 0.60f), 320, 1200);
+    }
+  }
+
+  int ResolveCriticalReadyAddressCap(WarmContext context, int highPriorityCap) {
+    var cap = Math.Max(highPriorityCap / 2, 128);
+    switch (context) {
+      case WarmContext.LoadSave:
+        cap = Math.Min(cap, 384);
+        break;
+      case WarmContext.GearApplyReturn:
+        cap = Math.Min(cap, 256);
+        break;
+      case WarmContext.EnemyWaveSpawn:
+        cap = Math.Min(cap, 320);
+        break;
+      default:
+        cap = Math.Min(cap, 512);
+        break;
+    }
+    return Math.Max(cap, 128);
+  }
+
+  int ResolveWarmBackgroundAddressCap(int highPriorityAddressCount) {
+    var targetOutstanding = ResolveWarmOutstandingTarget();
+    var remainingBudget = targetOutstanding - Math.Max(highPriorityAddressCount, 0);
+    if (remainingBudget <= 0) return 0;
+    return Math.Min(remainingBudget, Math.Max(activeMaxRequestedAddresses, 0));
+  }
+
+  void BuildScheduledAddressSets() {
+    scheduledAddressSet.Clear();
+    scheduledReadyAddressSet.Clear();
+    scheduledCriticalReadyAddressSet.Clear();
+
+    for (var i = 0; i < warmAddressBatch.Count; i++) {
+      var address = NormalizeToken(warmAddressBatch[i]);
+      if (string.IsNullOrWhiteSpace(address)) continue;
+      scheduledAddressSet.Add(address);
+    }
+
+    foreach (var address in readyAddressSet) {
+      if (!scheduledAddressSet.Contains(address)) continue;
+      scheduledReadyAddressSet.Add(address);
+    }
+
+    // No warm-gate priority partitioning: critical scope tracks the same complete
+    // scheduled ready-set so loading waits for full residency.
+    foreach (var address in scheduledReadyAddressSet) {
+      scheduledCriticalReadyAddressSet.Add(address);
+    }
   }
 
   void ClearScratch() {
     warmLibrarySet.Clear();
     warmAddressSet.Clear();
+    warmLabelSet.Clear();
     highPriorityAddressSet.Clear();
+    highPriorityLabelSet.Clear();
     readyAddressSet.Clear();
+    readyLabelSet.Clear();
     criticalReadyAddressSet.Clear();
+    criticalReadyLabelSet.Clear();
+    scheduledAddressSet.Clear();
+    scheduledReadyAddressSet.Clear();
+    scheduledCriticalReadyAddressSet.Clear();
     playerCriticalAtlasSeedAddresses.Clear();
     playerWarmAtlasSeedAddresses.Clear();
-    atlasSiblingScratch.Clear();
     warmAddressBatch.Clear();
+  }
+
+  IEnumerator ResolveLibraryAtlasDependenciesRoutine(float hardTimeoutAt, bool debugLogs) {
+    sortedLabelBuffer.Clear();
+    sortedLabelBuffer.AddRange(warmLibrarySet);
+    var libraries = sortedLabelBuffer;
+
+    for (var i = 0; i < libraries.Count; i++) {
+      if (Time.realtimeSinceStartup >= hardTimeoutAt) yield break;
+      var libKey = libraries[i];
+      // Library keys are used only to discover dependent sprite addresses.
+      // Actual texture residency still goes through address-based cache loads.
+      var locHandle = Addressables.LoadResourceLocationsAsync(libKey);
+      while (!locHandle.IsDone) {
+        if (Time.realtimeSinceStartup >= hardTimeoutAt) break;
+        TextureResidencyCache.Pump();
+        yield return null;
+      }
+
+      if (locHandle.Status == AsyncOperationStatus.Succeeded && locHandle.Result != null) {
+        var locations = locHandle.Result;
+        foreach (var loc in locations) {
+          if (loc.Dependencies == null) continue;
+          foreach (var dep in loc.Dependencies) {
+            if (HasReachedWarmAddressCap()) break;
+            AddWarmAddress(dep.PrimaryKey, markHighPriority: false);
+          }
+        }
+      }
+      Addressables.Release(locHandle);
+    }
+  }
+
+  IEnumerator ResolveLabelAddressesRoutine(float hardTimeoutAt, bool debugLogs) {
+    // use a shared buffer to avoid allocating a new list each warm gate
+    sortedLabelBuffer.Clear();
+    sortedLabelBuffer.AddRange(warmLabelSet);
+    var labels = sortedLabelBuffer;
+    if (labels.Count > 1) {
+      labels.Sort(CompareByLifecycleLabel);
+    }
+    for (var i = 0; i < labels.Count; i++) {
+      if (Time.realtimeSinceStartup >= hardTimeoutAt) yield break;
+      var label = labels[i];
+      var isCritical = criticalReadyLabelSet.Contains(label);
+      var locHandle = Addressables.LoadResourceLocationsAsync(label, typeof(Sprite));
+      // TODO(smooth-first-play): If a critical label resolves a very large location list, split
+      // the resulting address set into deterministic chunks and enqueue high-value chunks first.
+      while (!locHandle.IsDone) {
+        if (Time.realtimeSinceStartup >= hardTimeoutAt) break;
+        TextureResidencyCache.Pump();
+        yield return null;
+      }
+      if (locHandle.Status == AsyncOperationStatus.Succeeded && locHandle.Result != null) {
+        locationBuffer.Clear();
+        locationBuffer.AddRange(locHandle.Result);
+        if (locationBuffer.Count > 1) {
+          locationBuffer.Sort((a, b) => CompareByLifecycleLabel(a.PrimaryKey, b.PrimaryKey));
+        }
+        for (var j = 0; j < locationBuffer.Count; j++) {
+          if (HasReachedWarmAddressCap()) break;
+          AddReadyAddress(locationBuffer[j].PrimaryKey, markCritical: isCritical, markHighPriority: isCritical);
+        }
+        if (debugLogs) {
+          Debug.Log(
+            "[StreamingWarmOrchestrator] Label prewarm resolved label='" + label + "'" + " addresses=" +
+            locationBuffer.Count + " critical=" + (isCritical ? 1 : 0)
+          );
+        }
+      } else if (debugLogs) {
+        Debug.LogWarning(
+          "[StreamingWarmOrchestrator] Label prewarm failed to resolve label='" + label + "'" +
+          " status=" + locHandle.Status
+        );
+      }
+      Addressables.Release(locHandle);
+    }
   }
 
   static bool StepEnqueue(ref IEnumerator routine) {
@@ -1253,6 +1838,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
   static bool ShouldLogLoadingDebug() {
     if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
     return Application.isEditor || Debug.isDebugBuild;
   }
 }

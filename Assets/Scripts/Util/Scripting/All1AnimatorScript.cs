@@ -99,6 +99,7 @@ public class All1AnimatorScript : MonoBehaviour {
       DedupFloat(f);
       animator.activeFloatAnimations.RemoveAll(a => a.prop == f.prop);
       animator.activeFloatAnimations.Add(f.anim);
+      animator.enabled = true;
       activeFloat[name] = f;
       animator.Refresh();
       animator.ApplyAllProperties(true);
@@ -110,6 +111,7 @@ public class All1AnimatorScript : MonoBehaviour {
       DedupColor(c);
       animator.activeColorAnimations.RemoveAll(a => a.prop == c.prop);
       animator.activeColorAnimations.Add(c.anim);
+      animator.enabled = true;
       activeColor[name] = c;
       animator.Refresh();
       animator.ApplyAllProperties(true);
@@ -121,6 +123,7 @@ public class All1AnimatorScript : MonoBehaviour {
       DedupVector(v);
       animator.activeVectorAnimations.RemoveAll(a => a.prop == v.prop);
       animator.activeVectorAnimations.Add(v.anim);
+      animator.enabled = true;
       activeVector[name] = v;
       animator.Refresh();
       animator.ApplyAllProperties(true);

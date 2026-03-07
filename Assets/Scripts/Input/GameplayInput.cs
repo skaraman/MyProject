@@ -6,6 +6,8 @@ using UnityEngine.InputSystem;
 #endif
 
 public class GameplayInput : MonoBehaviour {
+  static readonly bool ForceDisableDebugLogsForPerfPass = true;
+
   private enum MoveMode {
     Run,
     Sprint
@@ -41,6 +43,8 @@ public class GameplayInput : MonoBehaviour {
 
   [Header("Attack Combos")]
   [SerializeField] private float superAttackWindowSeconds = 0.2f;
+  [SerializeField] private bool logAttackGate;
+  [SerializeField] private bool logAttackFlow = false;
 
   private float rawLeft;
   private float rawRight;
@@ -71,6 +75,7 @@ public class GameplayInput : MonoBehaviour {
 
   private PendingSuperAttack pendingSuperAttack1; // attack1 + attack2 -> superattack1
   private PendingSuperAttack pendingSuperAttack2; // attack3 + attack4 -> superattack2
+  private int lastAttackGateLogFrame = -1;
 
   void Start() {
     actions.Add(MessageBus.On("gameplay.attack1", o => { if (_IsPressed(o)) attack1(); }));
@@ -414,13 +419,22 @@ public class GameplayInput : MonoBehaviour {
 
   bool _TryPlayMappedAction(string actionKey, string fallback, bool forceRestart = false) {
     if (gearController == null) return false;
+    var anim = _ResolveMappedAnimation(actionKey, fallback);
+    return _TryPlayResolvedAnimation(anim, forceRestart, resolveInterrupts: true);
+  }
+
+  string _ResolveMappedAnimation(string actionKey, string fallback) {
     var anim = _GetMappedAnimation(actionKey) ?? fallback;
-    if (string.IsNullOrEmpty(anim)) return false;
+    if (string.IsNullOrEmpty(anim)) return null;
     if (!Animations.Esperanza.ContainsKey(anim)) anim = fallback;
-    if (string.IsNullOrEmpty(anim)) return false;
-    if (!Animations.Esperanza.ContainsKey(anim)) return false;
-    if (gearController.Controller != null) return gearController.Controller.PlayAnimation(anim, forceRestart);
-    gearController.PlayAnimation(anim);
+    if (string.IsNullOrEmpty(anim) || !Animations.Esperanza.ContainsKey(anim)) return null;
+    return anim;
+  }
+
+  bool _TryPlayResolvedAnimation(string anim, bool forceRestart = false, bool resolveInterrupts = true) {
+    if (gearController == null || string.IsNullOrEmpty(anim)) return false;
+    if (gearController.Controller != null) return gearController.Controller.PlayAnimation(anim, forceRestart, resolveInterrupts);
+    gearController.PlayAnimation(anim, forceRestart, resolveInterrupts);
     return true;
   }
 
@@ -432,13 +446,18 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _TryPlayLocomotion(string anim) {
-    if (gearController == null || string.IsNullOrEmpty(anim)) return;
-    if (!Animations.Esperanza.ContainsKey(anim)) return;
-    gearController.PlayAnimation(anim);
+    _TryPlayResolvedAnimation(anim, forceRestart: false, resolveInterrupts: true);
   }
 
   void _HandleAttackPress(int index) {
     float now = Time.time;
+    var actionKey = index == 1 ? "attack1"
+      : index == 2 ? "attack2"
+      : index == 3 ? "attack3"
+      : index == 4 ? "attack4"
+      : "";
+    _LogAttackFlow("press", actionKey: actionKey, note: "index=" + index);
+
     if (index == 1 || index == 2) {
       _HandleSuperPairAttack(ref pendingSuperAttack1, index, now, "superattack1");
     }
@@ -474,13 +493,38 @@ public class GameplayInput : MonoBehaviour {
 
   void _ExecuteAttackAction(string actionKey) {
     if (string.IsNullOrEmpty(actionKey)) return;
+    _LogAttackFlow("execute_start", actionKey: actionKey);
+    var mappedAttackAnimation = _ResolveMappedAnimation(actionKey, fallback: null);
+    if (string.IsNullOrWhiteSpace(mappedAttackAnimation)) {
+      _LogAttackFlow("missing_map", actionKey: actionKey, note: "resolve returned null/empty");
+      _LogAttackGate("missing_map", gearController != null ? gearController.CurrentAnimation : "", actionKey);
+      return;
+    }
+    PunchLeftTraceGate.OpenFromClick(
+      actionKey,
+      mappedAttackAnimation,
+      gearController != null ? gearController.CurrentAnimation : ""
+    );
+    if (_IsBlockingActionPlaybackActive(mappedAttackAnimation)) return;
 
     if (isJumping) {
       _TryBoostJumpForAirAttack();
     }
 
     _EnterStance(resetTimer: true);
-    _TryPlayMappedAction(actionKey, fallback: null);
+    _LogAttackFlow("play_request", actionKey: actionKey, mappedAnimation: mappedAttackAnimation, note: "resolveInterrupts=0");
+    // One click should play the full attack clip; skip interrupt transition categories here.
+    var played = _TryPlayResolvedAnimation(mappedAttackAnimation, forceRestart: false, resolveInterrupts: false);
+    PunchLeftTraceGate.LogClickDispatchResult(
+      actionKey,
+      mappedAttackAnimation,
+      played,
+      gearController != null ? gearController.CurrentAnimation : ""
+    );
+    _LogAttackFlow("play_result", actionKey: actionKey, mappedAnimation: mappedAttackAnimation, note: "played=" + (played ? 1 : 0));
+    if (!played) {
+      _LogAttackGate("play_rejected", gearController != null ? gearController.CurrentAnimation : "", mappedAttackAnimation);
+    }
   }
 
   void _ExecuteSuperAttackAction(string superActionKey, int fallbackAttackIndex) {
@@ -505,6 +549,84 @@ public class GameplayInput : MonoBehaviour {
     }
 
     MessageBus.Send($"gameplay.{superActionKey}", null);
+  }
+
+  bool _IsBlockingActionPlaybackActive(string requestedAnimation) {
+    if (gearController == null || gearController.Controller == null) return false;
+    if (!gearController.Controller.IsPlaying) return false;
+
+    var current = gearController.CurrentAnimation;
+    if (string.IsNullOrWhiteSpace(current)) return false;
+    if (_IsLocomotionAnimation(current)) return false;
+    if (_IsTransitionAnimation(current)) return false;
+
+    if (string.Equals(current, requestedAnimation, StringComparison.Ordinal)) {
+      _LogAttackFlow("gate_duplicate", mappedAnimation: requestedAnimation, note: "current=" + (current ?? ""));
+      _LogAttackGate("duplicate", current, requestedAnimation);
+      return true;
+    }
+
+    _LogAttackFlow("gate_busy", mappedAnimation: requestedAnimation, note: "current=" + (current ?? ""));
+    _LogAttackGate("busy", current, requestedAnimation);
+    return true;
+  }
+
+  static bool _IsLocomotionAnimation(string animationName) {
+    return string.Equals(animationName, "Breathe", StringComparison.Ordinal) ||
+           string.Equals(animationName, "Walk", StringComparison.Ordinal) ||
+           string.Equals(animationName, "Run", StringComparison.Ordinal) ||
+           string.Equals(animationName, "Sprint", StringComparison.Ordinal) ||
+           string.Equals(animationName, "Stance", StringComparison.Ordinal) ||
+           string.Equals(animationName, "JumpLanding", StringComparison.Ordinal);
+  }
+
+  static bool _IsTransitionAnimation(string animationName) {
+    if (string.IsNullOrWhiteSpace(animationName)) return false;
+    if (!Animations.Esperanza.TryGetValue(animationName, out var anim) || anim == null) return false;
+    return anim.To == 1 || anim.To == 2;
+  }
+
+  void _LogAttackGate(string reason, string currentAnimation, string requestedAnimation) {
+    if (ForceDisableDebugLogsForPerfPass) return;
+    if (!logAttackGate) return;
+    if (lastAttackGateLogFrame == Time.frameCount) return;
+    lastAttackGateLogFrame = Time.frameCount;
+    Debug.Log(
+      "[GameplayInput] attack gate reason='" + reason +
+      "' current='" + (currentAnimation ?? "") +
+      "' requested='" + (requestedAnimation ?? "") + "'"
+    );
+  }
+
+  void _LogAttackFlow(
+    string stage,
+    string actionKey = null,
+    string mappedAnimation = null,
+    string note = null
+  ) {
+    if (ForceDisableDebugLogsForPerfPass) return;
+    if (!logAttackFlow) return;
+    if (!ShouldTraceAttackFlow(actionKey, mappedAnimation)) return;
+    var current = gearController != null ? gearController.CurrentAnimation : "";
+    var controllerPlaying = gearController != null &&
+      gearController.Controller != null &&
+      gearController.Controller.IsPlaying;
+    Debug.Log(
+      "[GameplayInput][AttackTrace] stage='" + (stage ?? "") +
+      "' action='" + (actionKey ?? "") +
+      "' mapped='" + (mappedAnimation ?? "") +
+      "' current='" + (current ?? "") +
+      "' playing=" + (controllerPlaying ? 1 : 0) +
+      " note='" + (note ?? "") + "'"
+    );
+  }
+
+  static bool ShouldTraceAttackFlow(string actionKey, string mappedAnimation) {
+    var isAttack1Action = string.Equals(actionKey, "attack1", StringComparison.Ordinal);
+    var isPunchLeftAnimation =
+      !string.IsNullOrWhiteSpace(mappedAnimation) &&
+      mappedAnimation.IndexOf("PunchLeft", StringComparison.OrdinalIgnoreCase) >= 0;
+    return isAttack1Action || isPunchLeftAnimation;
   }
 
   void _TryBoostJumpForAirAttack() {

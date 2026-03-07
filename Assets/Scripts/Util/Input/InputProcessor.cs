@@ -4,10 +4,14 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class InputProcessor : MonoBehaviour {
+  const float ScalarDispatchEpsilon = 0.0001f;
+  const float VectorDispatchEpsilonSqr = 0.0001f;
   public TestActions input;
   public string defaultMap;
   private string activeMap;
   Dictionary<InputAction, string> cachedNames = new();
+  readonly Dictionary<InputAction, float> lastScalarDispatchValues = new();
+  readonly Dictionary<InputAction, Vector2> lastVectorDispatchValues = new();
   public string ActiveMap => activeMap;
 
   void OnEnable() {
@@ -18,10 +22,14 @@ public class InputProcessor : MonoBehaviour {
 
   void OnDisable() {
     if (input != null) RemoveAllCalls();
+    lastScalarDispatchValues.Clear();
+    lastVectorDispatchValues.Clear();
   }
 
   public void SwitchMap(string mapName) {
     DisableAllMaps();
+    lastScalarDispatchValues.Clear();
+    lastVectorDispatchValues.Clear();
     activeMap = mapName ?? activeMap;
     var map = input.asset.FindActionMap(activeMap);
     map?.Enable();
@@ -35,21 +43,79 @@ public class InputProcessor : MonoBehaviour {
   }
 
   void Process(InputAction.CallbackContext ctx) {
-    var type = ctx.valueType;
-    object value;
-    if (type == typeof(Vector2)) value = ctx.ReadValue<Vector2>();
-    else if (type == typeof(float)) value = ctx.ReadValue<float>();
-    else if (type == typeof(int)) value = ctx.ReadValue<int>();
-    else if (type == typeof(bool)) value = ctx.ReadValue<float>() > 0.5f;
-    else value = ctx.ReadValueAsObject();
-
     if (!cachedNames.TryGetValue(ctx.action, out var name)) {
       name = ctx.action.actionMap.name + "." + ctx.action.name;
       cachedNames[ctx.action] = name;
     }
 
+    var isValueAction = ctx.action != null && ctx.action.type == InputActionType.Value;
+    var isButtonAction = ctx.action != null && ctx.action.type == InputActionType.Button;
+    var shouldDedupeValueDispatch =
+      (isValueAction && ctx.performed) ||
+      isButtonAction;
+    var type = ctx.valueType;
+    object value;
+    if (type == typeof(Vector2)) {
+      var vectorValue = ctx.ReadValue<Vector2>();
+      if (shouldDedupeValueDispatch &&
+          !ShouldDispatchVectorValue(ctx.action, vectorValue)) {
+        return;
+      }
+      value = vectorValue;
+    }
+    else if (type == typeof(float)) {
+      var scalarValue = ctx.ReadValue<float>();
+      if (shouldDedupeValueDispatch &&
+          !ShouldDispatchScalarValue(ctx.action, scalarValue)) {
+        return;
+      }
+      value = scalarValue;
+    }
+    else if (type == typeof(int)) {
+      var scalarValue = ctx.ReadValue<int>();
+      if (shouldDedupeValueDispatch &&
+          !ShouldDispatchScalarValue(ctx.action, scalarValue)) {
+        return;
+      }
+      value = scalarValue;
+    }
+    else if (type == typeof(bool)) {
+      var boolValue = ctx.ReadValue<float>() > 0.5f;
+      var scalarValue = boolValue ? 1f : 0f;
+      if (shouldDedupeValueDispatch &&
+          !ShouldDispatchScalarValue(ctx.action, scalarValue)) {
+        return;
+      }
+      value = boolValue;
+    }
+    else {
+      value = ctx.ReadValueAsObject();
+    }
+
     //Debug.Log($"[InputProcessor] {name} = {value}");
     MessageBus.Send(name, value);
+  }
+
+  bool ShouldDispatchVectorValue(InputAction action, Vector2 currentValue) {
+    if (action == null) return true;
+    if (lastVectorDispatchValues.TryGetValue(action, out var previousValue)) {
+      if ((currentValue - previousValue).sqrMagnitude <= VectorDispatchEpsilonSqr) {
+        return false;
+      }
+    }
+    lastVectorDispatchValues[action] = currentValue;
+    return true;
+  }
+
+  bool ShouldDispatchScalarValue(InputAction action, float currentValue) {
+    if (action == null) return true;
+    if (lastScalarDispatchValues.TryGetValue(action, out var previousValue)) {
+      if (Mathf.Abs(currentValue - previousValue) <= ScalarDispatchEpsilon) {
+        return false;
+      }
+    }
+    lastScalarDispatchValues[action] = currentValue;
+    return true;
   }
 
   private void SetupAllCalls() {
