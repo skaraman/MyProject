@@ -260,6 +260,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       " export_batch_count=" + exportBatches.Count);
 
     var exportedCount = 0;
+    var deletedSourceCount = 0;
     var failedCount = 0;
     var failureLogs = new List<string>();
 
@@ -285,6 +286,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
         continue;
       }
 
+      deletedSourceCount += DeletePackedSourceAssets(batch, exportedAtlasPath);
       exportedCount++;
       Debug.Log(
         "[TrimAtlasExport] Folder export wrote atlas." +
@@ -301,7 +303,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
 
     var summary =
       "Processed " + sourceAtlasCount + " source atlas(es) in " + exportBatches.Count + " export batch(es)." +
-      " Exported " + exportedCount + ", failed " + failedCount + ".";
+      " Exported " + exportedCount + ", deleted_sources " + deletedSourceCount + ", failed " + failedCount + ".";
     Debug.Log("[TrimAtlasExport] Folder export complete. " + summary);
     for (var i = 0; i < failureLogs.Count; i++) {
       Debug.LogWarning("[TrimAtlasExport] " + failureLogs[i]);
@@ -311,6 +313,37 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       "Folder Export Complete",
       failedCount > 0 ? summary + "\nSee Console for the first " + failureLogs.Count + " failure(s)." : summary,
       "OK");
+  }
+
+  static int DeletePackedSourceAssets(SourceAtlasExportBatch batch, string exportedAtlasPath) {
+    if (batch == null || batch.sourcePaths == null || batch.sourcePaths.Count <= 0) return 0;
+
+    var deletedCount = 0;
+    var normalizedExportedAtlasPath = NormalizeAssetPath(exportedAtlasPath);
+    for (var sourceIndex = 0; sourceIndex < batch.sourcePaths.Count; sourceIndex++) {
+      var sourcePath = NormalizeAssetPath(batch.sourcePaths[sourceIndex]);
+      if (string.IsNullOrWhiteSpace(sourcePath)) continue;
+      if (string.Equals(sourcePath, normalizedExportedAtlasPath, StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      if (!File.Exists(Path.GetFullPath(sourcePath))) continue;
+      if (!AssetDatabase.DeleteAsset(sourcePath)) {
+        Debug.LogWarning("[TrimAtlasExport] Failed to delete packed source atlas. asset='" + sourcePath + "'");
+        continue;
+      }
+
+      deletedCount++;
+    }
+
+    if (deletedCount > 0) {
+      Debug.Log(
+        "[TrimAtlasExport] Deleted packed source atlases after export." +
+        " output='" + normalizedExportedAtlasPath + "'" +
+        " deleted_sources=" + deletedCount);
+    }
+
+    return deletedCount;
   }
 
   bool EnsureAnalysisAvailable(string sourcePath, string outputFolderPath, out string error) {
@@ -387,7 +420,15 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
         packedArea += (long)exportedBuildItems[i].Width * exportedBuildItems[i].Height;
       }
 
-      PackTrimmedSprites(exportedBuildItems, out var packedWidth, out var packedHeight);
+      if (!TryPackTrimmedSprites(exportedBuildItems, out var packedWidth, out var packedHeight, out error)) {
+        buildItems = null;
+        if (previewTexture != null) {
+          DestroyImmediate(previewTexture);
+          previewTexture = null;
+        }
+
+        return false;
+      }
 
       exportData = new TrimmedAtlasExport {
         sourceAtlasAssetPath = sourcePath,
@@ -513,7 +554,9 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       packedArea += (long)exportedBuildItems[i].Width * exportedBuildItems[i].Height;
     }
 
-    PackTrimmedSprites(exportedBuildItems, out var packedWidth, out var packedHeight);
+    if (!TryPackTrimmedSprites(exportedBuildItems, out var packedWidth, out var packedHeight, out error)) {
+      return false;
+    }
 
     exportData = new TrimmedAtlasExport {
       sourceAtlasAssetPath = batch.primarySourcePath,
@@ -617,16 +660,50 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     return trimmedPixels;
   }
 
-  void PackTrimmedSprites(List<TrimmedSpriteBuildData> items, out int packedWidth, out int packedHeight) {
+  bool TryPackTrimmedSprites(List<TrimmedSpriteBuildData> items, out int packedWidth, out int packedHeight, out string error) {
+    packedWidth = 1;
+    packedHeight = 1;
+    error = "";
     if (items == null || items.Count <= 0) {
-      packedWidth = 1;
-      packedHeight = 1;
-      return;
+      return true;
     }
 
-    var widestSprite = items.Max(item => item.Width);
-    var targetWidth = Math.Max(widestSprite + (padding * 2), maxAtlasWidth);
-    var ordered = items.OrderByDescending(item => item.Height).ThenByDescending(item => item.Width).ThenBy(item => item.metadata.index).ToList();
+    var targetWidth = Math.Max(1, maxAtlasWidth);
+    var maxContentWidth = Math.Max(1, targetWidth - (padding * 2));
+    TrimmedSpriteBuildData widestItem = null;
+    var widestSprite = 0;
+    for (var i = 0; i < items.Count; i++) {
+      var item = items[i];
+      if (item == null || item.metadata == null) continue;
+      if (item.Width <= widestSprite) continue;
+
+      widestSprite = item.Width;
+      widestItem = item;
+    }
+
+    if (widestItem == null) {
+      return true;
+    }
+
+    if (widestSprite > maxContentWidth) {
+      var spriteName = string.IsNullOrWhiteSpace(widestItem.metadata.name) ? "<unnamed>" : widestItem.metadata.name;
+      error = "Trimmed sprite '" + spriteName + "' is too wide to fit within the max atlas width once padding is applied.";
+      Debug.LogWarning(
+        "[TrimAtlasExport] Trimmed sprite exceeds padded atlas width." +
+        " sprite='" + spriteName + "'" +
+        " sprite_width=" + widestSprite +
+        " max_content_width=" + maxContentWidth +
+        " atlas_limit=" + targetWidth +
+        " padding=" + padding);
+      return false;
+    }
+
+    var ordered = items
+      .Where(item => item != null && item.metadata != null)
+      .OrderByDescending(item => item.Height)
+      .ThenByDescending(item => item.Width)
+      .ThenBy(item => item.metadata.index)
+      .ToList();
 
     var x = padding;
     var y = padding;
@@ -646,8 +723,19 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       if (x > usedWidth) usedWidth = x;
     }
 
-    packedWidth = Math.Max(1, usedWidth + padding);
+    packedWidth = Math.Max(1, usedWidth);
     packedHeight = Math.Max(1, y + rowHeight + padding);
+    if (packedWidth > targetWidth) {
+      error = "Packed atlas width exceeded the configured max atlas width.";
+      Debug.LogWarning(
+        "[TrimAtlasExport] Packed atlas width exceeded limit after packing." +
+        " packed_width=" + packedWidth +
+        " atlas_limit=" + targetWidth +
+        " padding=" + padding);
+      return false;
+    }
+
+    return true;
   }
 
   Texture2D BuildPackedTexture(int packedWidth, int packedHeight, List<TrimmedSpriteBuildData> items) {

@@ -51,12 +51,15 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     public string category;
     public string form;
     public string variant;
+    public string partCode;
     public string fileBase;
     public string sourceKind;
+    public int sourceAtlasCount;
     public int pageIndex;
     public int atlasWidth;
     public int atlasHeight;
     public int padding;
+    public List<string> sourceCategories = new();
     public List<GroupedAtlasSpriteMetadata> sprites = new();
   }
 
@@ -64,6 +67,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   sealed class GroupedAtlasSpriteMetadata {
     public string name;
     public bool empty;
+    public string sourceCategory;
     public string sourceAtlasAssetPath;
     public string sourceSpriteName;
     public string sourcePartCode;
@@ -98,19 +102,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
   }
 
-  sealed class GroupDefinition {
-    public string groupKey;
-    public string form;
-    public string variant;
-    public string slot;
-    public List<PartDefinition> parts = new();
-  }
-
-  sealed class PartDefinition {
-    public string token;
-    public string partCode;
-  }
-
   sealed class SourceAtlasRecord {
     public string category;
     public string form;
@@ -122,13 +113,12 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   sealed class GroupCandidate {
-    public GroupDefinition definition;
-    public string category;
     public string form;
     public string variant;
-    public string fileBase;
-    public Dictionary<string, SourceAtlasRecord> atlasesByPartCode = new(StringComparer.OrdinalIgnoreCase);
-    public List<string> missingPartTokens = new();
+    public string partCode;
+    public bool isSkin;
+    public List<SourceAtlasRecord> sourceAtlases = new();
+    public List<string> sourceCategories = new();
     public int normalAtlasCount;
   }
 
@@ -142,6 +132,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
   sealed class PackedSpriteBuildItem {
     public string outputSpriteName;
+    public string sourceCategory;
     public string colorSourceAtlasPath;
     public string normalSourceAtlasPath;
     public string sourceSpriteName;
@@ -316,7 +307,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     EditorGUILayout.Space();
     EditorGUILayout.LabelField("Rebind Sprite Libraries", EditorStyles.boldLabel);
     EditorGUILayout.HelpBox(
-      "Choose the grouped atlas source root, the grouped output subfolder to read, and the target sprite-library folder to update. Gear labels use form + variant prefixes like 'Aqua_aa_1'. Skin labels stay numeric like '1'.",
+      "Choose the grouped atlas source root, the grouped output subfolder to read, and the target sprite-library folder to update. Exports combine matching animation folders by form + variant + part, and grouped slice names include the animation prefix such as 'Breathe_1_11'.",
       MessageType.None);
     rebindSourceFolder = (DefaultAsset)EditorGUILayout.ObjectField("Grouped Source Folder", rebindSourceFolder, typeof(DefaultAsset), false);
     rebindOutputSubfolderName = EditorGUILayout.DelayedTextField("Grouped Output Subfolder", rebindOutputSubfolderName ?? "");
@@ -354,7 +345,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     scannedCandidates = CollectGroupCandidates(sourceFolderPath, sanitizedOutputSubfolder);
     analyzedSourceFolderPath = sourceFolderPath;
-    var totalAtlasCount = scannedCandidates.Sum(candidate => candidate.atlasesByPartCode.Count);
+    var totalAtlasCount = scannedCandidates.Sum(candidate => candidate.sourceAtlases.Count);
     var skinCandidateCount = scannedCandidates.Count(IsSkinCandidate);
     Debug.Log(
       "[GearGroupAtlas] Scan complete." +
@@ -381,7 +372,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     for (var i = 0; i < scannedCandidates.Count; i++) {
       var candidate = scannedCandidates[i];
-      if (!TryExportCandidate(candidate, sanitizedOutputSubfolder, out var pageCount, out var error)) {
+      if (!TryExportCandidate(sourceFolderPath, candidate, sanitizedOutputSubfolder, out var pageCount, out var error)) {
         AddFailureLog(failureLogs, BuildCandidateLabel(candidate), error);
         continue;
       }
@@ -431,15 +422,13 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       return;
     }
 
-    var totalAtlasCount = scannedCandidates.Sum(candidate => candidate.atlasesByPartCode.Count);
-    var candidateWithMissingParts = scannedCandidates.Count(candidate => candidate.missingPartTokens.Count > 0);
+    var totalAtlasCount = scannedCandidates.Sum(candidate => candidate.sourceAtlases.Count);
     var skinCandidateCount = scannedCandidates.Count(IsSkinCandidate);
     EditorGUILayout.LabelField(
       "Summary",
       "candidates=" + scannedCandidates.Count +
       ", skin_candidates=" + skinCandidateCount +
-      ", matched_atlases=" + totalAtlasCount +
-      ", partial_groups=" + candidateWithMissingParts);
+      ", matched_atlases=" + totalAtlasCount);
 
     using (var scroll = new EditorGUILayout.ScrollViewScope(resultsScrollPosition, GUILayout.Height(320f))) {
       resultsScrollPosition = scroll.scrollPosition;
@@ -447,26 +436,25 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         var candidate = scannedCandidates[i];
         using (new EditorGUILayout.VerticalScope("box")) {
           EditorGUILayout.LabelField(BuildCandidateLabel(candidate), EditorStyles.boldLabel);
+          EditorGUILayout.LabelField("Source Atlases", candidate.sourceAtlases.Count.ToString(CultureInfo.InvariantCulture));
           EditorGUILayout.LabelField(
-            "Found Parts",
-            string.Join(", ", candidate.definition.parts.Where(part => candidate.atlasesByPartCode.ContainsKey(part.partCode)).Select(part => part.token)));
-          EditorGUILayout.LabelField(
-            "Missing Parts",
-            candidate.missingPartTokens.Count > 0 ? string.Join(", ", candidate.missingPartTokens) : "(none)");
-          EditorGUILayout.LabelField("Normal Atlases", exportNormals ? (candidate.normalAtlasCount + "/" + candidate.atlasesByPartCode.Count) : "(disabled)");
+            "Animations",
+            candidate.sourceCategories.Count > 0 ? string.Join(", ", candidate.sourceCategories) : "(none)");
+          EditorGUILayout.LabelField("Normal Atlases", exportNormals ? (candidate.normalAtlasCount + "/" + candidate.sourceAtlases.Count) : "(disabled)");
         }
       }
     }
   }
 
   bool TryExportCandidate(
+    string sourceRootPath,
     GroupCandidate candidate,
     string sanitizedOutputSubfolder,
     out int exportedPageCount,
     out string error) {
     exportedPageCount = 0;
     error = "";
-    if (candidate == null || candidate.definition == null) {
+    if (candidate == null) {
       error = "Missing group candidate data.";
       return false;
     }
@@ -479,7 +467,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       return false;
     }
 
-    var outputFolderPath = BuildCandidateOutputFolderPath(candidate, sanitizedOutputSubfolder);
+    var outputFolderPath = BuildCandidateOutputFolderPath(sourceRootPath, candidate, sanitizedOutputSubfolder);
     if (string.IsNullOrWhiteSpace(outputFolderPath)) {
       error = "Could not resolve an output folder for group '" + BuildCandidateLabel(candidate) + "'.";
       return false;
@@ -493,6 +481,12 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       if (exportNormals) {
         page.normalAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, page.pageIndex, true);
       }
+    }
+
+    CleanupStaleCandidateOutputs(outputFolderPath, candidate, pages, exportNormals);
+
+    for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++) {
+      var page = pages[pageIndex];
 
       if (!TryWritePageTexture(page.colorAtlasPath, page, false, out error)) {
         return false;
@@ -524,8 +518,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " kind='" + (IsSkinCandidate(candidate) ? "skin" : "gear") + "'" +
       " pages=" + pages.Count +
       " sprites=" + items.Count +
-      " found_parts=" + candidate.atlasesByPartCode.Count +
-      " missing_parts=" + candidate.missingPartTokens.Count);
+      " source_atlases=" + candidate.sourceAtlases.Count +
+      " animations=" + candidate.sourceCategories.Count);
     return true;
   }
 
@@ -553,9 +547,9 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     for (var candidateIndex = 0; candidateIndex < exportedCandidates.Count; candidateIndex++) {
       var candidate = exportedCandidates[candidateIndex];
-      if (candidate?.atlasesByPartCode == null) continue;
+      if (candidate?.sourceAtlases == null) continue;
 
-      foreach (var record in candidate.atlasesByPartCode.Values) {
+      foreach (var record in candidate.sourceAtlases) {
         if (record == null) continue;
 
         AddCleanupAssetPath(sourceAssetPaths, record.atlasPath);
@@ -663,11 +657,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     var loadedAtlases = new Dictionary<string, LoadedAtlas>(StringComparer.OrdinalIgnoreCase);
     try {
-      for (var i = 0; i < candidate.definition.parts.Count; i++) {
-        var part = candidate.definition.parts[i];
-        if (!candidate.atlasesByPartCode.TryGetValue(part.partCode, out var record)) {
-          continue;
-        }
+      var orderedRecords = candidate.sourceAtlases ?? new List<SourceAtlasRecord>();
+      for (var i = 0; i < orderedRecords.Count; i++) {
+        var record = orderedRecords[i];
+        if (record == null) continue;
 
         if (string.IsNullOrWhiteSpace(representativeSourceAtlasPath)) {
           representativeSourceAtlasPath = record.atlasPath;
@@ -780,7 +773,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     var sourceRect = ToPixelRect(colorSprite.rect);
     AnalyzeTrimmedSprite(colorAtlas, sourceRect, out var trimRect, out var offsetPx, out var colorTrimPixels, out var empty);
     item = new PackedSpriteBuildItem {
-      outputSpriteName = BuildGroupedSpriteName(record.partCode, colorSprite.name),
+      outputSpriteName = BuildGroupedSpriteName(record.partCode, record.category, colorSprite.name),
+      sourceCategory = record.category,
       colorSourceAtlasPath = NormalizePath(record.atlasPath),
       normalSourceAtlasPath = NormalizePath(!string.IsNullOrWhiteSpace(record.normalAtlasPath) ? record.normalAtlasPath : record.atlasPath),
       sourceSpriteName = colorSprite.name,
@@ -956,7 +950,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
   void FinalizePage(AtlasPage page, int usedWidth, int y, int rowHeight) {
     if (page == null) return;
-    page.width = Mathf.Max(1, usedWidth + padding);
+    page.width = Mathf.Max(1, usedWidth);
     page.height = Mathf.Max(1, y + rowHeight + padding);
   }
 
@@ -1008,23 +1002,29 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   bool TryWriteMetadata(string atlasAssetPath, GroupCandidate candidate, AtlasPage page, bool isNormalMetadata, out string error) {
     error = "";
     var payload = new GroupedAtlasMetadataPayload {
-      groupKey = candidate.definition.groupKey,
-      category = candidate.category,
+      groupKey = IsSkinCandidate(candidate) ? SkinGroupKey : BuildOutputFilePrefix(candidate),
+      category = candidate.sourceCategories.FirstOrDefault() ?? "",
       form = candidate.form,
       variant = candidate.variant,
-      fileBase = candidate.fileBase,
+      partCode = candidate.partCode,
+      fileBase = "",
       sourceKind = isNormalMetadata ? "normal" : "color",
+      sourceAtlasCount = candidate.sourceAtlases?.Count ?? 0,
       pageIndex = page.pageIndex,
       atlasWidth = page.width,
       atlasHeight = page.height,
       padding = padding
     };
+    if (candidate.sourceCategories != null && candidate.sourceCategories.Count > 0) {
+      payload.sourceCategories.AddRange(candidate.sourceCategories);
+    }
 
     for (var i = 0; i < page.items.Count; i++) {
       var item = page.items[i];
       payload.sprites.Add(new GroupedAtlasSpriteMetadata {
         name = item.outputSpriteName,
         empty = item.empty,
+        sourceCategory = item.sourceCategory,
         sourceAtlasAssetPath = isNormalMetadata ? item.normalSourceAtlasPath : item.colorSourceAtlasPath,
         sourceSpriteName = item.sourceSpriteName,
         sourcePartCode = item.sourcePartCode,
@@ -1159,8 +1159,9 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     error = "";
 
     var normalizedSourceFolderPath = NormalizePath(sourceFolderPath).TrimEnd('/');
-    var outputMarker = "/" + (sanitizedOutputSubfolder ?? "").Trim().Trim('/') + "/";
-    if (string.IsNullOrWhiteSpace(normalizedSourceFolderPath) || string.IsNullOrWhiteSpace(outputMarker)) {
+    var normalizedOutputSubfolder = (sanitizedOutputSubfolder ?? "").Trim().Trim('/');
+    var groupedOutputRoot = NormalizePath(normalizedSourceFolderPath + "/" + normalizedOutputSubfolder).TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(normalizedSourceFolderPath) || string.IsNullOrWhiteSpace(normalizedOutputSubfolder) || string.IsNullOrWhiteSpace(groupedOutputRoot)) {
       error = "Missing source folder or grouped atlas output subfolder.";
       return false;
     }
@@ -1180,7 +1181,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       if (!TryConvertFullPathToAssetPath(metadataFullPath, out var metadataAssetPath)) continue;
 
       metadataAssetPath = NormalizePath(metadataAssetPath);
-      if (metadataAssetPath.IndexOf(outputMarker, StringComparison.OrdinalIgnoreCase) < 0) continue;
+      if (!metadataAssetPath.StartsWith(groupedOutputRoot + "/", StringComparison.OrdinalIgnoreCase)) continue;
 
       GroupedAtlasMetadataPayload payload;
       try {
@@ -1228,13 +1229,20 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         if (groupedSprite == null || string.IsNullOrWhiteSpace(groupedSprite.name)) continue;
         if (!spritesByName.TryGetValue(groupedSprite.name, out var replacementSprite) || replacementSprite == null) continue;
 
-        var partCode = string.IsNullOrWhiteSpace(groupedSprite.sourcePartCode) ? "" : groupedSprite.sourcePartCode.Trim();
+        var sourceCategory = string.IsNullOrWhiteSpace(groupedSprite.sourceCategory)
+          ? (payload.category ?? "").Trim()
+          : groupedSprite.sourceCategory.Trim();
+        if (string.IsNullOrWhiteSpace(sourceCategory)) continue;
+
+        var partCode = string.IsNullOrWhiteSpace(groupedSprite.sourcePartCode)
+          ? (payload.partCode ?? "").Trim()
+          : groupedSprite.sourcePartCode.Trim();
         if (string.IsNullOrWhiteSpace(partCode) && !TryExtractPartCode(groupedSprite.name, out partCode)) continue;
 
         var label = BuildLibraryEntryLabel(payload, groupedSprite);
         if (string.IsNullOrWhiteSpace(label)) continue;
 
-        var key = new LibraryEntryKey(isNormalAtlas, isSkinLibrary, payload.category, partCode, label);
+        var key = new LibraryEntryKey(isNormalAtlas, isSkinLibrary, sourceCategory, partCode, label);
         TryAddGroupedSpriteReplacement(
           replacementIndex,
           key,
@@ -1242,6 +1250,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           atlasAssetPath,
           groupedSprite.name,
           groupedSprite.sourceSpriteName,
+          sourceCategory,
           payload.form,
           payload.variant);
       }
@@ -1272,6 +1281,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     string atlasAssetPath,
     string groupedSpriteName,
     string sourceSpriteName,
+    string sourceCategory,
     string form,
     string variant) {
     if (replacementIndex == null || replacementSprite == null) return;
@@ -1284,6 +1294,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         " label='" + key.label + "'" +
         " normal=" + key.scopeKey.isNormal +
         " skin=" + key.scopeKey.isSkinLibrary +
+        " source_category='" + (sourceCategory ?? "") + "'" +
         " form='" + (form ?? "") + "'" +
         " variant='" + (variant ?? "") + "'" +
         " source_sprite='" + (sourceSpriteName ?? "") + "'" +
@@ -1623,6 +1634,38 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return deletedAssets;
   }
 
+  void CleanupStaleCandidateOutputs(string outputFolderPath, GroupCandidate candidate, List<AtlasPage> pages, bool includeNormalAtlases) {
+    if (string.IsNullOrWhiteSpace(outputFolderPath) || candidate == null || pages == null) return;
+
+    var cleanupPlan = new CleanupPlan {
+      folderPath = outputFolderPath,
+      filePrefix = BuildOutputFilePrefix(candidate),
+      isSkinLibrary = IsSkinCandidate(candidate)
+    };
+
+    for (var i = 0; i < pages.Count; i++) {
+      var page = pages[i];
+      if (page == null) continue;
+
+      if (!string.IsNullOrWhiteSpace(page.colorAtlasPath)) {
+        cleanupPlan.keepAssetPaths.Add(page.colorAtlasPath);
+        cleanupPlan.keepAssetPaths.Add(Path.ChangeExtension(page.colorAtlasPath, ".json").Replace("\\", "/"));
+      }
+
+      if (!includeNormalAtlases || string.IsNullOrWhiteSpace(page.normalAtlasPath)) continue;
+      cleanupPlan.keepAssetPaths.Add(page.normalAtlasPath);
+      cleanupPlan.keepAssetPaths.Add(Path.ChangeExtension(page.normalAtlasPath, ".json").Replace("\\", "/"));
+    }
+
+    var deletedCount = CleanupStaleOutputs(new List<CleanupPlan> { cleanupPlan });
+    if (deletedCount > 0) {
+      Debug.Log(
+        "[GearGroupAtlas] Deleted stale output assets before overwrite." +
+        " group='" + BuildCandidateLabel(candidate) + "'" +
+        " deleted_assets=" + deletedCount);
+    }
+  }
+
   static bool IsCleanupCandidateExtension(string extension) {
     return string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
@@ -1631,8 +1674,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   List<GroupCandidate> CollectGroupCandidates(string sourceFolderPath, string sanitizedOutputSubfolder) {
-    var definitions = BuildGroupDefinitions();
-    var definitionsByPartKey = BuildGroupDefinitionLookup(definitions);
     var candidatesByKey = new Dictionary<string, GroupCandidate>(StringComparer.OrdinalIgnoreCase);
 
     var textureGuids = AssetDatabase.FindAssets("t:Texture2D", new[] { sourceFolderPath });
@@ -1653,51 +1694,24 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         fileBase = fileBase
       };
 
-      if (isSkin) {
-        AddSkinCandidate(candidatesByKey, record);
-        continue;
+      var candidateKey = BuildCandidateKey(record, isSkin);
+      if (!candidatesByKey.TryGetValue(candidateKey, out var candidate) || candidate == null) {
+        candidate = new GroupCandidate {
+          form = form,
+          variant = variant,
+          partCode = partCode,
+          isSkin = isSkin
+        };
+        candidatesByKey[candidateKey] = candidate;
       }
 
-      var lookupKey = BuildDefinitionLookupKey(form, variant, partCode);
-      if (!definitionsByPartKey.TryGetValue(lookupKey, out var matchingDefinitions) || matchingDefinitions == null || matchingDefinitions.Count <= 0) {
-        continue;
-      }
-
-      for (var defIndex = 0; defIndex < matchingDefinitions.Count; defIndex++) {
-        var definition = matchingDefinitions[defIndex];
-        var candidateKey = category + "|" + definition.groupKey + "|" + fileBase;
-        if (!candidatesByKey.TryGetValue(candidateKey, out var candidate) || candidate == null) {
-          candidate = new GroupCandidate {
-            definition = definition,
-            category = category,
-            form = form,
-            variant = variant,
-            fileBase = fileBase
-          };
-          candidatesByKey[candidateKey] = candidate;
-        }
-
-        candidate.atlasesByPartCode[partCode] = record;
-      }
+      candidate.sourceAtlases.Add(record);
     }
 
     var candidates = candidatesByKey.Values.ToList();
     for (var i = 0; i < candidates.Count; i++) {
       var candidate = candidates[i];
-      FinalizeCandidateParts(candidate);
-      candidate.normalAtlasCount = 0;
-      candidate.missingPartTokens.Clear();
-      for (var partIndex = 0; partIndex < candidate.definition.parts.Count; partIndex++) {
-        var part = candidate.definition.parts[partIndex];
-        if (!candidate.atlasesByPartCode.TryGetValue(part.partCode, out var record) || record == null) {
-          candidate.missingPartTokens.Add(part.token);
-          continue;
-        }
-
-        if (!string.IsNullOrWhiteSpace(record.normalAtlasPath)) {
-          candidate.normalAtlasCount++;
-        }
-      }
+      FinalizeCandidate(candidate);
     }
 
     candidates.Sort(CompareCandidates);
@@ -1705,125 +1719,54 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   static int CompareCandidates(GroupCandidate left, GroupCandidate right) {
-    var categoryCompare = string.Compare(left?.category, right?.category, StringComparison.OrdinalIgnoreCase);
-    if (categoryCompare != 0) return categoryCompare;
-
     var formCompare = string.Compare(left?.form, right?.form, StringComparison.OrdinalIgnoreCase);
     if (formCompare != 0) return formCompare;
 
     var variantCompare = string.Compare(left?.variant, right?.variant, StringComparison.OrdinalIgnoreCase);
     if (variantCompare != 0) return variantCompare;
 
-    var groupCompare = string.Compare(left?.definition?.groupKey, right?.definition?.groupKey, StringComparison.OrdinalIgnoreCase);
-    if (groupCompare != 0) return groupCompare;
+    var partCompare = string.Compare(left?.partCode, right?.partCode, StringComparison.OrdinalIgnoreCase);
+    if (partCompare != 0) return partCompare;
 
-    return string.Compare(left?.fileBase, right?.fileBase, StringComparison.OrdinalIgnoreCase);
+    return string.Compare(BuildCandidateAnimationSummary(left), BuildCandidateAnimationSummary(right), StringComparison.OrdinalIgnoreCase);
   }
 
-  static void AddSkinCandidate(Dictionary<string, GroupCandidate> candidatesByKey, SourceAtlasRecord record) {
-    if (candidatesByKey == null || record == null || string.IsNullOrWhiteSpace(record.category) || string.IsNullOrWhiteSpace(record.fileBase)) {
-      return;
+  static string BuildCandidateKey(SourceAtlasRecord record, bool isSkin) {
+    if (record == null) return "";
+    if (isSkin) {
+      return SkinGroupKey + "|" + (record.partCode ?? "");
     }
 
-    var candidateKey = record.category + "|" + SkinGroupKey + "|" + record.fileBase;
-    if (!candidatesByKey.TryGetValue(candidateKey, out var candidate) || candidate == null) {
-      candidate = new GroupCandidate {
-        definition = new GroupDefinition {
-          groupKey = SkinGroupKey,
-          form = SkinFormName,
-          variant = SkinVariantName,
-          slot = SkinGroupKey
-        },
-        category = record.category,
-        form = SkinFormName,
-        variant = SkinVariantName,
-        fileBase = record.fileBase
-      };
-      candidatesByKey[candidateKey] = candidate;
+    return (record.form ?? "") + "|" + (record.variant ?? "") + "|" + (record.partCode ?? "");
+  }
+
+  static string BuildCandidateAnimationSummary(GroupCandidate candidate) {
+    if (candidate?.sourceCategories == null || candidate.sourceCategories.Count <= 0) return "";
+    return string.Join("|", candidate.sourceCategories);
+  }
+
+  static void FinalizeCandidate(GroupCandidate candidate) {
+    if (candidate == null) return;
+
+    if (candidate.sourceAtlases == null) {
+      candidate.sourceAtlases = new List<SourceAtlasRecord>();
     }
 
-    candidate.atlasesByPartCode[record.partCode] = record;
-  }
+    candidate.sourceAtlases = candidate.sourceAtlases
+      .Where(record => record != null)
+      .OrderBy(record => record.category, StringComparer.OrdinalIgnoreCase)
+      .ThenBy(record => record.fileBase, StringComparer.OrdinalIgnoreCase)
+      .ThenBy(record => record.atlasPath, StringComparer.OrdinalIgnoreCase)
+      .ToList();
 
-  static Dictionary<string, List<GroupDefinition>> BuildGroupDefinitionLookup(List<GroupDefinition> definitions) {
-    var lookup = new Dictionary<string, List<GroupDefinition>>(StringComparer.OrdinalIgnoreCase);
-    for (var i = 0; i < definitions.Count; i++) {
-      var definition = definitions[i];
-      if (definition == null) continue;
+    candidate.sourceCategories = candidate.sourceAtlases
+      .Select(record => (record.category ?? "").Trim())
+      .Where(category => !string.IsNullOrWhiteSpace(category))
+      .Distinct(StringComparer.OrdinalIgnoreCase)
+      .OrderBy(category => category, StringComparer.OrdinalIgnoreCase)
+      .ToList();
 
-      for (var partIndex = 0; partIndex < definition.parts.Count; partIndex++) {
-        var part = definition.parts[partIndex];
-        if (part == null || string.IsNullOrWhiteSpace(part.partCode)) continue;
-
-        var key = BuildDefinitionLookupKey(definition.form, definition.variant, part.partCode);
-        if (!lookup.TryGetValue(key, out var list) || list == null) {
-          list = new List<GroupDefinition>();
-          lookup[key] = list;
-        }
-
-        list.Add(definition);
-      }
-    }
-
-    return lookup;
-  }
-
-  static string BuildDefinitionLookupKey(string form, string variant, string partCode) {
-    return (form ?? "") + "|" + (variant ?? "") + "|" + (partCode ?? "");
-  }
-
-  static List<GroupDefinition> BuildGroupDefinitions() {
-    var definitions = new List<GroupDefinition>();
-    foreach (var pair in EsperanzaGearParts.gearParts) {
-      var groupKey = pair.Key ?? "";
-      if (groupKey.EndsWith("_no_Head", StringComparison.OrdinalIgnoreCase)) continue;
-      if (!TryParseGroupKey(groupKey, out var form, out var variant, out var slot)) continue;
-
-      var definition = new GroupDefinition {
-        groupKey = groupKey,
-        form = form,
-        variant = variant,
-        slot = slot
-      };
-
-      var seenPartCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-      var parts = pair.Value ?? new List<string>();
-      for (var i = 0; i < parts.Count; i++) {
-        var token = parts[i];
-        var partCode = ResolvePartCode(token);
-        if (string.IsNullOrWhiteSpace(partCode) || !seenPartCodes.Add(partCode)) continue;
-
-        definition.parts.Add(new PartDefinition {
-          token = string.IsNullOrWhiteSpace(token) ? partCode : token,
-          partCode = partCode
-        });
-      }
-
-      if (definition.parts.Count > 0) {
-        definitions.Add(definition);
-      }
-    }
-
-    return definitions;
-  }
-
-  static bool TryParseGroupKey(string groupKey, out string form, out string variant, out string slot) {
-    form = "";
-    variant = "";
-    slot = "";
-    if (string.IsNullOrWhiteSpace(groupKey)) return false;
-
-    var firstUnderscore = groupKey.IndexOf('_');
-    if (firstUnderscore <= 0 || firstUnderscore >= groupKey.Length - 1) return false;
-    var secondUnderscore = groupKey.IndexOf('_', firstUnderscore + 1);
-    if (secondUnderscore <= firstUnderscore + 1 || secondUnderscore >= groupKey.Length - 1) return false;
-
-    form = groupKey.Substring(0, firstUnderscore);
-    variant = groupKey.Substring(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1);
-    slot = groupKey.Substring(secondUnderscore + 1);
-    return !string.IsNullOrWhiteSpace(form) &&
-           !string.IsNullOrWhiteSpace(variant) &&
-           !string.IsNullOrWhiteSpace(slot);
+    candidate.normalAtlasCount = candidate.sourceAtlases.Count(record => !string.IsNullOrWhiteSpace(record.normalAtlasPath));
   }
 
   static string ResolvePartCode(string token) {
@@ -2012,23 +1955,22 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return false;
   }
 
-  string BuildCandidateOutputFolderPath(GroupCandidate candidate, string sanitizedOutputSubfolder) {
-    if (candidate == null || candidate.atlasesByPartCode == null || candidate.atlasesByPartCode.Count <= 0) {
+  string BuildCandidateOutputFolderPath(string sourceRootPath, GroupCandidate candidate, string sanitizedOutputSubfolder) {
+    if (candidate == null || candidate.sourceAtlases == null || candidate.sourceAtlases.Count <= 0) {
       return "";
     }
 
-    var firstRecord = candidate.atlasesByPartCode.Values.OrderBy(record => record.partCode, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
-    if (firstRecord == null || string.IsNullOrWhiteSpace(firstRecord.atlasPath)) {
+    var normalizedSourceRootPath = NormalizePath(sourceRootPath).TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(normalizedSourceRootPath) || string.IsNullOrWhiteSpace(sanitizedOutputSubfolder)) {
       return "";
     }
 
-    var partFolderPath = NormalizePath(Path.GetDirectoryName(firstRecord.atlasPath));
-    var variantFolderPath = NormalizePath(Path.GetDirectoryName(partFolderPath));
-    if (string.IsNullOrWhiteSpace(variantFolderPath)) {
-      return "";
+    var outputFolderPath = normalizedSourceRootPath + "/" + sanitizedOutputSubfolder.Trim('/');
+    if (IsSkinCandidate(candidate)) {
+      return NormalizePath(outputFolderPath + "/" + SkinFormName + "/" + candidate.partCode);
     }
 
-    return NormalizePath(variantFolderPath + "/" + sanitizedOutputSubfolder);
+    return NormalizePath(outputFolderPath + "/" + candidate.form + "/" + candidate.variant + "/" + candidate.partCode);
   }
 
   string BuildPageAtlasAssetPath(string outputFolderPath, GroupCandidate candidate, int pageIndex, bool isNormalAtlas) {
@@ -2037,11 +1979,22 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   static string BuildOutputFilePrefix(GroupCandidate candidate) {
-    return (candidate?.definition?.groupKey ?? "Grouped") + "_" + (candidate?.fileBase ?? "0");
+    if (candidate == null) return "Grouped";
+    if (IsSkinCandidate(candidate)) {
+      return SkinGroupKey + "_" + (candidate.partCode ?? "part");
+    }
+
+    return (candidate.form ?? "Form") + "_" + (candidate.variant ?? "Variant") + "_" + (candidate.partCode ?? "part");
   }
 
-  static string BuildGroupedSpriteName(string partCode, string sourceSpriteName) {
-    return (partCode ?? "part") + "__" + (sourceSpriteName ?? "sprite");
+  static string BuildGroupedSpriteName(string partCode, string sourceCategory, string sourceSpriteName) {
+    var normalizedCategory = string.IsNullOrWhiteSpace(sourceCategory) ? "Anim" : sourceCategory.Trim();
+    var normalizedSpriteName = string.IsNullOrWhiteSpace(sourceSpriteName) ? "sprite" : sourceSpriteName.Trim();
+    if (normalizedSpriteName.StartsWith(normalizedCategory + "_", StringComparison.OrdinalIgnoreCase)) {
+      return (partCode ?? "part") + "__" + normalizedSpriteName;
+    }
+
+    return (partCode ?? "part") + "__" + normalizedCategory + "_" + normalizedSpriteName;
   }
 
   string GetSanitizedOutputSubfolderName() {
@@ -2069,38 +2022,19 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   static string BuildCandidateLabel(GroupCandidate candidate) {
-    if (candidate == null || candidate.definition == null) return "<invalid>";
+    if (candidate == null) return "<invalid>";
     if (IsSkinCandidate(candidate)) {
-      return candidate.category + "/" + SkinFormName + " :: " + candidate.fileBase;
+      return SkinFormName + "/" + candidate.partCode + " :: " + BuildCandidateAnimationSummary(candidate);
     }
-    return candidate.category + "/" + candidate.form + "/" + candidate.variant + " :: " + candidate.definition.groupKey + " :: " + candidate.fileBase;
+    return candidate.form + "/" + candidate.variant + "/" + candidate.partCode + " :: " + BuildCandidateAnimationSummary(candidate);
   }
 
   static bool IsSkinCandidate(GroupCandidate candidate) {
-    return candidate != null &&
-           candidate.definition != null &&
-           IsSkinGroupKey(candidate.definition.groupKey);
+    return candidate != null && candidate.isSkin;
   }
 
   static bool IsSkinGroupKey(string groupKey) {
     return string.Equals(groupKey, SkinGroupKey, StringComparison.OrdinalIgnoreCase);
-  }
-
-  static void FinalizeCandidateParts(GroupCandidate candidate) {
-    if (candidate?.definition == null) return;
-    if (!IsSkinCandidate(candidate)) return;
-
-    candidate.definition.parts.Clear();
-    var partCodes = candidate.atlasesByPartCode.Keys.ToList();
-    partCodes.Sort(StringComparer.OrdinalIgnoreCase);
-    for (var i = 0; i < partCodes.Count; i++) {
-      var partCode = partCodes[i];
-      if (string.IsNullOrWhiteSpace(partCode)) continue;
-      candidate.definition.parts.Add(new PartDefinition {
-        token = partCode,
-        partCode = partCode
-      });
-    }
   }
 
   static void AddFailureLog(List<string> failureLogs, string context, string error) {
