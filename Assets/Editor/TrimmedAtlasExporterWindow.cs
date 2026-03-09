@@ -227,9 +227,20 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     var exportData = analyzedAtlas;
-    if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, analyzedBuildItems, out var pendingExport, out error)) {
-      EditorUtility.DisplayDialog("Trim Export Failed", error, "OK");
-      return;
+    PendingTrimmedAtlasExport pendingExport = null;
+    var deferredWritePhaseStarted = false;
+    try {
+      BeginDeferredTrimmedWritePhase(sourcePath, 1);
+      deferredWritePhaseStarted = true;
+      if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, analyzedBuildItems, out pendingExport, out error)) {
+        EditorUtility.DisplayDialog("Trim Export Failed", error, "OK");
+        return;
+      }
+    }
+    finally {
+      if (deferredWritePhaseStarted) {
+        EndDeferredTrimmedWritePhase(sourcePath, pendingExport != null ? 1 : 0, pendingExport == null ? 1 : 0);
+      }
     }
 
     var failureLogs = new List<string>();
@@ -281,39 +292,50 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     var failedCount = 0;
     var failureLogs = new List<string>();
     var pendingExports = new List<PendingTrimmedAtlasExport>();
+    var deferredWritePhaseStarted = false;
 
-    for (var i = 0; i < exportBatches.Count; i++) {
-      var batch = exportBatches[i];
-      var sourcePath = batch.primarySourcePath;
-      var outputFolderPath = ResolveOutputFolderPath(sourcePath, sourceFolderPath);
-      if (string.IsNullOrWhiteSpace(outputFolderPath)) {
-        failedCount++;
-        AddFailureLog(failureLogs, sourcePath, "Could not resolve an output folder.");
-        continue;
+    try {
+      BeginDeferredTrimmedWritePhase(sourceFolderPath, exportBatches.Count);
+      deferredWritePhaseStarted = true;
+
+      for (var i = 0; i < exportBatches.Count; i++) {
+        var batch = exportBatches[i];
+        var sourcePath = batch.primarySourcePath;
+        var outputFolderPath = ResolveOutputFolderPath(sourcePath, sourceFolderPath);
+        if (string.IsNullOrWhiteSpace(outputFolderPath)) {
+          failedCount++;
+          AddFailureLog(failureLogs, sourcePath, "Could not resolve an output folder.");
+          continue;
+        }
+
+        if (!TryAnalyzeSourceAtlasBatch(batch, outputFolderPath, out var exportData, out var buildItems, out var error)) {
+          failedCount++;
+          AddFailureLog(failureLogs, sourcePath, error);
+          continue;
+        }
+
+        if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, buildItems, out var pendingExport, out error)) {
+          failedCount++;
+          AddFailureLog(failureLogs, sourcePath, error);
+          continue;
+        }
+
+        pendingExport.batch = batch;
+        pendingExports.Add(pendingExport);
+        exportedCount++;
+        Debug.Log(
+          "[TrimAtlasExport] Folder export wrote atlas." +
+          " source='" + sourcePath + "'" +
+          " source_count=" + batch.sourcePaths.Count +
+          " grouped_numeric=" + batch.groupedNumericSiblings +
+          " output='" + pendingExport.exportedAtlasAssetPath + "'" +
+          " packed=" + exportData.atlasWidth + "x" + exportData.atlasHeight);
       }
-
-      if (!TryAnalyzeSourceAtlasBatch(batch, outputFolderPath, out var exportData, out var buildItems, out var error)) {
-        failedCount++;
-        AddFailureLog(failureLogs, sourcePath, error);
-        continue;
+    }
+    finally {
+      if (deferredWritePhaseStarted) {
+        EndDeferredTrimmedWritePhase(sourceFolderPath, pendingExports.Count, failedCount);
       }
-
-      if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, buildItems, out var pendingExport, out error)) {
-        failedCount++;
-        AddFailureLog(failureLogs, sourcePath, error);
-        continue;
-      }
-
-      pendingExport.batch = batch;
-      pendingExports.Add(pendingExport);
-      exportedCount++;
-      Debug.Log(
-        "[TrimAtlasExport] Folder export wrote atlas." +
-        " source='" + sourcePath + "'" +
-        " source_count=" + batch.sourcePaths.Count +
-        " grouped_numeric=" + batch.groupedNumericSiblings +
-        " output='" + pendingExport.exportedAtlasAssetPath + "'" +
-        " packed=" + exportData.atlasWidth + "x" + exportData.atlasHeight);
     }
 
     if (pendingExports.Count > 0) {
@@ -338,6 +360,23 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       "Folder Export Complete",
       failedCount > 0 ? summary + "\nSee Console for the first " + failureLogs.Count + " failure(s)." : summary,
       "OK");
+  }
+
+  static void BeginDeferredTrimmedWritePhase(string sourcePath, int exportCount) {
+    AssetDatabase.StartAssetEditing();
+    Debug.Log(
+      "[TrimAtlasExport] Deferred import write phase started." +
+      " source='" + sourcePath + "'" +
+      " exports=" + exportCount);
+  }
+
+  static void EndDeferredTrimmedWritePhase(string sourcePath, int pendingExportCount, int failureCount) {
+    AssetDatabase.StopAssetEditing();
+    Debug.Log(
+      "[TrimAtlasExport] Deferred import write phase completed." +
+      " source='" + sourcePath + "'" +
+      " pending_exports=" + pendingExportCount +
+      " failures=" + failureCount);
   }
 
   static int DeletePackedSourceAssets(SourceAtlasExportBatch batch, string exportedAtlasPath) {
@@ -829,6 +868,10 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     var finalizedExports = new List<PendingTrimmedAtlasExport>();
     if (pendingExports == null || pendingExports.Count <= 0) return finalizedExports;
 
+    Debug.Log(
+      "[TrimAtlasExport] Final import phase started." +
+      " pending_exports=" + pendingExports.Count +
+      " create_slices=" + createAtlasSlices);
     AssetDatabase.Refresh();
 
     for (var i = 0; i < pendingExports.Count; i++) {

@@ -375,15 +375,33 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     var pendingImports = new List<PendingGroupedAtlasImport>();
     var exportedCandidateCount = 0;
     var exportedPageCount = 0;
+    var deferredWritePhaseStarted = false;
 
-    for (var i = 0; i < scannedCandidates.Count; i++) {
-      var candidate = scannedCandidates[i];
-      if (!TryExportCandidate(sourceFolderPath, candidate, sanitizedOutputSubfolder, pendingImports, out var pageCount, out var error)) {
-        AddFailureLog(failureLogs, BuildCandidateLabel(candidate), error);
-        continue;
+    try {
+      BeginDeferredGroupedAtlasWritePhase(sourceFolderPath, scannedCandidates.Count);
+      deferredWritePhaseStarted = true;
+
+      for (var i = 0; i < scannedCandidates.Count; i++) {
+        var candidate = scannedCandidates[i];
+        if (!TryExportCandidate(sourceFolderPath, candidate, sanitizedOutputSubfolder, pendingImports, out var pageCount, out var error)) {
+          AddFailureLog(failureLogs, BuildCandidateLabel(candidate), error);
+          continue;
+        }
+
+        exportedPageCount += pageCount;
       }
+    }
+    finally {
+      if (deferredWritePhaseStarted) {
+        EndDeferredGroupedAtlasWritePhase(sourceFolderPath, pendingImports.Count, failureLogs.Count);
+      }
+    }
 
-      exportedPageCount += pageCount;
+    if (pendingImports.Count > 0) {
+      Debug.Log(
+        "[GearGroupAtlas] Final import phase started." +
+        " source='" + sourceFolderPath + "'" +
+        " pending_imports=" + pendingImports.Count);
     }
 
     var finalizedCandidates = pendingImports.Count > 0
@@ -410,6 +428,23 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     AssetDatabase.SaveAssets();
     AssetDatabase.Refresh();
+  }
+
+  static void BeginDeferredGroupedAtlasWritePhase(string sourceFolderPath, int candidateCount) {
+    AssetDatabase.StartAssetEditing();
+    Debug.Log(
+      "[GearGroupAtlas] Deferred import write phase started." +
+      " source='" + sourceFolderPath + "'" +
+      " candidates=" + candidateCount);
+  }
+
+  static void EndDeferredGroupedAtlasWritePhase(string sourceFolderPath, int pendingImportCount, int failureCount) {
+    AssetDatabase.StopAssetEditing();
+    Debug.Log(
+      "[GearGroupAtlas] Deferred import write phase completed." +
+      " source='" + sourceFolderPath + "'" +
+      " pending_imports=" + pendingImportCount +
+      " failures=" + failureCount);
   }
 
   void DrawScanResults() {
@@ -1860,6 +1895,88 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return token.Trim();
   }
 
+  static bool IsKnownPartCodeToken(string token) {
+    var resolvedPartCode = ResolvePartCode(token);
+    if (string.IsNullOrWhiteSpace(resolvedPartCode)) return false;
+    return PartCodeByToken.Values.Contains(resolvedPartCode, StringComparer.OrdinalIgnoreCase);
+  }
+
+  static bool TryParseWrappedDescriptorToken(string token, out string form, out string variant, out bool isSkin) {
+    form = "";
+    variant = "";
+    isSkin = false;
+    if (string.IsNullOrWhiteSpace(token)) return false;
+
+    var normalizedToken = token.Trim();
+    if (string.Equals(normalizedToken, SkinFormName, StringComparison.OrdinalIgnoreCase)) {
+      form = SkinFormName;
+      variant = SkinVariantName;
+      isSkin = true;
+      return true;
+    }
+
+    var separatorIndex = normalizedToken.IndexOf('_');
+    if (separatorIndex <= 0 || separatorIndex >= normalizedToken.Length - 1) return false;
+
+    form = normalizedToken.Substring(0, separatorIndex).Trim();
+    variant = normalizedToken.Substring(separatorIndex + 1).Trim();
+    return !string.IsNullOrWhiteSpace(form) && !string.IsNullOrWhiteSpace(variant);
+  }
+
+  static bool TryParseWrappedDescriptorSourceAtlasPath(
+    string[] segments,
+    out string category,
+    out string form,
+    out string variant,
+    out string partCode,
+    out bool isSkin) {
+    category = "";
+    form = "";
+    variant = "";
+    partCode = "";
+    isSkin = false;
+    if (segments == null || segments.Length < 9) return false;
+
+    var wrappedPartToken = segments[segments.Length - 3];
+    if (!IsKnownPartCodeToken(wrappedPartToken)) return false;
+    if (!TryParseWrappedDescriptorToken(segments[segments.Length - 2], out form, out variant, out isSkin)) return false;
+
+    category = (segments[segments.Length - 5] ?? "").Trim();
+    partCode = ResolvePartCode(wrappedPartToken);
+    return !string.IsNullOrWhiteSpace(category) &&
+           !string.IsNullOrWhiteSpace(form) &&
+           !string.IsNullOrWhiteSpace(variant) &&
+           !string.IsNullOrWhiteSpace(partCode);
+  }
+
+  static bool TryParseWrappedDirectSkinSourceAtlasPath(
+    string[] segments,
+    string fileBase,
+    out string category,
+    out string form,
+    out string variant,
+    out string partCode,
+    out bool isSkin) {
+    category = "";
+    form = "";
+    variant = "";
+    partCode = "";
+    isSkin = false;
+    if (segments == null || segments.Length != 8) return false;
+
+    var wrappedPartToken = segments[segments.Length - 2];
+    if (!IsKnownPartCodeToken(wrappedPartToken)) return false;
+    if (!string.Equals(fileBase, wrappedPartToken, StringComparison.OrdinalIgnoreCase)) return false;
+
+    category = (segments[segments.Length - 4] ?? "").Trim();
+    form = SkinFormName;
+    variant = SkinVariantName;
+    partCode = ResolvePartCode(wrappedPartToken);
+    isSkin = true;
+    return !string.IsNullOrWhiteSpace(category) &&
+           !string.IsNullOrWhiteSpace(partCode);
+  }
+
   static bool TryParseSourceAtlasPath(
     string assetPath,
     out string category,
@@ -1882,7 +1999,15 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     if (segments.Length < 5) return false;
 
     fileBase = Path.GetFileNameWithoutExtension(normalizedAssetPath);
-    partCode = segments[segments.Length - 2];
+    if (TryParseWrappedDescriptorSourceAtlasPath(segments, out category, out form, out variant, out partCode, out isSkin)) {
+      return !string.IsNullOrWhiteSpace(fileBase);
+    }
+
+    if (TryParseWrappedDirectSkinSourceAtlasPath(segments, fileBase, out category, out form, out variant, out partCode, out isSkin)) {
+      return !string.IsNullOrWhiteSpace(fileBase);
+    }
+
+    partCode = ResolvePartCode(segments[segments.Length - 2]);
 
     var parentFolder = segments[segments.Length - 3];
     if (string.Equals(parentFolder, SkinFormName, StringComparison.OrdinalIgnoreCase)) {
