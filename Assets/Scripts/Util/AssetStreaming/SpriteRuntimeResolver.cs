@@ -438,11 +438,25 @@ public static class SpriteRuntimeResolver {
     if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return false;
 
     var assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+    Sprite numericMatch = null;
     for (var i = 0; i < assets.Length; i++) {
       var candidate = assets[i] as Sprite;
       if (candidate == null) continue;
-      if (!string.IsNullOrEmpty(spriteName) && !string.Equals(candidate.name, spriteName, StringComparison.Ordinal)) continue;
-      sprite = candidate;
+      if (string.IsNullOrEmpty(spriteName) || string.Equals(candidate.name, spriteName, StringComparison.Ordinal)) {
+        sprite = candidate;
+        return true;
+      }
+
+      if (!SpriteSliceAddressUtility.HasEquivalentNumericLabel(candidate.name, spriteName)) continue;
+      if (numericMatch != null && numericMatch != candidate) {
+        numericMatch = null;
+        break;
+      }
+      numericMatch = candidate;
+    }
+
+    if (numericMatch != null) {
+      sprite = numericMatch;
       return true;
     }
 

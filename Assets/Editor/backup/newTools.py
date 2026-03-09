@@ -143,8 +143,10 @@ class AA:
                         setattr(B,button_attr,button)
         def _run(A,start,work,end):
                 def B():
-                        try:B=work();A.r.after(0,lambda:end(B))
-                        except Exception as C:A.r.after(0,lambda:messagebox.showerror(_c,str(C)))
+                        try:
+                                C=work();A.r.after(0,lambda C=C:end(C))
+                        except Exception as C:
+                                D=str(C);print(f"[Tools Hub] Worker failed: {D}");A.r.after(0,lambda D=D:messagebox.showerror(_c,D))
                 start();threading.Thread(target=B,daemon=1).start()
         def _parallel_for_each(C,items,func,workers):
                 A=items
@@ -157,8 +159,14 @@ class AA:
                 if not A:return[]
                 if len(A)==1:return[func(A[0])]
                 with ThreadPoolExecutor(max_workers=workers)as B:return list(B.map(func,A))
+        def _comp_cell_xy(A,index,grid,tile_size):
+                B=index%grid;C=index//grid;return B,C,B*tile_size,(grid-1-C)*tile_size
+        def _comp_sort_key(A,name,prefix):
+                B=os.path.splitext(name)[0];C=B[len(prefix):]if B.startswith(prefix)else B;D=re.search('(\\d+)$',C)
+                if D:E=D.group(1);return 0,int(E),len(E),B.lower()
+                print(f"[10x10 Compositor] No trailing frame number found for {name}; using lexical fallback.");return 1,0,0,B.lower()
         def _comp(A):
-                B=A._tab('10x10 Compositor');A.comp_folder=tk.StringVar(A.r);A.comp_prefix=tk.StringVar(A.r,'death 1_');A.comp_canvas=tk.StringVar(A.r,'1920');A.comp_grid=tk.StringVar(A.r,'10');A.comp_status=tk.StringVar(A.r,_O)
+                B=A._tab('10x10 Compositor');A.comp_folder=tk.StringVar(A.r);A.comp_prefix=tk.StringVar(A.r,'frame_');A.comp_canvas=tk.StringVar(A.r,'1920');A.comp_grid=tk.StringVar(A.r,'10');A.comp_status=tk.StringVar(A.r,_O)
                 for(C,(D,E,F))in enumerate((('Root:',A.comp_folder,50),('Prefix:',A.comp_prefix,25),('Canvas:',A.comp_canvas,10),('Grid:',A.comp_grid,10))):
                         ttk.Label(B,text=D).grid(row=C,column=0,sticky=_D);ttk.Entry(B,textvariable=E,width=F).grid(row=C,column=1,sticky=_D)
                         if C==0:ttk.Button(B,text=_J,command=lambda:A._pick(A.comp_folder)).grid(row=C,column=2)
@@ -170,27 +178,25 @@ class AA:
                         if E//B<=0:messagebox.showerror(_v,'Canvas size must be >= Grid size.');return
                         if not C or not os.path.isdir(C):messagebox.showerror(_d,_e);return
                         if not D:messagebox.showerror('No prefix','Please enter the filename prefix.');return
-                        def O(name):
-                                try:A=name.split(D,1)[1];B=A.split('.',1)[0];return int(B)
-                                except Exception:return 0
                         def F():
                                 F=[]
                                 for(I,K,G)in os.walk(C):
                                         H=[A for A in G if A.endswith(_U)and D in A]
                                         if H:F.append((I,H,G))
                                 def J(job):
-                                        K,H,P=job;H=sorted(H,key=O);A._clear_comp_sprite_meta(K,P);D=E//B;Q=B*B;C=Image.new(_L,(E,E));F=I=L=0;N=1
+                                        K,H,P=job;H=sorted(H,key=lambda C:A._comp_sort_key(C,D));A._clear_comp_sprite_meta(K,P);R=E//B;Q=B*B;C=Image.new(_L,(E,E));L=0;N=1
                                         for J in H:
-                                                R=os.path.join(K,J)
-                                                with Image.open(R)as S:G=S.resize((D,D))
-                                                if G.mode in(_L,'LA'):C.paste(G,(F*D,(B-1-I)*D),G)
-                                                elif _AF in G.info:M=G.convert(_L);C.paste(M,(F*D,(B-1-I)*D),M);M.close()
-                                                else:C.paste(G,(F*D,(B-1-I)*D))
-                                                G.close();F+=1;L+=1
-                                                if F==B:F=0;I+=1
+                                                V=os.path.join(K,J)
+                                                F,I,S,T=A._comp_cell_xy(L,B,R)
+                                                if F==0:print(f"[10x10 Compositor] {K} sheet={N} row_from_bottom={I} starts with {J} at ({S},{T})")
+                                                with Image.open(V)as U:G=U.resize((R,R))
+                                                if G.mode in(_L,'LA'):C.paste(G,(S,T),G)
+                                                elif _AF in G.info:M=G.convert(_L);C.paste(M,(S,T),M);M.close()
+                                                else:C.paste(G,(S,T))
+                                                G.close();L+=1
                                                 if L==Q or J==H[-1]:
-                                                        C.save(os.path.join(K,f"{N}.png"));C.close();C=_A;N+=1
-                                                        if J!=H[-1]:C=Image.new(_L,(E,E));F=I=L=0
+                                                        V=os.path.join(K,f"{N}.png");print(f"[10x10 Compositor] Saving {V} with {L} frame(s).");C.save(V);C.close();C=_A;N+=1
+                                                        if J!=H[-1]:C=Image.new(_L,(E,E));L=0
                                         if C is not _A:C.close()
                                         for J in H:os.remove(os.path.join(K,J))
                                 A._parallel_for_each(F,J,A._img_workers)
@@ -285,36 +291,70 @@ class AA:
                                 C._parallel_for_each(E,F,C._img_workers)
                         C._run(lambda:C.crunch_status.set(_P),E,lambda _:C.crunch_status.set(_w))
                 ttk.Button(D,text=_f,command=E).grid(row=1,column=0,columnspan=3);ttk.Label(D,textvariable=C.crunch_status).grid(row=2,column=0,columnspan=3)
+        def _atlas_output_path(B,root,index):
+                C,D=os.path.splitext(ATLAS);return os.path.join(root,ATLAS if index==0 else f"{C}{index}{D}")
+        def _atlas_source_files(B,root):
+                C,D=os.path.splitext(ATLAS);E=re.compile(f"^{re.escape(C)}(\\d+)?{re.escape(D)}$",re.I);A=[]
+                for F in walk(root,EXT):
+                        if E.match(os.path.basename(F)):continue
+                        A.append(F)
+                return sorted(A,key=lambda A:A.lower())
+        def _build_root_atlas_pages(B,root,image_paths):
+                E=[];F=Image.new(_L,(A,A));C=D=H=I=0
+                def J(final_page=_B):
+                        nonlocal F,C,D,H,I
+                        K=B._atlas_output_path(root,I);print(f"[Atlas 2048] Saving {K} with page_index={I}.");F.save(K);F.close();E.append(K);I+=1
+                        if not final_page:F=Image.new(_L,(A,A));C=D=H=0
+                try:
+                        for K in image_paths:
+                                with Image.open(K)as L:
+                                        if L.width>A or L.height>A:raise ValueError(f"Image is larger than {A}x{A} and cannot fit in an atlas:\n{K}")
+                                        if C+L.width>A:C=0;D+=H;H=0
+                                        if D+L.height>A:J();C=D=H=0
+                                        if L.mode in(_L,'LA')or _AF in L.info:M=L.convert(_L);F.paste(M,(C,D),M);M.close()
+                                        else:F.paste(L,(C,D))
+                                        C+=L.width;H=max(H,L.height)
+                        if image_paths:J(_C)
+                        else:F.close()
+                        return E
+                except Exception:
+                        F.close();raise
+        def _cleanup_root_atlas_outputs(B,root,keep_paths):
+                C,D=os.path.splitext(ATLAS);E=re.compile(f"^{re.escape(C)}(\\d+)?{re.escape(D)}$",re.I);F={os.path.normcase(os.path.normpath(A))for A in keep_paths};G=0
+                for H in os.listdir(root):
+                        I=os.path.join(root,H)
+                        if not os.path.isfile(I)or not E.match(H):continue
+                        if os.path.normcase(os.path.normpath(I))in F:continue
+                        print(f"[Atlas 2048] Removing stale atlas {I}.");os.remove(I);G+=1;J=I+_I
+                        if os.path.isfile(J):os.remove(J)
+                return G
+        def _delete_flattened_atlas_sources(B,root,image_paths):
+                C=os.path.normcase(os.path.normpath(root));D=0;E=0
+                for F in image_paths:
+                        G=os.path.normcase(os.path.normpath(os.path.dirname(F)))
+                        if G!=C:continue
+                        if os.path.isfile(F):os.remove(F);D+=1
+                        H=F+_I
+                        if os.path.isfile(H):os.remove(H)
+                for F in os.listdir(root):
+                        G=os.path.join(root,F)
+                        if not os.path.isdir(G):continue
+                        print(f"[Atlas 2048] Removing source folder {G}.");shutil.rmtree(G);E+=1;H=G+_I
+                        if os.path.isfile(H):os.remove(H)
+                return D,E
         def _atlas(B):
                 C=B._tab('Atlas 2048');B.atlas_folder=tk.StringVar(B.r);B.atlas_status=tk.StringVar(B.r,_O);B._entry_with_button(C,0,B.atlas_folder)
                 def D():
                         C=B.atlas_folder.get().strip()
                         if not C or not os.path.isdir(C):messagebox.showerror(_d,_e);return
                         def D():
-                                D=[];G=ATLAS.lower()
-                                for(H,L,I)in os.walk(C):
-                                        E=[A for A in I if A.lower().endswith(_U)and A.lower()!=G]
-                                        if E:D.append((H,E))
-                                def J(job):
-                                        H,K=job;D=Image.new(_L,(A,A));C=E=0;F=0;G=_B
-                                        for I in K:
-                                                L=os.path.join(H,I)
-                                                with Image.open(L)as B:
-                                                        if C+B.width>A:C=0;E+=F;F=0
-                                                        if E+B.height>A:G=_C;break
-                                                        if B.mode in(_L,'LA')or _AF in B.info:J=B.convert(_L);D.paste(J,(C,E),J);J.close()
-                                                        else:D.paste(B,(C,E))
-                                                        C+=B.width;F=max(F,B.height)
-                                                if G:break
-                                        D.save(os.path.join(H,ATLAS));D.close()
-                                        if not G:
-                                                for I in K:os.remove(os.path.join(H,I))
-                                        return G
-                                F=B._parallel_map(D,J,B._img_workers);K=sum(1 for A in F if A);return K,len(F)
+                                D=B._atlas_source_files(C)
+                                if not D:return 0,0,0,0
+                                E=B._build_root_atlas_pages(C,D);F=B._cleanup_root_atlas_outputs(C,E);G,H=B._delete_flattened_atlas_sources(C,D);return len(E),len(D),H,F+G
                         def E(result):
-                                A,C=result
-                                if A:B.atlas_status.set(f"DONE - {A}/{C} folder(s) overflowed; originals kept.")
-                                else:B.atlas_status.set(_w)
+                                A,C,D,E=result
+                                if not C:B.atlas_status.set('DONE - No images found.');return
+                                B.atlas_status.set(f"DONE - {A} atlas(es), {C} image(s), {D} folder(s) removed, {E} root file(s) removed.")
                         B._run(lambda:B.atlas_status.set(_P),D,E)
                 ttk.Button(C,text='Build Atlases',command=D).grid(row=1,column=0,columnspan=3);ttk.Label(C,textvariable=B.atlas_status).grid(row=2,column=0,columnspan=3)
         def _slices(A):

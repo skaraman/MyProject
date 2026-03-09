@@ -51,6 +51,7 @@ public class SpriteWithNormals : MonoBehaviour {
 
   [SerializeField] bool isAnimation = true;
   [SerializeField] bool doNotRender;
+  [SerializeField] bool useTrimmedAtlasOffset;
   [Header("Debug")]
   [SerializeField] bool enableDebugSpriteFetchLogs = false;
   [SerializeField] bool enableDebugSpriteApplyLogs = false;
@@ -114,6 +115,9 @@ public class SpriteWithNormals : MonoBehaviour {
   int _pendingRetargetAllowedFrame;
   int _deferredOverwriteAllowedFrame;
   int _lastAppliedNormalTextureId = int.MinValue;
+  string _appliedColorSliceAddress = "";
+  Vector3 _lastAppliedTrimmedOffsetLocalUnits;
+  bool _hasAppliedTrimmedOffset;
   int _adaptiveCooldownMultiplier = 1;
   int _adaptiveStaleWindowStartFrame = -1;
   int _adaptiveStaleCountInWindow;
@@ -135,6 +139,7 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
   void OnEnable() {
+    RefreshTrimmedOffsetForCurrentSprite();
     if (!Application.isPlaying) return;
     _nextInternalRetryFrame = 0;
     _pendingRetargetAllowedFrame = 0;
@@ -169,6 +174,7 @@ public class SpriteWithNormals : MonoBehaviour {
     if (Application.isPlaying) {
       SpriteUiPinService.Unregister(this);
     }
+    ResetAppliedTrimmedOffsetState(clearSliceAddress: false);
     if (!Application.isPlaying) return;
     CancelPendingRequest();
     ReleaseActiveLeases();
@@ -182,6 +188,7 @@ public class SpriteWithNormals : MonoBehaviour {
     if (Application.isPlaying) {
       SpriteUiPinService.Unregister(this);
     }
+    ResetAppliedTrimmedOffsetState();
     CancelPendingRequest();
     ReleaseActiveLeases();
     ResetPairLookupCaches();
@@ -206,6 +213,11 @@ public class SpriteWithNormals : MonoBehaviour {
   public void SetLibraryName(string value) { libraryName = value; _hasLastLookup = false; ResetPairLookupCaches(); }
   public void SetLabelPrefix(string value) { labelPrefix = value; _hasLastLookup = false; ResetPairLookupCaches(); }
   public void SetIsAnimation(bool value) { isAnimation = value; _hasLastLookup = false; ResetPairLookupCaches(); }
+  public void SetUseTrimmedAtlasOffset(bool value) {
+    if (useTrimmedAtlasOffset == value) return;
+    useTrimmedAtlasOffset = value;
+    RefreshTrimmedOffsetForCurrentSprite();
+  }
 
   public void SetDoNotRender(bool value) {
     if (doNotRender == value) return;
@@ -446,7 +458,10 @@ public class SpriteWithNormals : MonoBehaviour {
 
   public void FlipSprite(bool flip) {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) _renderer.flipX = flip;
+    if (_renderer != null) {
+      _renderer.flipX = flip;
+      RefreshTrimmedOffsetForCurrentSprite();
+    }
   }
 
   void QueueRuntimeLoad(SpriteAddressPair pair, bool cacheKnownMiss = false) {
@@ -605,7 +620,7 @@ public class SpriteWithNormals : MonoBehaviour {
     }
 
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(colorSprite, normalSprite);
+    if (_renderer != null) ApplySprites(colorSprite, normalSprite, pair.colorAddress);
 
     ReleaseActiveLeases();
     return true;
@@ -670,7 +685,7 @@ public class SpriteWithNormals : MonoBehaviour {
     );
 
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(colorSprite, normalSprite);
+    if (_renderer != null) ApplySprites(colorSprite, normalSprite, colorSliceAddress);
     RecordAdaptiveStableCompletion();
 
     ReleaseActiveLeases();
@@ -697,7 +712,7 @@ public class SpriteWithNormals : MonoBehaviour {
     if (normalSprite != null) CacheLocalLoadedSprite(pair.normalAddress, normalSprite);
 
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(colorSprite, normalSprite);
+    if (_renderer != null) ApplySprites(colorSprite, normalSprite, pair.colorAddress);
 
     if (!ForceDisableDebugLogsForPerfPass && _staleFallbackLogFrame != Time.frameCount) {
       _staleFallbackLogFrame = Time.frameCount;
@@ -758,10 +773,11 @@ public class SpriteWithNormals : MonoBehaviour {
     return !lease.TryGetSpriteByAddress(sliceOrAtlasAddress, out _);
   }
 
-  void ApplySprites(Sprite colorSprite, Sprite normalSprite) {
+  void ApplySprites(Sprite colorSprite, Sprite normalSprite, string colorSliceAddress) {
     if (_renderer.sprite != colorSprite) {
       _renderer.sprite = colorSprite;
     }
+    ApplyConfiguredTrimmedOffset(colorSprite, colorSliceAddress);
     var normalTexture = normalSprite != null ? normalSprite.texture : GetFallbackNormalTexture();
     var normalTextureId = normalTexture != null ? normalTexture.GetInstanceID() : 0;
     if (normalTextureId == _lastAppliedNormalTextureId) return;
@@ -771,6 +787,89 @@ public class SpriteWithNormals : MonoBehaviour {
     if (normalTexture != null) _mpb.SetTexture(NormalMapPropertyId, normalTexture);
     _renderer.SetPropertyBlock(_mpb);
     _lastAppliedNormalTextureId = normalTextureId;
+  }
+
+  void ApplyConfiguredTrimmedOffset(Sprite colorSprite, string colorSliceAddress) {
+    _appliedColorSliceAddress = colorSliceAddress ?? "";
+    if (!useTrimmedAtlasOffset || colorSprite == null || string.IsNullOrWhiteSpace(_appliedColorSliceAddress)) {
+      ResetAppliedTrimmedOffsetState(clearSliceAddress: colorSprite == null || !useTrimmedAtlasOffset);
+      return;
+    }
+
+    if (!TryResolveTrimmedOffsetLocalUnits(_appliedColorSliceAddress, colorSprite, out var offsetLocalUnits)) {
+      ClearAppliedTrimmedOffset();
+      return;
+    }
+
+    ApplyTrimmedOffsetLocal(offsetLocalUnits, colorSprite, _appliedColorSliceAddress);
+  }
+
+  bool TryResolveTrimmedOffsetLocalUnits(string colorSliceAddress, Sprite colorSprite, out Vector3 offsetLocalUnits) {
+    offsetLocalUnits = Vector3.zero;
+    if (colorSprite == null || string.IsNullOrWhiteSpace(colorSliceAddress)) return false;
+    if (!TrimmedSpriteOffsetResolver.TryGetExactOffset(colorSliceAddress, out var offsetPixels, OnTrimmedOffsetMetadataReady)) {
+      return false;
+    }
+
+    offsetLocalUnits = ConvertTrimmedOffsetToLocalUnits(offsetPixels, colorSprite);
+    return true;
+  }
+
+  Vector3 ConvertTrimmedOffsetToLocalUnits(Vector2 offsetPixels, Sprite colorSprite) {
+    var pixelsPerUnit = colorSprite != null && colorSprite.pixelsPerUnit > 0f ? colorSprite.pixelsPerUnit : 100f;
+    var x = offsetPixels.x / pixelsPerUnit;
+    var y = offsetPixels.y / pixelsPerUnit;
+    if (_renderer != null) {
+      if (_renderer.flipX) x = -x;
+      if (_renderer.flipY) y = -y;
+    }
+
+    return new Vector3(x, y, 0f);
+  }
+
+  void ApplyTrimmedOffsetLocal(Vector3 offsetLocalUnits, Sprite colorSprite, string colorSliceAddress) {
+    var currentLocalPosition = transform.localPosition;
+    var baseLocalPosition = _hasAppliedTrimmedOffset
+      ? currentLocalPosition - _lastAppliedTrimmedOffsetLocalUnits
+      : currentLocalPosition;
+    transform.localPosition = baseLocalPosition + offsetLocalUnits;
+    _lastAppliedTrimmedOffsetLocalUnits = offsetLocalUnits;
+    _hasAppliedTrimmedOffset = true;
+    LogSpriteApply(
+      "offset_applied",
+      colorSprite,
+      null,
+      "address='" + (colorSliceAddress ?? "") + "'" +
+      " local_offset=(" + offsetLocalUnits.x.ToString("0.###") + "," + offsetLocalUnits.y.ToString("0.###") + ")"
+    );
+  }
+
+  void ClearAppliedTrimmedOffset() {
+    if (!_hasAppliedTrimmedOffset) return;
+    transform.localPosition -= _lastAppliedTrimmedOffsetLocalUnits;
+    _lastAppliedTrimmedOffsetLocalUnits = Vector3.zero;
+    _hasAppliedTrimmedOffset = false;
+  }
+
+  void ResetAppliedTrimmedOffsetState(bool clearSliceAddress = true) {
+    ClearAppliedTrimmedOffset();
+    if (clearSliceAddress) {
+      _appliedColorSliceAddress = "";
+    }
+  }
+
+  void RefreshTrimmedOffsetForCurrentSprite() {
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    var currentSprite = _renderer != null ? _renderer.sprite : null;
+    ApplyConfiguredTrimmedOffset(currentSprite, _appliedColorSliceAddress);
+  }
+
+  void OnTrimmedOffsetMetadataReady() {
+    if (!useTrimmedAtlasOffset) return;
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    if (_renderer == null || _renderer.sprite == null) return;
+    if (string.IsNullOrWhiteSpace(_appliedColorSliceAddress)) return;
+    ApplyConfiguredTrimmedOffset(_renderer.sprite, _appliedColorSliceAddress);
   }
 
   static Texture2D GetFallbackNormalTexture() {
@@ -1142,6 +1241,7 @@ public class SpriteWithNormals : MonoBehaviour {
     if (loadedSprite == null) return null;
     if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out _, out var expectedSpriteName)) return loadedSprite;
     if (string.Equals(loadedSprite.name, expectedSpriteName, StringComparison.Ordinal)) return loadedSprite;
+    if (SpriteSliceAddressUtility.HasEquivalentNumericLabel(loadedSprite.name, expectedSpriteName)) return loadedSprite;
 
 #if UNITY_EDITOR
     if (Application.isEditor &&
@@ -1179,7 +1279,7 @@ public class SpriteWithNormals : MonoBehaviour {
     SpriteAddressResolver.TryLoadEditorSprite(pair.normalAddress, out var normalSprite);
     if (!string.IsNullOrWhiteSpace(pair.normalAddress) && normalSprite == null)
       Debug.LogError($"[SpriteWithNormals] Editor preview normal sprite not found for '{pair.normalAddress}' ({lookupKey})");
-    ApplySprites(colorSprite, normalSprite);
+    ApplySprites(colorSprite, normalSprite, pair.colorAddress);
   }
 #endif
 }
@@ -1333,6 +1433,7 @@ public class SpriteWithNormalsEditor : Editor {
   SerializedProperty categoryProperty;
   SerializedProperty isAnimationProperty;
   SerializedProperty doNotRenderProperty;
+  SerializedProperty useTrimmedAtlasOffsetProperty;
 
   void OnEnable() {
     libraryNameProperty = serializedObject.FindProperty(nameof(SpriteWithNormals.libraryName));
@@ -1340,6 +1441,7 @@ public class SpriteWithNormalsEditor : Editor {
     categoryProperty = serializedObject.FindProperty(nameof(SpriteWithNormals.category));
     isAnimationProperty = serializedObject.FindProperty("isAnimation");
     doNotRenderProperty = serializedObject.FindProperty("doNotRender");
+    useTrimmedAtlasOffsetProperty = serializedObject.FindProperty("useTrimmedAtlasOffset");
   }
 
   public override void OnInspectorGUI() {
@@ -1350,11 +1452,23 @@ public class SpriteWithNormalsEditor : Editor {
     changed |= DrawDropdown(labelPrefixProperty, "Label Prefix", BuildLabelPrefixOptions(libraryNameProperty.stringValue, categoryProperty.stringValue));
     EditorGUILayout.PropertyField(isAnimationProperty, new GUIContent("Is Animation", "When enabled, frame input drives this label prefix as an animation loop."));
     EditorGUILayout.PropertyField(doNotRenderProperty, new GUIContent("Do Not Render", "When enabled, this component keeps the SpriteRenderer disabled."));
+    EditorGUI.BeginChangeCheck();
+    EditorGUILayout.PropertyField(useTrimmedAtlasOffsetProperty, new GUIContent("Use Trimmed Atlas Offset", "When enabled, this component reads sibling atlas offset metadata and repositions the sprite to match its original slot."));
+    var trimmedOffsetToggleChanged = EditorGUI.EndChangeCheck();
 
     var loadIssue = SpriteIndexInspectorData.GetLoadIssue();
     if (!string.IsNullOrWhiteSpace(loadIssue)) EditorGUILayout.HelpBox(loadIssue, MessageType.Warning);
 
-    if (serializedObject.ApplyModifiedProperties() || changed) MarkTargetsDirty(targets);
+    var serializedChanged = serializedObject.ApplyModifiedProperties();
+    if (serializedChanged || changed) MarkTargetsDirty(targets);
+    if (trimmedOffsetToggleChanged) {
+      foreach (var obj in targets) {
+        var t = obj as SpriteWithNormals;
+        if (t == null) continue;
+        var refreshFrame = t.IsAnimation ? Mathf.Max(t.LastRequestedFrame, 1) : 0;
+        t.ForceUpdateSpriteAndNormal(refreshFrame);
+      }
+    }
 
     EditorGUILayout.BeginHorizontal();
     if (!Application.isPlaying && GUILayout.Button("Refresh Sprite + Normal")) {

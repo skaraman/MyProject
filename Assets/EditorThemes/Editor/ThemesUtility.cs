@@ -55,6 +55,8 @@ namespace ThemesPlugin
 
         public static string GenerateUssString(CustomTheme c)
         {
+            c.Items = SanitizeThemeItems(c.Items, c.Name);
+
             string ussText = "";
             ussText += "/* ========== Editor Themes Plugin ==========*/";
             ussText += "\n";
@@ -72,10 +74,49 @@ namespace ThemesPlugin
             return ussText;
         }
 
-        
+        static List<CustomTheme.UIItem> SanitizeThemeItems(List<CustomTheme.UIItem> items, string themeName)
+        {
+            List<CustomTheme.UIItem> sanitizedItems = new List<CustomTheme.UIItem>();
+            int removedCount = 0;
+
+            if (items == null)
+            {
+                return sanitizedItems;
+            }
+
+            foreach (CustomTheme.UIItem item in items)
+            {
+                if (item == null || IsUnsupportedSelectorName(item.Name))
+                {
+                    removedCount++;
+                    continue;
+                }
+
+                item.Name = item.Name.Trim();
+                sanitizedItems.Add(item);
+            }
+
+            if (removedCount > 0)
+            {
+                Debug.Log("[EditorThemes] Removed unsupported selector entries from theme '" + themeName + "'. removed_count=" + removedCount);
+            }
+
+            return sanitizedItems;
+        }
+
+        static bool IsUnsupportedSelectorName(string selectorName)
+        {
+            if (string.IsNullOrWhiteSpace(selectorName))
+            {
+                return true;
+            }
+
+            return selectorName.Trim() == "ToolbarSearchTextField";
+        }
 
         public static string UssBlock(string Name, Color Color)
         {
+            Name = Name.Trim();
             Color32 color32 = Color;
             //Debug.Log(color32);
             string a = Color.a + "";
@@ -93,6 +134,7 @@ namespace ThemesPlugin
 
         public static void SaveJsonFileForTheme(CustomTheme t)
         {
+            t.Items = SanitizeThemeItems(t.Items, t.Name);
 
             t.Version = Version;
             string NewJson = JsonUtility.ToJson(t);
@@ -204,7 +246,6 @@ namespace ThemesPlugin
                     colorList.Add("TV Selection");
                     colorList.Add("ExposablePopupMenu");
                     colorList.Add("minibutton");
-                    colorList.Add(" ToolbarSearchTextField");
                     break;
 
 

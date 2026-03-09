@@ -9,4 +9,5 @@ public static class SpriteStreamingConfig {
   public const string TextureAddressablesGroupName = "SpriteTextures";
   public const string IndexAddressablesGroupName = "SpriteRuntimeIndex";
   public const string DefaultManifestAddress = "SpriteRuntimeIndex/Manifest";
+  public const string AtlasMetadataAddressablesLabel = "ss_atlas_metadata";
 }

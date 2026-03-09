@@ -757,6 +757,7 @@ public static class TextureResidencyCache {
         }
         var lease = AcquireAsyncNormalized(
           desiredAddress,
+          desiredAddress,
           priority,
           runPumpAndMaintain: false,
           sourceTag: "UpdateOwnerPins",
@@ -1683,7 +1684,35 @@ public static class TextureResidencyCache {
       sprite = entry.primarySprite;
       return sprite != null;
     }
-    return entry.spritesByName.TryGetValue(spriteName.Trim(), out sprite) && sprite != null;
+    var normalizedName = spriteName.Trim();
+    if (entry.spritesByName.TryGetValue(normalizedName, out sprite) && sprite != null) {
+      return true;
+    }
+
+    if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(normalizedName, out var numericLabelValue)) return false;
+    return TryGetSpriteByNumericLabel(entry, numericLabelValue, out sprite);
+  }
+
+  static bool TryGetSpriteByNumericLabel(CacheEntry entry, string numericLabelValue, out Sprite sprite) {
+    sprite = null;
+    if (entry == null || entry.spritesByName == null || entry.spritesByName.Count <= 0) return false;
+    if (string.IsNullOrWhiteSpace(numericLabelValue)) return false;
+
+    Sprite match = null;
+    foreach (var pair in entry.spritesByName) {
+      if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(pair.Key, out var candidateNumericValue)) continue;
+      if (!string.Equals(candidateNumericValue, numericLabelValue, StringComparison.Ordinal)) continue;
+
+      if (match != null && match != pair.Value) {
+        sprite = null;
+        return false;
+      }
+
+      match = pair.Value;
+    }
+
+    sprite = match;
+    return sprite != null;
   }
 
   static string NormalizeAddress(string value) {

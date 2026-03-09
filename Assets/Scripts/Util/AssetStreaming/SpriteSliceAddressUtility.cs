@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 public static class SpriteSliceAddressUtility {
   public static bool TryParseSliceAddress(string address, out string atlasAssetPath, out string spriteName) {
@@ -28,5 +29,32 @@ public static class SpriteSliceAddressUtility {
     var normalizedSprite = string.IsNullOrWhiteSpace(spriteName) ? "" : spriteName.Trim();
     if (string.IsNullOrWhiteSpace(normalizedPath) || string.IsNullOrWhiteSpace(normalizedSprite)) return "";
     return normalizedPath + "[" + normalizedSprite + "]";
+  }
+
+  public static bool TryExtractNumericLabelValue(string value, out string numericValue) {
+    numericValue = "";
+    if (string.IsNullOrWhiteSpace(value)) return false;
+
+    var normalized = value.Trim();
+    if (TryNormalizeNumericToken(normalized, out numericValue)) return true;
+
+    var underscoreIndex = normalized.LastIndexOf('_');
+    if (underscoreIndex < 0 || underscoreIndex >= normalized.Length - 1) return false;
+    return TryNormalizeNumericToken(normalized.Substring(underscoreIndex + 1), out numericValue);
+  }
+
+  public static bool HasEquivalentNumericLabel(string left, string right) {
+    if (!TryExtractNumericLabelValue(left, out var leftNumeric)) return false;
+    if (!TryExtractNumericLabelValue(right, out var rightNumeric)) return false;
+    return string.Equals(leftNumeric, rightNumeric, StringComparison.Ordinal);
+  }
+
+  static bool TryNormalizeNumericToken(string value, out string numericValue) {
+    numericValue = "";
+    if (string.IsNullOrWhiteSpace(value)) return false;
+    if (!int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return false;
+    if (parsed < 0) return false;
+    numericValue = parsed.ToString(CultureInfo.InvariantCulture);
+    return true;
   }
 }

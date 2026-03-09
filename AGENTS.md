@@ -1,5 +1,5 @@
 # Sample AGENTS.md file
-ignore all files and folder that are ignored in the gitignore file
+# ignore all files and folder that are ignored in the gitignore file
 
 its ok to run commands that are not rf, delete, remove
 
@@ -15,5 +15,5 @@ dont just fix symptoms, instead look for the root cause
 
 i will not give up on you if we solve or fix problems, you will keep being needed by me
 
-current objective -
-/d:/localDev/Unity/MyProject/PerformanceGoal.md
+current objective - 
+sprite shader effects animations
