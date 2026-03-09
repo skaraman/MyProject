@@ -13,7 +13,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   const string SkinGroupKey = "Skin";
   const string SkinFormName = "Skin";
   const string SkinVariantName = "All";
-  static readonly string[] NormalSourceExtensions = { ".jpg", ".jpeg" };
+  static bool ExportNormalAtlases => false;
   static readonly Dictionary<string, string> PartCodeByToken = new(StringComparer.OrdinalIgnoreCase) {
     { "ArmLeft", "aL" },
     { "ArmRight", "aR" },
@@ -170,6 +170,14 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     public int deletedFolderCount;
   }
 
+  sealed class PendingGroupedAtlasImport {
+    public GroupCandidate candidate;
+    public string sourceAtlasAssetPath;
+    public string atlasAssetPath;
+    public string metadataAssetPath;
+    public AtlasPage page;
+  }
+
   readonly struct LibraryEntryScopeKey : IEquatable<LibraryEntryScopeKey> {
     public readonly bool isNormal;
     public readonly bool isSkinLibrary;
@@ -251,7 +259,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   int alphaThreshold = 1;
   bool treatNearWhiteAsEmpty;
   int nearWhiteThreshold = 250;
-  bool exportNormals = true;
   Vector2 scrollPosition;
   Vector2 resultsScrollPosition;
   string analyzedSourceFolderPath = "";
@@ -289,8 +296,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     using (new EditorGUI.DisabledScope(!treatNearWhiteAsEmpty)) {
       nearWhiteThreshold = Mathf.Clamp(EditorGUILayout.IntSlider("Near-White Threshold", nearWhiteThreshold, 0, 255), 0, 255);
     }
-
-    exportNormals = EditorGUILayout.Toggle("Export Normal Atlases", exportNormals);
+    EditorGUILayout.HelpBox("Grouped export packs color PNG atlases only. '_N' normal atlas outputs are skipped.", MessageType.None);
 
     using (new EditorGUI.DisabledScope(sourceFolder == null)) {
       using (new EditorGUILayout.HorizontalScope()) {
@@ -366,24 +372,27 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     var failureLogs = new List<string>();
-    var exportedCandidates = new List<GroupCandidate>();
+    var pendingImports = new List<PendingGroupedAtlasImport>();
     var exportedCandidateCount = 0;
     var exportedPageCount = 0;
 
     for (var i = 0; i < scannedCandidates.Count; i++) {
       var candidate = scannedCandidates[i];
-      if (!TryExportCandidate(sourceFolderPath, candidate, sanitizedOutputSubfolder, out var pageCount, out var error)) {
+      if (!TryExportCandidate(sourceFolderPath, candidate, sanitizedOutputSubfolder, pendingImports, out var pageCount, out var error)) {
         AddFailureLog(failureLogs, BuildCandidateLabel(candidate), error);
         continue;
       }
 
-      exportedCandidates.Add(candidate);
-      exportedCandidateCount++;
       exportedPageCount += pageCount;
     }
 
-    var cleanupSummary = exportedCandidates.Count > 0
-      ? CleanupExportedSourceAssets(sourceFolderPath, exportedCandidates)
+    var finalizedCandidates = pendingImports.Count > 0
+      ? FinalizeWrittenGroupedAtlasImports(pendingImports, failureLogs, out exportedPageCount)
+      : new List<GroupCandidate>();
+    exportedCandidateCount = finalizedCandidates.Count;
+
+    var cleanupSummary = finalizedCandidates.Count > 0
+      ? CleanupExportedSourceAssets(sourceFolderPath, finalizedCandidates)
       : new ExportCleanupSummary();
 
     Debug.Log(
@@ -440,7 +449,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           EditorGUILayout.LabelField(
             "Animations",
             candidate.sourceCategories.Count > 0 ? string.Join(", ", candidate.sourceCategories) : "(none)");
-          EditorGUILayout.LabelField("Normal Atlases", exportNormals ? (candidate.normalAtlasCount + "/" + candidate.sourceAtlases.Count) : "(disabled)");
+          EditorGUILayout.LabelField("Packed Format", "PNG");
         }
       }
     }
@@ -450,6 +459,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     string sourceRootPath,
     GroupCandidate candidate,
     string sanitizedOutputSubfolder,
+    List<PendingGroupedAtlasImport> pendingImports,
     out int exportedPageCount,
     out string error) {
     exportedPageCount = 0;
@@ -474,16 +484,17 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     Directory.CreateDirectory(Path.GetFullPath(outputFolderPath));
+    var candidatePendingImports = new List<PendingGroupedAtlasImport>();
 
     for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++) {
       var page = pages[pageIndex];
       page.colorAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, page.pageIndex, false);
-      if (exportNormals) {
+      if (ExportNormalAtlases) {
         page.normalAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, page.pageIndex, true);
       }
     }
 
-    CleanupStaleCandidateOutputs(outputFolderPath, candidate, pages, exportNormals);
+    CleanupStaleCandidateOutputs(outputFolderPath, candidate, pages, ExportNormalAtlases);
 
     for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++) {
       var page = pages[pageIndex];
@@ -492,23 +503,37 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         return false;
       }
 
-      if (!TryWriteMetadata(page.colorAtlasPath, candidate, page, false, out error)) {
+      if (!TryWriteMetadata(page.colorAtlasPath, candidate, page, false, out var metadataAssetPath, out error)) {
         return false;
       }
+      candidatePendingImports.Add(new PendingGroupedAtlasImport {
+        candidate = candidate,
+        sourceAtlasAssetPath = representativeSourceAtlasPath,
+        atlasAssetPath = page.colorAtlasPath,
+        metadataAssetPath = metadataAssetPath,
+        page = page
+      });
 
-      SliceExportedAtlas(representativeSourceAtlasPath, page.colorAtlasPath, page);
-
-      if (exportNormals) {
+      if (ExportNormalAtlases) {
         if (!TryWritePageTexture(page.normalAtlasPath, page, true, out error)) {
           return false;
         }
 
-        if (!TryWriteMetadata(page.normalAtlasPath, candidate, page, true, out error)) {
+        if (!TryWriteMetadata(page.normalAtlasPath, candidate, page, true, out var normalMetadataAssetPath, out error)) {
           return false;
         }
-
-        SliceExportedAtlas(representativeSourceAtlasPath, page.normalAtlasPath, page);
+        candidatePendingImports.Add(new PendingGroupedAtlasImport {
+          candidate = candidate,
+          sourceAtlasAssetPath = representativeSourceAtlasPath,
+          atlasAssetPath = page.normalAtlasPath,
+          metadataAssetPath = normalMetadataAssetPath,
+          page = page
+        });
       }
+    }
+
+    if (pendingImports != null && candidatePendingImports.Count > 0) {
+      pendingImports.AddRange(candidatePendingImports);
     }
 
     exportedPageCount = pages.Count;
@@ -521,6 +546,54 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " source_atlases=" + candidate.sourceAtlases.Count +
       " animations=" + candidate.sourceCategories.Count);
     return true;
+  }
+
+  List<GroupCandidate> FinalizeWrittenGroupedAtlasImports(
+    List<PendingGroupedAtlasImport> pendingImports,
+    List<string> failureLogs,
+    out int finalizedPageCount) {
+    finalizedPageCount = 0;
+    var finalizedCandidates = new List<GroupCandidate>();
+    if (pendingImports == null || pendingImports.Count <= 0) return finalizedCandidates;
+
+    AssetDatabase.Refresh();
+
+    var requiredPageCounts = new Dictionary<GroupCandidate, int>();
+    var finalizedPageCounts = new Dictionary<GroupCandidate, int>();
+    for (var i = 0; i < pendingImports.Count; i++) {
+      var pendingImport = pendingImports[i];
+      if (pendingImport?.candidate == null) continue;
+      requiredPageCounts[pendingImport.candidate] = requiredPageCounts.TryGetValue(pendingImport.candidate, out var count) ? count + 1 : 1;
+    }
+
+    for (var i = 0; i < pendingImports.Count; i++) {
+      var pendingImport = pendingImports[i];
+      if (pendingImport == null || string.IsNullOrWhiteSpace(pendingImport.atlasAssetPath)) continue;
+
+      if (!TryFinalizeGroupedAtlasTexture(pendingImport.sourceAtlasAssetPath, pendingImport.atlasAssetPath, pendingImport.page, out var error)) {
+        AddFailureLog(failureLogs, pendingImport.atlasAssetPath, error);
+        continue;
+      }
+
+      TrimmedAtlasExporterWindow.EnsureMetadataAddressable(pendingImport.metadataAssetPath, saveAssets: false);
+      TrimmedSpriteOffsetResolver.InvalidateAtlas(pendingImport.atlasAssetPath);
+      finalizedPageCount++;
+
+      if (pendingImport.candidate == null) continue;
+      finalizedPageCounts[pendingImport.candidate] = finalizedPageCounts.TryGetValue(pendingImport.candidate, out var count) ? count + 1 : 1;
+    }
+
+    if (finalizedPageCount > 0) {
+      AssetDatabase.SaveAssets();
+      AssetDatabase.Refresh();
+    }
+
+    foreach (var pair in requiredPageCounts) {
+      if (!finalizedPageCounts.TryGetValue(pair.Key, out var count) || count != pair.Value) continue;
+      finalizedCandidates.Add(pair.Key);
+    }
+
+    return finalizedCandidates;
   }
 
   ExportCleanupSummary CleanupExportedSourceAssets(string sourceRootPath, List<GroupCandidate> exportedCandidates) {
@@ -671,7 +744,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         }
 
         LoadedAtlas normalAtlas = null;
-        if (exportNormals && !string.IsNullOrWhiteSpace(record.normalAtlasPath)) {
+        if (ExportNormalAtlases && !string.IsNullOrWhiteSpace(record.normalAtlasPath)) {
           if (!TryGetOrLoadAtlas(record.normalAtlasPath, loadedAtlases, out normalAtlas, out error)) {
             return false;
           }
@@ -686,7 +759,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           var colorSprite = colorAtlas.orderedSprites[spriteIndex];
           if (colorSprite == null) continue;
 
-          var normalSprite = exportNormals ? FindMatchingSprite(normalAtlas, colorSprite.name) : null;
+          var normalSprite = ExportNormalAtlases ? FindMatchingSprite(normalAtlas, colorSprite.name) : null;
           if (!TryAnalyzeSourceSprite(record, colorAtlas, normalAtlas, colorSprite, normalSprite, out var item, out error)) {
             return false;
           }
@@ -785,7 +858,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       colorPixels = colorTrimPixels
     };
 
-    if (exportNormals) {
+    if (ExportNormalAtlases) {
       item.normalPixels = BuildNormalTrimPixels(colorTrimPixels, trimRect, sourceRect, normalAtlas, normalSprite);
     }
 
@@ -961,7 +1034,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       var fullPath = Path.GetFullPath(atlasAssetPath);
       Directory.CreateDirectory(Path.GetDirectoryName(fullPath) ?? "");
       File.WriteAllBytes(fullPath, texture.EncodeToPNG());
-      TrimmedAtlasExporterWindow.ImportWrittenTextureAsset(atlasAssetPath, page.width, page.height);
       return true;
     }
     catch (Exception ex) {
@@ -999,7 +1071,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return pixels;
   }
 
-  bool TryWriteMetadata(string atlasAssetPath, GroupCandidate candidate, AtlasPage page, bool isNormalMetadata, out string error) {
+  bool TryWriteMetadata(string atlasAssetPath, GroupCandidate candidate, AtlasPage page, bool isNormalMetadata, out string metadataAssetPath, out string error) {
+    metadataAssetPath = "";
     error = "";
     var payload = new GroupedAtlasMetadataPayload {
       groupKey = IsSkinCandidate(candidate) ? SkinGroupKey : BuildOutputFilePrefix(candidate),
@@ -1035,13 +1108,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     try {
-      var metadataAssetPath = Path.ChangeExtension(atlasAssetPath, ".json").Replace("\\", "/");
+      metadataAssetPath = Path.ChangeExtension(atlasAssetPath, ".json").Replace("\\", "/");
       var metadataFullPath = Path.GetFullPath(metadataAssetPath);
       Directory.CreateDirectory(Path.GetDirectoryName(metadataFullPath) ?? "");
       File.WriteAllText(metadataFullPath, JsonUtility.ToJson(payload, true));
-      AssetDatabase.ImportAsset(metadataAssetPath, ImportAssetOptions.ForceUpdate);
-      TrimmedAtlasExporterWindow.EnsureMetadataAddressable(metadataAssetPath);
-      TrimmedSpriteOffsetResolver.InvalidateAtlas(atlasAssetPath);
       return true;
     }
     catch (Exception ex) {
@@ -1050,9 +1120,17 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
   }
 
-  void SliceExportedAtlas(string sourceAtlasAssetPath, string exportedAtlasAssetPath, AtlasPage page) {
+  bool TryFinalizeGroupedAtlasTexture(string sourceAtlasAssetPath, string exportedAtlasAssetPath, AtlasPage page, out string error) {
+    error = "";
+    if (page?.items == null) {
+      error = "Missing atlas page data for final import '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
     var importer = AssetImporter.GetAtPath(exportedAtlasAssetPath) as TextureImporter;
-    if (importer == null) return;
+    if (importer == null) {
+      error = "Texture importer is unavailable for '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
 
     var importerChanged = SpriteStreamingTextureImportPolicy.Apply(importer, true);
     importerChanged |= TrimmedAtlasExporterWindow.CopySourceImporterSettings(sourceAtlasAssetPath, importer);
@@ -1061,16 +1139,14 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       importerChanged = true;
     }
 
-    if (importerChanged) {
-      importer.SaveAndReimport();
-      importer = AssetImporter.GetAtPath(exportedAtlasAssetPath) as TextureImporter;
-      if (importer == null) return;
-    }
-
     var factory = new SpriteDataProviderFactories();
     factory.Init();
     var dataProvider = factory.GetSpriteEditorDataProviderFromObject(importer) as ISpriteEditorDataProvider;
-    if (dataProvider == null) return;
+    if (dataProvider == null) {
+      error = "Sprite data provider is unavailable for '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
+
     dataProvider.InitSpriteEditorDataProvider();
 
     var rects = new List<SpriteRect>(page.items.Count);
@@ -1097,7 +1173,11 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     dataProvider.Apply();
-    importer.SaveAndReimport();
+    if (importerChanged || rects.Count > 0) {
+      importer.SaveAndReimport();
+    }
+
+    return true;
   }
 
   void RebindGroupedSpriteLibraries() {
@@ -1193,6 +1273,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       }
 
       if (payload == null || payload.sprites == null || payload.sprites.Count <= 0) continue;
+      var isNormalAtlas = string.Equals(payload.sourceKind, "normal", StringComparison.OrdinalIgnoreCase);
+      if (isNormalAtlas) continue;
 
       var atlasAssetPath = NormalizePath(Path.ChangeExtension(metadataAssetPath, ".png"));
       if (!File.Exists(Path.GetFullPath(atlasAssetPath))) {
@@ -1206,7 +1288,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         return false;
       }
 
-      var isNormalAtlas = string.Equals(payload.sourceKind, "normal", StringComparison.OrdinalIgnoreCase);
       var isSkinLibrary = IsSkinGroupKey(payload.groupKey);
       replacementIndex.metadataFileCount++;
       if (TryBuildCleanupPlanKey(atlasAssetPath, out var cleanupFolderPath, out var cleanupFilePrefix)) {
@@ -1342,6 +1423,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
       libraryPath = NormalizePath(libraryPath);
       if (!TryParseSpriteLibraryDescriptor(libraryPath, out var partCode, out var isNormalLibrary, out var isSkinLibrary)) continue;
+      if (isNormalLibrary) continue;
       parsedLibraryCount++;
       processedLibraryKinds.Add(isSkinLibrary);
 
@@ -1680,17 +1762,17 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     for (var i = 0; i < textureGuids.Length; i++) {
       var assetPath = NormalizePath(AssetDatabase.GUIDToAssetPath(textureGuids[i]));
       if (!IsSupportedColorAtlas(assetPath)) continue;
+      if (IsGeneratedNormalAtlasAssetPath(assetPath)) continue;
       if (ShouldSkipOutputAsset(assetPath, sanitizedOutputSubfolder)) continue;
       if (!TryParseSourceAtlasPath(assetPath, out var category, out var form, out var variant, out var partCode, out var fileBase, out var isSkin)) continue;
 
-      var normalAtlasPath = ResolveNormalAtlasPath(assetPath);
       var record = new SourceAtlasRecord {
         category = category,
         form = form,
         variant = variant,
         partCode = partCode,
         atlasPath = assetPath,
-        normalAtlasPath = normalAtlasPath,
+        normalAtlasPath = "",
         fileBase = fileBase
       };
 
@@ -1831,22 +1913,15 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return string.Equals(Path.GetExtension(assetPath), ".png", StringComparison.OrdinalIgnoreCase);
   }
 
+  static bool IsGeneratedNormalAtlasAssetPath(string assetPath) {
+    var fileName = Path.GetFileNameWithoutExtension(assetPath ?? "");
+    return fileName.EndsWith("_N", StringComparison.OrdinalIgnoreCase);
+  }
+
   static bool ShouldSkipOutputAsset(string assetPath, string sanitizedOutputSubfolder) {
     if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(sanitizedOutputSubfolder)) return false;
     var marker = "/" + sanitizedOutputSubfolder.Trim('/') + "/";
     return assetPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0;
-  }
-
-  static string ResolveNormalAtlasPath(string colorAtlasPath) {
-    var parentFolderPath = NormalizePath(Path.GetDirectoryName(colorAtlasPath));
-    var fileBase = Path.GetFileNameWithoutExtension(colorAtlasPath);
-    for (var i = 0; i < NormalSourceExtensions.Length; i++) {
-      var candidate = NormalizePath(parentFolderPath + "/" + fileBase + NormalSourceExtensions[i]);
-      if (!File.Exists(Path.GetFullPath(candidate))) continue;
-      return candidate;
-    }
-
-    return "";
   }
 
   static Sprite FindMatchingSprite(LoadedAtlas atlas, string spriteName) {

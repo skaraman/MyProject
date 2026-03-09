@@ -12,7 +12,7 @@ using UnityEngine;
 
 public sealed class TrimmedAtlasExporterWindow : EditorWindow {
   const string DefaultOutputPrefix = "trimmed";
-  static readonly string[] SupportedSourceExtensions = { ".png", ".jpg", ".jpeg" };
+  static readonly string[] SupportedSourceExtensions = { ".png" };
 
   [Serializable]
   sealed class TrimmedAtlasExport {
@@ -87,6 +87,14 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     public List<string> sourcePaths = new();
   }
 
+  sealed class PendingTrimmedAtlasExport {
+    public SourceAtlasExportBatch batch;
+    public string sourceAtlasAssetPath;
+    public string exportedAtlasAssetPath;
+    public string metadataAssetPath;
+    public TrimmedAtlasExport exportData;
+  }
+
   Texture2D sourceTexture;
   DefaultAsset sourceFolder;
   DefaultAsset outputFolder;
@@ -159,7 +167,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       EditorGUILayout.HelpBox("Write Prefixed Copy requires a valid prefix. Example: 'trimmed' writes 'trimmed_1.png'.", MessageType.Warning);
     }
     EditorGUILayout.HelpBox(
-      "By default export writes '<source>.png' in the destination folder, which overwrites the original atlas when exporting beside it. Enable Write Prefixed Copy to write '<prefix>_<source>.png' instead. Non-PNG sources still export as PNG files.",
+      "By default export writes '<source>.png' in the destination folder, which overwrites the original atlas when exporting beside it. Enable Write Prefixed Copy to write '<prefix>_<source>.png' instead. This tool only exports color PNG sources and skips '_N' normal atlas variants.",
       MessageType.None);
     createAtlasSlices = EditorGUILayout.Toggle("Slice Exported Atlas", createAtlasSlices);
 
@@ -219,10 +227,20 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     var exportData = analyzedAtlas;
-    if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, analyzedBuildItems, out var exportedAtlasPath, out error)) {
+    if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, analyzedBuildItems, out var pendingExport, out error)) {
       EditorUtility.DisplayDialog("Trim Export Failed", error, "OK");
       return;
     }
+
+    var failureLogs = new List<string>();
+    var finalizedExports = FinalizeWrittenAtlasExports(new List<PendingTrimmedAtlasExport> { pendingExport }, failureLogs);
+    if (finalizedExports.Count <= 0) {
+      var message = failureLogs.Count > 0 ? failureLogs[0] : "Unity import failed for the written atlas export.";
+      EditorUtility.DisplayDialog("Trim Export Failed", message, "OK");
+      return;
+    }
+
+    var exportedAtlasPath = finalizedExports[0].exportedAtlasAssetPath;
 
     Debug.Log(
       "[TrimAtlasExport] Exported atlas." +
@@ -231,7 +249,6 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       " packed=" + exportData.atlasWidth + "x" + exportData.atlasHeight +
       " sprites=" + exportData.sprites.Count +
       " empty=" + exportData.emptyCellCount);
-    AssetDatabase.Refresh();
   }
 
   void ExportSelectedFolder() {
@@ -263,6 +280,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     var deletedSourceCount = 0;
     var failedCount = 0;
     var failureLogs = new List<string>();
+    var pendingExports = new List<PendingTrimmedAtlasExport>();
 
     for (var i = 0; i < exportBatches.Count; i++) {
       var batch = exportBatches[i];
@@ -280,25 +298,32 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
         continue;
       }
 
-      if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, buildItems, out var exportedAtlasPath, out error)) {
+      if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, buildItems, out var pendingExport, out error)) {
         failedCount++;
         AddFailureLog(failureLogs, sourcePath, error);
         continue;
       }
 
-      deletedSourceCount += DeletePackedSourceAssets(batch, exportedAtlasPath);
+      pendingExport.batch = batch;
+      pendingExports.Add(pendingExport);
       exportedCount++;
       Debug.Log(
         "[TrimAtlasExport] Folder export wrote atlas." +
         " source='" + sourcePath + "'" +
         " source_count=" + batch.sourcePaths.Count +
         " grouped_numeric=" + batch.groupedNumericSiblings +
-        " output='" + exportedAtlasPath + "'" +
+        " output='" + pendingExport.exportedAtlasAssetPath + "'" +
         " packed=" + exportData.atlasWidth + "x" + exportData.atlasHeight);
     }
 
-    if (exportedCount > 0) {
-      AssetDatabase.Refresh();
+    if (pendingExports.Count > 0) {
+      var finalizedExports = FinalizeWrittenAtlasExports(pendingExports, failureLogs);
+      failedCount += pendingExports.Count - finalizedExports.Count;
+      for (var i = 0; i < finalizedExports.Count; i++) {
+        var pendingExport = finalizedExports[i];
+        deletedSourceCount += DeletePackedSourceAssets(pendingExport.batch, pendingExport.exportedAtlasAssetPath);
+      }
+      exportedCount = finalizedExports.Count;
     }
 
     var summary =
@@ -378,7 +403,12 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     error = "";
 
     if (!IsSupportedSourceTextureAssetPath(sourcePath)) {
-      error = "Only PNG and JPG atlas files are supported: " + sourcePath;
+      error = "Only PNG atlas files are supported: " + sourcePath;
+      return false;
+    }
+
+    if (IsGeneratedNormalAtlasAssetPath(sourcePath)) {
+      error = "Normal atlas variants with the '_N' suffix are skipped: " + sourcePath;
       return false;
     }
 
@@ -757,9 +787,9 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     string outputFolderPath,
     TrimmedAtlasExport exportData,
     List<TrimmedSpriteBuildData> buildItems,
-    out string exportedAtlasPath,
+    out PendingTrimmedAtlasExport pendingExport,
     out string error) {
-    exportedAtlasPath = "";
+    pendingExport = null;
     error = "";
     if (exportData == null || buildItems == null) {
       error = "No analyzed atlas data is available for export.";
@@ -774,14 +804,15 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
 
     var atlasTexture = BuildPackedTexture(exportData.atlasWidth, exportData.atlasHeight, exportedBuildItems);
     try {
-      exportedAtlasPath = WriteAtlasTexture(exportData.exportedAtlasAssetPath, atlasTexture);
+      var exportedAtlasPath = WriteAtlasTexture(exportData.exportedAtlasAssetPath, atlasTexture);
       exportData.exportedAtlasAssetPath = exportedAtlasPath;
-      WriteMetadataJson(exportedAtlasPath, exportData);
-
-      ImportWrittenTextureAsset(exportedAtlasPath, exportData.atlasWidth, exportData.atlasHeight);
-      if (createAtlasSlices) {
-        SliceExportedAtlas(sourcePath, exportedAtlasPath, exportData);
-      }
+      var metadataAssetPath = WriteMetadataJson(exportedAtlasPath, exportData);
+      pendingExport = new PendingTrimmedAtlasExport {
+        sourceAtlasAssetPath = sourcePath,
+        exportedAtlasAssetPath = exportedAtlasPath,
+        metadataAssetPath = metadataAssetPath,
+        exportData = exportData
+      };
 
       return true;
     }
@@ -792,6 +823,42 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     finally {
       DestroyImmediate(atlasTexture);
     }
+  }
+
+  List<PendingTrimmedAtlasExport> FinalizeWrittenAtlasExports(List<PendingTrimmedAtlasExport> pendingExports, List<string> failureLogs) {
+    var finalizedExports = new List<PendingTrimmedAtlasExport>();
+    if (pendingExports == null || pendingExports.Count <= 0) return finalizedExports;
+
+    AssetDatabase.Refresh();
+
+    for (var i = 0; i < pendingExports.Count; i++) {
+      var pendingExport = pendingExports[i];
+      if (pendingExport == null || string.IsNullOrWhiteSpace(pendingExport.exportedAtlasAssetPath)) continue;
+
+      if (createAtlasSlices) {
+        if (!TryFinalizeAtlasTexture(pendingExport.sourceAtlasAssetPath, pendingExport.exportedAtlasAssetPath, pendingExport.exportData, out var error)) {
+          AddFailureLog(failureLogs, pendingExport.sourceAtlasAssetPath, error);
+          continue;
+        }
+      }
+      else {
+        if (!TryFinalizeUnslicedTextureAsset(pendingExport.exportedAtlasAssetPath, pendingExport.exportData, out var error)) {
+          AddFailureLog(failureLogs, pendingExport.sourceAtlasAssetPath, error);
+          continue;
+        }
+      }
+
+      EnsureMetadataAddressable(pendingExport.metadataAssetPath, saveAssets: false);
+      TrimmedSpriteOffsetResolver.InvalidateAtlas(pendingExport.exportedAtlasAssetPath);
+      finalizedExports.Add(pendingExport);
+    }
+
+    if (finalizedExports.Count > 0) {
+      AssetDatabase.SaveAssets();
+      AssetDatabase.Refresh();
+    }
+
+    return finalizedExports;
   }
 
   static List<TrimmedSpriteBuildData> BuildExportBuildItems(List<TrimmedSpriteBuildData> buildItems) {
@@ -812,26 +879,6 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     Directory.CreateDirectory(Path.GetDirectoryName(outputFullPath) ?? "");
     File.WriteAllBytes(outputFullPath, atlasTexture.EncodeToPNG());
     return outputAssetPath.Replace("\\", "/");
-  }
-
-  internal static void ImportWrittenTextureAsset(string atlasAssetPath, int atlasWidth, int atlasHeight) {
-    var importer = AssetImporter.GetAtPath(atlasAssetPath) as TextureImporter;
-    if (importer == null) {
-      AssetDatabase.ImportAsset(atlasAssetPath, ImportAssetOptions.ForceUpdate);
-      return;
-    }
-
-    if (!TryPrepareOverwriteImport(importer, out var previousSliceCount)) {
-      AssetDatabase.ImportAsset(atlasAssetPath, ImportAssetOptions.ForceUpdate);
-      return;
-    }
-
-    Debug.Log(
-      "[TrimAtlasExport] Clearing stale sprite metadata before overwrite import." +
-      " asset='" + atlasAssetPath + "'" +
-      " previous_slices=" + (previousSliceCount >= 0 ? previousSliceCount.ToString() : "unknown") +
-      " new_size=" + atlasWidth + "x" + atlasHeight);
-    importer.SaveAndReimport();
   }
 
   static bool TryPrepareOverwriteImport(TextureImporter importer, out int previousSliceCount) {
@@ -866,19 +913,31 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     return true;
   }
 
-  void WriteMetadataJson(string exportedAtlasAssetPath, TrimmedAtlasExport exportData) {
+  string WriteMetadataJson(string exportedAtlasAssetPath, TrimmedAtlasExport exportData) {
     var jsonPath = Path.ChangeExtension(exportedAtlasAssetPath, ".json");
     var fullJsonPath = Path.GetFullPath(jsonPath);
     Directory.CreateDirectory(Path.GetDirectoryName(fullJsonPath) ?? "");
     File.WriteAllText(fullJsonPath, JsonUtility.ToJson(exportData, true));
-    AssetDatabase.ImportAsset(jsonPath, ImportAssetOptions.ForceUpdate);
-    EnsureMetadataAddressable(jsonPath);
-    TrimmedSpriteOffsetResolver.InvalidateAtlas(exportedAtlasAssetPath);
+    return jsonPath.Replace("\\", "/");
   }
 
-  void SliceExportedAtlas(string sourceAtlasAssetPath, string exportedAtlasAssetPath, TrimmedAtlasExport exportData) {
+  bool TryFinalizeAtlasTexture(string sourceAtlasAssetPath, string exportedAtlasAssetPath, TrimmedAtlasExport exportData, out string error) {
+    error = "";
+    if (string.IsNullOrWhiteSpace(exportedAtlasAssetPath)) {
+      error = "Missing exported atlas path for final import.";
+      return false;
+    }
+    if (exportData?.sprites == null) {
+      error = "Missing trimmed sprite metadata for final import '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
+
     var importer = AssetImporter.GetAtPath(exportedAtlasAssetPath) as TextureImporter;
-    if (importer == null) return;
+    if (importer == null) {
+      error = "Texture importer is unavailable for '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
+
     var importerChanged = SpriteStreamingTextureImportPolicy.Apply(importer, true);
     importerChanged |= CopySourceImporterSettings(sourceAtlasAssetPath, importer);
     if (!importer.alphaIsTransparency) {
@@ -886,16 +945,14 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       importerChanged = true;
     }
 
-    if (importerChanged) {
-      importer.SaveAndReimport();
-      importer = AssetImporter.GetAtPath(exportedAtlasAssetPath) as TextureImporter;
-      if (importer == null) return;
-    }
-
     var factory = new SpriteDataProviderFactories();
     factory.Init();
     var dataProvider = factory.GetSpriteEditorDataProviderFromObject(importer) as ISpriteEditorDataProvider;
-    if (dataProvider == null) return;
+    if (dataProvider == null) {
+      error = "Sprite data provider is unavailable for '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
+
     dataProvider.InitSpriteEditorDataProvider();
 
     var rects = new List<SpriteRect>(exportData.sprites.Count);
@@ -922,7 +979,42 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     dataProvider.Apply();
+    if (importerChanged || rects.Count > 0) {
+      importer.SaveAndReimport();
+    }
+
+    return true;
+  }
+
+  bool TryFinalizeUnslicedTextureAsset(string exportedAtlasAssetPath, TrimmedAtlasExport exportData, out string error) {
+    error = "";
+    if (string.IsNullOrWhiteSpace(exportedAtlasAssetPath)) {
+      error = "Missing exported atlas path for final import.";
+      return false;
+    }
+    if (exportData == null) {
+      error = "Missing export metadata for final import '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
+
+    var importer = AssetImporter.GetAtPath(exportedAtlasAssetPath) as TextureImporter;
+    if (importer == null) {
+      error = "Texture importer is unavailable for '" + exportedAtlasAssetPath + "'.";
+      return false;
+    }
+
+    if (!TryPrepareOverwriteImport(importer, out var previousSliceCount)) {
+      AssetDatabase.ImportAsset(exportedAtlasAssetPath, ImportAssetOptions.ForceUpdate);
+      return true;
+    }
+
+    Debug.Log(
+      "[TrimAtlasExport] Clearing stale sprite metadata before final import." +
+      " asset='" + exportedAtlasAssetPath + "'" +
+      " previous_slices=" + (previousSliceCount >= 0 ? previousSliceCount.ToString() : "unknown") +
+      " new_size=" + exportData.atlasWidth + "x" + exportData.atlasHeight);
     importer.SaveAndReimport();
+    return true;
   }
 
   internal static bool CopySourceImporterSettings(string sourceAtlasAssetPath, TextureImporter targetImporter) {
@@ -1235,6 +1327,11 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     return false;
   }
 
+  static bool IsGeneratedNormalAtlasAssetPath(string assetPath) {
+    var fileName = Path.GetFileNameWithoutExtension(assetPath ?? "");
+    return fileName.EndsWith("_N", StringComparison.OrdinalIgnoreCase);
+  }
+
   static string ResolveSpriteName(Dictionary<int, string> namesByIndex, int index, string atlasName, int fallbackIndex) {
     if (namesByIndex != null && namesByIndex.TryGetValue(index, out var name) && !string.IsNullOrWhiteSpace(name)) {
       return name;
@@ -1293,6 +1390,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       var assetPath = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(textureGuids[i]));
       if (string.IsNullOrWhiteSpace(assetPath)) continue;
       if (!IsSupportedSourceTextureAssetPath(assetPath)) continue;
+      if (IsGeneratedNormalAtlasAssetPath(assetPath)) continue;
       if (ShouldSkipGeneratedOutput(assetPath)) continue;
 
       var parentFolderPath = NormalizeAssetPath(Path.GetDirectoryName(assetPath));
@@ -1505,7 +1603,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     return new string(sanitizedChars, 0, count).Trim().Trim('_');
   }
 
-  internal static void EnsureMetadataAddressable(string metadataAssetPath) {
+  internal static void EnsureMetadataAddressable(string metadataAssetPath, bool saveAssets = true) {
     var normalizedAssetPath = (metadataAssetPath ?? "").Replace("\\", "/");
     if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
 
@@ -1544,7 +1642,9 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
 
     EditorUtility.SetDirty(group);
     EditorUtility.SetDirty(settings);
-    AssetDatabase.SaveAssets();
+    if (saveAssets) {
+      AssetDatabase.SaveAssets();
+    }
   }
 }
 #endif

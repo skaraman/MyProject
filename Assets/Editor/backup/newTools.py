@@ -299,12 +299,16 @@ class AA:
                         if E.match(os.path.basename(F)):continue
                         A.append(F)
                 return sorted(A,key=lambda A:A.lower())
+        def _trim_packed_atlas_page(B,image,used_width,used_height):
+                C=max(1,used_width);D=max(1,used_height)
+                if image.width==C and image.height==D:return image
+                E=image.crop((0,0,C,D));image.close();return E
         def _build_root_atlas_pages(B,root,image_paths):
-                E=[];F=Image.new(_L,(A,A));C=D=H=I=0
+                E=[];F=Image.new(_L,(A,A));C=D=H=I=N=0
                 def J(final_page=_B):
-                        nonlocal F,C,D,H,I
-                        K=B._atlas_output_path(root,I);print(f"[Atlas 2048] Saving {K} with page_index={I}.");F.save(K);F.close();E.append(K);I+=1
-                        if not final_page:F=Image.new(_L,(A,A));C=D=H=0
+                        nonlocal F,C,D,H,I,N
+                        L=max(1,N);M=max(1,D+H);K=B._atlas_output_path(root,I);print(f"[Atlas 2048] Saving {K} with page_index={I}, size={L}x{M}, cursor_x={C}, row_y={D}, row_h={H}.");O=B._trim_packed_atlas_page(F,L,M);O.save(K);O.close();E.append(K);I+=1
+                        if not final_page:F=Image.new(_L,(A,A));C=D=H=N=0
                 try:
                         for K in image_paths:
                                 with Image.open(K)as L:
@@ -313,7 +317,7 @@ class AA:
                                         if D+L.height>A:J();C=D=H=0
                                         if L.mode in(_L,'LA')or _AF in L.info:M=L.convert(_L);F.paste(M,(C,D),M);M.close()
                                         else:F.paste(L,(C,D))
-                                        C+=L.width;H=max(H,L.height)
+                                        C+=L.width;H=max(H,L.height);N=max(N,C)
                         if image_paths:J(_C)
                         else:F.close()
                         return E
