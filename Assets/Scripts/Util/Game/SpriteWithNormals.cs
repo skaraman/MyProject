@@ -807,24 +807,15 @@ public class SpriteWithNormals : MonoBehaviour {
   bool TryResolveTrimmedOffsetLocalUnits(string colorSliceAddress, Sprite colorSprite, out Vector3 offsetLocalUnits) {
     offsetLocalUnits = Vector3.zero;
     if (colorSprite == null || string.IsNullOrWhiteSpace(colorSliceAddress)) return false;
-    if (!TrimmedSpriteOffsetResolver.TryGetExactOffset(colorSliceAddress, out var offsetPixels, OnTrimmedOffsetMetadataReady)) {
-      return false;
-    }
-
-    offsetLocalUnits = ConvertTrimmedOffsetToLocalUnits(offsetPixels, colorSprite);
-    return true;
-  }
-
-  Vector3 ConvertTrimmedOffsetToLocalUnits(Vector2 offsetPixels, Sprite colorSprite) {
-    var pixelsPerUnit = colorSprite != null && colorSprite.pixelsPerUnit > 0f ? colorSprite.pixelsPerUnit : 100f;
-    var x = offsetPixels.x / pixelsPerUnit;
-    var y = offsetPixels.y / pixelsPerUnit;
-    if (_renderer != null) {
-      if (_renderer.flipX) x = -x;
-      if (_renderer.flipY) y = -y;
-    }
-
-    return new Vector3(x, y, 0f);
+    var flipX = _renderer != null && _renderer.flipX;
+    var flipY = _renderer != null && _renderer.flipY;
+    return TrimmedSpriteOffsetResolver.TryGetExactLocalOffset(
+      colorSliceAddress,
+      colorSprite,
+      out offsetLocalUnits,
+      flipX,
+      flipY,
+      OnTrimmedOffsetMetadataReady);
   }
 
   void ApplyTrimmedOffsetLocal(Vector3 offsetLocalUnits, Sprite colorSprite, string colorSliceAddress) {

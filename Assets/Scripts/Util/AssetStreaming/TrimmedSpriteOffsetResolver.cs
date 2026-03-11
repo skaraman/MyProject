@@ -105,6 +105,30 @@ public static class TrimmedSpriteOffsetResolver {
     return false;
   }
 
+  public static bool TryGetExactLocalOffset(
+    string sliceAddress,
+    Sprite sprite,
+    out Vector3 localOffset,
+    bool flipX = false,
+    bool flipY = false,
+    Action onReady = null) {
+    localOffset = Vector3.zero;
+    if (sprite == null) return false;
+    if (!TryGetExactOffset(sliceAddress, out var offsetPx, onReady)) return false;
+
+    localOffset = ConvertOffsetPixelsToLocalUnits(offsetPx, sprite, flipX, flipY);
+    return true;
+  }
+
+  public static Vector3 ConvertOffsetPixelsToLocalUnits(Vector2 offsetPx, Sprite sprite, bool flipX = false, bool flipY = false) {
+    var pixelsPerUnit = sprite != null && sprite.pixelsPerUnit > 0f ? sprite.pixelsPerUnit : 100f;
+    var x = offsetPx.x / pixelsPerUnit;
+    var y = offsetPx.y / pixelsPerUnit;
+    if (flipX) x = -x;
+    if (flipY) y = -y;
+    return new Vector3(x, y, 0f);
+  }
+
   static bool TryGetLoadedOffset(string atlasAssetPath, string spriteName, out Vector2 offsetPx) {
     offsetPx = Vector2.zero;
     if (!loadedAtlasOffsets.TryGetValue(atlasAssetPath, out var atlasOffsets) || atlasOffsets == null) return false;

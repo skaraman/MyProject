@@ -85,18 +85,34 @@ public static class SpriteIndexBuilder {
     }
   }
 
+  enum AtlasMetadataKind : byte {
+    Invalid = 0,
+    Standard = 1,
+    Grouped = 2,
+  }
+
   sealed class BuildState {
     public readonly AddressableAssetSettings addressables;
     public readonly AddressableAssetGroup textureGroup;
     public readonly AddressableAssetGroup indexGroup;
     public readonly List<string> errors = new();
     public readonly Dictionary<string, Dictionary<long, string>> addressCacheByGuid = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, Dictionary<string, string>> spriteAddressByNameCacheByGuid = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, string> derivedNormalAtlasPathByColorAtlas = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, bool> assetExistsByPath = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, string> atlasMetadataAssetPathByAtlasPath = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, AtlasMetadataKind> atlasMetadataKindByPath = new(StringComparer.OrdinalIgnoreCase);
     public int schemaRepairs;
     public readonly HashSet<string> runtimeAmbiguityWarnings = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, int> syntheticTextureLabelCounts = new(StringComparer.OrdinalIgnoreCase);
     public int syntheticTextureLabelAssignments;
     public readonly HashSet<string> activeTextureAssetPaths = new(StringComparer.OrdinalIgnoreCase);
     public readonly HashSet<string> activeAtlasMetadataAssetPaths = new(StringComparer.OrdinalIgnoreCase);
+    public bool projectGroupedMetadataScanCompleted;
+    public bool projectHasGroupedMetadataAssets;
+    public int missingNormalLibraryCount;
+    public int autoDerivedNormalAddressCount;
+    public int missingNormalAddressCount;
 
     public BuildState(AddressableAssetSettings addressables, AddressableAssetGroup textureGroup, AddressableAssetGroup indexGroup) {
       this.addressables = addressables;
@@ -359,14 +375,16 @@ public static class SpriteIndexBuilder {
         continue;
       }
 
+      var colorRows = ParseLibraryRows(colorLibraryPath, state.errors);
       var normalLibraryName = libraryName + "N";
-      if (!librariesByKey.TryGetValue(normalLibraryName, out var normalLibraryPath)) {
-        state.errors.Add("Missing normal library '" + normalLibraryName + "' for libraryName '" + libraryName + "' (requested '" + requestedLibraryName + "').");
-        continue;
+      var hasNormalLibrary = librariesByKey.TryGetValue(normalLibraryName, out var normalLibraryPath);
+      if (!hasNormalLibrary) {
+        state.missingNormalLibraryCount++;
       }
 
-      var colorRows = ParseLibraryRows(colorLibraryPath, state.errors);
-      var normalRows = ParseLibraryRows(normalLibraryPath, state.errors);
+      var normalRows = hasNormalLibrary
+        ? ParseLibraryRows(normalLibraryPath, state.errors)
+        : new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
       if (colorRows.Count == 0) {
         state.errors.Add("Color library '" + colorLibraryPath + "' produced zero rows.");
         continue;
@@ -374,11 +392,6 @@ public static class SpriteIndexBuilder {
 
       var shardRows = new List<ShardRow>(colorRows.Count);
       foreach (var pair in colorRows) {
-        if (!normalRows.TryGetValue(pair.Key, out var normalRef)) {
-          state.errors.Add("Missing normal row for '" + libraryName + "' entry '" + pair.Key + "'.");
-          continue;
-        }
-
         var separator = pair.Key.IndexOf('\u001f');
         if (separator <= 0 || separator >= pair.Key.Length - 1) {
           state.errors.Add("Invalid row key '" + pair.Key + "' in '" + colorLibraryPath + "'.");
@@ -390,16 +403,42 @@ public static class SpriteIndexBuilder {
         ParseLabel(label, out var labelPrefix, out var frame);
 
         var colorAddress = ResolveSpriteAddress(state, pair.Value, libraryName + "/" + category + ":" + label + " (color)");
-        var normalAddress = ResolveSpriteAddress(state, normalRef, normalLibraryName + "/" + category + ":" + label + " (normal)");
-        if (string.IsNullOrWhiteSpace(colorAddress) || string.IsNullOrWhiteSpace(normalAddress)) continue;
+        if (string.IsNullOrWhiteSpace(colorAddress)) continue;
         if (!ValidateRuntimeAtlasAddress(state, colorAddress, libraryName + "/" + category + ":" + label + " (color)")) continue;
-        if (!ValidateRuntimeAtlasAddress(state, normalAddress, normalLibraryName + "/" + category + ":" + label + " (normal)")) continue;
+
+        var normalAddress = "";
+        var autoDerivedNormal = false;
+        if (normalRows.TryGetValue(pair.Key, out var normalRef)) {
+          normalAddress = ResolveSpriteAddress(state, normalRef, normalLibraryName + "/" + category + ":" + label + " (normal)", recordError: false);
+          if (!string.IsNullOrWhiteSpace(normalAddress) &&
+              !ValidateRuntimeAtlasAddress(state, normalAddress, normalLibraryName + "/" + category + ":" + label + " (normal)", recordError: false)) {
+            normalAddress = "";
+          }
+        }
+
+        if (string.IsNullOrWhiteSpace(normalAddress) &&
+            TryResolveDerivedNormalAddress(state, colorAddress, out normalAddress)) {
+          autoDerivedNormal = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalAddress) &&
+            !ValidateRuntimeAtlasAddress(state, normalAddress, normalLibraryName + "/" + category + ":" + label + " (derived normal)", recordError: false)) {
+          normalAddress = "";
+          autoDerivedNormal = false;
+        }
+
+        if (autoDerivedNormal) {
+          state.autoDerivedNormalAddressCount++;
+        }
+        else if (string.IsNullOrWhiteSpace(normalAddress)) {
+          state.missingNormalAddressCount++;
+        }
 
         shardRows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
       }
 
       if (shardRows.Count == 0) {
-        state.errors.Add("LibraryName '" + libraryName + "' has zero valid color/normal pairs (requested '" + requestedLibraryName + "').");
+        state.errors.Add("LibraryName '" + libraryName + "' has zero valid color pairs (requested '" + requestedLibraryName + "').");
         continue;
       }
 
@@ -430,7 +469,7 @@ public static class SpriteIndexBuilder {
 
     CleanupStaleTextureEntries(textureGroup, state.activeTextureAssetPaths);
     CleanupStaleShardAssets(shardAssetPaths);
-    CleanupStaleIndexEntries(indexGroup, shardAssetPaths, manifestAssetPath, state.activeAtlasMetadataAssetPaths);
+    CleanupStaleIndexEntries(state, indexGroup, shardAssetPaths, manifestAssetPath, state.activeAtlasMetadataAssetPaths);
 
     manifestEntries.Sort((left, right) => string.Compare(left.libraryName, right.libraryName, StringComparison.Ordinal));
     WriteManifestTextAsset(manifestAssetPath, manifestEntries);
@@ -456,6 +495,7 @@ public static class SpriteIndexBuilder {
       }
       LogSyntheticTextureLabelSummary(contextLabel, state);
       LogAtlasMetadataSummary(contextLabel, state);
+      LogNormalAddressSummary(contextLabel, state);
       LogRuntimeIndexSummary(contextLabel, false, manifestEntries.Count, shardAssetPaths.Count, state.schemaRepairs, state.errors.Count);
 
       if (failOnError) {
@@ -466,6 +506,7 @@ public static class SpriteIndexBuilder {
 
     LogSyntheticTextureLabelSummary(contextLabel, state);
     LogAtlasMetadataSummary(contextLabel, state);
+    LogNormalAddressSummary(contextLabel, state);
     LogRuntimeIndexSummary(contextLabel, true, manifestEntries.Count, shardAssetPaths.Count, state.schemaRepairs, 0);
 
     return true;
@@ -945,21 +986,27 @@ public static class SpriteIndexBuilder {
     return rows;
   }
 
-  static string ResolveSpriteAddress(BuildState state, SpriteRef spriteRef, string context) {
+  static string ResolveSpriteAddress(BuildState state, SpriteRef spriteRef, string context, bool recordError = true) {
     if (string.IsNullOrWhiteSpace(spriteRef.guid)) {
-      state.errors.Add("Missing GUID while resolving " + context + ".");
+      if (recordError) {
+        state.errors.Add("Missing GUID while resolving " + context + ".");
+      }
       return "";
     }
 
     if (!state.addressCacheByGuid.TryGetValue(spriteRef.guid, out var byFileId)) {
       Debug.Log($"[SpriteIndexBuilder] ResolveSpriteAddress: Caching address map for GUID {spriteRef.guid} (Context: {context})");
-      byFileId = BuildAddressMapForGuid(state, spriteRef.guid);
-      state.addressCacheByGuid[spriteRef.guid] = byFileId;
+      byFileId = BuildAddressMapForGuid(state, spriteRef.guid, recordError);
+      if (recordError || byFileId.Count > 0) {
+        state.addressCacheByGuid[spriteRef.guid] = byFileId;
+      }
     }
 
     if (byFileId.TryGetValue(spriteRef.fileId, out var address)) return address;
 
-    Debug.LogWarning($"[SpriteIndexBuilder] ResolveSpriteAddress: Failed to resolve FileID {spriteRef.fileId} in GUID {spriteRef.guid}. Context: {context}. Map size: {byFileId.Count}.");
+    if (recordError) {
+      Debug.LogWarning($"[SpriteIndexBuilder] ResolveSpriteAddress: Failed to resolve FileID {spriteRef.fileId} in GUID {spriteRef.guid}. Context: {context}. Map size: {byFileId.Count}.");
+    }
 
     var targetUnsigned = unchecked((ulong)spriteRef.fileId);
     foreach (var pair in byFileId) {
@@ -970,46 +1017,49 @@ public static class SpriteIndexBuilder {
     var fallbackAddress = TryResolveSpriteAddressFromContext(byFileId, context);
     if (!string.IsNullOrWhiteSpace(fallbackAddress)) return fallbackAddress;
 
-    state.errors.Add("Could not resolve sprite fileID '" + spriteRef.fileId + "' for GUID '" + spriteRef.guid + "' (" + context + ").");
+    if (recordError) {
+      state.errors.Add("Could not resolve sprite fileID '" + spriteRef.fileId + "' for GUID '" + spriteRef.guid + "' (" + context + ").");
+    }
     return "";
   }
 
-  static bool ValidateRuntimeAtlasAddress(BuildState state, string sliceAddress, string context) {
+  static bool ValidateRuntimeAtlasAddress(BuildState state, string sliceAddress, string context, bool recordError = true) {
     if (state == null || string.IsNullOrWhiteSpace(sliceAddress)) return false;
-    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out var spriteName)) {
-      state.errors.Add("Invalid slice address '" + sliceAddress + "' (" + context + ").");
+    bool Fail(string message) {
+      if (recordError) {
+        state.errors.Add(message);
+      }
       return false;
+    }
+
+    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out var spriteName)) {
+      return Fail("Invalid slice address '" + sliceAddress + "' (" + context + ").");
     }
 
     var normalizedAtlasPath = NormalizePath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(spriteName)) {
-      state.errors.Add("Slice address '" + sliceAddress + "' did not resolve atlas path + sprite name (" + context + ").");
-      return false;
+      return Fail("Slice address '" + sliceAddress + "' did not resolve atlas path + sprite name (" + context + ").");
     }
 
     if (!state.activeTextureAssetPaths.Contains(normalizedAtlasPath)) {
-      state.errors.Add("Atlas path '" + normalizedAtlasPath + "' was not registered in texture group (" + context + ").");
-      return false;
+      return Fail("Atlas path '" + normalizedAtlasPath + "' was not registered in texture group (" + context + ").");
     }
 
     if (state.addressables == null || state.textureGroup == null) return true;
     var guid = AssetDatabase.AssetPathToGUID(normalizedAtlasPath);
     if (string.IsNullOrWhiteSpace(guid)) {
-      state.errors.Add("Atlas path '" + normalizedAtlasPath + "' has no GUID (" + context + ").");
-      return false;
+      return Fail("Atlas path '" + normalizedAtlasPath + "' has no GUID (" + context + ").");
     }
 
     var entry = state.addressables.FindAssetEntry(guid);
     if (entry == null || entry.parentGroup != state.textureGroup) {
-      state.errors.Add("Atlas path '" + normalizedAtlasPath + "' is not in texture addressables group (" + context + ").");
-      return false;
+      return Fail("Atlas path '" + normalizedAtlasPath + "' is not in texture addressables group (" + context + ").");
     }
 
     if (!string.Equals(entry.address, normalizedAtlasPath, StringComparison.Ordinal)) {
-      state.errors.Add(
+      return Fail(
         "Atlas path '" + normalizedAtlasPath + "' has addressable key '" + entry.address + "' instead of atlas asset path (" + context + ")."
       );
-      return false;
     }
 
     return true;
@@ -1081,34 +1131,165 @@ public static class SpriteIndexBuilder {
     return address.Substring(open + 1, close - open - 1);
   }
 
-  static Dictionary<long, string> BuildAddressMapForGuid(BuildState state, string guid) {
+  static bool TryResolveDerivedNormalAddress(BuildState state, string colorAddress, out string normalAddress) {
+    normalAddress = "";
+    if (string.IsNullOrWhiteSpace(colorAddress)) return false;
+
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorAddress, out var colorAtlasAssetPath, out var colorSpriteName)) {
+      if (!TryDeriveSiblingNormalAtlasAssetPath(state, colorAtlasAssetPath, out var normalAtlasAssetPath)) return false;
+      return TryResolveSpriteAddressByName(state, normalAtlasAssetPath, colorSpriteName, out normalAddress);
+    }
+
+    if (!TryDeriveSiblingNormalAtlasAssetPath(state, colorAddress, out var atlasOnlyNormalAddress)) return false;
+    normalAddress = atlasOnlyNormalAddress;
+    return true;
+  }
+
+  static bool TryDeriveSiblingNormalAtlasAssetPath(BuildState state, string colorAtlasAssetPath, out string normalAtlasAssetPath) {
+    normalAtlasAssetPath = "";
+    var normalizedColorAtlasAssetPath = NormalizePath(colorAtlasAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedColorAtlasAssetPath)) return false;
+
+    if (state != null &&
+        state.derivedNormalAtlasPathByColorAtlas.TryGetValue(normalizedColorAtlasAssetPath, out var cachedNormalAtlasAssetPath)) {
+      normalAtlasAssetPath = cachedNormalAtlasAssetPath ?? "";
+      return !string.IsNullOrWhiteSpace(normalAtlasAssetPath);
+    }
+
+    var extension = Path.GetExtension(normalizedColorAtlasAssetPath);
+    if (!string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) return false;
+
+    var jpgCandidate = NormalizePath(Path.ChangeExtension(normalizedColorAtlasAssetPath, ".jpg"));
+    if (AssetExistsAtPath(state, jpgCandidate)) {
+      normalAtlasAssetPath = jpgCandidate;
+      if (state != null) {
+        state.derivedNormalAtlasPathByColorAtlas[normalizedColorAtlasAssetPath] = normalAtlasAssetPath;
+      }
+      return true;
+    }
+
+    var jpegCandidate = NormalizePath(Path.ChangeExtension(normalizedColorAtlasAssetPath, ".jpeg"));
+    if (AssetExistsAtPath(state, jpegCandidate)) {
+      normalAtlasAssetPath = jpegCandidate;
+      if (state != null) {
+        state.derivedNormalAtlasPathByColorAtlas[normalizedColorAtlasAssetPath] = normalAtlasAssetPath;
+      }
+      return true;
+    }
+
+    if (state != null) {
+      state.derivedNormalAtlasPathByColorAtlas[normalizedColorAtlasAssetPath] = "";
+    }
+    return false;
+  }
+
+  static bool AssetExistsAtPath(BuildState state, string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
+
+    if (state != null && state.assetExistsByPath.TryGetValue(normalizedAssetPath, out var cachedExists)) {
+      return cachedExists;
+    }
+
+    var exists = !string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(normalizedAssetPath));
+    if (state != null) {
+      state.assetExistsByPath[normalizedAssetPath] = exists;
+    }
+    return exists;
+  }
+
+  static bool TryResolveSpriteAddressByName(BuildState state, string atlasAssetPath, string spriteName, out string address) {
+    address = "";
+    if (state == null || string.IsNullOrWhiteSpace(atlasAssetPath) || string.IsNullOrWhiteSpace(spriteName)) return false;
+
+    var normalizedAtlasAssetPath = NormalizePath(atlasAssetPath);
+    var guid = AssetDatabase.AssetPathToGUID(normalizedAtlasAssetPath);
+    if (string.IsNullOrWhiteSpace(guid)) return false;
+
+    if (!state.addressCacheByGuid.TryGetValue(guid, out var byFileId)) {
+      byFileId = BuildAddressMapForGuid(state, guid, recordError: false);
+      if (byFileId.Count > 0) {
+        state.addressCacheByGuid[guid] = byFileId;
+      }
+    }
+
+    if (!state.spriteAddressByNameCacheByGuid.TryGetValue(guid, out var bySpriteName)) {
+      bySpriteName = BuildSpriteAddressByNameMap(byFileId);
+      if (bySpriteName.Count > 0) {
+        state.spriteAddressByNameCacheByGuid[guid] = bySpriteName;
+      }
+    }
+
+    if (bySpriteName != null && bySpriteName.TryGetValue(spriteName, out var exactAddress)) {
+      address = exactAddress;
+      return true;
+    }
+
+    string numericFallbackAddress = null;
+    foreach (var pair in byFileId) {
+      var candidateAddress = pair.Value;
+      var candidateSpriteName = ExtractSpriteNameFromAddress(candidateAddress);
+      if (string.IsNullOrWhiteSpace(candidateSpriteName)) continue;
+      if (numericFallbackAddress == null &&
+          SpriteSliceAddressUtility.HasEquivalentNumericLabel(candidateSpriteName, spriteName)) {
+        numericFallbackAddress = candidateAddress;
+      }
+    }
+
+    if (string.IsNullOrWhiteSpace(numericFallbackAddress)) return false;
+    address = numericFallbackAddress;
+    return true;
+  }
+
+  static Dictionary<string, string> BuildSpriteAddressByNameMap(Dictionary<long, string> byFileId) {
+    var bySpriteName = new Dictionary<string, string>(StringComparer.Ordinal);
+    if (byFileId == null || byFileId.Count <= 0) return bySpriteName;
+
+    foreach (var pair in byFileId) {
+      var spriteName = ExtractSpriteNameFromAddress(pair.Value);
+      if (string.IsNullOrWhiteSpace(spriteName)) continue;
+      bySpriteName[spriteName] = pair.Value;
+    }
+
+    return bySpriteName;
+  }
+
+  static Dictionary<long, string> BuildAddressMapForGuid(BuildState state, string guid, bool recordError = true) {
     var map = new Dictionary<long, string>();
     var path = NormalizePath(AssetDatabase.GUIDToAssetPath(guid));
     if (string.IsNullOrWhiteSpace(path)) {
-      Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: GUID {guid} resolved to empty path.");
-      state.errors.Add("GUID '" + guid + "' does not map to an asset path.");
+      if (recordError) {
+        Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: GUID {guid} resolved to empty path.");
+        state.errors.Add("GUID '" + guid + "' does not map to an asset path.");
+      }
       return map;
     }
 
     EnsureAddressableTextureEntry(state, path);
     var metaPath = path + ".meta";
     if (!File.Exists(metaPath)) {
-      Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: Meta file missing for {path} (GUID {guid}).");
-      state.errors.Add("Meta file was not found for GUID '" + guid + "' at path '" + metaPath + "'.");
+      if (recordError) {
+        Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: Meta file missing for {path} (GUID {guid}).");
+        state.errors.Add("Meta file was not found for GUID '" + guid + "' at path '" + metaPath + "'.");
+      }
       return map;
     }
 
     if (!TryParseSpriteSheetInternalIdTable(metaPath, map, out var parseError)) {
-      Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: Failed to parse sprite sheet table for {path}: {parseError}");
-      state.errors.Add("Failed to parse spriteSheet.sprites table for GUID '" + guid + "' at path '" + metaPath + "'" +
-                       (string.IsNullOrWhiteSpace(parseError) ? "." : ": " + parseError));
+      if (recordError) {
+        Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: Failed to parse sprite sheet table for {path}: {parseError}");
+        state.errors.Add("Failed to parse spriteSheet.sprites table for GUID '" + guid + "' at path '" + metaPath + "'" +
+                         (string.IsNullOrWhiteSpace(parseError) ? "." : ": " + parseError));
+      }
       return map;
     }
 
     if (!TryParseNameFileIdTable(metaPath, map, out var nameTableError)) {
-      Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: Failed to parse name table for {path}: {nameTableError}");
-      state.errors.Add("Failed to parse nameFileIdTable for GUID '" + guid + "' at path '" + metaPath + "'" +
-                       (string.IsNullOrWhiteSpace(nameTableError) ? "." : ": " + nameTableError));
+      if (recordError) {
+        Debug.LogError($"[SpriteIndexBuilder] BuildAddressMapForGuid: Failed to parse name table for {path}: {nameTableError}");
+        state.errors.Add("Failed to parse nameFileIdTable for GUID '" + guid + "' at path '" + metaPath + "'" +
+                         (string.IsNullOrWhiteSpace(nameTableError) ? "." : ": " + nameTableError));
+      }
       return map;
     }
 
@@ -1120,8 +1301,10 @@ public static class SpriteIndexBuilder {
     }
 
     if (map.Count == 0) {
-      Debug.LogWarning($"[SpriteIndexBuilder] BuildAddressMapForGuid: No sprites found in {path} (GUID {guid}).");
-      state.errors.Add("No sprite sub-assets found for GUID '" + guid + "' at path '" + path + "'.");
+      if (recordError) {
+        Debug.LogWarning($"[SpriteIndexBuilder] BuildAddressMapForGuid: No sprites found in {path} (GUID {guid}).");
+        state.errors.Add("No sprite sub-assets found for GUID '" + guid + "' at path '" + path + "'.");
+      }
     } else {
       Debug.Log($"[SpriteIndexBuilder] BuildAddressMapForGuid: Mapped {map.Count} sprites for {path}");
     }
@@ -1341,6 +1524,7 @@ public static class SpriteIndexBuilder {
   }
 
   static void CleanupStaleIndexEntries(
+    BuildState state,
     AddressableAssetGroup indexGroup,
     HashSet<string> activeShardPaths,
     string manifestAssetPath,
@@ -1382,8 +1566,8 @@ public static class SpriteIndexBuilder {
          assetPath.StartsWith(runtimeIndexFolder + "/", StringComparison.OrdinalIgnoreCase)) ||
         string.Equals(assetPath, normalizedManifestPath, StringComparison.OrdinalIgnoreCase) ||
         HasAddressableLabel(entry, BuilderConfig.AtlasMetadataAddressablesLabel) ||
-        LooksLikeAtlasMetadataAssetPath(assetPath) ||
-        LooksLikeAtlasMetadataAssetPath(entry.address);
+        LooksLikeAtlasMetadataAssetPath(state, assetPath) ||
+        LooksLikeAtlasMetadataAssetPath(state, entry.address);
       if (!isManagedEntry) continue;
 
       if (string.IsNullOrWhiteSpace(assetPath) || !activeAssetPaths.Contains(assetPath)) {
@@ -1597,16 +1781,42 @@ public static class SpriteIndexBuilder {
     Debug.Log("[SpriteIndexBuilder] [" + contextLabel + "] Top synthetic texture bundle labels: " + topSb);
   }
 
+  static void LogNormalAddressSummary(string contextLabel, BuildState state) {
+    if (state == null) return;
+    if (state.missingNormalLibraryCount <= 0 &&
+        state.autoDerivedNormalAddressCount <= 0 &&
+        state.missingNormalAddressCount <= 0) {
+      return;
+    }
+
+    Debug.Log(
+      "[SpriteIndexBuilder] [" + contextLabel + "] Normal address automation." +
+      " missingNormalLibraries=" + state.missingNormalLibraryCount +
+      " autoDerivedNormals=" + state.autoDerivedNormalAddressCount +
+      " fallbackFlatNormals=" + state.missingNormalAddressCount
+    );
+  }
+
   static void LogAtlasMetadataSummary(string contextLabel, BuildState state) {
     if (state == null || state.activeAtlasMetadataAssetPaths == null) return;
     var metadataCount = state.activeAtlasMetadataAssetPaths.Count;
     if (metadataCount <= 0) return;
 
+    var groupedAtlasCount = CountGroupedAtlasTextureAssetPaths(state, state.activeTextureAssetPaths);
+
     Debug.Log(
       "[SpriteIndexBuilder] [" + contextLabel + "] Atlas metadata entries synced." +
       " metadataAssets=" + metadataCount +
-      " streamedAtlases=" + state.activeTextureAssetPaths.Count
+      " streamedAtlases=" + state.activeTextureAssetPaths.Count +
+      " groupedAtlasesReferenced=" + groupedAtlasCount
     );
+
+    if (groupedAtlasCount <= 0 && ProjectHasGroupedAtlasMetadataAssets(state)) {
+      Debug.LogWarning(
+        "[SpriteIndexBuilder] [" + contextLabel + "] Grouped atlas metadata was found in the project, but the rebuilt runtime index referenced zero grouped atlases." +
+        " If you expect grouped atlas streaming, rebind the sprite libraries first and rebuild the runtime index again."
+      );
+    }
   }
 
   static void EnsureAddressableTextureEntry(BuildState state, string assetPath) {
@@ -1614,7 +1824,9 @@ public static class SpriteIndexBuilder {
     var normalizedAssetPath = NormalizePath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
 
-    state.activeTextureAssetPaths.Add(normalizedAssetPath);
+    if (!state.activeTextureAssetPaths.Add(normalizedAssetPath)) {
+      return;
+    }
 
     var guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
     if (string.IsNullOrWhiteSpace(guid)) return;
@@ -1643,7 +1855,7 @@ public static class SpriteIndexBuilder {
 
   static void EnsureAtlasMetadataEntry(BuildState state, string atlasAssetPath) {
     if (state == null) return;
-    if (!TryGetAtlasMetadataAssetPath(atlasAssetPath, out var metadataAssetPath)) return;
+    if (!TryGetAtlasMetadataAssetPath(state, atlasAssetPath, out var metadataAssetPath)) return;
 
     state.activeAtlasMetadataAssetPaths.Add(metadataAssetPath);
     if (state.addressables == null || state.indexGroup == null) return;
@@ -1652,45 +1864,115 @@ public static class SpriteIndexBuilder {
     ApplyManagedLabel(state.addressables, state.indexGroup, metadataAssetPath, BuilderConfig.AtlasMetadataAddressablesLabel);
   }
 
-  static bool TryGetAtlasMetadataAssetPath(string atlasAssetPath, out string metadataAssetPath) {
+  static bool TryGetAtlasMetadataAssetPath(BuildState state, string atlasAssetPath, out string metadataAssetPath) {
     metadataAssetPath = "";
     var normalizedAtlasPath = NormalizePath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) return false;
 
+    if (state != null && state.atlasMetadataAssetPathByAtlasPath.TryGetValue(normalizedAtlasPath, out var cachedMetadataAssetPath)) {
+      metadataAssetPath = cachedMetadataAssetPath ?? "";
+      return !string.IsNullOrWhiteSpace(metadataAssetPath);
+    }
+
     var candidateAssetPath = NormalizePath(Path.ChangeExtension(normalizedAtlasPath, ".json"));
-    if (!LooksLikeAtlasMetadataAssetPath(candidateAssetPath)) return false;
+    if (!LooksLikeAtlasMetadataAssetPath(state, candidateAssetPath)) {
+      if (state != null) {
+        state.atlasMetadataAssetPathByAtlasPath[normalizedAtlasPath] = "";
+      }
+      return false;
+    }
 
     metadataAssetPath = candidateAssetPath;
+    if (state != null) {
+      state.atlasMetadataAssetPathByAtlasPath[normalizedAtlasPath] = metadataAssetPath;
+    }
     return true;
   }
 
-  static bool LooksLikeAtlasMetadataAssetPath(string assetPath) {
-    var normalizedAssetPath = NormalizePath(assetPath);
-    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
-    if (!normalizedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+  static bool LooksLikeAtlasMetadataAssetPath(BuildState state, string assetPath) {
+    return GetAtlasMetadataKind(state, assetPath) != AtlasMetadataKind.Invalid;
+  }
 
+  static int CountGroupedAtlasTextureAssetPaths(BuildState state, HashSet<string> textureAssetPaths) {
+    if (textureAssetPaths == null || textureAssetPaths.Count <= 0) return 0;
+
+    var groupedCount = 0;
+    foreach (var textureAssetPath in textureAssetPaths) {
+      if (!TryGetAtlasMetadataAssetPath(state, textureAssetPath, out var metadataAssetPath)) continue;
+      if (GetAtlasMetadataKind(state, metadataAssetPath) != AtlasMetadataKind.Grouped) continue;
+      groupedCount++;
+    }
+
+    return groupedCount;
+  }
+
+  static bool ProjectHasGroupedAtlasMetadataAssets(BuildState state) {
+    if (state == null) return false;
+    if (state.projectGroupedMetadataScanCompleted) {
+      return state.projectHasGroupedMetadataAssets;
+    }
+
+    state.projectGroupedMetadataScanCompleted = true;
     var sourceRoot = NormalizePath(SpriteStreamingConfig.TextureSourceRootFolder);
-    if (!string.IsNullOrWhiteSpace(sourceRoot) &&
-        !normalizedAssetPath.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)) {
-      return false;
+    if (string.IsNullOrWhiteSpace(sourceRoot)) return false;
+
+    var fullSourceRoot = Path.GetFullPath(sourceRoot);
+    if (!Directory.Exists(fullSourceRoot)) return false;
+
+    foreach (var metadataFullPath in Directory.EnumerateFiles(fullSourceRoot, "*.json", SearchOption.AllDirectories)) {
+      var normalizedAssetPath = NormalizePath(metadataFullPath);
+      if (GetAtlasMetadataKind(state, normalizedAssetPath) != AtlasMetadataKind.Grouped) continue;
+      state.projectHasGroupedMetadataAssets = true;
+      break;
     }
 
-    var fullPath = Path.GetFullPath(normalizedAssetPath);
-    if (!File.Exists(fullPath)) return false;
+    return state.projectHasGroupedMetadataAssets;
+  }
 
-    string jsonText;
-    try {
-      jsonText = File.ReadAllText(fullPath);
-    }
-    catch {
-      return false;
+  static bool LooksLikeGroupedAtlasMetadataAssetPath(BuildState state, string assetPath) {
+    return GetAtlasMetadataKind(state, assetPath) == AtlasMetadataKind.Grouped;
+  }
+
+  static AtlasMetadataKind GetAtlasMetadataKind(BuildState state, string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return AtlasMetadataKind.Invalid;
+    if (state != null && state.atlasMetadataKindByPath.TryGetValue(normalizedAssetPath, out var cachedKind)) {
+      return cachedKind;
     }
 
-    if (string.IsNullOrWhiteSpace(jsonText)) return false;
-    return jsonText.IndexOf("\"sprites\"", StringComparison.Ordinal) >= 0 &&
-           jsonText.IndexOf("\"offsetFromCellCenterPx\"", StringComparison.Ordinal) >= 0 &&
-           (jsonText.IndexOf("\"sourceAtlasAssetPath\"", StringComparison.Ordinal) >= 0 ||
-            jsonText.IndexOf("\"exportedAtlasAssetPath\"", StringComparison.Ordinal) >= 0);
+    var metadataKind = AtlasMetadataKind.Invalid;
+    if (normalizedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
+      var sourceRoot = NormalizePath(SpriteStreamingConfig.TextureSourceRootFolder);
+      var underSourceRoot = string.IsNullOrWhiteSpace(sourceRoot) ||
+                            normalizedAssetPath.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase);
+      if (underSourceRoot) {
+        var fullPath = Path.GetFullPath(normalizedAssetPath);
+        if (File.Exists(fullPath)) {
+          try {
+            var jsonText = File.ReadAllText(fullPath);
+            if (!string.IsNullOrWhiteSpace(jsonText) &&
+                jsonText.IndexOf("\"sprites\"", StringComparison.Ordinal) >= 0 &&
+                jsonText.IndexOf("\"offsetFromCellCenterPx\"", StringComparison.Ordinal) >= 0 &&
+                (jsonText.IndexOf("\"sourceAtlasAssetPath\"", StringComparison.Ordinal) >= 0 ||
+                 jsonText.IndexOf("\"exportedAtlasAssetPath\"", StringComparison.Ordinal) >= 0)) {
+              metadataKind =
+                jsonText.IndexOf("\"groupKey\"", StringComparison.Ordinal) >= 0 &&
+                jsonText.IndexOf("\"sourceCategories\"", StringComparison.Ordinal) >= 0
+                  ? AtlasMetadataKind.Grouped
+                  : AtlasMetadataKind.Standard;
+            }
+          }
+          catch {
+            metadataKind = AtlasMetadataKind.Invalid;
+          }
+        }
+      }
+    }
+
+    if (state != null) {
+      state.atlasMetadataKindByPath[normalizedAssetPath] = metadataKind;
+    }
+    return metadataKind;
   }
 
   static void ApplySyntheticBundleLabel(AddressableAssetEntry entry, string syntheticLabel) {
