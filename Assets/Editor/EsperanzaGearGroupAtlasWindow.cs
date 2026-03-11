@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using UnityEditor;
-using UnityEditor.U2D.Sprites;
 using UnityEngine;
 
 public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
@@ -47,6 +46,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
   [Serializable]
   sealed class GroupedAtlasMetadataPayload {
+    public string metadataKind = "grouped";
     public string groupKey;
     public string category;
     public string form;
@@ -54,6 +54,9 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     public string partCode;
     public string fileBase;
     public string sourceKind;
+    public string representativeSourceAtlasAssetPath;
+    public float spritePixelsPerUnit = 100f;
+    public int spriteMeshType = (int)SpriteMeshType.Tight;
     public int sourceAtlasCount;
     public int pageIndex;
     public int atlasWidth;
@@ -172,10 +175,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
   sealed class PendingGroupedAtlasImport {
     public GroupCandidate candidate;
-    public string sourceAtlasAssetPath;
-    public string atlasAssetPath;
-    public string metadataAssetPath;
-    public AtlasPage page;
   }
 
   readonly struct LibraryEntryScopeKey : IEquatable<LibraryEntryScopeKey> {
@@ -377,6 +376,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     var pendingImports = new List<PendingGroupedAtlasImport>();
     var exportedCandidateCount = 0;
     var exportedPageCount = 0;
+    var cleanupSummary = new ExportCleanupSummary();
     var deferredWritePhaseStarted = false;
 
     try {
@@ -392,32 +392,18 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
         exportedPageCount += pageCount;
       }
+
+      if (pendingImports.Count > 0) {
+        var exportedCandidates = CollectWrittenGroupedAtlasCandidates(pendingImports);
+        exportedCandidateCount = exportedCandidates.Count;
+        cleanupSummary = CleanupExportedSourceAssets(sourceFolderPath, exportedCandidates);
+      }
     }
     finally {
       if (deferredWritePhaseStarted) {
         EndDeferredGroupedAtlasWritePhase(sourceFolderPath, pendingImports.Count, failureLogs.Count);
       }
     }
-
-    if (pendingImports.Count > 0) {
-      var pendingSpriteCount = CountPendingImportSprites(pendingImports);
-      var maxPendingPageSpriteCount = CountMaxPendingImportPageSprites(pendingImports);
-      Debug.Log(
-        "[GearGroupAtlas] Final import phase started." +
-        " source='" + sourceFolderPath + "'" +
-        " pending_imports=" + pendingImports.Count +
-        " pending_sprites=" + pendingSpriteCount +
-        " max_page_sprites=" + maxPendingPageSpriteCount);
-    }
-
-    var finalizedCandidates = pendingImports.Count > 0
-      ? FinalizeWrittenGroupedAtlasImports(pendingImports, failureLogs, out exportedPageCount)
-      : new List<GroupCandidate>();
-    exportedCandidateCount = finalizedCandidates.Count;
-
-    var cleanupSummary = finalizedCandidates.Count > 0
-      ? CleanupExportedSourceAssets(sourceFolderPath, finalizedCandidates)
-      : new ExportCleanupSummary();
 
     Debug.Log(
       "[GearGroupAtlas] Export complete." +
@@ -426,14 +412,12 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " exported_pages=" + exportedPageCount +
       " deleted_source_assets=" + cleanupSummary.deletedAssetCount +
       " deleted_source_folders=" + cleanupSummary.deletedFolderCount +
-      " failures=" + failureLogs.Count);
+      " failures=" + failureLogs.Count +
+      " deferred_import=True");
 
     for (var i = 0; i < failureLogs.Count; i++) {
       Debug.LogWarning("[GearGroupAtlas] " + failureLogs[i]);
     }
-
-    AssetDatabase.SaveAssets();
-    AssetDatabase.Refresh();
   }
 
   static void BeginDeferredGroupedAtlasWritePhase(string sourceFolderPath, int candidateCount) {
@@ -453,27 +437,18 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " failures=" + failureCount);
   }
 
-  static int CountPendingImportSprites(List<PendingGroupedAtlasImport> pendingImports) {
-    if (pendingImports == null || pendingImports.Count <= 0) return 0;
+  static List<GroupCandidate> CollectWrittenGroupedAtlasCandidates(List<PendingGroupedAtlasImport> pendingImports) {
+    var candidates = new List<GroupCandidate>();
+    if (pendingImports == null || pendingImports.Count <= 0) return candidates;
 
-    var total = 0;
+    var seenCandidates = new HashSet<GroupCandidate>();
     for (var i = 0; i < pendingImports.Count; i++) {
-      total += pendingImports[i]?.page?.items?.Count ?? 0;
+      var candidate = pendingImports[i]?.candidate;
+      if (candidate == null || !seenCandidates.Add(candidate)) continue;
+      candidates.Add(candidate);
     }
 
-    return total;
-  }
-
-  static int CountMaxPendingImportPageSprites(List<PendingGroupedAtlasImport> pendingImports) {
-    if (pendingImports == null || pendingImports.Count <= 0) return 0;
-
-    var max = 0;
-    for (var i = 0; i < pendingImports.Count; i++) {
-      var count = pendingImports[i]?.page?.items?.Count ?? 0;
-      if (count > max) max = count;
-    }
-
-    return max;
+    return candidates;
   }
 
   void DrawScanResults() {
@@ -567,15 +542,11 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         return false;
       }
 
-      if (!TryWriteMetadata(page.colorAtlasPath, candidate, page, false, out var metadataAssetPath, out error)) {
+      if (!TryWriteMetadata(page.colorAtlasPath, candidate, representativeSourceAtlasPath, page, false, out _, out error)) {
         return false;
       }
       candidatePendingImports.Add(new PendingGroupedAtlasImport {
-        candidate = candidate,
-        sourceAtlasAssetPath = representativeSourceAtlasPath,
-        atlasAssetPath = page.colorAtlasPath,
-        metadataAssetPath = metadataAssetPath,
-        page = page
+        candidate = candidate
       });
 
       if (ExportNormalAtlases) {
@@ -583,15 +554,11 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           return false;
         }
 
-        if (!TryWriteMetadata(page.normalAtlasPath, candidate, page, true, out var normalMetadataAssetPath, out error)) {
+        if (!TryWriteMetadata(page.normalAtlasPath, candidate, representativeSourceAtlasPath, page, true, out _, out error)) {
           return false;
         }
         candidatePendingImports.Add(new PendingGroupedAtlasImport {
-          candidate = candidate,
-          sourceAtlasAssetPath = representativeSourceAtlasPath,
-          atlasAssetPath = page.normalAtlasPath,
-          metadataAssetPath = normalMetadataAssetPath,
-          page = page
+          candidate = candidate
         });
       }
     }
@@ -686,128 +653,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " output_pages=" + pages.Count +
       " new_page_sprites=" + remainingItems.Count);
     return pages.Count > 0;
-  }
-
-  List<GroupCandidate> FinalizeWrittenGroupedAtlasImports(
-    List<PendingGroupedAtlasImport> pendingImports,
-    List<string> failureLogs,
-    out int finalizedPageCount) {
-    finalizedPageCount = 0;
-    var finalizedCandidates = new List<GroupCandidate>();
-    if (pendingImports == null || pendingImports.Count <= 0) return finalizedCandidates;
-
-    AssetDatabase.Refresh();
-    var atlasAssetPathsToReimport = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    var pendingImportsByAtlasPath = new Dictionary<string, PendingGroupedAtlasImport>(StringComparer.OrdinalIgnoreCase);
-    var totalPendingSpriteCount = CountPendingImportSprites(pendingImports);
-    var maxPendingPageSpriteCount = CountMaxPendingImportPageSprites(pendingImports);
-    Debug.Log(
-      "[GearGroupAtlas] Finalize grouped atlas textures." +
-      " pending_imports=" + pendingImports.Count +
-      " pending_sprites=" + totalPendingSpriteCount +
-      " max_page_sprites=" + maxPendingPageSpriteCount);
-
-    var requiredPageCounts = new Dictionary<GroupCandidate, int>();
-    var finalizedPageCounts = new Dictionary<GroupCandidate, int>();
-    for (var i = 0; i < pendingImports.Count; i++) {
-      var pendingImport = pendingImports[i];
-      if (pendingImport != null && !string.IsNullOrWhiteSpace(pendingImport.atlasAssetPath)) {
-        pendingImportsByAtlasPath[pendingImport.atlasAssetPath] = pendingImport;
-      }
-      if (pendingImport?.candidate == null) continue;
-      requiredPageCounts[pendingImport.candidate] = requiredPageCounts.TryGetValue(pendingImport.candidate, out var count) ? count + 1 : 1;
-    }
-
-    try {
-      for (var i = 0; i < pendingImports.Count; i++) {
-        var pendingImport = pendingImports[i];
-        if (pendingImport == null || string.IsNullOrWhiteSpace(pendingImport.atlasAssetPath)) continue;
-
-        var pageSpriteCount = pendingImport.page?.items?.Count ?? 0;
-        EditorUtility.DisplayProgressBar(
-          "Gear Group Atlases",
-          "Finalizing atlas " + (i + 1) + "/" + pendingImports.Count + " (" + pageSpriteCount + " sprites)\n" + pendingImport.atlasAssetPath,
-          (float)(i + 1) / pendingImports.Count);
-        if (i == 0 || ((i + 1) % 8) == 0 || i == pendingImports.Count - 1) {
-          Debug.Log(
-            "[GearGroupAtlas] Finalize progress." +
-            " index=" + (i + 1) + "/" + pendingImports.Count +
-            " page_sprites=" + pageSpriteCount +
-            " atlas='" + pendingImport.atlasAssetPath + "'");
-        }
-
-        if (!TryFinalizeGroupedAtlasTexture(
-              pendingImport.sourceAtlasAssetPath,
-              pendingImport.atlasAssetPath,
-              pendingImport.page,
-              out var requiresReimport,
-              out var error)) {
-          AddFailureLog(failureLogs, pendingImport.atlasAssetPath, error);
-          continue;
-        }
-
-        if (requiresReimport) {
-          atlasAssetPathsToReimport.Add(pendingImport.atlasAssetPath);
-        }
-
-        TrimmedAtlasExporterWindow.EnsureMetadataAddressable(pendingImport.metadataAssetPath, saveAssets: false);
-        TrimmedSpriteOffsetResolver.InvalidateAtlas(pendingImport.atlasAssetPath);
-        finalizedPageCount++;
-
-        if (pendingImport.candidate == null) continue;
-        finalizedPageCounts[pendingImport.candidate] = finalizedPageCounts.TryGetValue(pendingImport.candidate, out var count) ? count + 1 : 1;
-      }
-    }
-    finally {
-      EditorUtility.ClearProgressBar();
-    }
-
-    if (atlasAssetPathsToReimport.Count > 0) {
-      var failedReimportAtlasPaths = ReimportFinalizedGroupedAtlasTextures(atlasAssetPathsToReimport, failureLogs);
-      foreach (var failedAtlasPath in failedReimportAtlasPaths) {
-        if (!pendingImportsByAtlasPath.TryGetValue(failedAtlasPath, out var failedPendingImport) ||
-            failedPendingImport?.candidate == null) {
-          continue;
-        }
-
-        DecrementFinalizedPageCount(finalizedPageCounts, failedPendingImport.candidate, ref finalizedPageCount);
-        Debug.LogWarning(
-          "[GearGroupAtlas] Skipping source cleanup for candidate page because grouped atlas reimport failed." +
-          " group='" + BuildCandidateLabel(failedPendingImport.candidate) + "'" +
-          " atlas='" + failedAtlasPath + "'");
-      }
-    }
-
-    if (finalizedPageCount > 0) {
-      AssetDatabase.SaveAssets();
-      AssetDatabase.Refresh();
-    }
-
-    foreach (var pair in requiredPageCounts) {
-      if (!finalizedPageCounts.TryGetValue(pair.Key, out var count) || count != pair.Value) continue;
-      finalizedCandidates.Add(pair.Key);
-    }
-
-    return finalizedCandidates;
-  }
-
-  static void DecrementFinalizedPageCount(
-    Dictionary<GroupCandidate, int> finalizedPageCounts,
-    GroupCandidate candidate,
-    ref int finalizedPageCount) {
-    if (finalizedPageCounts == null || candidate == null) return;
-    if (!finalizedPageCounts.TryGetValue(candidate, out var count) || count <= 0) return;
-
-    if (count == 1) {
-      finalizedPageCounts.Remove(candidate);
-    }
-    else {
-      finalizedPageCounts[candidate] = count - 1;
-    }
-
-    if (finalizedPageCount > 0) {
-      finalizedPageCount--;
-    }
   }
 
   ExportCleanupSummary CleanupExportedSourceAssets(string sourceRootPath, List<GroupCandidate> exportedCandidates) {
@@ -1547,7 +1392,14 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return pixels;
   }
 
-  bool TryWriteMetadata(string atlasAssetPath, GroupCandidate candidate, AtlasPage page, bool isNormalMetadata, out string metadataAssetPath, out string error) {
+  bool TryWriteMetadata(
+    string atlasAssetPath,
+    GroupCandidate candidate,
+    string representativeSourceAtlasAssetPath,
+    AtlasPage page,
+    bool isNormalMetadata,
+    out string metadataAssetPath,
+    out string error) {
     metadataAssetPath = "";
     error = "";
     var sourceCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1575,12 +1427,14 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       partCode = candidate.partCode,
       fileBase = "",
       sourceKind = isNormalMetadata ? "normal" : "color",
+      representativeSourceAtlasAssetPath = NormalizePath(representativeSourceAtlasAssetPath),
       sourceAtlasCount = sourceAtlasPaths.Count > 0 ? sourceAtlasPaths.Count : candidate.sourceAtlases?.Count ?? 0,
       pageIndex = page.pageIndex,
       atlasWidth = page.width,
       atlasHeight = page.height,
       padding = padding
     };
+    TrimmedAtlasExporterWindow.GetSourceImporterSnapshot(representativeSourceAtlasAssetPath, out payload.spritePixelsPerUnit, out payload.spriteMeshType);
     if (sourceCategories.Count > 0) {
       payload.sourceCategories.AddRange(sourceCategories.OrderBy(category => category, StringComparer.OrdinalIgnoreCase));
     }
@@ -1614,106 +1468,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       error = ex.Message;
       return false;
     }
-  }
-
-  static HashSet<string> ReimportFinalizedGroupedAtlasTextures(HashSet<string> atlasAssetPaths, List<string> failureLogs) {
-    var failedAtlasPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    if (atlasAssetPaths == null || atlasAssetPaths.Count <= 0) return failedAtlasPaths;
-
-    var orderedAssetPaths = atlasAssetPaths
-      .Where(path => !string.IsNullOrWhiteSpace(path))
-      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-      .ToList();
-    if (orderedAssetPaths.Count <= 0) return failedAtlasPaths;
-
-    Debug.Log("[GearGroupAtlas] Final grouped atlas reimport started. atlases=" + orderedAssetPaths.Count);
-    for (var i = 0; i < orderedAssetPaths.Count; i++) {
-      var atlasPath = orderedAssetPaths[i];
-      try {
-        AssetDatabase.ImportAsset(atlasPath, ImportAssetOptions.ForceUpdate);
-      }
-      catch (Exception ex) {
-        failedAtlasPaths.Add(atlasPath);
-        AddFailureLog(failureLogs, atlasPath, "Final grouped atlas reimport failed: " + ex.Message);
-        Debug.LogWarning(
-          "[GearGroupAtlas] Final grouped atlas reimport failed." +
-          " atlas='" + atlasPath + "'" +
-          " error='" + ex.Message + "'");
-      }
-    }
-
-    Debug.Log(
-      "[GearGroupAtlas] Final grouped atlas reimport completed." +
-      " atlases=" + orderedAssetPaths.Count +
-      " failures=" + failedAtlasPaths.Count);
-    return failedAtlasPaths;
-  }
-
-  bool TryFinalizeGroupedAtlasTexture(
-    string sourceAtlasAssetPath,
-    string exportedAtlasAssetPath,
-    AtlasPage page,
-    out bool requiresReimport,
-    out string error) {
-    requiresReimport = false;
-    error = "";
-    if (page?.items == null) {
-      error = "Missing atlas page data for final import '" + exportedAtlasAssetPath + "'.";
-      return false;
-    }
-    var importer = AssetImporter.GetAtPath(exportedAtlasAssetPath) as TextureImporter;
-    if (importer == null) {
-      error = "Texture importer is unavailable for '" + exportedAtlasAssetPath + "'.";
-      return false;
-    }
-
-    var importerChanged = SpriteStreamingTextureImportPolicy.Apply(importer, true);
-    importerChanged |= TrimmedAtlasExporterWindow.CopySourceImporterSettings(sourceAtlasAssetPath, importer);
-    if (!importer.alphaIsTransparency) {
-      importer.alphaIsTransparency = true;
-      importerChanged = true;
-    }
-
-    var factory = new SpriteDataProviderFactories();
-    factory.Init();
-    var dataProvider = factory.GetSpriteEditorDataProviderFromObject(importer) as ISpriteEditorDataProvider;
-    if (dataProvider == null) {
-      error = "Sprite data provider is unavailable for '" + exportedAtlasAssetPath + "'.";
-      return false;
-    }
-
-    dataProvider.InitSpriteEditorDataProvider();
-
-    var rects = new List<SpriteRect>(page.items.Count);
-    for (var i = 0; i < page.items.Count; i++) {
-      var item = page.items[i];
-      rects.Add(new SpriteRect {
-        name = item.outputSpriteName,
-        rect = new Rect(item.packedRect.x, item.packedRect.y, item.packedRect.width, item.packedRect.height),
-        alignment = (int)SpriteAlignment.Center,
-        pivot = new Vector2(0.5f, 0.5f),
-        border = Vector4.zero
-      });
-    }
-
-    dataProvider.SetSpriteRects(rects.ToArray());
-    if (dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider))) {
-      var nameFileIdProvider = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
-      var pairs = new List<SpriteNameFileIdPair>(rects.Count);
-      for (var i = 0; i < rects.Count; i++) {
-        pairs.Add(new SpriteNameFileIdPair(rects[i].name, GUID.Generate()));
-      }
-
-      nameFileIdProvider.SetNameFileIdPairs(pairs);
-    }
-
-    dataProvider.Apply();
-    requiresReimport = importerChanged || rects.Count > 0;
-    if (requiresReimport) {
-      AssetDatabase.WriteImportSettingsIfDirty(exportedAtlasAssetPath);
-    }
-
-    return true;
   }
 
   void RebindGroupedSpriteLibraries() {
