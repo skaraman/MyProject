@@ -2073,6 +2073,9 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
       if (!TryParseSourceAtlasPath(sourceFolderPath, assetPath, out var category, out var form, out var variant, out var partCode, out var fileBase, out var isSkin)) {
         parseRejectedCount++;
+        if (parseRejectedCount <= 10) {
+          Debug.LogWarning("[GearGroupAtlas] Rejected candidate path. asset='" + assetPath + "'");
+        }
         continue;
       }
 
@@ -2338,6 +2341,34 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return !string.IsNullOrWhiteSpace(category);
   }
 
+  static bool TryParseImplicitSkinSourceAtlasPath(
+    string[] relativeSegments,
+    out string category,
+    out string form,
+    out string variant,
+    out string partCode,
+    out bool isSkin) {
+    category = "";
+    form = "";
+    variant = "";
+    partCode = "";
+    isSkin = false;
+    if (relativeSegments == null || relativeSegments.Length != 3) return false;
+
+    partCode = ResolvePartCode(relativeSegments[relativeSegments.Length - 1]);
+    if (!string.Equals(partCode, "e", StringComparison.OrdinalIgnoreCase)) return false;
+
+    category = (relativeSegments[0] ?? "").Trim();
+    var sourceForm = (relativeSegments[1] ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(sourceForm)) return false;
+    if (TryParseWrappedDescriptorToken(sourceForm, out _, out _, out _)) return false;
+
+    form = SkinFormName;
+    variant = SkinVariantName;
+    isSkin = true;
+    return true;
+  }
+
   static bool TryParseSourceAtlasPath(
     string sourceFolderPath,
     string assetPath,
@@ -2359,6 +2390,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     if (TryParseWrappedDescriptorSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
+      return !string.IsNullOrWhiteSpace(fileBase);
+    }
+
+    if (TryParseImplicitSkinSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
       return !string.IsNullOrWhiteSpace(fileBase);
     }
 
