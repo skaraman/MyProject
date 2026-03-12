@@ -113,6 +113,13 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     public TrimmedAtlasExport exportData;
   }
 
+  [Serializable]
+  sealed class ExistingTrimmedAtlasMetadata {
+    public string metadataKind;
+    public string coordinateOrigin;
+    public string exportedAtlasAssetPath;
+  }
+
   Texture2D sourceTexture;
   DefaultAsset sourceFolder;
   DefaultAsset outputFolder;
@@ -365,6 +372,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
         }
 
         deletedSourceCount += DeletePackedSourceAssets(batch, batchPendingExports[0].exportedAtlasAssetPath);
+        DeleteLegacyGeneratedOutputs(batch, batch.outputName, batchPendingExports[0].exportedAtlasAssetPath);
       }
     }
     finally {
@@ -1840,14 +1848,40 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     if (!string.IsNullOrWhiteSpace(configuredOutputFolderPath)) {
       var relativeSourceFolder = BuildRelativeSourceFolderPath(sourcePath, sourceRootPath);
       if (!string.IsNullOrWhiteSpace(relativeSourceFolder)) {
-        return NormalizeAssetPath(configuredOutputFolderPath + "/" + relativeSourceFolder);
+        return ResolveEyeOutputFolderPath(
+          sourcePath,
+          configuredOutputFolderPath,
+          NormalizeAssetPath(configuredOutputFolderPath + "/" + relativeSourceFolder));
       }
 
-      return configuredOutputFolderPath;
+      return ResolveEyeOutputFolderPath(sourcePath, configuredOutputFolderPath, configuredOutputFolderPath);
     }
 
     var sourceDirectoryPath = NormalizeAssetPath(Path.GetDirectoryName(sourcePath));
-    return sourceDirectoryPath;
+    return ResolveEyeOutputFolderPath(sourcePath, "", sourceDirectoryPath);
+  }
+
+  static string ResolveEyeOutputFolderPath(string sourcePath, string configuredOutputRootPath, string resolvedOutputFolderPath) {
+    var normalizedResolvedOutputFolderPath = NormalizeAssetPath(resolvedOutputFolderPath);
+    if (!IsEyePartSourceFolder(sourcePath)) return normalizedResolvedOutputFolderPath;
+
+    var outputRootPath = NormalizeAssetPath(configuredOutputRootPath);
+    if (string.IsNullOrWhiteSpace(outputRootPath) &&
+        !TryGetCharacterSpriteRootPath(sourcePath, out outputRootPath)) {
+      return normalizedResolvedOutputFolderPath;
+    }
+
+    var normalizedSkinOutputFolderPath = NormalizeAssetPath(outputRootPath.TrimEnd('/') + "/Skin/e");
+    if (string.Equals(normalizedResolvedOutputFolderPath, normalizedSkinOutputFolderPath, StringComparison.OrdinalIgnoreCase)) {
+      return normalizedResolvedOutputFolderPath;
+    }
+
+    Debug.Log(
+      "[TrimAtlasExport] Redirecting eye atlas output to the shared skin folder." +
+      " source='" + NormalizeAssetPath(sourcePath) + "'" +
+      " from='" + normalizedResolvedOutputFolderPath + "'" +
+      " to='" + normalizedSkinOutputFolderPath + "'");
+    return normalizedSkinOutputFolderPath;
   }
 
   static string BuildRelativeSourceFolderPath(string sourcePath, string sourceRootPath) {
@@ -1867,13 +1901,40 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     return normalizedSourceFolderPath.Substring(prefix.Length).Trim('/');
   }
 
+  static bool IsEyePartSourceFolder(string sourcePath) {
+    var sourceFolderPath = NormalizeAssetPath(Path.GetDirectoryName(sourcePath));
+    return string.Equals(ExtractTrailingPathSegment(sourceFolderPath), "e", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool TryGetCharacterSpriteRootPath(string assetPath, out string characterRootPath) {
+    characterRootPath = "";
+    var normalizedAssetPath = NormalizeAssetPath(assetPath).Trim('/');
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
+
+    var segments = normalizedAssetPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+    if (segments.Length < 4) return false;
+    if (!string.Equals(segments[0], "Assets", StringComparison.OrdinalIgnoreCase) ||
+        !string.Equals(segments[1], "Sprites", StringComparison.OrdinalIgnoreCase) ||
+        !string.Equals(segments[2], "Characters", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    characterRootPath = string.Join("/", segments.Take(4));
+    return !string.IsNullOrWhiteSpace(characterRootPath);
+  }
+
   List<string> CollectSourceAtlasPaths(string sourceFolderPath) {
     var atlasPathsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     var normalizedSourceFolderPath = NormalizeAssetPath(sourceFolderPath).TrimEnd('/');
+    var ignoredFolderSkippedCount = 0;
     var textureGuids = AssetDatabase.FindAssets("t:Texture2D", new[] { normalizedSourceFolderPath });
     for (var i = 0; i < textureGuids.Length; i++) {
       var assetPath = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(textureGuids[i]));
       if (string.IsNullOrWhiteSpace(assetPath)) continue;
+      if (SpriteAtlasSourceFilter.HasIgnoredFolderInPath(assetPath)) {
+        ignoredFolderSkippedCount++;
+        continue;
+      }
       if (!IsSupportedSourceTextureAssetPath(assetPath)) continue;
       if (IsGeneratedNormalAtlasAssetPath(assetPath)) continue;
       if (ShouldSkipGeneratedOutput(assetPath)) continue;
@@ -1894,6 +1955,12 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
 
     var atlasPaths = atlasPathsByKey.Values.ToList();
     atlasPaths.Sort(SpriteSliceAddressUtility.CompareNaturally);
+    Debug.Log(
+      "[TrimAtlasExport] Source atlas scan complete." +
+      " source='" + normalizedSourceFolderPath + "'" +
+      " matched=" + atlasPaths.Count +
+      " ignored_folder_skipped=" + ignoredFolderSkippedCount +
+      " ignored_folders='" + SpriteAtlasSourceFilter.IgnoredFolderSummary + "'");
     return atlasPaths;
   }
 
@@ -1961,6 +2028,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
 
   bool ShouldSkipGeneratedOutput(string assetPath) {
     if (string.IsNullOrWhiteSpace(assetPath)) return false;
+    if (IsGeneratedTrimmedOutputAssetPath(assetPath)) return true;
 
     var fileName = Path.GetFileNameWithoutExtension(assetPath);
     var parentFolderPath = NormalizeAssetPath(Path.GetDirectoryName(assetPath));
@@ -1990,6 +2058,31 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     return false;
+  }
+
+  static bool IsGeneratedTrimmedOutputAssetPath(string assetPath) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
+
+    var metadataAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedAssetPath, ".json"));
+    var metadataFullPath = Path.GetFullPath(metadataAssetPath);
+    if (!File.Exists(metadataFullPath)) return false;
+
+    ExistingTrimmedAtlasMetadata metadata;
+    try {
+      metadata = JsonUtility.FromJson<ExistingTrimmedAtlasMetadata>(File.ReadAllText(metadataFullPath));
+    }
+    catch {
+      return false;
+    }
+
+    if (metadata == null || string.IsNullOrWhiteSpace(metadata.exportedAtlasAssetPath)) return false;
+    if (!string.Equals(NormalizeAssetPath(metadata.exportedAtlasAssetPath), normalizedAssetPath, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    return string.Equals(metadata.metadataKind, "trimmed", StringComparison.OrdinalIgnoreCase) ||
+           !string.IsNullOrWhiteSpace(metadata.coordinateOrigin);
   }
 
   static string PreferSourceAtlasPath(string existingPath, string candidatePath) {
@@ -2074,6 +2167,68 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     return outputName;
+  }
+
+  void DeleteLegacyGeneratedOutputs(SourceAtlasExportBatch batch, string outputName, string exportedAtlasPath) {
+    if (batch == null || batch.sourcePaths == null || batch.sourcePaths.Count <= 0 || string.IsNullOrWhiteSpace(outputName)) return;
+
+    var normalizedExportedAtlasPath = NormalizeAssetPath(exportedAtlasPath);
+    var normalizedExportFolderPath = NormalizeAssetPath(Path.GetDirectoryName(normalizedExportedAtlasPath));
+    var inspectedFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var sourceIndex = 0; sourceIndex < batch.sourcePaths.Count; sourceIndex++) {
+      var sourceFolderPath = NormalizeAssetPath(Path.GetDirectoryName(batch.sourcePaths[sourceIndex]));
+      if (string.IsNullOrWhiteSpace(sourceFolderPath) || !inspectedFolders.Add(sourceFolderPath)) continue;
+      if (string.Equals(sourceFolderPath, normalizedExportFolderPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+      var fullSourceFolderPath = Path.GetFullPath(sourceFolderPath);
+      if (!Directory.Exists(fullSourceFolderPath)) continue;
+
+      var candidateFiles = Directory.GetFiles(fullSourceFolderPath, "*.png", SearchOption.TopDirectoryOnly);
+      for (var candidateIndex = 0; candidateIndex < candidateFiles.Length; candidateIndex++) {
+        if (!TryConvertFullPathToAssetPath(candidateFiles[candidateIndex], out var candidateAssetPath)) continue;
+        if (string.Equals(candidateAssetPath, normalizedExportedAtlasPath, StringComparison.OrdinalIgnoreCase)) continue;
+        if (!MatchesGeneratedOutputName(candidateAssetPath, outputName)) continue;
+        if (!IsGeneratedTrimmedOutputAssetPath(candidateAssetPath)) continue;
+
+        DeleteGeneratedOutputAssetPair(candidateAssetPath);
+      }
+    }
+  }
+
+  bool MatchesGeneratedOutputName(string assetPath, string outputName) {
+    var fileName = Path.GetFileNameWithoutExtension(assetPath);
+    if (string.Equals(fileName, outputName, StringComparison.OrdinalIgnoreCase)) return true;
+    return TryExtractGeneratedOutputBaseName(fileName, out var generatedBaseName) &&
+           string.Equals(generatedBaseName, outputName, StringComparison.OrdinalIgnoreCase);
+  }
+
+  static void DeleteGeneratedOutputAssetPair(string atlasAssetPath) {
+    var normalizedAtlasAssetPath = NormalizeAssetPath(atlasAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) return;
+
+    var metadataAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedAtlasAssetPath, ".json"));
+    if (AssetDatabase.LoadMainAssetAtPath(metadataAssetPath) != null) {
+      AssetDatabase.DeleteAsset(metadataAssetPath);
+    }
+
+    if (AssetDatabase.LoadMainAssetAtPath(normalizedAtlasAssetPath) != null) {
+      AssetDatabase.DeleteAsset(normalizedAtlasAssetPath);
+    }
+  }
+
+  static bool TryConvertFullPathToAssetPath(string fullPath, out string assetPath) {
+    assetPath = "";
+    if (string.IsNullOrWhiteSpace(fullPath)) return false;
+
+    var normalizedFullPath = NormalizeAssetPath(Path.GetFullPath(fullPath));
+    var normalizedAssetsRoot = NormalizeAssetPath(Application.dataPath).TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(normalizedAssetsRoot) ||
+        !normalizedFullPath.StartsWith(normalizedAssetsRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    assetPath = "Assets/" + normalizedFullPath.Substring(normalizedAssetsRoot.Length + 1);
+    return true;
   }
 
   static string ExtractTrailingPathSegment(string path) {

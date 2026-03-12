@@ -8,7 +8,7 @@ using UnityEditor;
 using UnityEngine;
 
 public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
-  const string DefaultOutputSubfolder = "__GroupedGearAtlases";
+  const string DefaultOutputSubfolder = "GroupedGearAtlases";
   const string SkinGroupKey = "Skin";
   const string SkinFormName = "Skin";
   const string SkinVariantName = "All";
@@ -2188,6 +2188,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   List<GroupCandidate> CollectGroupCandidates(string sourceFolderPath, string sanitizedOutputSubfolder) {
     var candidatesByKey = new Dictionary<string, GroupCandidate>(StringComparer.OrdinalIgnoreCase);
     var outputSkippedCount = 0;
+    var ignoredFolderSkippedCount = 0;
     var shallowSkippedCount = 0;
     var parseRejectedCount = 0;
 
@@ -2196,6 +2197,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       var assetPath = NormalizePath(AssetDatabase.GUIDToAssetPath(textureGuids[i]));
       if (!IsSupportedColorAtlas(assetPath)) continue;
       if (IsGeneratedNormalAtlasAssetPath(assetPath)) continue;
+      if (SpriteAtlasSourceFilter.HasIgnoredFolderInPath(assetPath)) {
+        ignoredFolderSkippedCount++;
+        continue;
+      }
       if (ShouldSkipOutputAsset(assetPath, sanitizedOutputSubfolder)) {
         outputSkippedCount++;
         continue;
@@ -2249,6 +2254,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       "[GearGroupAtlas] Candidate path scan." +
       " source='" + sourceFolderPath + "'" +
       " textures=" + textureGuids.Length +
+      " ignored_folder_skipped=" + ignoredFolderSkippedCount +
+      " ignored_folders='" + SpriteAtlasSourceFilter.IgnoredFolderSummary + "'" +
       " output_skipped=" + outputSkippedCount +
       " shallow_skipped=" + shallowSkippedCount +
       " parse_rejected=" + parseRejectedCount +
