@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 public static class SpriteSliceAddressUtility {
+  public static IComparer<string> NaturalStringComparer { get; } = Comparer<string>.Create(CompareNaturally);
+
   public static bool TryParseSliceAddress(string address, out string atlasAssetPath, out string spriteName) {
     atlasAssetPath = "";
     spriteName = "";
@@ -49,6 +52,47 @@ public static class SpriteSliceAddressUtility {
     return string.Equals(leftNumeric, rightNumeric, StringComparison.Ordinal);
   }
 
+  public static int CompareNaturally(string left, string right) {
+    var normalizedLeft = left ?? "";
+    var normalizedRight = right ?? "";
+    var leftIndex = 0;
+    var rightIndex = 0;
+
+    while (leftIndex < normalizedLeft.Length && rightIndex < normalizedRight.Length) {
+      var leftChar = normalizedLeft[leftIndex];
+      var rightChar = normalizedRight[rightIndex];
+      if (char.IsDigit(leftChar) && char.IsDigit(rightChar)) {
+        var leftDigitsStart = leftIndex;
+        var rightDigitsStart = rightIndex;
+        while (leftIndex < normalizedLeft.Length && char.IsDigit(normalizedLeft[leftIndex])) leftIndex++;
+        while (rightIndex < normalizedRight.Length && char.IsDigit(normalizedRight[rightIndex])) rightIndex++;
+
+        var numericComparison = CompareNumericRuns(
+          normalizedLeft,
+          leftDigitsStart,
+          leftIndex - leftDigitsStart,
+          normalizedRight,
+          rightDigitsStart,
+          rightIndex - rightDigitsStart);
+        if (numericComparison != 0) return numericComparison;
+        continue;
+      }
+
+      var leftUpper = char.ToUpperInvariant(leftChar);
+      var rightUpper = char.ToUpperInvariant(rightChar);
+      if (leftUpper != rightUpper) {
+        return leftUpper.CompareTo(rightUpper);
+      }
+
+      leftIndex++;
+      rightIndex++;
+    }
+
+    if (leftIndex < normalizedLeft.Length) return 1;
+    if (rightIndex < normalizedRight.Length) return -1;
+    return 0;
+  }
+
   static bool TryNormalizeNumericToken(string value, out string numericValue) {
     numericValue = "";
     if (string.IsNullOrWhiteSpace(value)) return false;
@@ -56,5 +100,34 @@ public static class SpriteSliceAddressUtility {
     if (parsed < 0) return false;
     numericValue = parsed.ToString(CultureInfo.InvariantCulture);
     return true;
+  }
+
+  static int CompareNumericRuns(
+    string left,
+    int leftStart,
+    int leftLength,
+    string right,
+    int rightStart,
+    int rightLength) {
+    var trimmedLeftStart = leftStart;
+    var trimmedRightStart = rightStart;
+    while (trimmedLeftStart < (leftStart + leftLength) && left[trimmedLeftStart] == '0') trimmedLeftStart++;
+    while (trimmedRightStart < (rightStart + rightLength) && right[trimmedRightStart] == '0') trimmedRightStart++;
+
+    var trimmedLeftLength = (leftStart + leftLength) - trimmedLeftStart;
+    var trimmedRightLength = (rightStart + rightLength) - trimmedRightStart;
+    if (trimmedLeftLength != trimmedRightLength) {
+      return trimmedLeftLength.CompareTo(trimmedRightLength);
+    }
+
+    for (var i = 0; i < trimmedLeftLength; i++) {
+      var leftChar = left[trimmedLeftStart + i];
+      var rightChar = right[trimmedRightStart + i];
+      if (leftChar != rightChar) {
+        return leftChar.CompareTo(rightChar);
+      }
+    }
+
+    return leftLength.CompareTo(rightLength);
   }
 }

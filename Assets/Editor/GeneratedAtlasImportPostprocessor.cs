@@ -124,13 +124,15 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     for (var i = 0; i < deletedAssets.Length; i++) {
       var deletedAssetPath = deletedAssets[i];
       if (string.IsNullOrWhiteSpace(deletedAssetPath)) continue;
-      if (deletedAssetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) {
+      if (IsSupportedGeneratedAtlasTextureAssetPath(deletedAssetPath)) {
         TrimmedSpriteOffsetResolver.InvalidateAtlas(deletedAssetPath);
         continue;
       }
 
       if (!deletedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
-      TrimmedSpriteOffsetResolver.InvalidateAtlas(Path.ChangeExtension(deletedAssetPath, ".png"));
+      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(deletedAssetPath, ".png"));
+      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(deletedAssetPath, ".jpg"));
+      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(deletedAssetPath, ".jpeg"));
     }
   }
 
@@ -141,7 +143,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       var assetPath = assetPaths[i];
       if (string.IsNullOrWhiteSpace(assetPath)) continue;
 
-      if (assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) {
+      if (IsSupportedGeneratedAtlasTextureAssetPath(assetPath)) {
         if (!TryBuildImportDefinition(assetPath, out var definition)) continue;
         metadataAssetPaths?.Add(definition.metadataAssetPath);
         atlasAssetPaths?.Add(definition.atlasAssetPath);
@@ -149,7 +151,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       }
 
       if (!assetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
-      if (!TryBuildImportDefinition(Path.ChangeExtension(assetPath, ".png"), out var definitionFromJson)) continue;
+      if (!TryBuildImportDefinitionForMetadataAsset(assetPath, out var definitionFromJson)) continue;
       metadataAssetPaths?.Add(definitionFromJson.metadataAssetPath);
     }
   }
@@ -158,7 +160,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     definition = null;
     var normalizedAtlasAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath) ||
-        !normalizedAtlasAssetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) {
+        !IsSupportedGeneratedAtlasTextureAssetPath(normalizedAtlasAssetPath)) {
       return false;
     }
 
@@ -176,6 +178,36 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
 
     return TryBuildTrimmedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition) ||
            TryBuildGroupedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition);
+  }
+
+  static bool TryBuildImportDefinitionForMetadataAsset(string metadataAssetPath, out GeneratedAtlasImportDefinition definition) {
+    definition = null;
+    if (string.IsNullOrWhiteSpace(metadataAssetPath) ||
+        !metadataAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var pngAtlasAssetPath = Path.ChangeExtension(metadataAssetPath, ".png");
+    if (TryBuildImportDefinition(pngAtlasAssetPath, out definition)) return true;
+
+    var jpgAtlasAssetPath = Path.ChangeExtension(metadataAssetPath, ".jpg");
+    if (TryBuildImportDefinition(jpgAtlasAssetPath, out definition)) return true;
+
+    var jpegAtlasAssetPath = Path.ChangeExtension(metadataAssetPath, ".jpeg");
+    return TryBuildImportDefinition(jpegAtlasAssetPath, out definition);
+  }
+
+  static bool IsSupportedGeneratedAtlasTextureAssetPath(string assetPath) {
+    return !string.IsNullOrWhiteSpace(assetPath) &&
+           (assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+            assetPath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+            assetPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase));
+  }
+
+  static void InvalidateSiblingGeneratedAtlas(string atlasAssetPath) {
+    var normalizedAtlasAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(atlasAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) return;
+    TrimmedSpriteOffsetResolver.InvalidateAtlas(normalizedAtlasAssetPath);
   }
 
   static bool TryBuildTrimmedImportDefinition(string atlasAssetPath, string metadataAssetPath, string json, out GeneratedAtlasImportDefinition definition) {
@@ -271,6 +303,8 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       if (!TryBuildSpriteMetaData(sprite.name, sprite.packedRect, out var spriteData)) continue;
       spriteMetaData.Add(spriteData);
     }
+
+    SortSpriteMetadata(spriteMetaData);
   }
 
   static void BuildSpriteMetadata(List<GroupedSpriteImportPayload> sprites, List<SpriteMetaData> spriteMetaData) {
@@ -282,6 +316,29 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       if (!TryBuildSpriteMetaData(sprite.name, sprite.packedRect, out var spriteData)) continue;
       spriteMetaData.Add(spriteData);
     }
+
+    SortSpriteMetadata(spriteMetaData);
+  }
+
+  static void SortSpriteMetadata(List<SpriteMetaData> spriteMetaData) {
+    if (spriteMetaData == null || spriteMetaData.Count <= 1) return;
+    spriteMetaData.Sort(CompareSpriteMetaData);
+  }
+
+  static int CompareSpriteMetaData(SpriteMetaData left, SpriteMetaData right) {
+    var nameCompare = SpriteSliceAddressUtility.CompareNaturally(left.name, right.name);
+    if (nameCompare != 0) return nameCompare;
+
+    var yCompare = left.rect.yMin.CompareTo(right.rect.yMin);
+    if (yCompare != 0) return yCompare;
+
+    var xCompare = left.rect.xMin.CompareTo(right.rect.xMin);
+    if (xCompare != 0) return xCompare;
+
+    var heightCompare = left.rect.height.CompareTo(right.rect.height);
+    if (heightCompare != 0) return heightCompare;
+
+    return left.rect.width.CompareTo(right.rect.width);
   }
 
   static bool TryBuildSpriteMetaData(string spriteName, ImportPixelRect packedRect, out SpriteMetaData spriteMetaData) {

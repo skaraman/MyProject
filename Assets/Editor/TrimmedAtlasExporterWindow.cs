@@ -607,9 +607,9 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     if (sprites.Count == 1 && DoesSpriteCoverEntireTexture(sprites[0], previewTexture)) return null;
 
     var orderedSprites = sprites
-      .OrderBy(sprite => sprite.rect.yMin)
+      .OrderBy(sprite => sprite.name, SpriteSliceAddressUtility.NaturalStringComparer)
+      .ThenBy(sprite => sprite.rect.yMin)
       .ThenBy(sprite => sprite.rect.xMin)
-      .ThenBy(sprite => sprite.name, StringComparer.Ordinal)
       .ToList();
 
     var sourceCells = new List<SourceCellDefinition>(orderedSprites.Count);
@@ -1147,12 +1147,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       return false;
     }
 
-    var ordered = items
-      .Where(item => item != null && item.metadata != null)
-      .OrderByDescending(item => item.Height)
-      .ThenByDescending(item => item.Width)
-      .ThenBy(item => item.metadata.index)
-      .ToList();
+    var ordered = BuildTrimmedPackSequence(items);
 
     var x = padding;
     var y = padding;
@@ -1185,6 +1180,18 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     return true;
+  }
+
+  static List<TrimmedSpriteBuildData> BuildTrimmedPackSequence(IEnumerable<TrimmedSpriteBuildData> items) {
+    if (items == null) return new List<TrimmedSpriteBuildData>();
+
+    var ordered = new List<TrimmedSpriteBuildData>();
+    foreach (var item in items) {
+      if (item == null || item.metadata == null) continue;
+      ordered.Add(item);
+    }
+
+    return ordered;
   }
 
   Texture2D BuildPackedTexture(int packedWidth, int packedHeight, List<TrimmedSpriteBuildData> items) {
@@ -1886,7 +1893,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     var atlasPaths = atlasPathsByKey.Values.ToList();
-    atlasPaths.Sort(StringComparer.OrdinalIgnoreCase);
+    atlasPaths.Sort(SpriteSliceAddressUtility.CompareNaturally);
     return atlasPaths;
   }
 
@@ -1905,7 +1912,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     }
 
     var exportBatches = new List<SourceAtlasExportBatch>(sourceAtlasPaths.Count);
-    var orderedFolderPaths = sourcePathsByFolder.Keys.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
+    var orderedFolderPaths = sourcePathsByFolder.Keys.OrderBy(path => path, SpriteSliceAddressUtility.NaturalStringComparer).ToList();
     for (var folderIndex = 0; folderIndex < orderedFolderPaths.Count; folderIndex++) {
       var folderPath = orderedFolderPaths[folderIndex];
       var folderSourcePaths = sourcePathsByFolder[folderPath];
@@ -1937,13 +1944,13 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
         exportBatches.Add(BuildSingleSourceExportBatch(numericSourcePaths[0]));
       }
 
-      nonNumericSourcePaths.Sort(StringComparer.OrdinalIgnoreCase);
+      nonNumericSourcePaths.Sort(SpriteSliceAddressUtility.CompareNaturally);
       for (var sourceIndex = 0; sourceIndex < nonNumericSourcePaths.Count; sourceIndex++) {
         exportBatches.Add(BuildSingleSourceExportBatch(nonNumericSourcePaths[sourceIndex]));
       }
     }
 
-    exportBatches.Sort((left, right) => string.Compare(left.primarySourcePath, right.primarySourcePath, StringComparison.OrdinalIgnoreCase));
+    exportBatches.Sort((left, right) => SpriteSliceAddressUtility.CompareNaturally(left?.primarySourcePath, right?.primarySourcePath));
     return exportBatches;
   }
 
@@ -2050,7 +2057,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
       if (numericComparison != 0) return numericComparison;
     }
 
-    return string.Compare(leftPath, rightPath, StringComparison.OrdinalIgnoreCase);
+    return SpriteSliceAddressUtility.CompareNaturally(leftPath, rightPath);
   }
 
   static string BuildNumericBatchOutputName(string folderPath, List<string> sourcePaths) {
