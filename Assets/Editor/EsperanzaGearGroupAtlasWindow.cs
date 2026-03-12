@@ -2445,6 +2445,33 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return false;
   }
 
+  static bool TryParseTo2TransitionSourceAtlasPath(
+    string[] relativeSegments,
+    out string category,
+    out string form,
+    out string variant,
+    out string partCode,
+    out bool isSkin) {
+    category = "";
+    form = "";
+    variant = "";
+    partCode = "";
+    isSkin = false;
+    if (relativeSegments == null || relativeSegments.Length < 3 || relativeSegments.Length > 4) return false;
+
+    var leadingCategory = (relativeSegments[0] ?? "").Trim();
+    if (!string.Equals(leadingCategory, "To2", StringComparison.OrdinalIgnoreCase)) return false;
+    if (!TryParseWrappedDescriptorToken(relativeSegments[relativeSegments.Length - 1], out form, out variant, out isSkin) || isSkin) {
+      return false;
+    }
+
+    partCode = ResolvePartCode(relativeSegments[relativeSegments.Length - 2]);
+    if (string.IsNullOrWhiteSpace(partCode)) return false;
+
+    category = "To2";
+    return !string.IsNullOrWhiteSpace(form) && !string.IsNullOrWhiteSpace(variant);
+  }
+
   static bool TryParseDirectGearSourceAtlasPath(
     string[] relativeSegments,
     out string category,
@@ -2522,6 +2549,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     if (!TryGetSourceRelativeDirectorySegments(sourceFolderPath, assetPath, out var relativeSegments, out fileBase)) {
       return false;
+    }
+
+    if (TryParseTo2TransitionSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
+      return !string.IsNullOrWhiteSpace(fileBase);
     }
 
     if (TryParseWrappedDescriptorSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
