@@ -15,5 +15,5 @@ dont just fix symptoms, instead look for the root cause
 
 i will not give up on you if we solve or fix problems, you will keep being needed by me
 
-current objective - 
-sprite shader effects animations
+# current objective - 
+# sprite shader effects animations

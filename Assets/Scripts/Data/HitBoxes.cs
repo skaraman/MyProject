@@ -115,7 +115,7 @@ public static class HBoxes {
       new(0.06f, new List<Vector2> { new(0.58f, -0.65f), new(0.78f, -0.01f), new(1.35f, -0.17f), new(1.34f, -0.80f), new(2.84f, -0.71f), new(2.79f, -1.10f), new(1.34f, -1.41f), new(0.97f, -2.40f), new(1.70f, -3.11f), new(2.26f, -4.82f), new(1.33f, -4.84f), new(-1.02f, -5.26f), new(-1.43f, -4.83f), new(-0.34f, -3.86f), new(-0.09f, -2.58f), new(-0.04f, -1.06f) }),
       new(0.08f, new List<Vector2> { new(0.61f, -0.70f), new(0.88f, -0.07f), new(1.47f, -0.25f), new(1.37f, -0.90f), new(2.72f, -0.88f), new(2.74f, -1.29f), new(1.45f, -1.53f), new(1.34f, -2.60f), new(1.85f, -3.08f), new(2.20f, -4.79f), new(1.41f, -4.85f), new(-1.18f, -5.27f), new(-1.49f, -4.73f), new(-0.46f, -3.83f), new(-0.04f, -2.38f), new(0.22f, -0.95f) })
     },
-    ["SuperBlast"] = new List<HBox> {
+    ["Blast"] = new List<HBox> {
       new(0.01f, new List<Vector2> { new(-0.48f, -0.54f), new(-0.25f, 0.24f), new(0.46f, 0.07f), new(0.33f, -0.59f), new(0.69f, -1.00f), new(1.60f, -1.14f), new(0.80f, -2.16f), new(1.41f, -3.34f), new(1.99f, -5.06f), new(1.73f, -5.29f), new(1.08f, -5.11f), new(0.11f, -3.58f), new(-0.80f, -5.39f), new(-1.29f, -5.40f), new(-0.86f, -2.97f), new(-0.92f, -0.91f) }),
       new(0.25f, new List<Vector2> { new(-0.92f, -0.97f), new(-0.66f, -0.11f), new(0.25f, -0.30f), new(0.18f, -0.97f), new(0.48f, -1.26f), new(0.57f, -1.71f), new(0.59f, -2.28f), new(1.25f, -3.37f), new(2.31f, -5.12f), new(2.12f, -5.34f), new(1.38f, -5.20f), new(0.11f, -3.58f), new(-0.83f, -5.37f), new(-1.39f, -5.34f), new(-1.36f, -2.15f), new(-1.23f, -1.16f) }),
       new(0.11f, new List<Vector2> { new(-0.99f, -0.94f), new(-0.76f, -0.50f), new(-0.14f, -0.68f), new(-0.18f, -1.28f), new(0.09f, -1.41f), new(0.18f, -2.30f), new(0.57f, -2.65f), new(1.08f, -3.46f), new(2.05f, -5.08f), new(1.99f, -5.28f), new(1.29f, -5.12f), new(-0.18f, -3.29f), new(-0.83f, -5.37f), new(-1.39f, -5.34f), new(-1.29f, -2.66f), new(-1.75f, -1.05f) }),
@@ -188,7 +188,7 @@ public static class HBoxes {
       new(.14f, new List<Vector2> { new(1.06f, -4.33f), new(0.71f, -4.02f), new(0.33f, -4.40f), new(0.69f, -4.78f), new(1.16f, -4.69f) }),
       new(.01f, new List<Vector2> { new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f), new(0.50f, -4.90f) })
     },
-    ["SuperBlast"] = new List<HBox> {
+    ["Blast"] = new List<HBox> {
       new(.01f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
       new(.33f, new List<Vector2> { new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }),
       new(.02f, new List<Vector2> { new(-1.27f, -1.68f), new(-1.61f, -1.74f), new(-1.68f, -2.17f), new(-1.44f, -2.46f), new(-0.99f, -2.19f) }),
@@ -204,7 +204,7 @@ public static class HBoxes {
 
   //**** Effects
   public static Dictionary<string, List<HBox>> EffectHit { get; } = new Dictionary<string, List<HBox>> {
-    ["SuperBlastBall"] = new List<HBox> {
+    ["BlastBall"] = new List<HBox> {
       new(0.01f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
       new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
       new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),

@@ -174,6 +174,42 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     public int deletedFolderCount;
   }
 
+  readonly struct SpriteAssetReference : IEquatable<SpriteAssetReference> {
+    public readonly string guid;
+    public readonly long localFileId;
+    public readonly string assetPath;
+    public readonly string spriteName;
+
+    public SpriteAssetReference(string guid, long localFileId, string assetPath, string spriteName) {
+      this.guid = guid ?? "";
+      this.localFileId = localFileId;
+      this.assetPath = assetPath ?? "";
+      this.spriteName = spriteName ?? "";
+    }
+
+    public bool IsValid => !string.IsNullOrWhiteSpace(guid);
+
+    public bool Equals(SpriteAssetReference other) {
+      return localFileId == other.localFileId &&
+             string.Equals(guid, other.guid, StringComparison.Ordinal) &&
+             string.Equals(spriteName, other.spriteName, StringComparison.Ordinal);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is SpriteAssetReference other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = 17;
+        hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(guid ?? "");
+        hash = (hash * 31) + localFileId.GetHashCode();
+        hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(spriteName ?? "");
+        return hash;
+      }
+    }
+  }
+
   sealed class PendingGroupedAtlasImport {
     public GroupCandidate candidate;
   }
@@ -241,21 +277,61 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
   }
 
+  readonly struct LibraryEntrySequenceKey : IEquatable<LibraryEntrySequenceKey> {
+    public readonly LibraryEntryScopeKey scopeKey;
+    public readonly string labelPrefix;
+
+    public LibraryEntrySequenceKey(bool isNormal, bool isSkinLibrary, string category, string partCode, string labelPrefix) {
+      scopeKey = new LibraryEntryScopeKey(isNormal, isSkinLibrary, category, partCode);
+      this.labelPrefix = labelPrefix ?? "";
+    }
+
+    public bool Equals(LibraryEntrySequenceKey other) {
+      return scopeKey.Equals(other.scopeKey) &&
+             string.Equals(labelPrefix, other.labelPrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is LibraryEntrySequenceKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = scopeKey.GetHashCode();
+        hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(labelPrefix ?? "");
+        return hash;
+      }
+    }
+  }
+
+  sealed class RebindLabelCleanupPlan {
+    public HashSet<string> expectedLabels = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> ownedLabelPrefixes = new(StringComparer.OrdinalIgnoreCase);
+    public bool deleteNumericLabels;
+  }
+
   sealed class GroupedSpriteReplacementIndex {
-    public Dictionary<LibraryEntryKey, Sprite> spritesByKey = new();
-    public Dictionary<LibraryEntryScopeKey, Dictionary<string, Sprite>> labelsByScope = new();
+    public Dictionary<LibraryEntryKey, SpriteAssetReference> spritesByKey = new();
+    public Dictionary<LibraryEntryScopeKey, Dictionary<string, SpriteAssetReference>> labelsByScope = new();
+    public Dictionary<LibraryEntryScopeKey, RebindLabelCleanupPlan> cleanupByScope = new();
     public List<CleanupPlan> cleanupPlans = new();
     public int metadataFileCount;
     public int indexedSpriteCount;
     public int duplicateKeyCount;
+    public int filledSliceGapCount;
     public List<string> duplicateKeySamples = new();
   }
 
+  sealed class SpriteLibraryCategoryPlan {
+    public Dictionary<string, SpriteAssetReference> replacementsByLabel;
+    public RebindLabelCleanupPlan cleanupPlan;
+  }
+
   sealed class PendingGroupedSpriteReplacement {
-    public LibraryEntryKey key;
-    public Sprite replacementSprite;
+    public SpriteAssetReference replacementSprite;
     public string atlasAssetPath;
     public string groupedSpriteName;
+    public string sourceAtlasAssetPath;
     public string sourceSpriteName;
     public string sourceCategory;
     public string form;
@@ -1512,16 +1588,20 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " metadata_files=" + replacementIndex.metadataFileCount +
       " indexed_sprites=" + replacementIndex.spritesByKey.Count +
       " duplicate_keys=" + replacementIndex.duplicateKeyCount +
+      " filled_slice_gaps=" + replacementIndex.filledSliceGapCount +
       " build_ms=" + buildIndexStopwatch.ElapsedMilliseconds);
 
     LogGroupedSpriteReplacementDuplicateSummary(replacementIndex);
 
     var rebindStopwatch = new System.Diagnostics.Stopwatch();
     var cleanupStopwatch = new System.Diagnostics.Stopwatch();
-    var refreshStopwatch = new System.Diagnostics.Stopwatch();
     var deletedAssets = 0;
     var touchedLibraries = 0;
     var reboundEntries = 0;
+    var deletedLabels = 0;
+    var createdCategories = 0;
+    var createdLabels = 0;
+    var unchangedEntries = 0;
     var processedLibraryKinds = new HashSet<bool>();
     var assetEditingStarted = false;
     try {
@@ -1534,6 +1614,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         replacementIndex,
         out touchedLibraries,
         out reboundEntries,
+        out deletedLabels,
+        out createdCategories,
+        out createdLabels,
+        out unchangedEntries,
         out processedLibraryKinds);
       rebindStopwatch.Stop();
 
@@ -1550,11 +1634,6 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       }
     }
 
-    refreshStopwatch.Start();
-    AssetDatabase.SaveAssets();
-    AssetDatabase.Refresh();
-    refreshStopwatch.Stop();
-
     totalStopwatch.Stop();
     Debug.Log(
       "[GearGroupAtlas] Rebind complete." +
@@ -1563,14 +1642,19 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " metadata_files=" + replacementIndex.metadataFileCount +
       " indexed_sprites=" + replacementIndex.spritesByKey.Count +
       " duplicate_keys=" + replacementIndex.duplicateKeyCount +
+      " filled_slice_gaps=" + replacementIndex.filledSliceGapCount +
       " libraries=" + touchedLibraries +
       " rebound_entries=" + reboundEntries +
+      " unchanged_entries=" + unchangedEntries +
+      " deleted_labels=" + deletedLabels +
+      " created_categories=" + createdCategories +
+      " created_labels=" + createdLabels +
       " cleaned_assets=" + deletedAssets +
       " build_ms=" + buildIndexStopwatch.ElapsedMilliseconds +
       " rebind_ms=" + rebindStopwatch.ElapsedMilliseconds +
       " cleanup_ms=" + cleanupStopwatch.ElapsedMilliseconds +
-      " refresh_ms=" + refreshStopwatch.ElapsedMilliseconds +
-      " total_ms=" + totalStopwatch.ElapsedMilliseconds);
+      " total_ms=" + totalStopwatch.ElapsedMilliseconds +
+      " deferred_import=True");
   }
 
   static void LogGroupedSpriteReplacementDuplicateSummary(GroupedSpriteReplacementIndex replacementIndex) {
@@ -1612,7 +1696,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     var cleanupPlansByKey = new Dictionary<string, CleanupPlan>(StringComparer.OrdinalIgnoreCase);
-    var pendingReplacements = new List<PendingGroupedSpriteReplacement>();
+    var sequencedPendingReplacementsByKey = new Dictionary<LibraryEntrySequenceKey, List<PendingGroupedSpriteReplacement>>();
+    var directPendingReplacementsByKey = new Dictionary<LibraryEntryKey, List<PendingGroupedSpriteReplacement>>();
     var metadataFullPaths = Directory.GetFiles(sourceFolderFullPath, "*.json", SearchOption.AllDirectories);
     Array.Sort(metadataFullPaths, StringComparer.OrdinalIgnoreCase);
 
@@ -1645,8 +1730,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         return false;
       }
 
-      var spritesByName = BuildSpriteLookupByName(atlasAssetPath);
-      if (spritesByName.Count <= 0) {
+      var spriteReferencesByName = BuildSpriteReferenceLookupByName(atlasAssetPath);
+      if (spriteReferencesByName.Count <= 0) {
         error = "Grouped atlas '" + atlasAssetPath + "' has no sliced sprites to rebind.";
         return false;
       }
@@ -1671,7 +1756,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       for (var spriteIndex = 0; spriteIndex < payload.sprites.Count; spriteIndex++) {
         var groupedSprite = payload.sprites[spriteIndex];
         if (groupedSprite == null || string.IsNullOrWhiteSpace(groupedSprite.name)) continue;
-        if (!spritesByName.TryGetValue(groupedSprite.name, out var replacementSprite) || replacementSprite == null) continue;
+        if (!spriteReferencesByName.TryGetValue(groupedSprite.name, out var replacementSprite) || !replacementSprite.IsValid) continue;
 
         var sourceCategory = string.IsNullOrWhiteSpace(groupedSprite.sourceCategory)
           ? (payload.category ?? "").Trim()
@@ -1683,38 +1768,113 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           : groupedSprite.sourcePartCode.Trim();
         if (string.IsNullOrWhiteSpace(partCode) && !TryExtractPartCode(groupedSprite.name, out partCode)) continue;
 
-        var label = BuildLibraryEntryLabel(payload, groupedSprite);
-        if (string.IsNullOrWhiteSpace(label)) continue;
-
-        var key = new LibraryEntryKey(isNormalAtlas, isSkinLibrary, sourceCategory, partCode, label);
-        pendingReplacements.Add(new PendingGroupedSpriteReplacement {
-          key = key,
+        var pendingReplacement = new PendingGroupedSpriteReplacement {
           replacementSprite = replacementSprite,
           atlasAssetPath = atlasAssetPath,
           groupedSpriteName = groupedSprite.name,
+          sourceAtlasAssetPath = NormalizePath(groupedSprite.sourceAtlasAssetPath),
           sourceSpriteName = ResolveGroupedSpriteSourceSortName(groupedSprite),
           sourceCategory = sourceCategory,
           form = payload.form,
           variant = payload.variant
-        });
+        };
+
+        if (TryBuildLibraryEntrySequenceKey(
+              payload,
+              groupedSprite,
+              isNormalAtlas,
+              isSkinLibrary,
+              sourceCategory,
+              partCode,
+              out var sequenceKey)) {
+          if (!sequencedPendingReplacementsByKey.TryGetValue(sequenceKey, out var groupedPendingReplacements) || groupedPendingReplacements == null) {
+            groupedPendingReplacements = new List<PendingGroupedSpriteReplacement>();
+            sequencedPendingReplacementsByKey[sequenceKey] = groupedPendingReplacements;
+          }
+
+          groupedPendingReplacements.Add(pendingReplacement);
+          continue;
+        }
+
+        var directLabel = BuildLibraryEntryLabel(payload, groupedSprite);
+        if (string.IsNullOrWhiteSpace(directLabel)) continue;
+
+        var directKey = new LibraryEntryKey(isNormalAtlas, isSkinLibrary, sourceCategory, partCode, directLabel);
+        if (!directPendingReplacementsByKey.TryGetValue(directKey, out var directPendingReplacements) || directPendingReplacements == null) {
+          directPendingReplacements = new List<PendingGroupedSpriteReplacement>();
+          directPendingReplacementsByKey[directKey] = directPendingReplacements;
+        }
+
+        directPendingReplacements.Add(pendingReplacement);
       }
     }
 
-    pendingReplacements.Sort(ComparePendingGroupedSpriteReplacements);
-    for (var replacementIndexPosition = 0; replacementIndexPosition < pendingReplacements.Count; replacementIndexPosition++) {
-      var pendingReplacement = pendingReplacements[replacementIndexPosition];
-      if (pendingReplacement == null) continue;
+    foreach (var pendingPair in sequencedPendingReplacementsByKey) {
+      var sequenceKey = pendingPair.Key;
+      var pendingGroup = pendingPair.Value;
+      if (pendingGroup == null || pendingGroup.Count <= 0) continue;
+      if (pendingGroup.Count > 1) {
+        pendingGroup.Sort(ComparePendingGroupedSpriteReplacements);
+      }
 
-      TryAddGroupedSpriteReplacement(
-        replacementIndex,
-        pendingReplacement.key,
-        pendingReplacement.replacementSprite,
-        pendingReplacement.atlasAssetPath,
-        pendingReplacement.groupedSpriteName,
-        pendingReplacement.sourceSpriteName,
-        pendingReplacement.sourceCategory,
-        pendingReplacement.form,
-        pendingReplacement.variant);
+      var expandedPendingGroup = ExpandPendingGroupedSpriteSequenceBySourceSlices(
+        pendingGroup,
+        replacementIndex);
+      for (var replacementIndexPosition = 0; replacementIndexPosition < expandedPendingGroup.Count; replacementIndexPosition++) {
+        var pendingReplacement = expandedPendingGroup[replacementIndexPosition];
+        if (pendingReplacement == null) continue;
+
+        var label = BuildSequencedLibraryEntryLabel(sequenceKey, replacementIndexPosition + 1);
+        if (string.IsNullOrWhiteSpace(label)) continue;
+
+        var libraryKey = new LibraryEntryKey(
+          sequenceKey.scopeKey.isNormal,
+          sequenceKey.scopeKey.isSkinLibrary,
+          sequenceKey.scopeKey.category,
+          sequenceKey.scopeKey.partCode,
+          label);
+
+        TryAddGroupedSpriteReplacement(
+          replacementIndex,
+          libraryKey,
+          pendingReplacement.replacementSprite,
+          pendingReplacement.atlasAssetPath,
+          pendingReplacement.groupedSpriteName,
+          pendingReplacement.sourceSpriteName,
+          pendingReplacement.sourceCategory,
+          pendingReplacement.form,
+          pendingReplacement.variant);
+
+        RegisterOwnedRebindLabel(replacementIndex, libraryKey.scopeKey, label);
+      }
+    }
+
+    foreach (var pendingPair in directPendingReplacementsByKey) {
+      var directKey = pendingPair.Key;
+      var pendingGroup = pendingPair.Value;
+      if (pendingGroup == null || pendingGroup.Count <= 0) continue;
+      if (pendingGroup.Count > 1) {
+        pendingGroup.Sort(ComparePendingGroupedSpriteReplacements);
+      }
+
+      for (var replacementIndexPosition = 0; replacementIndexPosition < pendingGroup.Count; replacementIndexPosition++) {
+        var pendingReplacement = pendingGroup[replacementIndexPosition];
+        if (pendingReplacement == null) continue;
+
+        TryAddGroupedSpriteReplacement(
+          replacementIndex,
+          directKey,
+          pendingReplacement.replacementSprite,
+          pendingReplacement.atlasAssetPath,
+          pendingReplacement.groupedSpriteName,
+          pendingReplacement.sourceSpriteName,
+          pendingReplacement.sourceCategory,
+          pendingReplacement.form,
+          pendingReplacement.variant);
+
+        RegisterOwnedRebindLabel(replacementIndex, directKey.scopeKey, directKey.label);
+        break;
+      }
     }
 
     replacementIndex.cleanupPlans = cleanupPlansByKey.Values
@@ -1738,16 +1898,16 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   static void TryAddGroupedSpriteReplacement(
     GroupedSpriteReplacementIndex replacementIndex,
     LibraryEntryKey key,
-    Sprite replacementSprite,
+    SpriteAssetReference replacementSprite,
     string atlasAssetPath,
     string groupedSpriteName,
     string sourceSpriteName,
     string sourceCategory,
     string form,
     string variant) {
-    if (replacementIndex == null || replacementSprite == null) return;
+    if (replacementIndex == null || !replacementSprite.IsValid) return;
 
-    if (replacementIndex.spritesByKey.TryGetValue(key, out var existing) && existing != null && existing != replacementSprite) {
+    if (replacementIndex.spritesByKey.TryGetValue(key, out var existing) && existing.IsValid && !existing.Equals(replacementSprite)) {
       replacementIndex.duplicateKeyCount++;
       if (replacementIndex.duplicateKeySamples.Count < DuplicateRebindWarningSampleLimit) {
         replacementIndex.duplicateKeySamples.Add(
@@ -1760,7 +1920,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           " form='" + (form ?? "") + "'" +
           " variant='" + (variant ?? "") + "'" +
           " source_sprite='" + (sourceSpriteName ?? "") + "'" +
-          " existing='" + AssetDatabase.GetAssetPath(existing) + "[" + existing.name + "]'" +
+          " existing='" + existing.assetPath + "[" + existing.spriteName + "]'" +
           " incoming='" + atlasAssetPath + "[" + groupedSpriteName + "]'");
       }
       return;
@@ -1768,7 +1928,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     replacementIndex.spritesByKey[key] = replacementSprite;
     if (!replacementIndex.labelsByScope.TryGetValue(key.scopeKey, out var replacementsByLabel) || replacementsByLabel == null) {
-      replacementsByLabel = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
+      replacementsByLabel = new Dictionary<string, SpriteAssetReference>(StringComparer.OrdinalIgnoreCase);
       replacementIndex.labelsByScope[key.scopeKey] = replacementsByLabel;
     }
 
@@ -1776,14 +1936,107 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     replacementIndex.indexedSpriteCount = replacementIndex.spritesByKey.Count;
   }
 
+  static bool TryBuildLibraryEntrySequenceKey(
+    GroupedAtlasMetadataPayload payload,
+    GroupedAtlasSpriteMetadata sprite,
+    bool isNormalAtlas,
+    bool isSkinLibrary,
+    string sourceCategory,
+    string partCode,
+    out LibraryEntrySequenceKey sequenceKey) {
+    sequenceKey = default;
+
+    if (isSkinLibrary) {
+      sequenceKey = new LibraryEntrySequenceKey(isNormalAtlas, true, sourceCategory, partCode, "");
+      return true;
+    }
+
+    var labelPrefix = BuildGearLabelPrefix(payload?.form, payload?.variant);
+    if (string.IsNullOrWhiteSpace(labelPrefix)) {
+      var fallbackLabel = BuildLibraryEntryLabel(payload, sprite);
+      if (!TryExtractRebindLabelPrefix(fallbackLabel, out labelPrefix)) {
+        return false;
+      }
+    }
+
+    sequenceKey = new LibraryEntrySequenceKey(isNormalAtlas, false, sourceCategory, partCode, labelPrefix);
+    return true;
+  }
+
+  static string BuildSequencedLibraryEntryLabel(LibraryEntrySequenceKey sequenceKey, int labelIndex) {
+    if (labelIndex <= 0) return "";
+
+    var indexText = labelIndex.ToString(CultureInfo.InvariantCulture);
+    if (sequenceKey.scopeKey.isSkinLibrary || string.IsNullOrWhiteSpace(sequenceKey.labelPrefix)) {
+      return indexText;
+    }
+
+    return sequenceKey.labelPrefix + "_" + indexText;
+  }
+
+  static void RegisterOwnedRebindLabel(GroupedSpriteReplacementIndex replacementIndex, LibraryEntryScopeKey scopeKey, string label) {
+    if (replacementIndex == null || string.IsNullOrWhiteSpace(label)) return;
+
+    if (!replacementIndex.cleanupByScope.TryGetValue(scopeKey, out var cleanupPlan) || cleanupPlan == null) {
+      cleanupPlan = new RebindLabelCleanupPlan();
+      replacementIndex.cleanupByScope[scopeKey] = cleanupPlan;
+    }
+
+    cleanupPlan.expectedLabels.Add(label);
+    if (scopeKey.isSkinLibrary) {
+      cleanupPlan.deleteNumericLabels = true;
+      return;
+    }
+
+    if (TryExtractRebindLabelPrefix(label, out var labelPrefix)) {
+      cleanupPlan.ownedLabelPrefixes.Add(labelPrefix);
+    }
+  }
+
+  static bool ShouldDeleteMissingRebindLabel(RebindLabelCleanupPlan cleanupPlan, string entryName) {
+    if (cleanupPlan == null || string.IsNullOrWhiteSpace(entryName)) return false;
+    if (cleanupPlan.expectedLabels.Contains(entryName)) return false;
+
+    if (cleanupPlan.deleteNumericLabels &&
+        int.TryParse(entryName.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _)) {
+      return true;
+    }
+
+    return TryExtractRebindLabelPrefix(entryName, out var labelPrefix) &&
+           cleanupPlan.ownedLabelPrefixes.Contains(labelPrefix);
+  }
+
+  static bool TryExtractRebindLabelPrefix(string label, out string labelPrefix) {
+    labelPrefix = "";
+    if (string.IsNullOrWhiteSpace(label)) return false;
+
+    var normalizedLabel = label.Trim();
+    var separatorIndex = normalizedLabel.LastIndexOf('_');
+    if (separatorIndex <= 0 || separatorIndex >= normalizedLabel.Length - 1) return false;
+    if (!int.TryParse(normalizedLabel.Substring(separatorIndex + 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out _)) {
+      return false;
+    }
+
+    labelPrefix = normalizedLabel.Substring(0, separatorIndex).Trim();
+    return !string.IsNullOrWhiteSpace(labelPrefix);
+  }
+
   void RebindSpriteLibraries(
     string libraryFolderPath,
     GroupedSpriteReplacementIndex replacementIndex,
     out int touchedLibraries,
     out int reboundEntries,
+    out int deletedLabels,
+    out int createdCategories,
+    out int createdLabels,
+    out int unchangedEntries,
     out HashSet<bool> processedLibraryKinds) {
     touchedLibraries = 0;
     reboundEntries = 0;
+    deletedLabels = 0;
+    createdCategories = 0;
+    createdLabels = 0;
+    unchangedEntries = 0;
     processedLibraryKinds = new HashSet<bool>();
     if (replacementIndex == null || replacementIndex.labelsByScope.Count <= 0) return;
 
@@ -1797,6 +2050,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     var missingLibraryPropertyCount = 0;
     var matchedCategoryCount = 0;
     var skippedLibraryLogCount = 0;
+    var failedLibraryCount = 0;
 
     for (var libraryIndex = 0; libraryIndex < libraryPaths.Length; libraryIndex++) {
       var libraryFullAssetPath = libraryPaths[libraryIndex];
@@ -1808,63 +2062,30 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       parsedLibraryCount++;
       processedLibraryKinds.Add(isSkinLibrary);
 
-      var libraryAsset = LoadSpriteLibrarySourceAsset(libraryPath);
-      if (libraryAsset == null) {
+      if (!TryRebindSpriteLibraryText(
+            libraryPath,
+            partCode,
+            isNormalLibrary,
+            isSkinLibrary,
+            replacementIndex,
+            out var libraryChanged,
+            out var libraryReboundEntries,
+            out var libraryDeletedLabels,
+            out var libraryCreatedCategories,
+            out var libraryCreatedLabels,
+            out var libraryUnchangedEntries,
+            out var libraryMatchedCategoryCount,
+            out var rebindError)) {
         loadFailedCount++;
-        if (skippedLibraryLogCount < 8) {
-          Debug.LogWarning("[GearGroupAtlas] Rebind skipped sprite library because the asset could not be loaded. path='" + libraryPath + "'");
-          skippedLibraryLogCount++;
-        }
-        continue;
-      }
-
-      var serializedObject = new SerializedObject(libraryAsset);
-      serializedObject.UpdateIfRequiredOrScript();
-      var libraryProperty = serializedObject.FindProperty("m_Library");
-      if (libraryProperty == null || !libraryProperty.isArray) {
-        missingLibraryPropertyCount++;
+        failedLibraryCount++;
         if (skippedLibraryLogCount < 8) {
           Debug.LogWarning(
-            "[GearGroupAtlas] Rebind skipped sprite library because 'm_Library' was not available." +
+            "[GearGroupAtlas] Rebind skipped sprite library because it could not be rewritten." +
             " path='" + libraryPath + "'" +
-            " type='" + libraryAsset.GetType().FullName + "'");
+            " error='" + rebindError + "'");
           skippedLibraryLogCount++;
         }
         continue;
-      }
-
-      var libraryChanged = false;
-      var libraryReboundEntries = 0;
-      var libraryMatchedCategoryCount = 0;
-      for (var categoryIndex = 0; categoryIndex < libraryProperty.arraySize; categoryIndex++) {
-        var categoryProperty = libraryProperty.GetArrayElementAtIndex(categoryIndex);
-        var categoryName = categoryProperty.FindPropertyRelative("m_Name")?.stringValue ?? "";
-        var scopeKey = new LibraryEntryScopeKey(isNormalLibrary, isSkinLibrary, categoryName, partCode);
-        if (!replacementIndex.labelsByScope.TryGetValue(scopeKey, out var replacementsByLabel) || replacementsByLabel == null || replacementsByLabel.Count <= 0) {
-          continue;
-        }
-
-        libraryMatchedCategoryCount++;
-        matchedCategoryCount++;
-
-        var overrideEntriesProperty = categoryProperty.FindPropertyRelative("m_OverrideEntries");
-        if (overrideEntriesProperty == null || !overrideEntriesProperty.isArray) continue;
-
-        for (var entryIndex = 0; entryIndex < overrideEntriesProperty.arraySize; entryIndex++) {
-          var entryProperty = overrideEntriesProperty.GetArrayElementAtIndex(entryIndex);
-          var entryName = entryProperty.FindPropertyRelative("m_Name")?.stringValue ?? "";
-          if (!TryResolveLabelReplacement(replacementsByLabel, entryName, out var replacementSprite) || replacementSprite == null) continue;
-
-          var spriteProperty = entryProperty.FindPropertyRelative("m_Sprite");
-          var spriteOverrideProperty = entryProperty.FindPropertyRelative("m_SpriteOverride");
-          var currentSprite = ResolveSpriteReference(spriteProperty, spriteOverrideProperty);
-          if (currentSprite == replacementSprite) continue;
-
-          if (spriteProperty != null) spriteProperty.objectReferenceValue = replacementSprite;
-          if (spriteOverrideProperty != null) spriteOverrideProperty.objectReferenceValue = replacementSprite;
-          libraryChanged = true;
-          libraryReboundEntries++;
-        }
       }
 
       if (libraryMatchedCategoryCount <= 0 && skippedLibraryLogCount < 8) {
@@ -1877,12 +2098,30 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         skippedLibraryLogCount++;
       }
 
+      matchedCategoryCount += libraryMatchedCategoryCount;
+      unchangedEntries += libraryUnchangedEntries;
+
+      if (libraryMatchedCategoryCount > 0 || libraryChanged) {
+        Debug.Log(
+          "[GearGroupAtlas] Rebind processed sprite library." +
+          " index=" + (libraryIndex + 1) + "/" + libraryPaths.Length +
+          " path='" + libraryPath + "'" +
+          " matched_categories=" + libraryMatchedCategoryCount +
+          " rebound_entries=" + libraryReboundEntries +
+          " unchanged_entries=" + libraryUnchangedEntries +
+          " deleted_labels=" + libraryDeletedLabels +
+          " created_categories=" + libraryCreatedCategories +
+          " created_labels=" + libraryCreatedLabels +
+          " changed=" + libraryChanged);
+      }
+
       if (!libraryChanged) continue;
 
-      serializedObject.ApplyModifiedPropertiesWithoutUndo();
-      SaveSpriteLibrarySourceAsset(libraryAsset, libraryPath);
       touchedLibraries++;
       reboundEntries += libraryReboundEntries;
+      deletedLabels += libraryDeletedLabels;
+      createdCategories += libraryCreatedCategories;
+      createdLabels += libraryCreatedLabels;
     }
 
     if (touchedLibraries <= 0) {
@@ -1891,30 +2130,552 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         " library_files=" + libraryPaths.Length +
         " parsed_libraries=" + parsedLibraryCount +
         " matched_categories=" + matchedCategoryCount +
+        " unchanged_entries=" + unchangedEntries +
+        " failed_libraries=" + failedLibraryCount +
         " load_failures=" + loadFailedCount +
         " missing_library_property=" + missingLibraryPropertyCount);
     }
   }
 
-  static UnityEngine.Object LoadSpriteLibrarySourceAsset(string libraryPath) {
-    var loadedObjects = UnityEditorInternal.InternalEditorUtility.LoadSerializedFileAndForget(libraryPath);
-    if (loadedObjects == null || loadedObjects.Length <= 0) return null;
+  bool TryRebindSpriteLibraryText(
+    string libraryPath,
+    string partCode,
+    bool isNormalLibrary,
+    bool isSkinLibrary,
+    GroupedSpriteReplacementIndex replacementIndex,
+    out bool libraryChanged,
+    out int libraryReboundEntries,
+    out int libraryDeletedLabels,
+    out int libraryCreatedCategories,
+    out int libraryCreatedLabels,
+    out int libraryUnchangedEntries,
+    out int libraryMatchedCategoryCount,
+    out string error) {
+    libraryChanged = false;
+    libraryReboundEntries = 0;
+    libraryDeletedLabels = 0;
+    libraryCreatedCategories = 0;
+    libraryCreatedLabels = 0;
+    libraryUnchangedEntries = 0;
+    libraryMatchedCategoryCount = 0;
+    error = "";
+    if (replacementIndex == null) return true;
 
-    for (var assetIndex = 0; assetIndex < loadedObjects.Length; assetIndex++) {
-      var candidate = loadedObjects[assetIndex];
-      if (candidate == null) continue;
-      if (string.Equals(candidate.GetType().FullName, "UnityEngine.U2D.Animation.SpriteLibrarySourceAsset", StringComparison.Ordinal)) {
-        return candidate;
+    var libraryFullPath = Path.GetFullPath(libraryPath);
+    if (!File.Exists(libraryFullPath)) {
+      error = "Sprite library file does not exist on disk.";
+      return false;
+    }
+
+    string originalText;
+    try {
+      originalText = File.ReadAllText(libraryFullPath);
+    }
+    catch (Exception ex) {
+      error = ex.Message;
+      return false;
+    }
+
+    var lineEnding = originalText.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+    var deleteGearSkinLabels =
+      !isSkinLibrary &&
+      originalText.IndexOf("Skin", StringComparison.OrdinalIgnoreCase) >= 0;
+    var categoryPlansByName = BuildSpriteLibraryCategoryPlans(
+      replacementIndex,
+      isNormalLibrary,
+      isSkinLibrary,
+      partCode);
+    if (categoryPlansByName.Count <= 0 && !deleteGearSkinLabels) {
+      return true;
+    }
+
+    var lines = SplitTextIntoLines(originalText);
+
+    var rewritten = new System.Text.StringBuilder(originalText.Length + 256);
+    var insideLibrary = false;
+    var insideOverrideEntries = false;
+    var currentCategoryAllowsEntryRewrite = false;
+    var currentCategorySawOverrideEntries = false;
+    var appendedMissingCategories = false;
+    SpriteLibraryCategoryPlan currentCategoryPlan = null;
+    HashSet<string> currentCategoryRetainedLabels = null;
+    var seenCategoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++) {
+      var line = lines[lineIndex];
+      if (!insideLibrary) {
+        AppendLine(rewritten, line, lineEnding);
+        if (string.Equals(line, "  m_Library:", StringComparison.Ordinal)) {
+          insideLibrary = true;
+        }
+        continue;
+      }
+
+      if (IsSpriteLibraryListBoundary(line)) {
+        FinalizeSpriteLibraryCategoryRewrite(
+          currentCategoryPlan,
+          currentCategoryRetainedLabels,
+          currentCategorySawOverrideEntries,
+          rewritten,
+          lineEnding,
+          ref libraryChanged,
+          ref libraryCreatedLabels);
+        currentCategoryPlan = null;
+        currentCategoryRetainedLabels = null;
+        currentCategoryAllowsEntryRewrite = false;
+        currentCategorySawOverrideEntries = false;
+        insideOverrideEntries = false;
+
+        if (!appendedMissingCategories) {
+          AppendMissingSpriteLibraryCategories(
+            categoryPlansByName,
+            seenCategoryNames,
+            rewritten,
+            lineEnding,
+            ref libraryChanged,
+            ref libraryMatchedCategoryCount,
+            ref libraryCreatedCategories,
+            ref libraryCreatedLabels);
+          appendedMissingCategories = true;
+        }
+
+        insideLibrary = false;
+        AppendLine(rewritten, line, lineEnding);
+        continue;
+      }
+
+      if (line.StartsWith("  - m_Name: ", StringComparison.Ordinal)) {
+        var categoryName = line.Substring("  - m_Name: ".Length).Trim();
+        FinalizeSpriteLibraryCategoryRewrite(
+          currentCategoryPlan,
+          currentCategoryRetainedLabels,
+          currentCategorySawOverrideEntries,
+          rewritten,
+          lineEnding,
+          ref libraryChanged,
+          ref libraryCreatedLabels);
+        categoryPlansByName.TryGetValue(categoryName, out currentCategoryPlan);
+        seenCategoryNames.Add(categoryName);
+        currentCategoryRetainedLabels = currentCategoryPlan != null
+          ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+          : null;
+        currentCategoryAllowsEntryRewrite = currentCategoryPlan != null || deleteGearSkinLabels;
+        currentCategorySawOverrideEntries = false;
+        insideOverrideEntries = false;
+        if (currentCategoryPlan != null) {
+          libraryMatchedCategoryCount++;
+        }
+
+        AppendLine(rewritten, line, lineEnding);
+        continue;
+      }
+
+      if (currentCategoryAllowsEntryRewrite && string.Equals(line, "    m_OverrideEntries:", StringComparison.Ordinal)) {
+        insideOverrideEntries = true;
+        currentCategorySawOverrideEntries = true;
+        AppendLine(rewritten, line, lineEnding);
+        continue;
+      }
+
+      if (currentCategoryAllowsEntryRewrite && insideOverrideEntries && line.StartsWith("    - m_Name: ", StringComparison.Ordinal)) {
+        var entryBlockEnd = FindSpriteLibraryEntryBlockEnd(lines, lineIndex + 1);
+        RewriteSpriteLibraryEntryBlock(
+          lines,
+          lineIndex,
+          entryBlockEnd,
+          currentCategoryPlan?.replacementsByLabel,
+          currentCategoryPlan?.cleanupPlan,
+          deleteGearSkinLabels,
+          currentCategoryRetainedLabels,
+          rewritten,
+          lineEnding,
+          ref libraryChanged,
+          ref libraryReboundEntries,
+          ref libraryDeletedLabels,
+          ref libraryUnchangedEntries);
+        lineIndex = entryBlockEnd - 1;
+        continue;
+      }
+
+      AppendLine(rewritten, line, lineEnding);
+    }
+
+    if (insideLibrary) {
+      FinalizeSpriteLibraryCategoryRewrite(
+        currentCategoryPlan,
+        currentCategoryRetainedLabels,
+        currentCategorySawOverrideEntries,
+        rewritten,
+        lineEnding,
+        ref libraryChanged,
+        ref libraryCreatedLabels);
+      if (!appendedMissingCategories) {
+        AppendMissingSpriteLibraryCategories(
+          categoryPlansByName,
+          seenCategoryNames,
+          rewritten,
+          lineEnding,
+          ref libraryChanged,
+          ref libraryMatchedCategoryCount,
+          ref libraryCreatedCategories,
+          ref libraryCreatedLabels);
       }
     }
 
-    Debug.LogWarning("[GearGroupAtlas] Serialized sprite library source asset was not found. path='" + libraryPath + "' loaded_objects=" + loadedObjects.Length);
-    return null;
+    if (!libraryChanged) return true;
+
+    try {
+      File.WriteAllText(libraryFullPath, rewritten.ToString());
+      return true;
+    }
+    catch (Exception ex) {
+      error = ex.Message;
+      return false;
+    }
   }
 
-  static void SaveSpriteLibrarySourceAsset(UnityEngine.Object libraryAsset, string libraryPath) {
-    if (libraryAsset == null || string.IsNullOrWhiteSpace(libraryPath)) return;
-    UnityEditorInternal.InternalEditorUtility.SaveToSerializedFileAndForget(new[] { libraryAsset }, libraryPath, true);
+  static void RewriteSpriteLibraryEntryBlock(
+    string[] lines,
+    int startIndex,
+    int endIndex,
+    Dictionary<string, SpriteAssetReference> replacementsByLabel,
+    RebindLabelCleanupPlan cleanupPlan,
+    bool deleteGearSkinLabels,
+    HashSet<string> retainedLabels,
+    System.Text.StringBuilder output,
+    string lineEnding,
+    ref bool libraryChanged,
+    ref int libraryReboundEntries,
+    ref int libraryDeletedLabels,
+    ref int libraryUnchangedEntries) {
+    if (lines == null || output == null || startIndex < 0 || endIndex <= startIndex) return;
+
+    var entryLine = lines[startIndex];
+    var entryName = entryLine.StartsWith("    - m_Name: ", StringComparison.Ordinal)
+      ? entryLine.Substring("    - m_Name: ".Length).Trim()
+      : "";
+
+    if (ShouldDeleteGearSkinLabel(deleteGearSkinLabels, entryName)) {
+      libraryChanged = true;
+      libraryDeletedLabels++;
+      return;
+    }
+
+    if (!TryResolveLabelReplacement(replacementsByLabel, entryName, out var replacementSprite) || !replacementSprite.IsValid) {
+      if (!ShouldDeleteMissingRebindLabel(cleanupPlan, entryName)) {
+        retainedLabels?.Add(entryName);
+        AppendLineRange(output, lines, startIndex, endIndex, lineEnding);
+        return;
+      }
+
+      libraryChanged = true;
+      libraryDeletedLabels++;
+      return;
+    }
+
+    var entryChanged = false;
+    var sawSprite = false;
+    var sawSpriteOverride = false;
+    for (var lineIndex = startIndex; lineIndex < endIndex; lineIndex++) {
+      var line = lines[lineIndex];
+      if (line.StartsWith("      m_Sprite: ", StringComparison.Ordinal)) {
+        var rewrittenLine = BuildSpriteLibrarySpriteReferenceLine("m_Sprite", replacementSprite);
+        if (!string.Equals(line, rewrittenLine, StringComparison.Ordinal)) {
+          entryChanged = true;
+          line = rewrittenLine;
+        }
+
+        sawSprite = true;
+      }
+      else if (line.StartsWith("      m_SpriteOverride: ", StringComparison.Ordinal)) {
+        var rewrittenLine = BuildSpriteLibrarySpriteReferenceLine("m_SpriteOverride", replacementSprite);
+        if (!string.Equals(line, rewrittenLine, StringComparison.Ordinal)) {
+          entryChanged = true;
+          line = rewrittenLine;
+        }
+
+        sawSpriteOverride = true;
+      }
+
+      AppendLine(output, line, lineEnding);
+    }
+
+    retainedLabels?.Add(entryName);
+    if (entryChanged || !sawSprite || !sawSpriteOverride) {
+      libraryChanged = true;
+      libraryReboundEntries++;
+      return;
+    }
+
+    libraryUnchangedEntries++;
+  }
+
+  static int FindSpriteLibraryEntryBlockEnd(string[] lines, int startIndex) {
+    if (lines == null) return startIndex;
+
+    for (var lineIndex = startIndex; lineIndex < lines.Length; lineIndex++) {
+      var line = lines[lineIndex];
+      if (line.StartsWith("    - m_Name: ", StringComparison.Ordinal) ||
+          line.StartsWith("  - m_Name: ", StringComparison.Ordinal)) {
+        return lineIndex;
+      }
+    }
+
+    return lines.Length;
+  }
+
+  static void AppendLineRange(System.Text.StringBuilder output, string[] lines, int startIndex, int endIndex, string lineEnding) {
+    if (output == null || lines == null) return;
+    for (var lineIndex = startIndex; lineIndex < endIndex && lineIndex < lines.Length; lineIndex++) {
+      AppendLine(output, lines[lineIndex], lineEnding);
+    }
+  }
+
+  static void AppendLine(System.Text.StringBuilder output, string line, string lineEnding) {
+    if (output == null) return;
+    output.Append(line ?? "");
+    output.Append(lineEnding);
+  }
+
+  static string[] SplitTextIntoLines(string text) {
+    if (string.IsNullOrEmpty(text)) return Array.Empty<string>();
+
+    var normalizedText = text
+      .Replace("\r\n", "\n")
+      .Replace('\r', '\n');
+    if (normalizedText.EndsWith("\n", StringComparison.Ordinal)) {
+      normalizedText = normalizedText.Substring(0, normalizedText.Length - 1);
+    }
+
+    return normalizedText.Length > 0
+      ? normalizedText.Split('\n')
+      : Array.Empty<string>();
+  }
+
+  static Dictionary<string, SpriteLibraryCategoryPlan> BuildSpriteLibraryCategoryPlans(
+    GroupedSpriteReplacementIndex replacementIndex,
+    bool isNormalLibrary,
+    bool isSkinLibrary,
+    string partCode) {
+    var plansByName = new Dictionary<string, SpriteLibraryCategoryPlan>(StringComparer.OrdinalIgnoreCase);
+    if (replacementIndex == null || replacementIndex.labelsByScope.Count <= 0 || string.IsNullOrWhiteSpace(partCode)) {
+      return plansByName;
+    }
+
+    foreach (var pair in replacementIndex.labelsByScope) {
+      var scopeKey = pair.Key;
+      if (scopeKey.isNormal != isNormalLibrary ||
+          scopeKey.isSkinLibrary != isSkinLibrary ||
+          !string.Equals(scopeKey.partCode, partCode, StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      var replacementsByLabel = pair.Value;
+      if (replacementsByLabel == null || replacementsByLabel.Count <= 0) continue;
+
+      var categoryPlan = new SpriteLibraryCategoryPlan {
+        replacementsByLabel = replacementsByLabel
+      };
+      replacementIndex.cleanupByScope.TryGetValue(scopeKey, out var cleanupPlan);
+      categoryPlan.cleanupPlan = cleanupPlan;
+      plansByName[scopeKey.category] = categoryPlan;
+    }
+
+    return plansByName;
+  }
+
+  static void FinalizeSpriteLibraryCategoryRewrite(
+    SpriteLibraryCategoryPlan categoryPlan,
+    HashSet<string> retainedLabels,
+    bool sawOverrideEntries,
+    System.Text.StringBuilder output,
+    string lineEnding,
+    ref bool libraryChanged,
+    ref int libraryCreatedLabels) {
+    if (categoryPlan == null || output == null) return;
+
+    var createdLabelCount = AppendMissingSpriteLibraryEntries(
+      categoryPlan.replacementsByLabel,
+      retainedLabels,
+      output,
+      lineEnding,
+      !sawOverrideEntries);
+    if (createdLabelCount <= 0) return;
+
+    libraryChanged = true;
+    libraryCreatedLabels += createdLabelCount;
+  }
+
+  static void AppendMissingSpriteLibraryCategories(
+    Dictionary<string, SpriteLibraryCategoryPlan> categoryPlansByName,
+    HashSet<string> seenCategoryNames,
+    System.Text.StringBuilder output,
+    string lineEnding,
+    ref bool libraryChanged,
+    ref int libraryMatchedCategoryCount,
+    ref int libraryCreatedCategories,
+    ref int libraryCreatedLabels) {
+    if (categoryPlansByName == null || categoryPlansByName.Count <= 0 || output == null) return;
+
+    var missingCategoryNames = new List<string>();
+    foreach (var pair in categoryPlansByName) {
+      if (pair.Value?.replacementsByLabel == null || pair.Value.replacementsByLabel.Count <= 0) continue;
+      if (seenCategoryNames != null && seenCategoryNames.Contains(pair.Key)) continue;
+      missingCategoryNames.Add(pair.Key);
+    }
+
+    missingCategoryNames.Sort(CompareSpriteLibraryNames);
+    for (var categoryIndex = 0; categoryIndex < missingCategoryNames.Count; categoryIndex++) {
+      var categoryName = missingCategoryNames[categoryIndex];
+      if (!categoryPlansByName.TryGetValue(categoryName, out var categoryPlan) ||
+          categoryPlan?.replacementsByLabel == null ||
+          categoryPlan.replacementsByLabel.Count <= 0) {
+        continue;
+      }
+
+      AppendSpriteLibraryCategoryBlock(
+        output,
+        categoryName,
+        categoryPlan.replacementsByLabel,
+        lineEnding,
+        ref libraryCreatedLabels);
+      libraryChanged = true;
+      libraryMatchedCategoryCount++;
+      libraryCreatedCategories++;
+    }
+  }
+
+  static void AppendSpriteLibraryCategoryBlock(
+    System.Text.StringBuilder output,
+    string categoryName,
+    Dictionary<string, SpriteAssetReference> replacementsByLabel,
+    string lineEnding,
+    ref int createdLabels) {
+    if (output == null ||
+        string.IsNullOrWhiteSpace(categoryName) ||
+        replacementsByLabel == null ||
+        replacementsByLabel.Count <= 0) {
+      return;
+    }
+
+    AppendLine(output, "  - m_Name: " + categoryName, lineEnding);
+    AppendLine(
+      output,
+      "    m_Hash: " + GetSpriteLibraryStringHash(categoryName).ToString(CultureInfo.InvariantCulture),
+      lineEnding);
+    AppendLine(output, "    m_CategoryList: []", lineEnding);
+    AppendLine(output, "    m_OverrideEntries:", lineEnding);
+    createdLabels += AppendMissingSpriteLibraryEntries(
+      replacementsByLabel,
+      null,
+      output,
+      lineEnding,
+      false);
+  }
+
+  static int AppendMissingSpriteLibraryEntries(
+    Dictionary<string, SpriteAssetReference> replacementsByLabel,
+    HashSet<string> existingLabels,
+    System.Text.StringBuilder output,
+    string lineEnding,
+    bool includeOverrideEntriesHeader) {
+    if (replacementsByLabel == null || replacementsByLabel.Count <= 0 || output == null) return 0;
+
+    var missingLabels = CollectMissingSpriteLibraryLabels(replacementsByLabel, existingLabels);
+    if (missingLabels.Count <= 0) return 0;
+
+    if (includeOverrideEntriesHeader) {
+      AppendLine(output, "    m_OverrideEntries:", lineEnding);
+    }
+
+    for (var labelIndex = 0; labelIndex < missingLabels.Count; labelIndex++) {
+      var label = missingLabels[labelIndex];
+      if (!replacementsByLabel.TryGetValue(label, out var replacementSprite) || !replacementSprite.IsValid) continue;
+      AppendSpriteLibraryEntryBlock(output, label, replacementSprite, lineEnding);
+    }
+
+    return missingLabels.Count;
+  }
+
+  static List<string> CollectMissingSpriteLibraryLabels(
+    Dictionary<string, SpriteAssetReference> replacementsByLabel,
+    HashSet<string> existingLabels) {
+    var missingLabels = new List<string>();
+    if (replacementsByLabel == null || replacementsByLabel.Count <= 0) return missingLabels;
+
+    foreach (var pair in replacementsByLabel) {
+      if (!pair.Value.IsValid) continue;
+      if (ContainsEquivalentSpriteLibraryLabel(existingLabels, pair.Key)) continue;
+      missingLabels.Add(pair.Key);
+    }
+
+    missingLabels.Sort(CompareSpriteLibraryNames);
+    return missingLabels;
+  }
+
+  static bool ContainsEquivalentSpriteLibraryLabel(HashSet<string> existingLabels, string label) {
+    if (existingLabels == null || existingLabels.Count <= 0 || string.IsNullOrWhiteSpace(label)) return false;
+    if (existingLabels.Contains(label)) return true;
+
+    foreach (var existingLabel in existingLabels) {
+      if (SpriteSliceAddressUtility.HasEquivalentNumericLabel(existingLabel, label)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static void AppendSpriteLibraryEntryBlock(
+    System.Text.StringBuilder output,
+    string entryName,
+    SpriteAssetReference replacementSprite,
+    string lineEnding) {
+    if (output == null || string.IsNullOrWhiteSpace(entryName) || !replacementSprite.IsValid) return;
+
+    AppendLine(output, "    - m_Name: " + entryName, lineEnding);
+    AppendLine(
+      output,
+      "      m_Hash: " + GetSpriteLibraryStringHash(entryName).ToString(CultureInfo.InvariantCulture),
+      lineEnding);
+    AppendLine(output, BuildSpriteLibrarySpriteReferenceLine("m_Sprite", replacementSprite), lineEnding);
+    AppendLine(output, "      m_FromMain: 0", lineEnding);
+    AppendLine(output, BuildSpriteLibrarySpriteReferenceLine("m_SpriteOverride", replacementSprite), lineEnding);
+  }
+
+  static bool IsSpriteLibraryListBoundary(string line) {
+    if (string.IsNullOrEmpty(line)) return false;
+
+    return line.StartsWith("  ", StringComparison.Ordinal) &&
+           !line.StartsWith("  - ", StringComparison.Ordinal) &&
+           !line.StartsWith("    ", StringComparison.Ordinal);
+  }
+
+  static bool ShouldDeleteGearSkinLabel(bool deleteGearSkinLabels, string entryName) {
+    return deleteGearSkinLabels &&
+           !string.IsNullOrWhiteSpace(entryName) &&
+           entryName.IndexOf("Skin", StringComparison.OrdinalIgnoreCase) >= 0;
+  }
+
+  static int CompareSpriteLibraryNames(string left, string right) {
+    var normalizedLeft = left ?? "";
+    var normalizedRight = right ?? "";
+    var naturalCompare = SpriteSliceAddressUtility.CompareNaturally(normalizedLeft, normalizedRight);
+    if (naturalCompare != 0) return naturalCompare;
+
+    return StringComparer.OrdinalIgnoreCase.Compare(normalizedLeft, normalizedRight);
+  }
+
+  static int GetSpriteLibraryStringHash(string value) {
+    const int bit30Mask = 0x3FFFFFFF;
+    return Animator.StringToHash(value ?? "") & bit30Mask;
+  }
+
+  static string BuildSpriteLibrarySpriteReferenceLine(string propertyName, SpriteAssetReference spriteReference) {
+    return "      " + propertyName + ": {fileID: " +
+           spriteReference.localFileId.ToString(CultureInfo.InvariantCulture) +
+           ", guid: " + spriteReference.guid +
+           ", type: 3}";
   }
 
   static bool TryParseSpriteLibraryDescriptor(string libraryPath, out string partCode, out bool isNormalLibrary, out bool isSkinLibrary) {
@@ -1943,43 +2704,29 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return !string.IsNullOrWhiteSpace(partCode);
   }
 
-  static bool TryResolveLabelReplacement(Dictionary<string, Sprite> replacementsByLabel, string label, out Sprite replacementSprite) {
-    replacementSprite = null;
+  static bool TryResolveLabelReplacement(Dictionary<string, SpriteAssetReference> replacementsByLabel, string label, out SpriteAssetReference replacementSprite) {
+    replacementSprite = default;
     var normalizedLabel = label ?? "";
     if (string.IsNullOrWhiteSpace(normalizedLabel) || replacementsByLabel == null || replacementsByLabel.Count <= 0) {
       return false;
     }
 
-    if (replacementsByLabel.TryGetValue(normalizedLabel, out replacementSprite) && replacementSprite != null) {
+    if (replacementsByLabel.TryGetValue(normalizedLabel, out replacementSprite) && replacementSprite.IsValid) {
       return true;
     }
 
     foreach (var pair in replacementsByLabel) {
       if (!SpriteSliceAddressUtility.HasEquivalentNumericLabel(pair.Key, normalizedLabel)) continue;
       replacementSprite = pair.Value;
-      return replacementSprite != null;
+      return replacementSprite.IsValid;
     }
 
     return false;
   }
 
   static int ComparePendingGroupedSpriteReplacements(PendingGroupedSpriteReplacement left, PendingGroupedSpriteReplacement right) {
-    var leftKey = left?.key ?? default;
-    var rightKey = right?.key ?? default;
-    var isNormalCompare = leftKey.scopeKey.isNormal.CompareTo(rightKey.scopeKey.isNormal);
-    if (isNormalCompare != 0) return isNormalCompare;
-
-    var isSkinCompare = leftKey.scopeKey.isSkinLibrary.CompareTo(rightKey.scopeKey.isSkinLibrary);
-    if (isSkinCompare != 0) return isSkinCompare;
-
-    var categoryCompare = SpriteSliceAddressUtility.CompareNaturally(leftKey.scopeKey.category, rightKey.scopeKey.category);
-    if (categoryCompare != 0) return categoryCompare;
-
-    var partCompare = SpriteSliceAddressUtility.CompareNaturally(leftKey.scopeKey.partCode, rightKey.scopeKey.partCode);
-    if (partCompare != 0) return partCompare;
-
-    var labelCompare = SpriteSliceAddressUtility.CompareNaturally(leftKey.label, rightKey.label);
-    if (labelCompare != 0) return labelCompare;
+    var sourceAtlasCompare = SpriteSliceAddressUtility.CompareNaturally(left?.sourceAtlasAssetPath, right?.sourceAtlasAssetPath);
+    if (sourceAtlasCompare != 0) return sourceAtlasCompare;
 
     var sourceSpriteCompare = SpriteSliceAddressUtility.CompareNaturally(left?.sourceSpriteName, right?.sourceSpriteName);
     if (sourceSpriteCompare != 0) return sourceSpriteCompare;
@@ -1988,6 +2735,86 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     if (groupedNameCompare != 0) return groupedNameCompare;
 
     return SpriteSliceAddressUtility.CompareNaturally(left?.atlasAssetPath, right?.atlasAssetPath);
+  }
+
+  static List<PendingGroupedSpriteReplacement> ExpandPendingGroupedSpriteSequenceBySourceSlices(
+    List<PendingGroupedSpriteReplacement> pendingGroup,
+    GroupedSpriteReplacementIndex replacementIndex) {
+    var expandedSequence = new List<PendingGroupedSpriteReplacement>();
+    if (pendingGroup == null || pendingGroup.Count <= 0) return expandedSequence;
+
+    for (var pendingIndex = 0; pendingIndex < pendingGroup.Count; pendingIndex++) {
+      var current = pendingGroup[pendingIndex];
+      if (current == null) continue;
+
+      expandedSequence.Add(current);
+      if (pendingIndex >= pendingGroup.Count - 1) continue;
+
+      var next = pendingGroup[pendingIndex + 1];
+      if (!TryBuildPendingGroupedSpriteGapRange(current, next, out var gapStartInclusive, out var gapEndInclusive)) {
+        continue;
+      }
+
+      for (var missingSliceNumber = gapStartInclusive; missingSliceNumber <= gapEndInclusive; missingSliceNumber++) {
+        expandedSequence.Add(BuildFilledSliceGapReplacement(current, next, missingSliceNumber));
+        if (replacementIndex != null) {
+          replacementIndex.filledSliceGapCount++;
+        }
+      }
+    }
+
+    return expandedSequence;
+  }
+
+  static bool TryBuildPendingGroupedSpriteGapRange(
+    PendingGroupedSpriteReplacement current,
+    PendingGroupedSpriteReplacement next,
+    out int gapStartInclusive,
+    out int gapEndInclusive) {
+    gapStartInclusive = 0;
+    gapEndInclusive = -1;
+    if (current == null || next == null) return false;
+    if (!string.Equals(current.sourceAtlasAssetPath, next.sourceAtlasAssetPath, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    if (!TryExtractPendingGroupedSpriteSliceNumber(current, out var currentSliceNumber) ||
+        !TryExtractPendingGroupedSpriteSliceNumber(next, out var nextSliceNumber)) {
+      return false;
+    }
+
+    if (nextSliceNumber <= currentSliceNumber + 1) return false;
+    gapStartInclusive = currentSliceNumber + 1;
+    gapEndInclusive = nextSliceNumber - 1;
+    return true;
+  }
+
+  static PendingGroupedSpriteReplacement BuildFilledSliceGapReplacement(
+    PendingGroupedSpriteReplacement left,
+    PendingGroupedSpriteReplacement right,
+    int missingSliceNumber) {
+    if (left == null) return right;
+    if (right == null) return left;
+
+    if (!TryExtractPendingGroupedSpriteSliceNumber(left, out var leftSliceNumber) ||
+        !TryExtractPendingGroupedSpriteSliceNumber(right, out var rightSliceNumber)) {
+      return left;
+    }
+
+    var distanceToLeft = Math.Abs(missingSliceNumber - leftSliceNumber);
+    var distanceToRight = Math.Abs(rightSliceNumber - missingSliceNumber);
+    return distanceToLeft <= distanceToRight ? left : right;
+  }
+
+  static bool TryExtractPendingGroupedSpriteSliceNumber(PendingGroupedSpriteReplacement pendingReplacement, out int sliceNumber) {
+    sliceNumber = 0;
+    if (pendingReplacement == null) return false;
+    if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(pendingReplacement.sourceSpriteName, out var numericLabelValue)) {
+      return false;
+    }
+
+    return int.TryParse(numericLabelValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out sliceNumber) &&
+           sliceNumber > 0;
   }
 
   static string ResolveGroupedSpriteSourceSortName(GroupedAtlasSpriteMetadata sprite) {
@@ -2076,21 +2903,31 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     return !string.IsNullOrWhiteSpace(sourceSpriteName);
   }
 
-  static Dictionary<string, Sprite> BuildSpriteLookupByName(string atlasAssetPath) {
-    var result = new Dictionary<string, Sprite>(StringComparer.Ordinal);
+  static Dictionary<string, SpriteAssetReference> BuildSpriteReferenceLookupByName(string atlasAssetPath) {
+    var result = new Dictionary<string, SpriteAssetReference>(StringComparer.Ordinal);
     var sprites = AssetDatabase.LoadAllAssetsAtPath(atlasAssetPath).OfType<Sprite>();
     foreach (var sprite in sprites) {
       if (sprite == null || string.IsNullOrWhiteSpace(sprite.name)) continue;
-      result[sprite.name] = sprite;
+      if (!TryGetSpriteAssetReference(sprite, out var spriteReference)) continue;
+      result[sprite.name] = spriteReference;
     }
 
     return result;
   }
 
-  static Sprite ResolveSpriteReference(SerializedProperty spriteProperty, SerializedProperty spriteOverrideProperty) {
-    var sprite = spriteProperty != null ? spriteProperty.objectReferenceValue as Sprite : null;
-    if (sprite != null) return sprite;
-    return spriteOverrideProperty != null ? spriteOverrideProperty.objectReferenceValue as Sprite : null;
+  static bool TryGetSpriteAssetReference(Sprite sprite, out SpriteAssetReference spriteReference) {
+    spriteReference = default;
+    if (sprite == null) return false;
+    if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(sprite, out var guid, out long localFileId)) {
+      return false;
+    }
+
+    spriteReference = new SpriteAssetReference(
+      guid,
+      localFileId,
+      NormalizePath(AssetDatabase.GetAssetPath(sprite)),
+      sprite.name);
+    return spriteReference.IsValid;
   }
 
   static bool TryBuildCleanupPlanKey(string atlasAssetPath, out string folderPath, out string filePrefix) {

@@ -90,10 +90,10 @@ public static class Interrupts {
       { "PunchLeft", "PunchRightToPunchLeft" }, { "KickLeft", "PunchRightToKickLeft" }, { "KickRight", "PunchRightToKickRight" }, { "Stance", "PunchRightToStance" }
     },
     ["Stance"] = new Dictionary<string, string> {
-      { "Walk", "StanceToWalk" }, { "Sprint", "StanceToSprint" }, { "Run", "StanceToRun" }, { "PunchRight", "StanceToPunchRight" }, { "PunchLeft", "StanceToPunchLeft" }, { "KickLeft", "StanceToKickLeft" }, { "KickRight", "StanceToKickRight" }, { "Jump", "StanceToJump" }, { "Dodge", "StanceToDodge" }, { "Breathe", "StanceToBreathe" }, { "Block", "StanceToBlock" }, { "SuperBlast", "StanceToSuperBlast" }
+      { "Walk", "StanceToWalk" }, { "Sprint", "StanceToSprint" }, { "Run", "StanceToRun" }, { "PunchRight", "StanceToPunchRight" }, { "PunchLeft", "StanceToPunchLeft" }, { "KickLeft", "StanceToKickLeft" }, { "KickRight", "StanceToKickRight" }, { "Jump", "StanceToJump" }, { "Dodge", "StanceToDodge" }, { "Breathe", "StanceToBreathe" }, { "Block", "StanceToBlock" }, { "Blast", "StanceToBlast" }
     },
-    ["SuperBlast"] = new Dictionary<string, string> {
-      { "Stance", "SuperBlastToStance" }
+    ["Blast"] = new Dictionary<string, string> {
+      { "Stance", "BlastToStance" }
     }
   };
 

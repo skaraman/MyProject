@@ -40,7 +40,7 @@ public static class AttacksMapToForms {
       ["dodge"] = "Dodge",
       ["block"] = "Block",
       ["jump"] = "Jump",
-      ["superattack1"] = "SuperBlast",
+      ["superattack1"] = "Blast",
       ["superattack2"] = "TwisterKick"
     },
     ["Bolt"] = new Dictionary<string, string> {

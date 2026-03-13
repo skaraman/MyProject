@@ -180,7 +180,7 @@ public class SingleSceneManager : MonoBehaviour {
   const string PreUnlockResidentPinOwnerId = "single_scene_manager.pre_unlock";
   const int PreUnlockResidentPinHardCapDesktop = 2048;
   const int PreUnlockResidentPinHardCapMobile = 1024;
-  static readonly string[] CorePlayerEffectWarmKeys = { "SuperBlast", "SuperBlastBall" };
+  static readonly string[] CorePlayerEffectWarmKeys = { "Blast", "BlastBall" };
   void Start() {
     RegisterMessageBusHandlers();
     SetActiveSafe(LoadingScreen, true);
