@@ -113,6 +113,8 @@ public static class SpriteIndexBuilder {
     public int missingNormalLibraryCount;
     public int autoDerivedNormalAddressCount;
     public int missingNormalAddressCount;
+    public int skippedColorRowCount;
+    public int skippedColorLibraryCount;
 
     public BuildState(AddressableAssetSettings addressables, AddressableAssetGroup textureGroup, AddressableAssetGroup indexGroup) {
       this.addressables = addressables;
@@ -153,6 +155,8 @@ public static class SpriteIndexBuilder {
     var startedAt = EditorApplication.timeSinceStartup;
     var aborted = false;
 
+    Debug.Log("[SpriteIndexBuilder] [Essential Pipeline] Deferring intermediate asset refreshes until rebuild/build steps.");
+
     bool RunStep(int stepIndex, string stepName, Func<bool> action) {
       var stepLabel = "[SpriteIndexBuilder] [Essential Pipeline] Step " + stepIndex + "/" + stepCount + " - " + stepName;
       Debug.Log(stepLabel + " (start)");
@@ -182,12 +186,12 @@ public static class SpriteIndexBuilder {
       })) return;
 
       if (!RunStep(2, "Sync location profiles from prefabs", () => {
-        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: true, saveAndRefresh: true);
+        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: true, saveAndRefresh: false);
         return true;
       })) return;
 
       if (!RunStep(3, "Apply unified import flow", () => {
-        return SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: true, logResult: true);
+        return SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: false, logResult: true);
       })) return;
 
       if (!RunStep(4, "Rebuild runtime index", () => {
@@ -197,7 +201,7 @@ public static class SpriteIndexBuilder {
       if (!RunStep(5, "Apply gameplay + location hotset", () => {
         return SpriteStreamingHotsetConfigurator.ApplyPerformanceHotset(
           rebuildRuntimeIndexFirst: false,
-          saveAndRefreshAtEnd: true,
+          saveAndRefreshAtEnd: false,
           logResult: true
         );
       })) return;
@@ -386,11 +390,17 @@ public static class SpriteIndexBuilder {
         ? ParseLibraryRows(normalLibraryPath, state.errors)
         : new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
       if (colorRows.Count == 0) {
-        state.errors.Add("Color library '" + colorLibraryPath + "' produced zero rows.");
+        state.skippedColorLibraryCount++;
+        Debug.LogWarning(
+          "[SpriteIndexBuilder] [" + contextLabel + "] Skipped sprite library because it produced zero color rows." +
+          " libraryName='" + libraryName + "'" +
+          " path='" + colorLibraryPath + "'" +
+          " requested='" + requestedLibraryName + "'");
         continue;
       }
 
       var shardRows = new List<ShardRow>(colorRows.Count);
+      var skippedColorRowsForLibrary = 0;
       foreach (var pair in colorRows) {
         var separator = pair.Key.IndexOf('\u001f');
         if (separator <= 0 || separator >= pair.Key.Length - 1) {
@@ -402,9 +412,16 @@ public static class SpriteIndexBuilder {
         var label = pair.Key.Substring(separator + 1);
         ParseLabel(label, out var labelPrefix, out var frame);
 
-        var colorAddress = ResolveSpriteAddress(state, pair.Value, libraryName + "/" + category + ":" + label + " (color)");
-        if (string.IsNullOrWhiteSpace(colorAddress)) continue;
-        if (!ValidateRuntimeAtlasAddress(state, colorAddress, libraryName + "/" + category + ":" + label + " (color)")) continue;
+        var colorContext = libraryName + "/" + category + ":" + label + " (color)";
+        var colorAddress = ResolveSpriteAddress(state, pair.Value, colorContext, recordError: false);
+        if (string.IsNullOrWhiteSpace(colorAddress)) {
+          skippedColorRowsForLibrary++;
+          continue;
+        }
+        if (!ValidateRuntimeAtlasAddress(state, colorAddress, colorContext, recordError: false)) {
+          skippedColorRowsForLibrary++;
+          continue;
+        }
 
         var normalAddress = "";
         var autoDerivedNormal = false;
@@ -437,8 +454,22 @@ public static class SpriteIndexBuilder {
         shardRows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
       }
 
+      if (skippedColorRowsForLibrary > 0) {
+        state.skippedColorRowCount += skippedColorRowsForLibrary;
+        Debug.LogWarning(
+          "[SpriteIndexBuilder] [" + contextLabel + "] Skipped unresolved color rows while rebuilding runtime index." +
+          " libraryName='" + libraryName + "'" +
+          " skippedRows=" + skippedColorRowsForLibrary +
+          " totalRows=" + colorRows.Count);
+      }
+
       if (shardRows.Count == 0) {
-        state.errors.Add("LibraryName '" + libraryName + "' has zero valid color pairs (requested '" + requestedLibraryName + "').");
+        state.skippedColorLibraryCount++;
+        Debug.LogWarning(
+          "[SpriteIndexBuilder] [" + contextLabel + "] Skipped sprite library because all color rows were unresolved." +
+          " libraryName='" + libraryName + "'" +
+          " requested='" + requestedLibraryName + "'" +
+          " totalRows=" + colorRows.Count);
         continue;
       }
 
@@ -485,14 +516,15 @@ public static class SpriteIndexBuilder {
     AssetDatabase.SaveAssets();
     AssetDatabase.Refresh();
 
-    if (state.errors.Count > 0) {
-      var limitedErrors = state.errors.Take(50).ToList();
-      for (var i = 0; i < limitedErrors.Count; i++) {
-        Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] " + limitedErrors[i]);
-      }
+      if (state.errors.Count > 0) {
+        var limitedErrors = state.errors.Take(50).ToList();
+        for (var i = 0; i < limitedErrors.Count; i++) {
+          Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] " + limitedErrors[i]);
+        }
       if (state.errors.Count > limitedErrors.Count) {
         Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Additional errors omitted: " + (state.errors.Count - limitedErrors.Count));
       }
+      LogSkippedColorRowSummary(contextLabel, state);
       LogSyntheticTextureLabelSummary(contextLabel, state);
       LogAtlasMetadataSummary(contextLabel, state);
       LogNormalAddressSummary(contextLabel, state);
@@ -504,6 +536,7 @@ public static class SpriteIndexBuilder {
       return false;
     }
 
+    LogSkippedColorRowSummary(contextLabel, state);
     LogSyntheticTextureLabelSummary(contextLabel, state);
     LogAtlasMetadataSummary(contextLabel, state);
     LogNormalAddressSummary(contextLabel, state);
@@ -1084,6 +1117,7 @@ public static class SpriteIndexBuilder {
     if (byName.TryGetValue(label, out var exact)) return exact;
 
     ParseLabel(label, out var labelPrefix, out var frame);
+    var category = ExtractCategoryFromContext(context);
     if (frame > 0) {
       var frameText = frame.ToString(CultureInfo.InvariantCulture);
 
@@ -1105,9 +1139,36 @@ public static class SpriteIndexBuilder {
       }
 
       if (!string.IsNullOrWhiteSpace(singleSuffixMatch)) return singleSuffixMatch;
+
+      if (!string.IsNullOrWhiteSpace(category)) {
+        string singleCategoryFrameMatch = null;
+        foreach (var pair in byName) {
+          if (!SpriteNameMatchesCategoryAndFrame(pair.Key, category, frame)) continue;
+          if (singleCategoryFrameMatch != null) {
+            singleCategoryFrameMatch = null;
+            break;
+          }
+          singleCategoryFrameMatch = pair.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(singleCategoryFrameMatch)) return singleCategoryFrameMatch;
+      }
     }
 
     return "";
+  }
+
+  static string ExtractCategoryFromContext(string context) {
+    if (string.IsNullOrWhiteSpace(context)) return "";
+    var colon = context.LastIndexOf(':');
+    if (colon <= 0) return "";
+
+    var slash = context.LastIndexOf('/', colon - 1);
+    var start = slash >= 0 ? slash + 1 : 0;
+    if (start >= colon) return "";
+
+    var category = context.Substring(start, colon - start);
+    return string.IsNullOrWhiteSpace(category) ? "" : category.Trim();
   }
 
   static string ExtractLabelFromContext(string context) {
@@ -1129,6 +1190,27 @@ public static class SpriteIndexBuilder {
     var open = address.LastIndexOf('[', close - 1);
     if (open < 0 || open >= close - 1) return "";
     return address.Substring(open + 1, close - open - 1);
+  }
+
+  static bool SpriteNameMatchesCategoryAndFrame(string spriteName, string category, int frame) {
+    if (string.IsNullOrWhiteSpace(spriteName) || string.IsNullOrWhiteSpace(category) || frame <= 0) return false;
+
+    var normalizedName = spriteName.Trim();
+    var nameBody = normalizedName;
+    var doubleUnderscoreIndex = normalizedName.IndexOf("__", StringComparison.Ordinal);
+    if (doubleUnderscoreIndex >= 0 && doubleUnderscoreIndex < normalizedName.Length - 2) {
+      nameBody = normalizedName.Substring(doubleUnderscoreIndex + 2);
+    }
+
+    var categoryPrefix = category + "_";
+    if (!nameBody.StartsWith(categoryPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+
+    var lastUnderscore = nameBody.LastIndexOf('_');
+    if (lastUnderscore < 0 || lastUnderscore >= nameBody.Length - 1) return false;
+
+    var frameText = nameBody.Substring(lastUnderscore + 1);
+    return int.TryParse(frameText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedFrame) &&
+           parsedFrame == frame;
   }
 
   static bool TryResolveDerivedNormalAddress(BuildState state, string colorAddress, out string normalAddress) {
@@ -1293,6 +1375,8 @@ public static class SpriteIndexBuilder {
       return map;
     }
 
+    var supplementedLocalIdCount = SupplementAddressMapWithEditorLocalFileIds(path, map);
+
     var keys = map.Keys.ToList();
     for (var i = 0; i < keys.Count; i++) {
       var localId = keys[i];
@@ -1306,10 +1390,40 @@ public static class SpriteIndexBuilder {
         state.errors.Add("No sprite sub-assets found for GUID '" + guid + "' at path '" + path + "'.");
       }
     } else {
-      Debug.Log($"[SpriteIndexBuilder] BuildAddressMapForGuid: Mapped {map.Count} sprites for {path}");
+      Debug.Log(
+        $"[SpriteIndexBuilder] BuildAddressMapForGuid: Mapped {map.Count} sprites for {path}" +
+        (supplementedLocalIdCount > 0 ? $" (supplementedLocalIds={supplementedLocalIdCount})" : "")
+      );
     }
 
     return map;
+  }
+
+  static int SupplementAddressMapWithEditorLocalFileIds(string assetPath, Dictionary<long, string> target) {
+    if (target == null || string.IsNullOrWhiteSpace(assetPath)) return 0;
+
+    var supplemented = 0;
+
+    void AddSpriteIds(UnityEngine.Object[] assets) {
+      if (assets == null || assets.Length == 0) return;
+
+      for (var i = 0; i < assets.Length; i++) {
+        if (assets[i] is not Sprite sprite) continue;
+        if (string.IsNullOrWhiteSpace(sprite.name)) continue;
+        if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(sprite, out _, out long localFileId)) continue;
+        if (target.TryGetValue(localFileId, out var existingName) &&
+            string.Equals(existingName, sprite.name, StringComparison.Ordinal)) {
+          continue;
+        }
+
+        target[localFileId] = sprite.name;
+        supplemented++;
+      }
+    }
+
+    AddSpriteIds(AssetDatabase.LoadAllAssetsAtPath(assetPath));
+    AddSpriteIds(AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath));
+    return supplemented;
   }
 
   static bool TryParseSpriteSheetInternalIdTable(string metaPath, Dictionary<long, string> target, out string error) {
@@ -1797,6 +1911,16 @@ public static class SpriteIndexBuilder {
     );
   }
 
+  static void LogSkippedColorRowSummary(string contextLabel, BuildState state) {
+    if (state == null) return;
+    if (state.skippedColorRowCount <= 0 && state.skippedColorLibraryCount <= 0) return;
+
+    Debug.LogWarning(
+      "[SpriteIndexBuilder] [" + contextLabel + "] Skipped unresolved color sprite references." +
+      " skippedRows=" + state.skippedColorRowCount +
+      " skippedLibraries=" + state.skippedColorLibraryCount);
+  }
+
   static void LogAtlasMetadataSummary(string contextLabel, BuildState state) {
     if (state == null || state.activeAtlasMetadataAssetPaths == null) return;
     var metadataCount = state.activeAtlasMetadataAssetPaths.Count;
@@ -2079,17 +2203,42 @@ public static class SpriteIndexBuilder {
   }
 
   static void EnsureAddressableEntry(AddressableAssetSettings settings, AddressableAssetGroup group, string assetPath, string address) {
-    var guid = AssetDatabase.AssetPathToGUID(assetPath);
-    if (string.IsNullOrWhiteSpace(guid)) return;
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
 
+    var guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
+    if (string.IsNullOrWhiteSpace(guid) && File.Exists(normalizedAssetPath)) {
+      AssetDatabase.ImportAsset(normalizedAssetPath, ImportAssetOptions.ForceSynchronousImport);
+      guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
+    }
+
+    if (string.IsNullOrWhiteSpace(guid)) {
+      Debug.LogWarning(
+        "[SpriteIndexBuilder] Skipped Addressables registration because the asset is not imported." +
+        " assetPath='" + normalizedAssetPath + "'" +
+        " address='" + address + "'"
+      );
+      return;
+    }
+
+    var changed = false;
     var entry = settings.FindAssetEntry(guid);
     if (entry == null || entry.parentGroup != group) {
       entry = settings.CreateOrMoveEntry(guid, group, false, false);
+      changed = entry != null;
     }
     if (entry == null) return;
 
     if (!string.Equals(entry.address, address, StringComparison.Ordinal)) {
       entry.SetAddress(address, false);
+      changed = true;
+    }
+
+    if (changed) {
+      if (group != null) {
+        EditorUtility.SetDirty(group);
+      }
+      EditorUtility.SetDirty(settings);
     }
   }
 

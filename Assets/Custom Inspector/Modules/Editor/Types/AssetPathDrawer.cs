@@ -46,6 +46,17 @@ namespace CustomInspector.Editor
             //Get Properties
             SerializedProperty path = property.FindPropertyRelative("path");
             SerializedProperty assetReference = property.FindPropertyRelative("assetReference");
+            var originalPath = path.stringValue;
+            var normalizedPath = AssetPath.NormalizeEditorPath(path.stringValue);
+            if (!string.Equals(path.stringValue, normalizedPath, StringComparison.Ordinal))
+            {
+                path.stringValue = normalizedPath;
+                assetReference.objectReferenceValue = AssetPath.IsValidPath(normalizedPath, typeof(Object))
+                    ? AssetDatabase.LoadAssetAtPath<Object>(normalizedPath)
+                    : null;
+                property.serializedObject.ApplyModifiedProperties();
+                Debug.Log("[AssetPathDrawer] Normalized asset path from '" + originalPath + "' to '" + normalizedPath + "'");
+            }
 
             DirtyValue dv = new(property);
             dv.FindRelative("RequiredType").TryGetValue(out object resType);
@@ -74,7 +85,7 @@ namespace CustomInspector.Editor
             using (new NewIndentLevel(0))
             {
                 //warning if not valid
-                bool isValid = AssetPath.IsValidPath(path.stringValue, requiredType);
+                bool isValid = AssetPath.IsValidPath(normalizedPath, requiredType);
                 if (!isValid)
                 {
                     Rect errorRect;
@@ -113,7 +124,7 @@ namespace CustomInspector.Editor
                     }
                     else
                     {
-                        IEnumerator<string> parts = path.stringValue.Split('/', '\\').AsEnumerable<string>().GetEnumerator();
+                        IEnumerator<string> parts = normalizedPath.Split('/', '\\').AsEnumerable<string>().GetEnumerator();
                         parts.MoveNext();
                         if (parts.Current == "Assets")
                         {
@@ -162,7 +173,7 @@ namespace CustomInspector.Editor
                                       position.width - EditorGUIUtility.singleLineHeight - pathToObjectSpacing - minDropRectWidth),
                 };
                 EditorGUI.BeginChangeCheck();
-                string res = EditorGUI.TextField(pathRect, path.stringValue);
+                string res = EditorGUI.TextField(pathRect, normalizedPath);
                 if (EditorGUI.EndChangeCheck() || (isValid && assetReference.objectReferenceValue == null))
                 {
                     if (string.IsNullOrEmpty(res))
@@ -172,6 +183,7 @@ namespace CustomInspector.Editor
                     }
                     else
                     {
+                        res = AssetPath.NormalizeEditorPath(res);
                         if (res[^1] == '/' || res[^1] == '\\')
                             res = res[..^1];
 
@@ -225,7 +237,7 @@ namespace CustomInspector.Editor
                     if (absolutePath == null)
                     {
                         assetReference.objectReferenceValue = droppedObj;
-                        path.stringValue = AssetDatabase.GetAssetPath(droppedObj);
+                        path.stringValue = AssetPath.NormalizeEditorPath(AssetDatabase.GetAssetPath(droppedObj));
 
                         property.serializedObject.ApplyModifiedProperties();
                     }

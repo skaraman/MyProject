@@ -368,6 +368,22 @@ public static class SaveSlotManager {
     slot = newSlot;
   }
 
+  public static bool SlotExists(int slotNumber) {
+    if (slotNumber <= 0) return false;
+
+    var mainPath = BuildSavePath(BuildSlotDirectory(slotNumber), "slot");
+    if (File.Exists(mainPath)) {
+      return true;
+    }
+
+    var legacyPath = BuildSavePath(BuildLegacySlotDirectory(slotNumber), "slot");
+    return File.Exists(legacyPath);
+  }
+
+  public static bool CurrentSlotExists() {
+    return SlotExists(slot);
+  }
+
   public static void Save(string name, SaveData table) {
     var path = BuildSavePath(BuildSlotDirectory(slot), name);
     table.Save(path);

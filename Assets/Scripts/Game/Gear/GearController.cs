@@ -49,6 +49,7 @@ public class GearController : MonoBehaviour {
   private readonly Dictionary<string, string> equipPartPrefixScratch = new(StringComparer.OrdinalIgnoreCase);
   private Coroutine equipWarmupRoutine;
   private bool effectControllerInitialized;
+  private bool runtimeInitialized;
   private string appearanceOwnerId;
   private string effectAppearanceOwnerId;
   private int appearanceRevision = 1;
@@ -58,6 +59,16 @@ public class GearController : MonoBehaviour {
 
 
   void Start() {
+    EnsureRuntimeInitialized("start");
+  }
+
+  static bool ShouldLogRuntimeInitDebug() {
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  void EnsureRuntimeInitialized(string source) {
+    if (runtimeInitialized) return;
+    runtimeInitialized = true;
     ResetDebugPlaybackFlags();
     appearanceOwnerId = "player:" + gameObject.GetInstanceID().ToString();
     effectAppearanceOwnerId = effectNode != null ? "effect:" + effectNode.GetInstanceID().ToString() : "";
@@ -73,6 +84,15 @@ public class GearController : MonoBehaviour {
       LeanTween.init(4000);
     }
     animationController.PlayAnimation(defaultAnimation, true);
+    if (ShouldLogRuntimeInitDebug()) {
+      Debug.Log(
+        "[GearController] RuntimeInit" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " object=" + gameObject.name +
+        " active=" + (gameObject.activeInHierarchy ? 1 : 0) +
+        " combined_bounces=" + (combinedBounces != null ? combinedBounces.Length : 0)
+      );
+    }
   }
 
   void ResetDebugPlaybackFlags() {
@@ -182,9 +202,7 @@ public class GearController : MonoBehaviour {
   }
 
   public void LoadGear() {
-     if (!Application.isPlaying) {
-      Start();
-    }
+    EnsureRuntimeInitialized("load_gear");
     GetSavedGearState();
     RefreshGear();
     PrimeEquippedAnimationStartsIfLoading();
@@ -249,7 +267,8 @@ public class GearController : MonoBehaviour {
         }
       }
     }
-    foreach (GameObject bounceParent in combinedBounces) {
+    foreach (GameObject bounceParent in combinedBounces ?? Array.Empty<GameObject>()) {
+      if (bounceParent == null) continue;
       foreach (Transform child in bounceParent.transform) {
         child.gameObject.SetActive(false);
       }

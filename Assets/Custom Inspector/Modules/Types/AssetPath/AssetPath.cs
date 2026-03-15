@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -58,8 +59,9 @@ namespace CustomInspector
         /// <exception cref="System.NullReferenceException">If no valid path was entered</exception>
         public string GetPath()
         {
-            if (HasPath())
-                return path;
+            var normalizedPath = NormalizeEditorPath(path);
+            if (IsValidPath(normalizedPath, RequiredType))
+                return normalizedPath;
             else
                 throw new System.NullReferenceException("No valid path entered. Fill it in the Inspector!");
         }
@@ -87,7 +89,7 @@ namespace CustomInspector
             {
 #if UNITY_EDITOR
                 if (HasPath())
-                    return AssetDatabase.LoadAssetAtPath<Object>(path).GetType();
+                    return AssetDatabase.LoadAssetAtPath<Object>(NormalizeEditorPath(path)).GetType();
                 else
                     return null;
 #else
@@ -110,7 +112,7 @@ namespace CustomInspector
         /// <returns>True, if current path is valid</returns>
         public bool SetPath(string path)
         {
-            this.path = path;
+            this.path = NormalizeEditorPath(path);
             return HasPath();
         }
 
@@ -141,7 +143,15 @@ namespace CustomInspector
         public static bool IsValidPath(string path, Type fileType)
         {
 #if UNITY_EDITOR
-            if (path == invalidString)
+            path = NormalizeEditorPath(path);
+            if (string.IsNullOrWhiteSpace(path) || path == invalidString)
+                return false;
+
+            var startsWithAssets =
+                string.Equals(path, "Assets", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("Assets\\", StringComparison.OrdinalIgnoreCase);
+            if (!startsWithAssets)
                 return false;
 
             if (fileType == typeof(Folder))
@@ -172,6 +182,31 @@ namespace CustomInspector
         {
             int startIndex = Application.dataPath.Length - "Assets".Length;
             return absolute[startIndex..];
+        }
+
+        public static string NormalizeEditorPath(string path)
+        {
+#if UNITY_EDITOR
+            if (string.IsNullOrWhiteSpace(path) || path == invalidString)
+                return path;
+
+            var normalized = path.Trim().Replace('\\', '/');
+            var assetsPath = Application.dataPath.Replace('\\', '/');
+            if (normalized.StartsWith(assetsPath, StringComparison.OrdinalIgnoreCase))
+                return "Assets" + normalized[assetsPath.Length..];
+
+            var projectPath = Path.GetDirectoryName(assetsPath)?.Replace('\\', '/');
+            if (!string.IsNullOrWhiteSpace(projectPath))
+            {
+                var projectPrefix = projectPath.EndsWith("/") ? projectPath : projectPath + "/";
+                if (normalized.StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase))
+                    return normalized[projectPrefix.Length..];
+            }
+
+            return normalized;
+#else
+            return path;
+#endif
         }
     }
 }

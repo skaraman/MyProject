@@ -81,6 +81,22 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   [Serializable]
+  sealed class ExistingTrimmedAtlasMetadataPayload {
+    public string metadataKind;
+    public string coordinateOrigin;
+    public List<ExistingTrimmedAtlasSpriteMetadata> sprites = new();
+  }
+
+  [Serializable]
+  sealed class ExistingTrimmedAtlasSpriteMetadata {
+    public string name;
+    public bool empty;
+    public PixelRect trimRectInCell;
+    public PixelRect packedRect;
+    public PixelPoint offsetFromCellCenterPx;
+  }
+
+  [Serializable]
   struct PixelRect {
     public int x;
     public int y;
@@ -132,6 +148,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     public Color32[] pixels;
     public List<Sprite> orderedSprites = new();
     public Dictionary<string, Sprite> spritesByName = new(StringComparer.Ordinal);
+    public Dictionary<string, ExistingTrimmedAtlasSpriteMetadata> trimmedSourceMetadataByName = new(StringComparer.Ordinal);
   }
 
   sealed class PackedSpriteBuildItem {
@@ -148,6 +165,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     public Color32[] colorPixels;
     public Color32[] normalPixels;
     public int pageIndex;
+    public bool inheritedTrimMetadata;
 
     public int Width => Math.Max(1, trimRectInSourceSprite.width);
     public int Height => Math.Max(1, trimRectInSourceSprite.height);
@@ -598,6 +616,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     if (!TryBuildPackedItems(candidate, out var items, out var representativeSourceAtlasPath, out error)) {
       return false;
     }
+    var inheritedTrimMetadataCount = items.Count(item => item != null && item.inheritedTrimMetadata);
 
     var outputFolderPath = BuildCandidateOutputFolderPath(sourceRootPath, candidate, sanitizedOutputSubfolder);
     if (string.IsNullOrWhiteSpace(outputFolderPath)) {
@@ -662,6 +681,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       " reused_pages=" + reusedPageCount +
       " pages=" + pages.Count +
       " sprites=" + items.Count +
+      " inherited_trim_metadata=" + inheritedTrimMetadataCount +
       " source_atlases=" + candidate.sourceAtlases.Count +
       " animations=" + candidate.sourceCategories.Count);
     return true;
@@ -1098,7 +1118,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       atlasPath = normalizedAtlasPath,
       texture = texture,
       pixels = texture.GetPixels32(),
-      orderedSprites = sprites
+      orderedSprites = sprites,
+      trimmedSourceMetadataByName = LoadTrimmedSourceMetadataByName(normalizedAtlasPath)
     };
 
     for (var i = 0; i < sprites.Count; i++) {
@@ -1126,6 +1147,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       return false;
     }
 
+    if (TryBuildItemFromTrimmedSourceMetadata(record, colorAtlas, normalAtlas, colorSprite, normalSprite, out item, out error)) {
+      return true;
+    }
+
     var sourceRect = ToPixelRect(colorSprite.rect);
     AnalyzeTrimmedSprite(colorAtlas, sourceRect, out var trimRect, out var offsetPx, out var colorTrimPixels, out var empty);
     item = new PackedSpriteBuildItem {
@@ -1146,6 +1171,109 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     return true;
+  }
+
+  bool TryBuildItemFromTrimmedSourceMetadata(
+    SourceAtlasRecord record,
+    LoadedAtlas colorAtlas,
+    LoadedAtlas normalAtlas,
+    Sprite colorSprite,
+    Sprite normalSprite,
+    out PackedSpriteBuildItem item,
+    out string error) {
+    item = null;
+    error = "";
+    if (record == null || colorAtlas == null || colorSprite == null) return false;
+    if (!TryGetTrimmedSourceMetadata(colorAtlas, colorSprite.name, out var sourceMetadata)) return false;
+
+    var sourcePackedRect = ResolveSourcePackedRect(colorSprite, sourceMetadata);
+    var colorPixels = CopyPackedPixels(colorAtlas.pixels, colorAtlas.texture.width, sourcePackedRect, out var copyError);
+    if (colorPixels == null) {
+      Debug.LogWarning(
+        "[GearGroupAtlas] Failed to reuse source trim metadata; falling back to pixel analysis." +
+        " atlas='" + colorAtlas.atlasPath + "'" +
+        " sprite='" + colorSprite.name + "'" +
+        " error='" + copyError + "'");
+      return false;
+    }
+
+    item = new PackedSpriteBuildItem {
+      outputSpriteName = BuildGroupedSpriteName(record.partCode, record.category, colorSprite.name),
+      sourceCategory = record.category,
+      colorSourceAtlasPath = NormalizePath(record.atlasPath),
+      normalSourceAtlasPath = NormalizePath(!string.IsNullOrWhiteSpace(record.normalAtlasPath) ? record.normalAtlasPath : record.atlasPath),
+      sourceSpriteName = colorSprite.name,
+      sourcePartCode = record.partCode,
+      empty = sourceMetadata.empty,
+      trimRectInSourceSprite = BuildInheritedTrimRect(sourceMetadata, sourcePackedRect),
+      offsetFromCellCenterPx = sourceMetadata.offsetFromCellCenterPx,
+      colorPixels = colorPixels,
+      inheritedTrimMetadata = true
+    };
+
+    if (ExportNormalAtlases) {
+      item.normalPixels = BuildNormalPixelsFromPackedSourceMetadata(colorPixels, normalAtlas, normalSprite);
+    }
+
+    return true;
+  }
+
+  static bool TryGetTrimmedSourceMetadata(
+    LoadedAtlas atlas,
+    string spriteName,
+    out ExistingTrimmedAtlasSpriteMetadata sourceMetadata) {
+    sourceMetadata = null;
+    if (atlas?.trimmedSourceMetadataByName == null || string.IsNullOrWhiteSpace(spriteName)) return false;
+    return atlas.trimmedSourceMetadataByName.TryGetValue(spriteName, out sourceMetadata) && sourceMetadata != null;
+  }
+
+  static PixelRect ResolveSourcePackedRect(Sprite sprite, ExistingTrimmedAtlasSpriteMetadata sourceMetadata) {
+    var fallbackRect = sprite != null ? ToPixelRect(sprite.rect) : default;
+    if (sourceMetadata == null) return fallbackRect;
+    return sourceMetadata.packedRect.width > 0 && sourceMetadata.packedRect.height > 0
+      ? sourceMetadata.packedRect
+      : fallbackRect;
+  }
+
+  static PixelRect BuildInheritedTrimRect(ExistingTrimmedAtlasSpriteMetadata sourceMetadata, PixelRect sourcePackedRect) {
+    var trimRect = sourceMetadata != null ? sourceMetadata.trimRectInCell : default;
+    return new PixelRect(
+      trimRect.x,
+      trimRect.y,
+      Math.Max(1, sourcePackedRect.width),
+      Math.Max(1, sourcePackedRect.height));
+  }
+
+  Color32[] BuildNormalPixelsFromPackedSourceMetadata(Color32[] colorTrimPixels, LoadedAtlas normalAtlas, Sprite normalSprite) {
+    if (colorTrimPixels == null || colorTrimPixels.Length <= 0) {
+      return new[] { new Color32(128, 128, 255, 0) };
+    }
+
+    if (normalAtlas == null || normalSprite == null) {
+      return BuildNeutralNormalPixels(colorTrimPixels);
+    }
+
+    TryGetTrimmedSourceMetadata(normalAtlas, normalSprite.name, out var normalMetadata);
+    var normalPackedRect = ResolveSourcePackedRect(normalSprite, normalMetadata);
+    var rawNormalPixels = CopyPackedPixels(normalAtlas.pixels, normalAtlas.texture.width, normalPackedRect, out var error);
+    if (rawNormalPixels == null || rawNormalPixels.Length != colorTrimPixels.Length) {
+      if (!string.IsNullOrWhiteSpace(error)) {
+        Debug.LogWarning(
+          "[GearGroupAtlas] Failed to reuse normal source trim metadata." +
+          " atlas='" + normalAtlas.atlasPath + "'" +
+          " sprite='" + normalSprite.name + "'" +
+          " error='" + error + "'");
+      }
+      return BuildNeutralNormalPixels(colorTrimPixels);
+    }
+
+    var output = new Color32[rawNormalPixels.Length];
+    for (var i = 0; i < rawNormalPixels.Length; i++) {
+      var source = rawNormalPixels[i];
+      output[i] = new Color32(source.r, source.g, source.b, colorTrimPixels[i].a);
+    }
+
+    return output;
   }
 
   void AnalyzeTrimmedSprite(
@@ -1239,6 +1367,37 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     return output;
+  }
+
+  static Dictionary<string, ExistingTrimmedAtlasSpriteMetadata> LoadTrimmedSourceMetadataByName(string atlasAssetPath) {
+    var metadataByName = new Dictionary<string, ExistingTrimmedAtlasSpriteMetadata>(StringComparer.Ordinal);
+    var metadataAssetPath = NormalizePath(Path.ChangeExtension(atlasAssetPath ?? "", ".json"));
+    if (string.IsNullOrWhiteSpace(metadataAssetPath)) return metadataByName;
+
+    var metadataFullPath = Path.GetFullPath(metadataAssetPath);
+    if (!File.Exists(metadataFullPath)) return metadataByName;
+
+    ExistingTrimmedAtlasMetadataPayload payload;
+    try {
+      payload = JsonUtility.FromJson<ExistingTrimmedAtlasMetadataPayload>(File.ReadAllText(metadataFullPath));
+    }
+    catch {
+      return metadataByName;
+    }
+
+    if (payload == null || payload.sprites == null) return metadataByName;
+    if (!string.IsNullOrWhiteSpace(payload.metadataKind) &&
+        !string.Equals(payload.metadataKind, "trimmed", StringComparison.OrdinalIgnoreCase)) {
+      return metadataByName;
+    }
+
+    for (var i = 0; i < payload.sprites.Count; i++) {
+      var spriteMetadata = payload.sprites[i];
+      if (spriteMetadata == null || string.IsNullOrWhiteSpace(spriteMetadata.name)) continue;
+      metadataByName[spriteMetadata.name] = spriteMetadata;
+    }
+
+    return metadataByName;
   }
 
   Color32[] CopyPackedPixels(Color32[] sourcePixels, int atlasWidth, PixelRect packedRect, out string error) {
@@ -2190,6 +2349,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     var lines = SplitTextIntoLines(originalText);
+    var existingCategoryNames = CollectSpriteLibraryCategoryNames(lines);
 
     var rewritten = new System.Text.StringBuilder(originalText.Length + 256);
     var insideLibrary = false;
@@ -2197,7 +2357,10 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     var currentCategoryAllowsEntryRewrite = false;
     var currentCategorySawOverrideEntries = false;
     var appendedMissingCategories = false;
+    var pendingCategoryHashRewrite = false;
+    var pendingCategoryHashName = "";
     SpriteLibraryCategoryPlan currentCategoryPlan = null;
+    RebindLabelCleanupPlan currentCategoryCleanupPlan = null;
     HashSet<string> currentCategoryRetainedLabels = null;
     var seenCategoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -2221,9 +2384,12 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           ref libraryChanged,
           ref libraryCreatedLabels);
         currentCategoryPlan = null;
+        currentCategoryCleanupPlan = null;
         currentCategoryRetainedLabels = null;
         currentCategoryAllowsEntryRewrite = false;
         currentCategorySawOverrideEntries = false;
+        pendingCategoryHashRewrite = false;
+        pendingCategoryHashName = "";
         insideOverrideEntries = false;
 
         if (!appendedMissingCategories) {
@@ -2246,6 +2412,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
       if (line.StartsWith("  - m_Name: ", StringComparison.Ordinal)) {
         var categoryName = line.Substring("  - m_Name: ".Length).Trim();
+        var resolvedCategoryName = categoryName;
+        var resolvedCategoryPlan = (SpriteLibraryCategoryPlan)null;
         FinalizeSpriteLibraryCategoryRewrite(
           currentCategoryPlan,
           currentCategoryRetainedLabels,
@@ -2254,18 +2422,55 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           lineEnding,
           ref libraryChanged,
           ref libraryCreatedLabels);
-        categoryPlansByName.TryGetValue(categoryName, out currentCategoryPlan);
-        seenCategoryNames.Add(categoryName);
-        currentCategoryRetainedLabels = currentCategoryPlan != null
+        TryResolveSpriteLibraryCategoryPlan(
+          categoryPlansByName,
+          categoryName,
+          out resolvedCategoryName,
+          out resolvedCategoryPlan);
+        var useCleanupOnlyRewrite =
+          resolvedCategoryPlan != null &&
+          !string.Equals(categoryName, resolvedCategoryName, StringComparison.OrdinalIgnoreCase) &&
+          ContainsEquivalentSpriteLibraryCategory(existingCategoryNames, resolvedCategoryName);
+        seenCategoryNames.Add(resolvedCategoryName);
+        currentCategoryPlan = useCleanupOnlyRewrite ? null : resolvedCategoryPlan;
+        currentCategoryCleanupPlan = resolvedCategoryPlan?.cleanupPlan;
+        currentCategoryRetainedLabels = currentCategoryPlan != null || currentCategoryCleanupPlan != null
           ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
           : null;
-        currentCategoryAllowsEntryRewrite = currentCategoryPlan != null || deleteGearSkinLabels;
+        currentCategoryAllowsEntryRewrite =
+          currentCategoryPlan != null ||
+          currentCategoryCleanupPlan != null ||
+          deleteGearSkinLabels;
         currentCategorySawOverrideEntries = false;
+        pendingCategoryHashRewrite =
+          !useCleanupOnlyRewrite &&
+          !string.Equals(categoryName, resolvedCategoryName, StringComparison.Ordinal) &&
+          !string.IsNullOrWhiteSpace(resolvedCategoryName);
+        pendingCategoryHashName = pendingCategoryHashRewrite ? resolvedCategoryName : "";
         insideOverrideEntries = false;
-        if (currentCategoryPlan != null) {
+        if (resolvedCategoryPlan != null) {
           libraryMatchedCategoryCount++;
         }
 
+        if (pendingCategoryHashRewrite) {
+          line = "  - m_Name: " + resolvedCategoryName;
+          libraryChanged = true;
+        }
+
+        AppendLine(rewritten, line, lineEnding);
+        continue;
+      }
+
+      if (pendingCategoryHashRewrite && line.StartsWith("    m_Hash: ", StringComparison.Ordinal)) {
+        var rewrittenHashLine =
+          "    m_Hash: " + GetSpriteLibraryStringHash(pendingCategoryHashName).ToString(CultureInfo.InvariantCulture);
+        if (!string.Equals(line, rewrittenHashLine, StringComparison.Ordinal)) {
+          line = rewrittenHashLine;
+          libraryChanged = true;
+        }
+
+        pendingCategoryHashRewrite = false;
+        pendingCategoryHashName = "";
         AppendLine(rewritten, line, lineEnding);
         continue;
       }
@@ -2284,7 +2489,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
           lineIndex,
           entryBlockEnd,
           currentCategoryPlan?.replacementsByLabel,
-          currentCategoryPlan?.cleanupPlan,
+          currentCategoryCleanupPlan,
           deleteGearSkinLabels,
           currentCategoryRetainedLabels,
           rewritten,
@@ -2482,6 +2687,82 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     return plansByName;
+  }
+
+  static HashSet<string> CollectSpriteLibraryCategoryNames(string[] lines) {
+    var categoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (lines == null || lines.Length <= 0) return categoryNames;
+
+    for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++) {
+      var line = lines[lineIndex];
+      if (!line.StartsWith("  - m_Name: ", StringComparison.Ordinal)) continue;
+      var categoryName = line.Substring("  - m_Name: ".Length).Trim();
+      if (string.IsNullOrWhiteSpace(categoryName)) continue;
+      categoryNames.Add(categoryName);
+    }
+
+    return categoryNames;
+  }
+
+  static bool ContainsEquivalentSpriteLibraryCategory(HashSet<string> existingCategoryNames, string categoryName) {
+    if (existingCategoryNames == null || existingCategoryNames.Count <= 0 || string.IsNullOrWhiteSpace(categoryName)) {
+      return false;
+    }
+
+    foreach (var existingCategoryName in existingCategoryNames) {
+      if (string.Equals(existingCategoryName, categoryName, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool TryResolveSpriteLibraryCategoryPlan(
+    Dictionary<string, SpriteLibraryCategoryPlan> categoryPlansByName,
+    string categoryName,
+    out string resolvedCategoryName,
+    out SpriteLibraryCategoryPlan plan) {
+    resolvedCategoryName = categoryName ?? "";
+    plan = null;
+    if (categoryPlansByName == null || categoryPlansByName.Count <= 0 || string.IsNullOrWhiteSpace(categoryName)) {
+      return false;
+    }
+
+    if (categoryPlansByName.TryGetValue(categoryName, out plan) && plan != null) {
+      resolvedCategoryName = categoryName;
+      return true;
+    }
+
+    var normalizedCategoryName = NormalizeSpriteLibraryCategoryName(categoryName);
+    if (string.IsNullOrWhiteSpace(normalizedCategoryName)) return false;
+
+    foreach (var pair in categoryPlansByName) {
+      if (pair.Value == null) continue;
+      if (!string.Equals(
+            NormalizeSpriteLibraryCategoryName(pair.Key),
+            normalizedCategoryName,
+            StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      resolvedCategoryName = pair.Key;
+      plan = pair.Value;
+      return true;
+    }
+
+    return false;
+  }
+
+  static string NormalizeSpriteLibraryCategoryName(string categoryName) {
+    if (string.IsNullOrWhiteSpace(categoryName)) return "";
+
+    var normalizedCategoryName = categoryName.Trim();
+    if (string.Equals(normalizedCategoryName, "SuperBlast", StringComparison.OrdinalIgnoreCase)) {
+      return "Blast";
+    }
+
+    return normalizedCategoryName;
   }
 
   static void FinalizeSpriteLibraryCategoryRewrite(

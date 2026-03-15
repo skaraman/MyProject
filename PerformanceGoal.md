@@ -117,22 +117,59 @@ Not yet verified after the latest runtime code changes:
 - confirmation that gameplay no longer falls back to slice-style misses
 - effect of the threaded warm-plan finalize pass during a real warm gate
 
+## Current Tracking Item As Of March 15, 2026
+
+### Grouped atlas runtime-index joins are currently the active blocker
+
+Observed from the latest Unity `Editor.log`:
+
+- `Tools > Sprite Streaming > 7b) Build Index + Addressables (Clean)` and `0) Run Essential Pipeline` now complete.
+- Player-script compile errors from `SpriteRuntimeResolver.cs` were fixed.
+- The remaining runtime symptom is repeated:
+  - `SpriteWithNormals] No sprite mapping found ...`
+  - especially across `Esperanza/Gear/*` and `Esperanza/Skin/*`
+- Runtime-index rebuilds report success, but only produce `19` shards.
+- The build log shows most Esperanza gear and skin libraries were skipped because all color rows were unresolved.
+
+Root cause discovered:
+
+- The regenerated grouped atlas assets now expose local sprite IDs that do not reliably join through `.meta` parsing alone.
+- `SpriteLibrarySourceAsset` rows are referencing 64-bit local file IDs.
+- The grouped atlas `.meta` `nameFileIdTable` values do not cover those references well enough for runtime-index generation.
+- This caused the builder to skip large libraries even though the sprite slices and atlases existed.
+
+Fix now in progress / baseline going forward:
+
+- Runtime-index generation must supplement `.meta` parsing with Unity-reported sprite sub-asset local IDs via `AssetDatabase.TryGetGUIDAndLocalFileIdentifier(...)`.
+- Treat this as a build-data integrity requirement, not a one-off Esperanza hack.
+- Missing normal maps should still remain hard errors; this tracking item is about color/normal row resolution, not softening asset validation.
+
+Validation required before calling this solved:
+
+1. Re-run `Tools > Sprite Streaming > 7) Build Index + Addressables`.
+2. Confirm the build log shows `supplementedLocalIds=` for grouped atlases.
+3. Confirm Esperanza gear and skin libraries are no longer logged as:
+   - `Skipped sprite library because all color rows were unresolved`
+4. Confirm runtime-index shard output grows beyond the current `19`-shard set and includes the missing Esperanza parts.
+5. Re-run `Start New Game` and confirm `SpriteWithNormals` no longer logs `No sprite mapping found` for the player body parts.
+
 ## Next Iteration Order
 
-1. Capture a fresh gameplay profiler run after the current baseline.
-2. Confirm whether first attack, first nearby enemy attack, and first room entry still cause cold atlas misses.
-3. If misses remain, expand preload policy for the missing tier:
+1. Finish validating the grouped-atlas local-ID runtime-index fix.
+2. Capture a fresh gameplay profiler run after the current baseline.
+3. Confirm whether first attack, first nearby enemy attack, and first room entry still cause cold atlas misses.
+4. If misses remain, expand preload policy for the missing tier:
    - player
    - nearby enemy archetypes
    - current room
    - adjacent room
    - core combat VFX
-4. If misses are low but spikes remain, profile CPU-side hot paths:
+5. If misses are low but spikes remain, profile CPU-side hot paths:
    - `GearController.Update()`
    - `AnimationController` switch/apply paths
    - owner pin refresh / pin mutation cost
    - warm-plan enqueue / cache pump cost
-5. If warm-gate CPU cost is high, move more plan construction to editor/build data before adding more runtime complexity.
+6. If warm-gate CPU cost is high, move more plan construction to editor/build data before adding more runtime complexity.
 
 ## Do Not Regress
 

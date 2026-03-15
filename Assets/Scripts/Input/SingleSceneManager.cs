@@ -12,15 +12,60 @@ public class SingleSceneManager : MonoBehaviour {
     GearApplyReturn = 2
   }
 
-  enum UiMode {
-    MainMenu,
-    Gameplay,
-    Pause
+  enum Section {
+    None = 0,
+    MainMenu = 1,
+    LoadMenu = 2,
+    SettingsMenu = 3,
+    Gameplay = 4,
+    Pause = 5
   }
 
-  enum SettingsReturnTarget {
-    MainMenu,
-    PauseMenu
+  struct SectionDescriptor {
+    public readonly string inputMap;
+    public readonly bool sceneActiveByDefault;
+    public readonly bool restoreSceneLightsByDefault;
+    public readonly bool resetPauseAppearanceRevision;
+
+    public SectionDescriptor(
+      string inputMap,
+      bool sceneActiveByDefault,
+      bool restoreSceneLightsByDefault,
+      bool resetPauseAppearanceRevision
+    ) {
+      this.inputMap = inputMap;
+      this.sceneActiveByDefault = sceneActiveByDefault;
+      this.restoreSceneLightsByDefault = restoreSceneLightsByDefault;
+      this.resetPauseAppearanceRevision = resetPauseAppearanceRevision;
+    }
+  }
+
+  struct SectionTransitionRequest {
+    public readonly Section targetSection;
+    public readonly string overlayTag;
+    public readonly bool requestMainMenuLocation;
+    public readonly bool waitForStreamingIdle;
+    public readonly bool showProgressUi;
+    public readonly bool showLoadingLight;
+    public readonly bool switchInputMapToNone;
+
+    public SectionTransitionRequest(
+      Section targetSection,
+      string overlayTag,
+      bool requestMainMenuLocation,
+      bool waitForStreamingIdle,
+      bool showProgressUi,
+      bool showLoadingLight = true,
+      bool switchInputMapToNone = false
+    ) {
+      this.targetSection = targetSection;
+      this.overlayTag = overlayTag;
+      this.requestMainMenuLocation = requestMainMenuLocation;
+      this.waitForStreamingIdle = waitForStreamingIdle;
+      this.showProgressUi = showProgressUi;
+      this.showLoadingLight = showLoadingLight;
+      this.switchInputMapToNone = switchInputMapToNone;
+    }
   }
 
   public InputProcessor inputProcessor;
@@ -30,6 +75,7 @@ public class SingleSceneManager : MonoBehaviour {
   private All1AnimatorScript blackscreen;
   private GameObject loadingBlackscreen;
   private SpriteRenderer loadingBlackscreenRenderer;
+  private GameObject loadingLightObject;
   private GameObject loadingCircle;
   private GameObject loadingTextObject;
   private FontText loadingText;
@@ -51,6 +97,9 @@ public class SingleSceneManager : MonoBehaviour {
   private bool loadingBlockingStateKnown;
   const float LoadingProgressCompletionSettleSeconds = 0.15f;
   const float LoadingProgressSoftCap = 0.99f;
+  const float LoadingZeroPercentStallDelaySeconds = 1.5f;
+  const float LoadingZeroPercentStallLogIntervalSeconds = 2.0f;
+  const float LoadingWaitStateLogIntervalSeconds = 2.0f;
 
   public GameObject MainMenu;
   public GameObject LoadMenu;
@@ -68,74 +117,71 @@ public class SingleSceneManager : MonoBehaviour {
   // - In-flight addressable loads should usually stay under ~128 to reduce completion spikes.
   // - Pre-unlock resident pinning should stay bounded (prefer <= ~2048 addresses on desktop).
   // - Estimated resident texture bytes should sit under configured soft budget with headroom.
-  [Header("Warm Gate")]
-  [SerializeField] bool useScenarioWarmGate = true;
-  [SerializeField, Min(0.5f)] float startWarmTimeoutSeconds = 2.0f;
-  [SerializeField, Min(0.5f)] float startWarmHardTimeoutSeconds = 25.0f;
-  [SerializeField, Min(0.5f)] float startWarmRequiredRatio = 0.97f;
-  [SerializeField, Range(0.5f, 0.99f)] float loadSaveWarmRequiredRatioCap = 0.72f;
-  [SerializeField, Range(0.5f, 0.99f)] float loadSaveWarmRequiredRatioFloor = 0.62f;
-  [SerializeField, Min(0)] int warmGateCriticalEnemyCount = 3;
-  [SerializeField, Min(0f)] float warmGateCriticalEnemyDistance = 25f;
-  [SerializeField] bool warmGatePreloadCorePlayerEffects = true;
-  [SerializeField, Min(0.5f)] float gearReturnWarmTimeoutSeconds = 3.0f;
-  [SerializeField, Min(0.5f)] float gearReturnWarmHardTimeoutSeconds = 16.0f;
-  [SerializeField, Min(0.5f)] float gearReturnRequiredRatio = 0.95f;
-  [SerializeField] bool allowHardTimeoutBypass = true;
-  [SerializeField, Min(0f)] float fadeLeadSeconds = 0.15f;
-  [SerializeField, Min(0f)] float fallbackTransitionSeconds = 2.0f;
-  [SerializeField, Min(0f)] float fadeToBlackSeconds = 0.2f;
-  [SerializeField, Min(0f)] float fadeFromBlackSeconds = 0.25f;
-  [SerializeField, Min(0f)] float loadingCircleSpinSpeedDegreesPerSecond = 360f;
-  [SerializeField] bool waitForStreamingIdleBeforeFadeOut = true;
-  [SerializeField, Min(0f)] float streamingIdleMinimumWaitSeconds = 0.1f;
-  [SerializeField, Min(0f)] float streamingIdleTimeoutSeconds = 20.0f;
-  [SerializeField] bool allowStreamingIdleTimeoutBypass = false;
-  [SerializeField, Min(1)] int streamingIdleStableFrames = 2;
-  [SerializeField, Min(0)] int streamingIdleAllowedQueued = 0;
-  [SerializeField, Min(0)] int streamingIdleAllowedInFlight = 0;
-  [SerializeField, Min(0)] int streamingBlockingReadyMaxOutstandingDesktop = 384;
-  [SerializeField, Min(0)] int streamingBlockingReadyMaxOutstandingMobile = 256;
-  [SerializeField, Min(0)] int streamingBlockingReadyMaxInFlightDesktop = 48;
-  [SerializeField, Min(0)] int streamingBlockingReadyMaxInFlightMobile = 32;
-  [SerializeField] bool enforceZeroOutstandingBeforeUnlock = true;
-  [SerializeField, Min(1f)] float loadingPercentRisePerSecond = 500f;
-  [Header("Pre-Unlock Prefetch")]
-  [SerializeField] bool enablePreUnlockVisibleSpritePrefetch = true;
+  const bool useScenarioWarmGate = true;
+  const float startWarmTimeoutSeconds = 2.0f;
+  const float startWarmHardTimeoutSeconds = 25.0f;
+  const float startWarmRequiredRatio = 0.97f;
+  const float loadSaveWarmRequiredRatioCap = 0.72f;
+  const float loadSaveWarmRequiredRatioFloor = 0.62f;
+  const int warmGateCriticalEnemyCount = 3;
+  const float warmGateCriticalEnemyDistance = 25f;
+  const bool warmGatePreloadCorePlayerEffects = true;
+  const float gearReturnWarmTimeoutSeconds = 3.0f;
+  const float gearReturnWarmHardTimeoutSeconds = 16.0f;
+  const float gearReturnRequiredRatio = 0.95f;
+  const bool allowHardTimeoutBypass = true;
+  const float fadeLeadSeconds = 3.0f;
+  const float fallbackTransitionSeconds = 3.0f;
+  const float fadeToBlackSeconds = 2.0f;
+  const float fadeFromBlackSeconds = 2.0f;
+  const float loadingCircleSpinSpeedDegreesPerSecond = 360f;
+  static readonly bool waitForStreamingIdleBeforeFadeOut = true;
+  const float streamingIdleMinimumWaitSeconds = 3.0f;
+  const float streamingIdleTimeoutSeconds = 20.0f;
+  const bool allowStreamingIdleTimeoutBypass = false;
+  const int streamingIdleStableFrames = 2;
+  const int streamingIdleAllowedQueued = 0;
+  const int streamingIdleAllowedInFlight = 0;
+  const int streamingBlockingReadyMaxOutstandingDesktop = 384;
+  const int streamingBlockingReadyMaxOutstandingMobile = 256;
+  const int streamingBlockingReadyMaxInFlightDesktop = 48;
+  const int streamingBlockingReadyMaxInFlightMobile = 32;
+  const bool enforceZeroOutstandingBeforeUnlock = true;
+  const float loadingPercentRisePerSecond = 55f;
+  const bool enablePreUnlockVisibleSpritePrefetch = true;
   // Increase this if animations are choppy immediately after unlock (e.g. to 12 or 24).
-  [SerializeField, Min(1)] int preUnlockPrefetchAnimationFrames = 12;
-  [SerializeField, Min(0)] int preUnlockPrefetchLookAheadFrames = 6;
-  [SerializeField, Min(1)] int preUnlockPrefetchMaxAddresses = 12288;
-  [SerializeField, Min(1)] int preUnlockPrefetchMinAddresses = 512;
-  [SerializeField, Min(50)] int preUnlockPrefetchEnqueueBudgetPerFrame = 200;
-  [SerializeField, Min(1)] int preUnlockPrefetchFrameJumpClamp = 4;
-  [SerializeField, Min(0f)] float preUnlockTargetCacheRefreshSeconds = 0.5f;
-  [SerializeField] bool preUnlockPrefetchExpandAtlasSiblings = true;
-  [SerializeField, Min(1)] int preUnlockPrefetchMaxAtlasSiblingsPerSeed = 24;
-  [SerializeField] bool preUnlockPrefetchIncludeUiTargets = false;
-  [SerializeField] bool enablePreUnlockControllerAnimationPrefetch = true;
-  [SerializeField, Min(1)] int preUnlockPlayerAnimationStarts = 64;
-  [SerializeField, Min(0)] int preUnlockEnemyAnimationStartsPerController = 24;
-  [Header("Pre-Unlock Animation Playback")]
-  [SerializeField] bool enablePreUnlockAnimationPlaybackWarmup = true;
-  [SerializeField, Min(1)] int preUnlockAnimationPlaybackPasses = 1;
-  [SerializeField, Min(1)] int preUnlockAnimationFramePreloadPasses = 3;
-  [SerializeField] bool preUnlockReprefetchVisibleSpritesAfterAnimationWarmup = true;
-  [SerializeField, Min(0f)] float preUnlockWarmupQueueSettleTimeoutSeconds = 2.0f;
-  [SerializeField, Min(0f)] float preUnlockBlockingBudgetSeconds = 1.25f;
-  [SerializeField] bool enablePreUnlockResidentPinning = true;
-  [SerializeField, Min(1)] int preUnlockResidentPinMaxAddresses = 2048;
-  [SerializeField] bool preUnlockWarmEnemyAnimationPlayback = true;
-  [SerializeField, Min(1)] int preUnlockAnimationWarmupControllersPerFrame = 1;
-  [SerializeField, Min(0)] int preUnlockAnimationWarmupMaxEnemyControllers = 6;
-  [SerializeField, Min(0f)] float preUnlockAnimationWarmupEnemyDistance = 25f;
-  [SerializeField, Min(0f)] float startupFadeWatchdogSeconds = 2.5f;
-  [SerializeField] bool enableLoadingStallEmergencyUnlock = true;
-  [SerializeField, Min(1f)] float loadingStallEmergencyUnlockSeconds = 12.0f;
-  [SerializeField, Min(0f)] float postUnlockPinReleaseDelaySeconds = 8.0f;
-  [SerializeField, Min(0)] int postUnlockPinReleaseMaxOutstanding = 192;
-  [SerializeField, Min(0f)] float postUnlockPinReleaseTimeoutSeconds = 20.0f;
-  [SerializeField] string defaultStartLocation = LocationEnemyData.DomeCityLocationId;
+  const int preUnlockPrefetchAnimationFrames = 6;
+  const int preUnlockPrefetchLookAheadFrames = 6;
+  const int preUnlockPrefetchMaxAddresses = 12288;
+  const int preUnlockPrefetchMinAddresses = 512;
+  const int preUnlockPrefetchEnqueueBudgetPerFrame = 200;
+  const int preUnlockPrefetchFrameJumpClamp = 4;
+  const float preUnlockTargetCacheRefreshSeconds = 0.5f;
+  const bool preUnlockPrefetchExpandAtlasSiblings = true;
+  const int preUnlockPrefetchMaxAtlasSiblingsPerSeed = 24;
+  const bool preUnlockPrefetchIncludeUiTargets = false;
+  const bool enablePreUnlockControllerAnimationPrefetch = true;
+  const int preUnlockPlayerAnimationStarts = 64;
+  const int preUnlockEnemyAnimationStartsPerController = 24;
+  const bool enablePreUnlockAnimationPlaybackWarmup = true;
+  const int preUnlockAnimationPlaybackPasses = 2;
+  const int preUnlockAnimationFramePreloadPasses = 3;
+  const bool preUnlockReprefetchVisibleSpritesAfterAnimationWarmup = true;
+  const float preUnlockWarmupQueueSettleTimeoutSeconds = 2.0f;
+  const float preUnlockBlockingBudgetSeconds = 1.25f;
+  static readonly bool enablePreUnlockResidentPinning = true;
+  const int preUnlockResidentPinMaxAddresses = 2048;
+  const bool preUnlockWarmEnemyAnimationPlayback = true;
+  const int preUnlockAnimationWarmupControllersPerFrame = 1;
+  static readonly int preUnlockAnimationWarmupMaxEnemyControllers = 0;
+  const float preUnlockAnimationWarmupEnemyDistance = 25f;
+  const float startupFadeWatchdogSeconds = 1.0f;
+  const bool enableLoadingStallEmergencyUnlock = true;
+  const float loadingStallEmergencyUnlockSeconds = 12.0f;
+  const float postUnlockPinReleaseDelaySeconds = 8.0f;
+  const int postUnlockPinReleaseMaxOutstanding = 192;
+  const float postUnlockPinReleaseTimeoutSeconds = 20.0f;
+  static readonly string defaultStartLocation = LocationEnemyData.DomeCityLocationId;
   const string mainMenuFlowLocationId = LocationEnemyData.MainMenuLocationId;
   const string gameplayFlowFallbackLocationId = LocationEnemyData.DomeCityLocationId;
   private List<Action> actions = new();
@@ -146,13 +192,18 @@ public class SingleSceneManager : MonoBehaviour {
   private Coroutine startupGameplayRoutine;
   private Coroutine startupFadeWatchdogRoutine;
   private Coroutine unlockFadeFailSafeRoutine;
-  private Coroutine uiModeRoutine;
+  private Coroutine sectionTransitionRoutine;
   private GearController cachedPlayerGearController;
   private int pauseMenuOpenAppearanceRevision = -1;
   private bool holdBlackscreenOpaqueDuringLoad;
+  private bool playerAnimationHeldForLoadingOverlay;
   private string lastPurgedLocationId = "";
   private float loadingStallStartedAt = -1f;
-  private SettingsReturnTarget settingsReturnTarget = SettingsReturnTarget.MainMenu;
+  private float loadingZeroPercentStartedAt = -1f;
+  private float loadingZeroPercentNextLogAt = -1f;
+  private Section settingsReturnTarget = Section.MainMenu;
+  private Section currentSection = Section.None;
+  private Section pendingRevealSection = Section.None;
   private GameObject settingsCloseButton;
   private GameObject settingsHoveredTarget;
   private string activeInputMap = "";
@@ -183,15 +234,14 @@ public class SingleSceneManager : MonoBehaviour {
   static readonly string[] CorePlayerEffectWarmKeys = { "Blast", "BlastBall" };
   void Start() {
     RegisterMessageBusHandlers();
-    SetActiveSafe(LoadingScreen, true);
     InitializeLoadingScreenReferences();
-    // Boot in fully black state, then reveal with explicit startup fade-out.
     ForceBlackscreenVisible(true);
     loadingOverlayChildrenReady = false;
-    SetLoadingOverlayChildrenActive(false);
+    SetLoadingLightActive(false);
+    SetLoadingProgressUiActive(false);
     SetLoadingText("");
+    SetLoadingRootActive(false);
     ApplyConfiguredStartupMode();
-    ApplyInputMapForCurrentUiState(preferGameplayWhenNoUi: false);
   }
 
   void RegisterMessageBusHandlers() {
@@ -215,6 +265,8 @@ public class SingleSceneManager : MonoBehaviour {
 
     if (!init) {
       if (ShouldRunStartupGameplayWarmFlow()) {
+        pendingRevealSection = Section.Gameplay;
+        PrepareLoadingScreenCarrier();
         SetLoadingBlackscreenHold(true);
         if (startupGameplayRoutine == null) {
           startupGameplayRoutine = StartCoroutine(StartupGameplayFlowRoutine());
@@ -222,8 +274,10 @@ public class SingleSceneManager : MonoBehaviour {
         init = true;
         return;
       }
+      PrepareLoadingScreenCarrier();
       SetLoadingBlackscreenHold(false);
       ForceBlackscreenVisible(true);
+      LogSectionTransitionState("startup_reveal_begin", Section.None, ResolveCurrentSection(), "MainMenuStartup", false);
       if (blackscreen != null) {
         PlayBlackscreen("alphaOut");
       }
@@ -244,6 +298,7 @@ public class SingleSceneManager : MonoBehaviour {
     loadingBlackscreen = null;
     loadingBlackscreenRenderer = null;
     blackscreen = null;
+    loadingLightObject = null;
     loadingCircle = null;
     loadingTextObject = null;
     loadingText = null;
@@ -280,6 +335,11 @@ public class SingleSceneManager : MonoBehaviour {
       loadingCircle = circleTransform.gameObject;
     }
 
+    var lightTransform = FindChildByName(LoadingScreen.transform, "light");
+    if (lightTransform != null) {
+      loadingLightObject = lightTransform.gameObject;
+    }
+
     var textTransform = FindChildByName(LoadingScreen.transform, "text");
     if (textTransform != null) {
       loadingTextObject = textTransform.gameObject;
@@ -310,16 +370,18 @@ public class SingleSceneManager : MonoBehaviour {
       loadingProgressObservedWork = false;
       loadingProgressNextDebugLogAt = -1f;
       ResetBlockingProgressState();
-      SetLoadingOverlayChildrenActive(false);
+      ResetZeroPercentStallDebugState();
+      SetLoadingLightActive(false);
+      SetLoadingProgressUiActive(false);
       SetLoadingText("");
       return false;
     }
 
     if (LoadingScreen != null && !LoadingScreen.activeSelf) {
-      LoadingScreen.SetActive(true);
+      SetLoadingRootActive(true);
     }
 
-    SetLoadingOverlayChildrenActive(loadingOverlayChildrenReady);
+    SetLoadingProgressUiActive(loadingOverlayChildrenReady);
     loadingUiFeedbackActive = true;
 
     if (loadingOverlayChildrenReady) {
@@ -351,6 +413,11 @@ public class SingleSceneManager : MonoBehaviour {
     loadingBlockingCriticalReady = false;
     loadingBlockingHardBypassUsed = false;
     loadingBlockingStateKnown = false;
+  }
+
+  void ResetZeroPercentStallDebugState() {
+    loadingZeroPercentStartedAt = -1f;
+    loadingZeroPercentNextLogAt = -1f;
   }
 
   void CaptureBlockingProgressStateFromWarmResult(WarmResult result) {
@@ -518,9 +585,12 @@ public class SingleSceneManager : MonoBehaviour {
     }
     queueProgress = Mathf.Clamp01(queueProgress);
 
-    // Ideal loading UX tracks blocking scope (critical first-frame readiness)
-    // rather than the full long-tail warm queue that can continue post-unlock.
-    var targetProgress = hasBlockingProgress ? blockingProgress : goalProgress;
+    // Blocking progress should determine release gating, but the visible percentage
+    // should still reflect real queue/session progress so startup does not appear frozen.
+    var nonBlockingProgress = Mathf.Max(goalProgress, queueProgress);
+    var targetProgress = hasBlockingProgress
+      ? Mathf.Max(blockingProgress, Mathf.Min(nonBlockingProgress, 0.9f))
+      : goalProgress;
     if (!loadingProgressObservedWork && !hasBlockingProgress) {
       targetProgress = 0f;
     }
@@ -570,6 +640,23 @@ public class SingleSceneManager : MonoBehaviour {
       targetProgress,
       actualPercent
     );
+    MaybeLogZeroPercentStall(
+      queue,
+      session,
+      outstanding,
+      remainingWork,
+      resolverIdle,
+      playerReady,
+      hasBlockingProgress,
+      blockingReadyCount,
+      blockingTotalCount,
+      blockingProgress,
+      blockingCriticalReady,
+      blockingHardBypassUsed,
+      blockingReady,
+      targetProgress,
+      actualPercent
+    );
 
     return actualPercent;
   }
@@ -594,6 +681,7 @@ public class SingleSceneManager : MonoBehaviour {
     loadingProgressObservedWork = outstanding > 0;
     loadingProgressNextDebugLogAt = -1f;
     ResetBlockingProgressState();
+    ResetZeroPercentStallDebugState();
     loadingPercent = -1;
     loadingPercentDisplayInitialized = true;
     loadingPercentDisplayValue = 0f;
@@ -658,7 +746,7 @@ public class SingleSceneManager : MonoBehaviour {
     loadingPercentDisplayValue = 0f;
     UpdateLoadingScreenPercentText(0);
     loadingOverlayChildrenReady = true;
-    SetLoadingOverlayChildrenActive(true);
+    SetLoadingProgressUiActive(true);
 
     if (ShouldLogLoadingProgressDebug()) {
       Debug.Log(
@@ -739,6 +827,201 @@ public class SingleSceneManager : MonoBehaviour {
     );
   }
 
+  static bool ShouldLogLoadFlowDebug() {
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  void LogStartGameRequest(bool isNewGame, SaveData loadedSlot) {
+    if (!ShouldLogLoadFlowDebug()) return;
+    var savedLocation = loadedSlot != null && loadedSlot.ContainsKey("location")
+      ? Convert.ToString(loadedSlot["location"])
+      : "";
+    Debug.Log(
+      "[SingleSceneManager][LoadStart] kind=" + (isNewGame ? "new_game" : "load_save") +
+      " slot=" + SaveSlotManager.slot +
+      " slot_exists=" + (SaveSlotManager.CurrentSlotExists() ? 1 : 0) +
+      " save_key_count=" + (loadedSlot != null ? loadedSlot.Count : 0) +
+      " saved_location=" + (string.IsNullOrWhiteSpace(savedLocation) ? "-" : savedLocation.Trim()) +
+      " current_location=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
+      " current_section=" + ResolveCurrentSection() +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason)
+    );
+  }
+
+  void LogLoadStateDispatch(string stage) {
+    if (!ShouldLogLoadFlowDebug()) return;
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
+    var playerReady = IsPlayerFirstFrameReady();
+    Debug.Log(
+      "[SingleSceneManager][LoadState] stage=" + (string.IsNullOrWhiteSpace(stage) ? "unspecified" : stage.Trim()) +
+      " slot=" + SaveSlotManager.slot +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
+      " current_location=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
+      " queue_queued=" + queue.queuedCount +
+      " queue_in_flight=" + queue.inFlightCount +
+      " deferred_pending=" + deferredSnapshot.pendingCount +
+      " player_ready=" + (playerReady ? 1 : 0) +
+      " current_section=" + ResolveCurrentSection()
+    );
+  }
+
+  void LogLocationLoadRequest(string requestedLocationId, string resolvedLocationId) {
+    if (!ShouldLogLoadFlowDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][LocationLoad] requested=" + (string.IsNullOrWhiteSpace(requestedLocationId) ? "-" : requestedLocationId.Trim()) +
+      " resolved=" + (string.IsNullOrWhiteSpace(resolvedLocationId) ? "-" : resolvedLocationId.Trim()) +
+      " current_before=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
+      " current_section=" + ResolveCurrentSection()
+    );
+  }
+
+  void LogLocationUpdate(string previousLocationId, string currentLocationId) {
+    if (!ShouldLogLoadFlowDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][LocationLoad] updated previous=" + (string.IsNullOrWhiteSpace(previousLocationId) ? "-" : previousLocationId.Trim()) +
+      " current=" + (string.IsNullOrWhiteSpace(currentLocationId) ? "-" : currentLocationId.Trim()) +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
+      " current_section=" + ResolveCurrentSection()
+    );
+  }
+
+  void MaybeLogZeroPercentStall(
+    TextureResidencyCache.QueueSnapshot queue,
+    TextureResidencyCache.SessionSnapshot session,
+    int outstanding,
+    int remainingWork,
+    bool resolverIdle,
+    bool playerReady,
+    bool usingBlockingProgress,
+    int blockingReadyCount,
+    int blockingTotalCount,
+    float blockingProgress,
+    bool blockingCriticalReady,
+    bool blockingHardBypassUsed,
+    bool blockingReady,
+    float targetProgress,
+    int actualPercent
+  ) {
+    if (!ShouldLogLoadFlowDebug()) return;
+    if (!loadingOverlayChildrenReady || actualPercent > 0) {
+      ResetZeroPercentStallDebugState();
+      return;
+    }
+
+    var overlayActive = holdBlackscreenOpaqueDuringLoad || SpriteStreamingLoadingState.IsLoadingOverlayActive;
+    if (!overlayActive) {
+      ResetZeroPercentStallDebugState();
+      return;
+    }
+
+    var now = Time.realtimeSinceStartup;
+    if (loadingZeroPercentStartedAt < 0f) {
+      loadingZeroPercentStartedAt = now;
+      loadingZeroPercentNextLogAt = now + LoadingZeroPercentStallDelaySeconds;
+      return;
+    }
+
+    if (now < loadingZeroPercentNextLogAt) return;
+    loadingZeroPercentNextLogAt = now + LoadingZeroPercentStallLogIntervalSeconds;
+    var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
+    var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "" : blocker;
+    Debug.LogWarning(
+      "[SingleSceneManager][LoadingZeroStall] elapsed_s=" + (now - loadingZeroPercentStartedAt).ToString("0.000") +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
+      " current_section=" + ResolveCurrentSection() +
+      " current_location=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
+      " slot=" + SaveSlotManager.slot +
+      " target_progress=" + targetProgress.ToString("0.000") +
+      " actual_percent=" + actualPercent +
+      " goal_total=" + loadingProgressGoalTotal +
+      " goal_remaining_best=" + loadingProgressGoalBestRemaining +
+      " remaining_work=" + remainingWork +
+      " session_expected=" + session.expectedTotal +
+      " session_scheduled=" + session.scheduledTotal +
+      " session_completed=" + session.completedTotal +
+      " session_total=" + session.EffectiveTotal +
+      " queue_queued=" + queue.queuedCount +
+      " queue_in_flight=" + queue.inFlightCount +
+      " deferred_pending=" + deferredSnapshot.pendingCount +
+      " outstanding=" + outstanding +
+      " blocking_mode=" + (usingBlockingProgress ? 1 : 0) +
+      " blocking_ready_count=" + blockingReadyCount +
+      " blocking_total_count=" + blockingTotalCount +
+      " blocking_progress=" + blockingProgress.ToString("0.000") +
+      " blocking_critical_ready=" + (blockingCriticalReady ? 1 : 0) +
+      " blocking_hard_bypass=" + (blockingHardBypassUsed ? 1 : 0) +
+      " blocking_ready=" + (blockingReady ? 1 : 0) +
+      " resolver_idle=" + (resolverIdle ? 1 : 0) +
+      " player_ready=" + (playerReady ? 1 : 0) +
+      " player_blocker=" + (string.IsNullOrWhiteSpace(blockerSummary) ? "-" : blockerSummary) +
+      " progress_ui=" + (IsLoadingProgressUiVisible() ? 1 : 0) +
+      " loading_light=" + (loadingLightObject != null && loadingLightObject.activeSelf ? 1 : 0)
+    );
+  }
+
+  void MaybeLogStreamingIdleWaitState(
+    ref float nextLogAt,
+    float elapsed,
+    float minimumWaitSeconds,
+    float timeoutSeconds,
+    int stableFrames,
+    int stableFramesRequired,
+    TextureResidencyCache.QueueSnapshot queue,
+    bool resolverIdle,
+    bool playerReady,
+    bool queueIdle,
+    bool hasBlockingProgress,
+    int blockingReadyCount,
+    int blockingTotalCount,
+    float blockingProgress,
+    bool blockingCriticalReady,
+    bool blockingHardBypassUsed,
+    bool blockingReady,
+    bool warmupDone
+  ) {
+    if (!ShouldLogLoadFlowDebug()) return;
+    var now = Time.realtimeSinceStartup;
+    if (nextLogAt < 0f) {
+      nextLogAt = now + LoadingWaitStateLogIntervalSeconds;
+      return;
+    }
+    if (now < nextLogAt) return;
+    nextLogAt = now + LoadingWaitStateLogIntervalSeconds;
+    var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
+    var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "" : blocker;
+    var playerController = ResolvePlayerAnimationController();
+    Debug.Log(
+      "[SingleSceneManager][WaitForIdle] elapsed_s=" + elapsed.ToString("0.000") +
+      " min_wait_s=" + minimumWaitSeconds.ToString("0.000") +
+      " timeout_s=" + timeoutSeconds.ToString("0.000") +
+      " stable_frames=" + stableFrames +
+      " stable_required=" + stableFramesRequired +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
+      " current_section=" + ResolveCurrentSection() +
+      " current_location=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
+      " current_percent=" + loadingPercent +
+      " queue_idle=" + (queueIdle ? 1 : 0) +
+      " resolver_idle=" + (resolverIdle ? 1 : 0) +
+      " player_ready=" + (playerReady ? 1 : 0) +
+      " player_animation_held=" + (playerAnimationHeldForLoadingOverlay ? 1 : 0) +
+      " player_animation=" + (playerController != null && !string.IsNullOrWhiteSpace(playerController.CurrentAnimation) ? playerController.CurrentAnimation.Trim() : "-") +
+      " player_blocker=" + (string.IsNullOrWhiteSpace(blockerSummary) ? "-" : blockerSummary) +
+      " queue_queued=" + queue.queuedCount +
+      " queue_in_flight=" + queue.inFlightCount +
+      " deferred_pending=" + deferredPending +
+      " blocking_mode=" + (hasBlockingProgress ? 1 : 0) +
+      " blocking_ready_count=" + blockingReadyCount +
+      " blocking_total_count=" + blockingTotalCount +
+      " blocking_progress=" + blockingProgress.ToString("0.000") +
+      " blocking_critical_ready=" + (blockingCriticalReady ? 1 : 0) +
+      " blocking_hard_bypass=" + (blockingHardBypassUsed ? 1 : 0) +
+      " blocking_ready=" + (blockingReady ? 1 : 0) +
+      " warmup_done=" + (warmupDone ? 1 : 0)
+    );
+  }
+
   static bool ShouldLogLoadingProgressDebug() {
     if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
     if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
@@ -752,6 +1035,7 @@ public class SingleSceneManager : MonoBehaviour {
 
   void FinalizeLoadingProgressForRelease() {
     loadingProgressIdleStartedAt = -1f;
+    ResetZeroPercentStallDebugState();
     loadingProgressPeakOutstanding = Mathf.Max(loadingProgressPeakOutstanding, 1);
     loadingPercentDisplayInitialized = true;
     loadingPercentDisplayValue = 100f;
@@ -766,13 +1050,210 @@ public class SingleSceneManager : MonoBehaviour {
     loadingText.content = textValue;
   }
 
-  void SetLoadingOverlayChildrenActive(bool active) {
+  void SetLoadingRootActive(bool active) {
+    if (LoadingScreen == null || LoadingScreen.activeSelf == active) return;
+    LoadingScreen.SetActive(active);
+  }
+
+  void SetLoadingLightActive(bool active) {
+    if (loadingLightObject == null || loadingLightObject.activeSelf == active) return;
+    loadingLightObject.SetActive(active);
+  }
+
+  void SetLoadingProgressUiActive(bool active) {
     if (loadingCircle != null && loadingCircle.activeSelf != active) {
       loadingCircle.SetActive(active);
     }
     if (loadingTextObject != null && loadingTextObject.activeSelf != active) {
       loadingTextObject.SetActive(active);
     }
+  }
+
+  bool IsLoadingProgressUiVisible() {
+    return (loadingCircle != null && loadingCircle.activeSelf) ||
+           (loadingTextObject != null && loadingTextObject.activeSelf);
+  }
+
+  void DisableLoadingUiFeedback(bool clearText = true, bool includeLoadingLight = true) {
+    loadingUiFeedbackActive = false;
+    loadingOverlayChildrenReady = false;
+    if (includeLoadingLight) {
+      SetLoadingLightActive(false);
+    }
+    SetLoadingProgressUiActive(false);
+    if (clearText) {
+      SetLoadingText("");
+    }
+  }
+
+  void PrepareLoadingScreenCarrier(bool clearText = true) {
+    loadingUiFeedbackActive = false;
+    loadingOverlayChildrenReady = false;
+    SetLoadingRootActive(true);
+    SetLoadingLightActive(false);
+    SetLoadingProgressUiActive(false);
+    if (clearText) {
+      SetLoadingText("");
+    }
+  }
+
+  void ReleaseLoadingScreenIfIdle() {
+    if (holdBlackscreenOpaqueDuringLoad || SpriteStreamingLoadingState.IsLoadingOverlayActive) return;
+    SetLoadingRootActive(false);
+  }
+
+  static bool ShouldLogSectionTransitionDebug() {
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  void LogSectionTransitionState(string stage, Section fromSection, Section toSection, string overlayTag, bool showProgressUi) {
+    if (!ShouldLogSectionTransitionDebug()) return;
+    var loadingRootActive = LoadingScreen != null && LoadingScreen.activeSelf;
+    var loadingLightActive = loadingLightObject != null && loadingLightObject.activeSelf;
+    var sceneLights = ResolveSceneObjectLights();
+    var sceneLightsActive = sceneLights != null && sceneLights.activeSelf;
+    Debug.Log(
+      "[SingleSceneManager][SectionTransition] stage=" + (string.IsNullOrWhiteSpace(stage) ? "unspecified" : stage.Trim()) +
+      " from=" + fromSection +
+      " to=" + toSection +
+      " overlay=" + (string.IsNullOrWhiteSpace(overlayTag) ? "-" : overlayTag.Trim()) +
+      " loading_root=" + (loadingRootActive ? 1 : 0) +
+      " loading_light=" + (loadingLightActive ? 1 : 0) +
+      " progress_ui=" + (IsLoadingProgressUiVisible() ? 1 : 0) +
+      " requested_progress=" + (showProgressUi ? 1 : 0) +
+      " black_hold=" + (holdBlackscreenOpaqueDuringLoad ? 1 : 0) +
+      " black_visible=" + (loadingBlackscreen != null && loadingBlackscreen.activeInHierarchy ? 1 : 0) +
+      " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
+      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
+      " scene_lights=" + (sceneLightsActive ? 1 : 0) +
+      " current_section=" + ResolveCurrentSection()
+    );
+  }
+
+  void InvalidateCachedPlayerGearController(string reason = null) {
+    if (cachedPlayerGearController == null) return;
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][PlayerResolve] invalidate reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()) +
+        " previous=" + DescribeGearController(cachedPlayerGearController)
+      );
+    }
+    cachedPlayerGearController = null;
+  }
+
+  string DescribeGearController(GearController controller) {
+    if (controller == null) return "player=-";
+    var go = controller.gameObject;
+    var inSceneRoot = Scene != null && go != null && go.transform.IsChildOf(Scene.transform);
+    return "player=" + go.name +
+           " enabled=" + (controller.enabled ? 1 : 0) +
+           " active=" + (go.activeInHierarchy ? 1 : 0) +
+           " scene='" + (go.scene.IsValid() ? go.scene.name : "-") + "'" +
+           " in_scene_root=" + (inSceneRoot ? 1 : 0) +
+           " appearance_rev=" + controller.AppearanceRevision;
+  }
+
+  bool IsPreferredGameplayPlayerController(GearController controller) {
+    if (controller == null) return false;
+    var go = controller.gameObject;
+    if (go == null || !go.scene.IsValid()) return false;
+    if ((go.hideFlags & HideFlags.HideAndDontSave) != 0) return false;
+    if (!controller.enabled || !go.activeInHierarchy) return false;
+    if (Scene != null && Scene.activeInHierarchy) {
+      return go.transform.IsChildOf(Scene.transform);
+    }
+    return true;
+  }
+
+  GearController ResolveBestAvailablePlayerController() {
+    var activeControllers = FindObjectsByType<GearController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+    for (var i = 0; i < activeControllers.Length; i++) {
+      var candidate = activeControllers[i];
+      if (IsPreferredGameplayPlayerController(candidate)) {
+        return candidate;
+      }
+    }
+
+    for (var i = 0; i < activeControllers.Length; i++) {
+      var candidate = activeControllers[i];
+      if (candidate == null) continue;
+      var go = candidate.gameObject;
+      if (go == null || !go.scene.IsValid()) continue;
+      if ((go.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
+      return candidate;
+    }
+
+    var all = Resources.FindObjectsOfTypeAll<GearController>();
+    GearController fallback = null;
+    for (var i = 0; i < all.Length; i++) {
+      var candidate = all[i];
+      if (candidate == null) continue;
+      var go = candidate.gameObject;
+      if (go == null || !go.scene.IsValid()) continue;
+      if ((go.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
+      if (IsPreferredGameplayPlayerController(candidate)) {
+        return candidate;
+      }
+      fallback ??= candidate;
+    }
+    return fallback;
+  }
+
+  int ResolveSpriteReadinessFrame(SpriteWithNormals sprite) {
+    if (sprite == null) return 1;
+    if (!sprite.IsAnimation) return 0;
+    return Mathf.Max(sprite.LastRequestedFrame, 1);
+  }
+
+  bool TryDescribeFirstUnreadySprite(GameObject[] objects, string groupName, out string blockerSummary) {
+    if (objects != null) {
+      for (var i = 0; i < objects.Length; i++) {
+        var go = objects[i];
+        if (go == null) continue;
+        var sprite = go.GetComponent<SpriteWithNormals>();
+        if (sprite == null || !sprite.isActiveAndEnabled || sprite.DoNotRender) continue;
+        var frame = ResolveSpriteReadinessFrame(sprite);
+        if (sprite.IsFrameReady(frame, out var colorReadyOnly)) continue;
+        blockerSummary =
+          "group=" + groupName +
+          " sprite=" + go.name +
+          " lib=" + (string.IsNullOrWhiteSpace(sprite.libraryName) ? "-" : sprite.libraryName) +
+          " label=" + (string.IsNullOrWhiteSpace(sprite.labelPrefix) ? "-" : sprite.labelPrefix) +
+          " category=" + (string.IsNullOrWhiteSpace(sprite.category) ? "-" : sprite.category) +
+          " frame=" + frame +
+          " color_only=" + (colorReadyOnly ? 1 : 0) +
+          " active=" + (go.activeInHierarchy ? 1 : 0);
+        return true;
+      }
+    }
+
+    blockerSummary = "";
+    return false;
+  }
+
+  bool TryGetPlayerFirstFrameBlocker(out string blockerSummary) {
+    var player = ResolvePlayerGearController();
+    if (player == null) {
+      blockerSummary = "player=-";
+      return false;
+    }
+
+    if (Scene != null && Scene.activeInHierarchy && !player.gameObject.activeInHierarchy) {
+      blockerSummary = DescribeGearController(player) + " inactive_under_scene";
+      return true;
+    }
+
+    if (TryDescribeFirstUnreadySprite(player.SkinObjects, "skin", out var skinBlocker)) {
+      blockerSummary = DescribeGearController(player) + " " + skinBlocker;
+      return true;
+    }
+    if (TryDescribeFirstUnreadySprite(player.GearObjects, "gear", out var gearBlocker)) {
+      blockerSummary = DescribeGearController(player) + " " + gearBlocker;
+      return true;
+    }
+
+    blockerSummary = DescribeGearController(player) + " ready";
+    return false;
   }
 
   void RotateLoadingCircle() {
@@ -797,6 +1278,8 @@ public class SingleSceneManager : MonoBehaviour {
     ReleasePreUnlockResidentPins("start_game");
     StopStartupFadeWatchdog();
     StopStartupGameplayFlow();
+    StopSectionTransition(clearLoadingOverlay: true, restoreVisibleState: true);
+    InvalidateCachedPlayerGearController("start_game");
     SaveData loadedSlot = null;
     var isNewGame = _isNewGame();
     if (!isNewGame) {
@@ -805,6 +1288,7 @@ public class SingleSceneManager : MonoBehaviour {
         autoSaver.SetPlaytime((int)loadedSlot["playtimeHours"], (int)loadedSlot["playtimeMinutes"], (int)loadedSlot["playtimeSeconds"]);
       }
     }
+    LogStartGameRequest(isNewGame, loadedSlot);
     autoSaver.enableTimeTracking = true;
     _SwitchMap("none");
     if (resumeGameplayRoutine != null) {
@@ -814,50 +1298,49 @@ public class SingleSceneManager : MonoBehaviour {
     }
     if (startGameRoutine != null) {
       StopCoroutine(startGameRoutine);
+      startGameRoutine = null;
       SpriteStreamingLoadingState.ForceClearLoadingOverlay();
     }
     startGameRoutine = StartCoroutine(StartGameFlowRoutine(isNewGame, loadedSlot));
   }
 
   void OpenLoadMenu() {
-    _SwitchMap("loadMenu");
-    SetActiveSafe(MainMenu, false);
-    SetActiveSafe(SettingsMenu, false);
-    SetActiveSafe(LoadMenu, true);
+    StartSectionTransition(new SectionTransitionRequest(
+      Section.LoadMenu,
+      BuildSectionOverlayTag(Section.LoadMenu),
+      requestMainMenuLocation: false,
+      waitForStreamingIdle: false,
+      showProgressUi: false,
+      switchInputMapToNone: true
+    ));
   }
 
   void OpenSettingsMenu() {
-    var openedFromPause = PauseMenu != null && PauseMenu.activeInHierarchy;
-    settingsReturnTarget = openedFromPause ? SettingsReturnTarget.PauseMenu : SettingsReturnTarget.MainMenu;
+    var openedFromPause = ResolveCurrentSection() == Section.Pause;
+    settingsReturnTarget = openedFromPause ? Section.Pause : Section.MainMenu;
     settingsHoveredTarget = null;
     settingsCloseButton = null;
-
-    _SwitchMap("settingsMenu");
-
-    SetActiveSafe(MainMenu, false);
-    SetActiveSafe(LoadMenu, false);
-    SetActiveSafe(PauseMenu, false);
-    SetActiveSafe(SettingsMenu, true);
-    SetActiveSafe(GameplayInterface, false);
+    StartSectionTransition(new SectionTransitionRequest(
+      Section.SettingsMenu,
+      BuildSectionOverlayTag(Section.SettingsMenu),
+      requestMainMenuLocation: false,
+      waitForStreamingIdle: false,
+      showProgressUi: false,
+      switchInputMapToNone: true
+    ));
   }
 
   void CloseSettingsMenu() {
     if (SettingsMenu != null && !SettingsMenu.activeInHierarchy) return;
-
-    SetActiveSafe(SettingsMenu, false);
-    SetActiveSafe(LoadMenu, false);
-    SetActiveSafe(GameplayInterface, false);
-
-    if (settingsReturnTarget == SettingsReturnTarget.PauseMenu) {
-      SetActiveSafe(MainMenu, false);
-      SetActiveSafe(PauseMenu, true);
-      _SwitchMap("pauseMenu");
-      return;
-    }
-
-    SetActiveSafe(PauseMenu, false);
-    SetActiveSafe(MainMenu, true);
-    _SwitchMap("mainMenu");
+    var targetSection = settingsReturnTarget == Section.Pause ? Section.Pause : Section.MainMenu;
+    StartSectionTransition(new SectionTransitionRequest(
+      targetSection,
+      BuildSectionOverlayTag(targetSection),
+      requestMainMenuLocation: false,
+      waitForStreamingIdle: false,
+      showProgressUi: false,
+      switchInputMapToNone: true
+    ));
   }
 
   void OnSettingsMenuClick(object payload) {
@@ -934,6 +1417,101 @@ public class SingleSceneManager : MonoBehaviour {
     return null;
   }
 
+  static SectionDescriptor GetSectionDescriptor(Section section) {
+    switch (section) {
+      case Section.MainMenu:
+        return new SectionDescriptor("mainMenu", sceneActiveByDefault: false, restoreSceneLightsByDefault: false, resetPauseAppearanceRevision: true);
+      case Section.LoadMenu:
+        return new SectionDescriptor("loadMenu", sceneActiveByDefault: false, restoreSceneLightsByDefault: false, resetPauseAppearanceRevision: false);
+      case Section.SettingsMenu:
+        return new SectionDescriptor("settingsMenu", sceneActiveByDefault: false, restoreSceneLightsByDefault: false, resetPauseAppearanceRevision: false);
+      case Section.Gameplay:
+        return new SectionDescriptor("gameplay", sceneActiveByDefault: true, restoreSceneLightsByDefault: true, resetPauseAppearanceRevision: true);
+      case Section.Pause:
+        return new SectionDescriptor("pauseMenu", sceneActiveByDefault: true, restoreSceneLightsByDefault: true, resetPauseAppearanceRevision: false);
+      default:
+        return new SectionDescriptor("", sceneActiveByDefault: false, restoreSceneLightsByDefault: false, resetPauseAppearanceRevision: false);
+    }
+  }
+
+  Section ResolveActiveSectionFromHierarchy() {
+    if (PauseMenu != null && PauseMenu.activeInHierarchy) return Section.Pause;
+    if (SettingsMenu != null && SettingsMenu.activeInHierarchy) return Section.SettingsMenu;
+    if (LoadMenu != null && LoadMenu.activeInHierarchy) return Section.LoadMenu;
+    if (MainMenu != null && MainMenu.activeInHierarchy) return Section.MainMenu;
+    if (GameplayInterface != null && GameplayInterface.activeInHierarchy) return Section.Gameplay;
+    return Section.None;
+  }
+
+  Section ResolveCurrentSection() {
+    var activeSection = ResolveActiveSectionFromHierarchy();
+    if (activeSection != Section.None) {
+      currentSection = activeSection;
+      return activeSection;
+    }
+    return currentSection;
+  }
+
+  bool ShouldSectionKeepSceneActive(Section section) {
+    var descriptor = GetSectionDescriptor(section);
+    if (section == Section.SettingsMenu && settingsReturnTarget == Section.Pause) {
+      return true;
+    }
+    return descriptor.sceneActiveByDefault;
+  }
+
+  bool ShouldRestoreSceneLightsForSection(Section section) {
+    var descriptor = GetSectionDescriptor(section);
+    if (section == Section.SettingsMenu && settingsReturnTarget == Section.Pause) {
+      return true;
+    }
+    return descriptor.restoreSceneLightsByDefault;
+  }
+
+  void HideAllSectionsForTransition(Section targetSection) {
+    SetActiveSafe(MainMenu, false);
+    SetActiveSafe(LoadMenu, false);
+    SetActiveSafe(SettingsMenu, false);
+    SetActiveSafe(GameplayInterface, false);
+    SetActiveSafe(PauseMenu, false);
+    SetActiveSafe(Scene, ShouldSectionKeepSceneActive(targetSection));
+  }
+
+  void ApplySectionActivation(Section section) {
+    currentSection = section;
+    pendingRevealSection = Section.None;
+    HideAllSectionsForTransition(section);
+
+    switch (section) {
+      case Section.MainMenu:
+        SetActiveSafe(MainMenu, true);
+        break;
+      case Section.LoadMenu:
+        SetActiveSafe(LoadMenu, true);
+        break;
+      case Section.SettingsMenu:
+        SetActiveSafe(SettingsMenu, true);
+        break;
+      case Section.Gameplay:
+        SetActiveSafe(GameplayInterface, true);
+        pauseMenuOpenAppearanceRevision = -1;
+        break;
+      case Section.Pause:
+        SetActiveSafe(PauseMenu, true);
+        break;
+    }
+
+    if (GetSectionDescriptor(section).resetPauseAppearanceRevision) {
+      pauseMenuOpenAppearanceRevision = -1;
+    }
+  }
+
+  void ApplyInputForSection(Section section) {
+    var inputMap = GetSectionDescriptor(section).inputMap;
+    if (string.IsNullOrWhiteSpace(inputMap)) return;
+    _SwitchMap(inputMap);
+  }
+
   GameObject ResolveSceneObjectLights() {
     if (sceneObjectLights != null) return sceneObjectLights;
     if (Scene == null) return null;
@@ -951,13 +1529,21 @@ public class SingleSceneManager : MonoBehaviour {
 
   void RestoreSceneLightingForCurrentActivation() {
     // Safety net for aborted/forced transitions that skip the normal fade-out completion.
-    SetSceneObjectLightsActive(Scene != null && Scene.activeInHierarchy);
+    var section = ResolveActiveSectionFromHierarchy();
+    if (section == Section.None) {
+      section = currentSection;
+    }
+    var shouldEnableLights = Scene != null &&
+                             Scene.activeInHierarchy &&
+                             ShouldRestoreSceneLightsForSection(section);
+    SetSceneObjectLightsActive(shouldEnableLights);
   }
 
   void OpenGameplay() {
     ReleasePreUnlockResidentPins("open_gameplay");
     StopStartupFadeWatchdog();
     StopStartupGameplayFlow();
+    StopSectionTransition(clearLoadingOverlay: true, restoreVisibleState: true);
     if (startGameRoutine != null) return;
     if (resumeGameplayRoutine != null) {
       StopCoroutine(resumeGameplayRoutine);
@@ -970,20 +1556,135 @@ public class SingleSceneManager : MonoBehaviour {
       return;
     }
 
-    SetUiMode(UiMode.Gameplay);
+    StartSectionTransition(new SectionTransitionRequest(
+      Section.Gameplay,
+      BuildSectionOverlayTag(Section.Gameplay),
+      requestMainMenuLocation: false,
+      waitForStreamingIdle: false,
+      showProgressUi: false,
+      switchInputMapToNone: true
+    ));
   }
 
   void OpenMainMenu() {
     ReleasePreUnlockResidentPins("open_main_menu");
-    if (uiModeRoutine != null) StopCoroutine(uiModeRoutine);
-    uiModeRoutine = StartCoroutine(SwitchUiModeRoutine(UiMode.MainMenu));
+    StartSectionTransition(new SectionTransitionRequest(
+      Section.MainMenu,
+      BuildSectionOverlayTag(Section.MainMenu),
+      requestMainMenuLocation: true,
+      waitForStreamingIdle: true,
+      showProgressUi: true,
+      switchInputMapToNone: true
+    ));
   }
 
   void OpenPauseMenu() {
     var gear = ResolvePlayerGearController();
     pauseMenuOpenAppearanceRevision = gear != null ? gear.AppearanceRevision : -1;
-    SetUiMode(UiMode.Pause);
+    StartSectionTransition(new SectionTransitionRequest(
+      Section.Pause,
+      BuildSectionOverlayTag(Section.Pause),
+      requestMainMenuLocation: false,
+      waitForStreamingIdle: false,
+      showProgressUi: false,
+      switchInputMapToNone: true
+    ));
+  }
 
+  void StartSectionTransition(SectionTransitionRequest request) {
+    if (request.targetSection == Section.None) return;
+    StopStartupFadeWatchdog();
+    StopStartupGameplayFlow();
+    StopSectionTransition(clearLoadingOverlay: true, restoreVisibleState: true);
+
+    var current = ResolveCurrentSection();
+    if (current == request.targetSection && !request.requestMainMenuLocation) {
+      ApplySectionActivation(request.targetSection);
+      ApplyInputForSection(request.targetSection);
+      return;
+    }
+
+    pendingRevealSection = request.targetSection;
+    sectionTransitionRoutine = StartCoroutine(SwitchSectionRoutine(request));
+  }
+
+  void StopSectionTransition(bool clearLoadingOverlay = true, bool restoreVisibleState = true) {
+    if (sectionTransitionRoutine != null) {
+      StopCoroutine(sectionTransitionRoutine);
+      sectionTransitionRoutine = null;
+    }
+    if (unlockFadeFailSafeRoutine != null) {
+      StopCoroutine(unlockFadeFailSafeRoutine);
+      unlockFadeFailSafeRoutine = null;
+    }
+
+    DisableLoadingUiFeedback(clearText: true, includeLoadingLight: true);
+    loadingStallStartedAt = -1f;
+    pendingRevealSection = Section.None;
+
+    if (clearLoadingOverlay) {
+      SpriteStreamingLoadingState.ForceClearLoadingOverlay();
+    }
+
+    if (restoreVisibleState) {
+      SetLoadingBlackscreenHold(false);
+      ForceBlackscreenVisible(false);
+      RestoreSceneLightingForCurrentActivation();
+      ReleaseLoadingScreenIfIdle();
+    }
+  }
+
+  string BuildSectionOverlayTag(Section section) {
+    return "Section_" + section;
+  }
+
+  IEnumerator SwitchSectionRoutine(SectionTransitionRequest request) {
+    var previousSection = ResolveCurrentSection();
+    var overlayTag = string.IsNullOrWhiteSpace(request.overlayTag)
+      ? BuildSectionOverlayTag(request.targetSection)
+      : request.overlayTag.Trim();
+
+    LogSectionTransitionState("begin", previousSection, request.targetSection, overlayTag, request.showProgressUi);
+    SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
+    ResetLoadingProgressForPhase(force: true);
+    if (request.switchInputMapToNone) {
+      _SwitchMap("none");
+    }
+
+    yield return FadeToBlackBeforeLoadRoutine();
+
+    HideAllSectionsForTransition(request.targetSection);
+    LogSectionTransitionState("opaque_previous_hidden", previousSection, request.targetSection, overlayTag, request.showProgressUi);
+
+    SetLoadingLightActive(request.showLoadingLight);
+    if (request.requestMainMenuLocation) {
+      RequestLocationLoadForMainMenu();
+    }
+
+    if (request.showProgressUi) {
+      BeginLoadingProgressUiAfterFadeIn();
+    }
+    else {
+      DisableLoadingUiFeedback(clearText: true, includeLoadingLight: false);
+    }
+
+    LogSectionTransitionState("loading_phase", previousSection, request.targetSection, overlayTag, request.showProgressUi);
+
+    if (request.waitForStreamingIdle) {
+      yield return WaitForStreamingIdleBeforeUnlock();
+    }
+
+    if (request.showProgressUi) {
+      FinalizeLoadingProgressForRelease();
+    }
+    SetLoadingLightActive(false);
+    DisableLoadingUiFeedback(clearText: true, includeLoadingLight: false);
+    ApplySectionActivation(request.targetSection);
+    ApplyInputForSection(request.targetSection);
+    LogSectionTransitionState("ready_to_reveal", previousSection, request.targetSection, overlayTag, request.showProgressUi);
+
+    yield return FadeFromBlackRoutine(overlayTag, request.targetSection);
+    sectionTransitionRoutine = null;
   }
 
   private void _SwitchMap(string map) {
@@ -995,7 +1696,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   private bool _isNewGame() {
-    return SaveSlotManager.slot > saveSlotView.SavesCount;
+    return !SaveSlotManager.CurrentSlotExists();
   }
 
   IEnumerator StartGameFlowRoutine(bool isNewGame, SaveData loadedSlot) {
@@ -1055,24 +1756,36 @@ public class SingleSceneManager : MonoBehaviour {
     bool isNewGame = true,
     SaveData loadedSlot = null
   ) {
+    var previousSection = ResolveCurrentSection();
+    pendingRevealSection = Section.Gameplay;
+    LogSectionTransitionState("begin", previousSection, Section.Gameplay, overlayTag, true);
     SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
     ResetLoadingProgressForPhase(force: true);
     if (switchInputMapToNone) {
       _SwitchMap("none");
     }
     yield return FadeToBlackBeforeLoadRoutine();
+    SetLoadingLightActive(true);
+    BeginLoadingProgressUiAfterFadeIn();
+    LogSectionTransitionState("loading_phase", previousSection, Section.Gameplay, overlayTag, true);
 
     if (resolveLocationForStart) {
       ResolveAndApplyLocationForStart(isNewGame, loadedSlot);
     }
 
     if (!isNewGame) {
+      LogLoadStateDispatch("before_load_game_message");
       ApplySavedGameplayStateUnderLoadingOverlay();
+      LogLoadStateDispatch("after_load_game_message");
       yield return null;
+      LogLoadStateDispatch("after_load_game_one_frame");
     }
 
     if (applyGameplayStateBeforeWarmGate) {
       ApplyGameplayStateUnderBlack();
+      if (isNewGame) {
+        PrepareNewGameRuntimeStateUnderLoadingOverlay();
+      }
       if (sendReadyForSpawns) {
         MessageBus.Send("ReadyForSpawns");
         yield return null;
@@ -1087,7 +1800,10 @@ public class SingleSceneManager : MonoBehaviour {
       allow => allowGameplayUnlock = allow
     );
     if (!allowGameplayUnlock) {
-      ForceGameplayUnlockFallback();
+      if (!applyGameplayStateBeforeWarmGate) {
+        ApplyGameplayStateUnderBlack();
+      }
+      yield return UnlockGameplayFromBlackRoutine(overlayTag);
       yield break;
     }
 
@@ -1095,11 +1811,13 @@ public class SingleSceneManager : MonoBehaviour {
       ApplyGameplayStateUnderBlack();
     }
 
+    HoldPlayerAnimationForLoadingOverlay("wait_for_streaming_idle");
     yield return WaitForStreamingIdleBeforeUnlock(prefetchVisibleSprites: true, warmAnimationsBeforeUnlock: true);
-    UnlockGameplayFromBlack();
+    yield return UnlockGameplayFromBlackRoutine(overlayTag);
   }
 
   void ApplySavedGameplayStateUnderLoadingOverlay() {
+    LogLoadStateDispatch("dispatch_load_game");
     MessageBus.Send("loadGame");
     if (!ShouldLogLoadingProgressDebug()) return;
     Debug.Log(
@@ -1110,16 +1828,134 @@ public class SingleSceneManager : MonoBehaviour {
     );
   }
 
+  void PrepareNewGameRuntimeStateUnderLoadingOverlay() {
+    var player = ResolvePlayerGearController();
+    var characterState = player != null
+      ? player.GetComponent<CharacterState>()
+      : null;
+    characterState ??= FindFirstObjectByType<CharacterState>();
+
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][NewGameState] stage=begin" +
+        " slot=" + SaveSlotManager.slot +
+        " character_state=" + (characterState != null ? 1 : 0) +
+        " " + DescribeGearController(player)
+      );
+    }
+
+    if (characterState == null) {
+      Debug.LogWarning(
+        "[SingleSceneManager][NewGameState] stage=missing_character_state" +
+        " slot=" + SaveSlotManager.slot +
+        " " + DescribeGearController(player)
+      );
+      return;
+    }
+
+    characterState.InitializeRuntimeStateForNewGame();
+
+    if (!ShouldLogLoadFlowDebug()) return;
+    var playerReady = IsPlayerFirstFrameReady();
+    var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "-" : blocker;
+    Debug.Log(
+      "[SingleSceneManager][NewGameState] stage=complete" +
+      " slot=" + SaveSlotManager.slot +
+      " player_ready=" + (playerReady ? 1 : 0) +
+      " player_blocker=" + blockerSummary
+    );
+  }
+
+  void HoldPlayerAnimationForLoadingOverlay(string reason) {
+    if (playerAnimationHeldForLoadingOverlay) return;
+
+    var player = ResolvePlayerGearController();
+    var controller = player != null ? player.Controller : null;
+    if (controller == null) {
+      if (ShouldLogLoadFlowDebug()) {
+        Debug.Log(
+          "[SingleSceneManager][PlayerAnimationHold] stage=skip_missing_controller" +
+          " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
+          " " + DescribeGearController(player)
+        );
+      }
+      return;
+    }
+
+    var targetAnimation = ResolvePlayerLoadingOverlayAnimation(player, controller);
+    var restarted = false;
+    if (!string.IsNullOrWhiteSpace(targetAnimation)) {
+      restarted = controller.PlayAnimation(targetAnimation, forceRestart: true, resolveInterrupts: false);
+    }
+
+    if (!restarted && string.IsNullOrWhiteSpace(controller.CurrentAnimation)) {
+      if (ShouldLogLoadFlowDebug()) {
+        Debug.LogWarning(
+          "[SingleSceneManager][PlayerAnimationHold] stage=skip_missing_animation" +
+          " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
+          " target_animation=" + (string.IsNullOrWhiteSpace(targetAnimation) ? "-" : targetAnimation.Trim()) +
+          " " + DescribeGearController(player)
+        );
+      }
+      return;
+    }
+
+    controller.PauseAnimation();
+    playerAnimationHeldForLoadingOverlay = true;
+
+    if (!ShouldLogLoadFlowDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][PlayerAnimationHold] stage=applied" +
+      " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
+      " target_animation=" + (string.IsNullOrWhiteSpace(targetAnimation) ? "-" : targetAnimation.Trim()) +
+      " current_animation=" + (string.IsNullOrWhiteSpace(controller.CurrentAnimation) ? "-" : controller.CurrentAnimation.Trim()) +
+      " restarted=" + (restarted ? 1 : 0) +
+      " " + DescribeGearController(player)
+    );
+  }
+
+  void ResumePlayerAnimationAfterLoadingOverlay(string reason) {
+    if (!playerAnimationHeldForLoadingOverlay) return;
+
+    var player = ResolvePlayerGearController();
+    var controller = player != null ? player.Controller : null;
+    playerAnimationHeldForLoadingOverlay = false;
+    if (controller == null) {
+      if (ShouldLogLoadFlowDebug()) {
+        Debug.Log(
+          "[SingleSceneManager][PlayerAnimationHold] stage=release_missing_controller" +
+          " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
+          " " + DescribeGearController(player)
+        );
+      }
+      return;
+    }
+
+    controller.ResumeAnimation();
+    if (!ShouldLogLoadFlowDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][PlayerAnimationHold] stage=released" +
+      " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
+      " current_animation=" + (string.IsNullOrWhiteSpace(controller.CurrentAnimation) ? "-" : controller.CurrentAnimation.Trim()) +
+      " " + DescribeGearController(player)
+    );
+  }
+
+  static string ResolvePlayerLoadingOverlayAnimation(GearController player, AnimationController controller) {
+    if (controller != null && !string.IsNullOrWhiteSpace(controller.CurrentAnimation)) {
+      return controller.CurrentAnimation.Trim();
+    }
+    if (player != null && !string.IsNullOrWhiteSpace(player.defaultAnimation)) {
+      return player.defaultAnimation.Trim();
+    }
+    return null;
+  }
+
   IEnumerator FadeToBlackBeforeLoadRoutine() {
     SetSceneObjectLightsActive(false);
     SetLoadingBlackscreenHold(false);
     BeginLoadingProgressGoalAtFadeStart();
-    loadingOverlayChildrenReady = false;
-    SetLoadingOverlayChildrenActive(false);
-    SetLoadingText("");
-    if (LoadingScreen != null && !LoadingScreen.activeSelf) {
-      LoadingScreen.SetActive(true);
-    }
+    PrepareLoadingScreenCarrier();
     if (blackscreen != null) {
       PlayBlackscreen("alphaIn");
     }
@@ -1132,7 +1968,6 @@ public class SingleSceneManager : MonoBehaviour {
     }
     ForceBlackscreenVisible(true);
     SetLoadingBlackscreenHold(true);
-    BeginLoadingProgressUiAfterFadeIn();
   }
 
   IEnumerator RunScenarioWarmGate(
@@ -1399,7 +2234,7 @@ public class SingleSceneManager : MonoBehaviour {
       yield break;
     }
     if (LoadingScreen != null && !LoadingScreen.activeSelf) {
-      LoadingScreen.SetActive(true);
+      SetLoadingRootActive(true);
     }
     SetLoadingBlackscreenHold(true);
     EnsureLoadingProgressForPhase();
@@ -1425,6 +2260,7 @@ public class SingleSceneManager : MonoBehaviour {
     var timeoutSeconds = Mathf.Max(streamingIdleTimeoutSeconds, 0f);
     var startedAt = Time.realtimeSinceStartup;
     var stableFrames = 0;
+    var nextWaitStateLogAt = -1f;
 
     var warmupDone = false;
 
@@ -1437,9 +2273,9 @@ public class SingleSceneManager : MonoBehaviour {
       var minimumWaitReached = elapsed >= minimumWaitSeconds;
       var playerReady = IsPlayerFirstFrameReady();
       var hasBlockingProgress = TryGetBlockingProgressState(
-        out _,
-        out _,
-        out _,
+        out var blockingProgress,
+        out var blockingReadyCount,
+        out var blockingTotalCount,
         out var blockingCriticalReady,
         out var blockingHardBypassUsed
       );
@@ -1453,6 +2289,26 @@ public class SingleSceneManager : MonoBehaviour {
       else {
         stableFrames = 0;
       }
+      MaybeLogStreamingIdleWaitState(
+        ref nextWaitStateLogAt,
+        elapsed,
+        minimumWaitSeconds,
+        timeoutSeconds,
+        stableFrames,
+        stableFramesRequired,
+        queue,
+        resolverIdle,
+        playerReady,
+        queueIdle,
+        hasBlockingProgress,
+        blockingReadyCount,
+        blockingTotalCount,
+        blockingProgress,
+        blockingCriticalReady,
+        blockingHardBypassUsed,
+        blockingReady,
+        warmupDone
+      );
 
       if (stableFrames >= stableFramesRequired) {
         if (warmAnimationsBeforeUnlock && !warmupDone) {
@@ -1507,23 +2363,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   bool IsPlayerFirstFrameReady() {
-    var player = ResolvePlayerGearController();
-    if (player == null) return true;
-    if (!AreSpriteTargetsFrameReady(player.SkinObjects, 1)) return false;
-    if (!AreSpriteTargetsFrameReady(player.GearObjects, 1)) return false;
-    return true;
-  }
-
-  static bool AreSpriteTargetsFrameReady(GameObject[] objects, int frame) {
-    if (objects == null || objects.Length == 0) return true;
-    for (var i = 0; i < objects.Length; i++) {
-      var go = objects[i];
-      if (go == null) continue;
-      var sprite = go.GetComponent<SpriteWithNormals>();
-      if (sprite == null || !sprite.isActiveAndEnabled || sprite.DoNotRender) continue;
-      if (!sprite.IsFrameReady(frame, out _)) return false;
-    }
-    return true;
+    return !TryGetPlayerFirstFrameBlocker(out _);
   }
 
   IEnumerator RunPreUnlockAnimationWarmupSequence(bool includeVisibleSpriteReprefetch) {
@@ -2376,18 +3216,35 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   GearController ResolvePlayerGearController() {
-    if (cachedPlayerGearController != null) return cachedPlayerGearController;
-    cachedPlayerGearController = FindFirstObjectByType<GearController>();
-    if (cachedPlayerGearController != null) return cachedPlayerGearController;
+    if (cachedPlayerGearController != null) {
+      var cachedGo = cachedPlayerGearController.gameObject;
+      var cachedValid = cachedGo != null &&
+                        cachedGo.scene.IsValid() &&
+                        (cachedGo.hideFlags & HideFlags.HideAndDontSave) == 0;
+      if (cachedValid) {
+        if (Scene == null || !Scene.activeInHierarchy || IsPreferredGameplayPlayerController(cachedPlayerGearController)) {
+          return cachedPlayerGearController;
+        }
 
-    var all = Resources.FindObjectsOfTypeAll<GearController>();
-    for (var i = 0; i < all.Length; i++) {
-      var candidate = all[i];
-      if (candidate == null) continue;
-      if (!candidate.gameObject.scene.IsValid()) continue;
-      if ((candidate.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
-      cachedPlayerGearController = candidate;
-      break;
+        var replacement = ResolveBestAvailablePlayerController();
+        if (replacement == null || ReferenceEquals(replacement, cachedPlayerGearController)) {
+          return cachedPlayerGearController;
+        }
+
+        InvalidateCachedPlayerGearController("cached_candidate_replaced");
+      }
+      else {
+        InvalidateCachedPlayerGearController("cached_candidate_invalid");
+      }
+    }
+
+    cachedPlayerGearController = ResolveBestAvailablePlayerController();
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][PlayerResolve] resolved " +
+        DescribeGearController(cachedPlayerGearController) +
+        " scene_active=" + (Scene != null && Scene.activeInHierarchy ? 1 : 0)
+      );
     }
     return cachedPlayerGearController;
   }
@@ -2419,38 +3276,27 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void ApplyGameplayStateUnderBlack() {
-    if (LoadingScreen != null && !LoadingScreen.activeSelf) {
-      LoadingScreen.SetActive(true);
-    }
+    pendingRevealSection = Section.Gameplay;
+    SetLoadingRootActive(true);
+    InvalidateCachedPlayerGearController("apply_gameplay_state_under_black");
     RequestLocationLoadForGameplay(LocationManager.currentLocation);
     SetLoadingBlackscreenHold(true);
     _SwitchMap("none");
-    SetActiveSafe(MainMenu, false);
-    SetActiveSafe(SettingsMenu, false);
-    SetActiveSafe(LoadMenu, false);
-    SetActiveSafe(GameplayInterface, true);
-    SetActiveSafe(PauseMenu, false);
-    SetActiveSafe(Scene, true);
+    HideAllSectionsForTransition(Section.Gameplay);
     SetSceneObjectLightsActive(false);
     pauseMenuOpenAppearanceRevision = -1;
+    LogSectionTransitionState("gameplay_under_black", ResolveCurrentSection(), Section.Gameplay, SpriteStreamingLoadingState.ActiveReason, IsLoadingProgressUiVisible());
   }
 
-  void UnlockGameplayFromBlack() {
+  IEnumerator UnlockGameplayFromBlackRoutine(string overlayTag) {
+    var previousSection = ResolveCurrentSection();
     FinalizeLoadingProgressForRelease();
-    SetSceneObjectLightsActive(true);
-    SetLoadingBlackscreenHold(false);
-    if (blackscreen != null) {
-      PlayBlackscreen("alphaOut");
-    }
-    else {
-      ForceBlackscreenVisible(false);
-    }
-    if (unlockFadeFailSafeRoutine != null) {
-      StopCoroutine(unlockFadeFailSafeRoutine);
-    }
-    unlockFadeFailSafeRoutine = StartCoroutine(EnsureBlackscreenClearsAfterUnlockRoutine());
-    _SwitchMap("gameplay");
-    SpriteStreamingLoadingState.EndLoadingOverlay("Gameplay");
+    SetLoadingLightActive(false);
+    DisableLoadingUiFeedback(clearText: true, includeLoadingLight: false);
+    ApplySectionActivation(Section.Gameplay);
+    ApplyInputForSection(Section.Gameplay);
+    LogSectionTransitionState("ready_to_reveal", previousSection, Section.Gameplay, overlayTag, false);
+    yield return FadeFromBlackRoutine(overlayTag, Section.Gameplay);
   }
 
   void PlayBlackscreen(string animationName) {
@@ -2460,7 +3306,8 @@ public class SingleSceneManager : MonoBehaviour {
     }
     if (string.Equals(animationName, "alphaOut", StringComparison.Ordinal)) {
       loadingOverlayChildrenReady = false;
-      SetLoadingOverlayChildrenActive(false);
+      SetLoadingLightActive(false);
+      SetLoadingProgressUiActive(false);
       SetLoadingText("");
     }
     if (loadingBlackscreenRenderer != null) {
@@ -2490,9 +3337,15 @@ public class SingleSceneManager : MonoBehaviour {
       yield break;
     }
 
+    SetLoadingLightActive(false);
+    SetLoadingProgressUiActive(false);
+    SetLoadingText("");
     SetLoadingBlackscreenHold(false);
     ForceBlackscreenVisible(false);
     SpriteStreamingLoadingState.ForceClearLoadingOverlay();
+    RestoreSceneLightingForCurrentActivation();
+    ReleaseLoadingScreenIfIdle();
+    LogSectionTransitionState("startup_reveal_complete", Section.None, ResolveCurrentSection(), "MainMenuStartup", false);
     ApplyStartupInputFallbackAfterWatchdog();
     startupFadeWatchdogRoutine = null;
   }
@@ -2512,11 +3365,18 @@ public class SingleSceneManager : MonoBehaviour {
     if (startupGameplayRoutine == null) return;
     StopCoroutine(startupGameplayRoutine);
     startupGameplayRoutine = null;
+    pendingRevealSection = Section.None;
+    ResumePlayerAnimationAfterLoadingOverlay("stop_startup_gameplay_flow");
     SpriteStreamingLoadingState.ForceClearLoadingOverlay();
   }
 
   void ApplyStartupInputFallbackAfterWatchdog() {
     if (startGameRoutine != null || resumeGameplayRoutine != null || startupGameplayRoutine != null) {
+      return;
+    }
+    var section = ResolveCurrentSection();
+    if (section != Section.None) {
+      ApplyInputForSection(section);
       return;
     }
     ApplyInputMapForCurrentUiState(preferGameplayWhenNoUi: false);
@@ -2528,8 +3388,11 @@ public class SingleSceneManager : MonoBehaviour {
 
   void ApplyConfiguredStartupMode() {
     ReleasePreUnlockResidentPins("startup_mode_main_menu");
+    pendingRevealSection = Section.None;
     RequestLocationLoadForMainMenu();
-    ApplyUiModeActivations(UiMode.MainMenu);
+    ApplySectionActivation(Section.MainMenu);
+    ApplyInputForSection(Section.MainMenu);
+    SetSceneObjectLightsActive(false);
     pauseMenuOpenAppearanceRevision = -1;
     SpriteStreamingLoadingState.EndLoadingOverlay("MainMenuStartup");
   }
@@ -2624,6 +3487,7 @@ public class SingleSceneManager : MonoBehaviour {
   void RequestLocationLoad(string locationId) {
     var resolved = LocationEnemyData.ResolveRequestedOrDefault(locationId);
     if (string.IsNullOrWhiteSpace(resolved)) return;
+    LogLocationLoadRequest(locationId, resolved);
     if (!string.Equals(LocationManager.currentLocation, resolved, StringComparison.OrdinalIgnoreCase)) {
       LocationManager.UpdateLocation(resolved);
     }
@@ -2635,6 +3499,7 @@ public class SingleSceneManager : MonoBehaviour {
     if (!Application.isPlaying) return;
     InvalidatePreUnlockTargetCache();
     InvalidateActiveEnemyControllersCache();
+    InvalidateCachedPlayerGearController("location_updated");
     cachedGameplayInput = null;
     gameplayInputCacheRefreshedAt = -1f;
 
@@ -2646,6 +3511,7 @@ public class SingleSceneManager : MonoBehaviour {
     if (string.Equals(lastPurgedLocationId, locationId, StringComparison.OrdinalIgnoreCase)) return;
     var previousLocationId = lastPurgedLocationId;
     lastPurgedLocationId = locationId;
+    LogLocationUpdate(previousLocationId, locationId);
     HandleLocationCacheTransition(previousLocationId, locationId);
   }
 
@@ -2697,7 +3563,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
   }
 
-  IEnumerator EnsureBlackscreenClearsAfterUnlockRoutine() {
+  IEnumerator EnsureBlackscreenClearsAfterUnlockRoutine(Section revealedSection, string overlayTag) {
     var waitSeconds = Mathf.Max(fadeFromBlackSeconds + 0.15f, 0.5f);
     if (waitSeconds > 0f) {
       yield return new WaitForSecondsRealtime(waitSeconds);
@@ -2705,6 +3571,20 @@ public class SingleSceneManager : MonoBehaviour {
     if (!holdBlackscreenOpaqueDuringLoad) {
       ForceBlackscreenVisible(false);
     }
+    var sectionToReveal = revealedSection == Section.None ? ResolveCurrentSection() : revealedSection;
+    var shouldEnableLights = Scene != null &&
+                             Scene.activeInHierarchy &&
+                             ShouldRestoreSceneLightsForSection(sectionToReveal);
+    SetSceneObjectLightsActive(shouldEnableLights);
+    if (sectionToReveal == Section.Gameplay) {
+      ResumePlayerAnimationAfterLoadingOverlay("reveal_complete");
+    }
+    if (!string.IsNullOrWhiteSpace(overlayTag)) {
+      SpriteStreamingLoadingState.EndLoadingOverlay(overlayTag);
+    }
+    DisableLoadingUiFeedback(clearText: true, includeLoadingLight: true);
+    ReleaseLoadingScreenIfIdle();
+    LogSectionTransitionState("reveal_complete", currentSection, sectionToReveal, overlayTag, false);
     var pinReleaseDelay = Mathf.Max(postUnlockPinReleaseDelaySeconds, 0f);
     if (pinReleaseDelay > 0f) {
       yield return new WaitForSecondsRealtime(pinReleaseDelay);
@@ -2722,6 +3602,7 @@ public class SingleSceneManager : MonoBehaviour {
       yield return null;
     }
     ReleasePreUnlockResidentPins("post_unlock");
+    ReleaseLoadingScreenIfIdle();
     unlockFadeFailSafeRoutine = null;
   }
 
@@ -2760,9 +3641,9 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void ForceReleaseLoadingState() {
-    if (uiModeRoutine != null) {
-      StopCoroutine(uiModeRoutine);
-      uiModeRoutine = null;
+    if (sectionTransitionRoutine != null) {
+      StopCoroutine(sectionTransitionRoutine);
+      sectionTransitionRoutine = null;
     }
     if (startGameRoutine != null) {
       StopCoroutine(startGameRoutine);
@@ -2781,101 +3662,37 @@ public class SingleSceneManager : MonoBehaviour {
       unlockFadeFailSafeRoutine = null;
     }
 
+    StopStartupFadeWatchdog();
+    loadingStallStartedAt = -1f;
+
+    var sectionToReveal = ResolveActiveSectionFromHierarchy();
+    if (sectionToReveal == Section.None) {
+      var fallbackSection = pendingRevealSection != Section.None ? pendingRevealSection : currentSection;
+      if (fallbackSection != Section.None) {
+        ApplySectionActivation(fallbackSection);
+        sectionToReveal = fallbackSection;
+      }
+    }
+    pendingRevealSection = Section.None;
+
     FinalizeLoadingProgressForRelease();
+    DisableLoadingUiFeedback(clearText: true, includeLoadingLight: true);
     ReleasePreUnlockResidentPins("force_release");
     SetLoadingBlackscreenHold(false);
     ForceBlackscreenVisible(false);
-    RestoreSceneLightingForCurrentActivation();
+    ResumePlayerAnimationAfterLoadingOverlay("force_release");
     SpriteStreamingLoadingState.ForceClearLoadingOverlay();
+    RestoreSceneLightingForCurrentActivation();
+    ReleaseLoadingScreenIfIdle();
+    if (sectionToReveal != Section.None) {
+      ApplyInputForSection(sectionToReveal);
+      return;
+    }
     ApplyInputMapForCurrentUiState(preferGameplayWhenNoUi: false);
   }
 
-  void ForceGameplayUnlockFallback() {
-    if (LoadingScreen != null && !LoadingScreen.activeSelf) {
-      LoadingScreen.SetActive(true);
-    }
-    ApplyGameplayStateUnderBlack();
-    UnlockGameplayFromBlack();
-  }
-
-  void SetUiMode(UiMode mode, bool waitForStreamingIdle = true) {
-    if (uiModeRoutine != null) {
-      StopCoroutine(uiModeRoutine);
-      uiModeRoutine = null;
-      // Prior routine may have disabled lights before reaching FadeFromBlackRoutine.
-      RestoreSceneLightingForCurrentActivation();
-    }
-    uiModeRoutine = StartCoroutine(SwitchUiModeRoutine(mode, waitForStreamingIdle));
-  }
-
-  string BuildUiOverlayTag(UiMode mode) {
-    return "UiMode_" + mode;
-  }
-
-  IEnumerator SwitchUiModeRoutine(UiMode mode, bool waitForStreamingIdle = true) {
-    var overlayTag = BuildUiOverlayTag(mode);
-    SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
-    ResetLoadingProgressForPhase(force: true);
-    yield return FadeToBlackBeforeLoadRoutine();
-    ApplyUiModeActivations(mode);
-    ApplyInputForUiMode(mode);
-    if (waitForStreamingIdle) {
-      yield return WaitForStreamingIdleBeforeUnlock();
-    }
-    yield return FadeFromBlackRoutine(overlayTag);
-    uiModeRoutine = null;
-  }
-
-  void ApplyUiModeActivations(UiMode mode) {
-    switch (mode) {
-      case UiMode.MainMenu:
-        RequestLocationLoadForMainMenu();
-        SetActiveSafe(MainMenu, true);
-        SetActiveSafe(LoadMenu, false);
-        SetActiveSafe(SettingsMenu, false);
-        SetActiveSafe(GameplayInterface, false);
-        SetActiveSafe(PauseMenu, false);
-        SetActiveSafe(Scene, false);
-        SetSceneObjectLightsActive(false);
-        break;
-      case UiMode.Gameplay:
-        SetActiveSafe(MainMenu, false);
-        SetActiveSafe(LoadMenu, false);
-        SetActiveSafe(SettingsMenu, false);
-        SetActiveSafe(PauseMenu, false);
-        SetActiveSafe(GameplayInterface, true);
-        SetActiveSafe(Scene, true);
-        SetSceneObjectLightsActive(false);
-        pauseMenuOpenAppearanceRevision = -1;
-        break;
-      case UiMode.Pause:
-        SetActiveSafe(MainMenu, false);
-        SetActiveSafe(GameplayInterface, false);
-        SetActiveSafe(PauseMenu, true);
-        SetActiveSafe(LoadMenu, false);
-        SetActiveSafe(SettingsMenu, false);
-        SetActiveSafe(Scene, true);
-        break;
-    }
-  }
-
-  void ApplyInputForUiMode(UiMode mode) {
-    switch (mode) {
-      case UiMode.MainMenu:
-        _SwitchMap("mainMenu");
-        break;
-      case UiMode.Gameplay:
-        _SwitchMap("gameplay");
-        break;
-      case UiMode.Pause:
-        _SwitchMap("pauseMenu");
-        break;
-    }
-  }
-
-  IEnumerator FadeFromBlackRoutine(string overlayTag) {
+  IEnumerator FadeFromBlackRoutine(string overlayTag, Section revealedSection) {
     FinalizeLoadingProgressForRelease();
-    SetSceneObjectLightsActive(Scene != null && Scene.activeInHierarchy);
     SetLoadingBlackscreenHold(false);
     if (blackscreen != null) {
       PlayBlackscreen("alphaOut");
@@ -2886,11 +3703,11 @@ public class SingleSceneManager : MonoBehaviour {
     if (unlockFadeFailSafeRoutine != null) {
       StopCoroutine(unlockFadeFailSafeRoutine);
     }
-    unlockFadeFailSafeRoutine = StartCoroutine(EnsureBlackscreenClearsAfterUnlockRoutine());
-    if (!string.IsNullOrWhiteSpace(overlayTag)) {
-      SpriteStreamingLoadingState.EndLoadingOverlay(overlayTag);
+    unlockFadeFailSafeRoutine = StartCoroutine(EnsureBlackscreenClearsAfterUnlockRoutine(revealedSection, overlayTag));
+    var waitSeconds = Mathf.Max(fadeFromBlackSeconds, 0f);
+    if (waitSeconds > 0f) {
+      yield return new WaitForSecondsRealtime(waitSeconds);
     }
-    yield return null;
   }
 
   void SetActiveSafe(GameObject target, bool active) {

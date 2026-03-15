@@ -118,10 +118,17 @@ public class SpriteWithNormals : MonoBehaviour {
   string _appliedColorSliceAddress = "";
   Vector3 _lastAppliedTrimmedOffsetLocalUnits;
   bool _hasAppliedTrimmedOffset;
+  Vector3 _trimmedOffsetBaseLocalPosition;
+  bool _hasTrimmedOffsetBaseLocalPosition;
+  [SerializeField, HideInInspector] Vector3 serializedAppliedTrimmedOffsetLocalUnits;
+  [SerializeField, HideInInspector] bool serializedHasAppliedTrimmedOffset;
+  [SerializeField, HideInInspector] Vector3 serializedTrimmedOffsetBaseLocalPosition;
+  [SerializeField, HideInInspector] bool serializedHasTrimmedOffsetBaseLocalPosition;
   int _adaptiveCooldownMultiplier = 1;
   int _adaptiveStaleWindowStartFrame = -1;
   int _adaptiveStaleCountInWindow;
   int _adaptiveCooldownLastDecayFrame = -1;
+  readonly HashSet<string> _editorPreviewNormalMissWarnings = new(StringComparer.OrdinalIgnoreCase);
 
   Coroutine _pendingLoadRoutine;
   TextureResidencyCache.Lease _pendingColorLease;
@@ -135,10 +142,12 @@ public class SpriteWithNormals : MonoBehaviour {
   void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
     _mpb = new MaterialPropertyBlock();
+    SyncSerializedTrimmedOffsetState();
     SyncRendererVisibility();
   }
 
   void OnEnable() {
+    SyncSerializedTrimmedOffsetState();
     RefreshTrimmedOffsetForCurrentSprite();
     if (!Application.isPlaying) return;
     _nextInternalRetryFrame = 0;
@@ -663,6 +672,9 @@ public class SpriteWithNormals : MonoBehaviour {
     var colorSliceAddress = string.IsNullOrWhiteSpace(_targetColorSliceAddress) ? pair.colorAddress : _targetColorSliceAddress;
     var normalSliceAddress = string.IsNullOrWhiteSpace(_targetNormalSliceAddress) ? pair.normalAddress : _targetNormalSliceAddress;
     var colorSprite = ResolveLeaseSprite(colorLease, colorSliceAddress);
+#if UNITY_EDITOR
+    colorSprite ??= TryResolveEditorSliceFallback(colorSliceAddress, "color");
+#endif
     if (colorSprite == null) {
       LogSpriteFetch("complete_color_missing", "address='" + (colorSliceAddress ?? "") + "'");
       Debug.LogError($"[SpriteWithNormals] Failed to resolve color sprite '{colorSliceAddress}' on {gameObject.name}");
@@ -675,6 +687,9 @@ public class SpriteWithNormals : MonoBehaviour {
     CacheLocalLoadedSprite(colorSliceAddress, colorSprite);
 
     var normalSprite = ResolveLeaseSprite(normalLease, normalSliceAddress);
+#if UNITY_EDITOR
+    normalSprite ??= TryResolveEditorSliceFallback(normalSliceAddress, "normal");
+#endif
     normalSprite = ResolveExpectedSliceSprite(normalSprite, normalSliceAddress, "normal");
     if (normalSprite != null) CacheLocalLoadedSprite(normalSliceAddress, normalSprite);
     if (normalLease != null && normalLease.IsDone && normalSprite == null && !string.IsNullOrWhiteSpace(normalSliceAddress))
@@ -819,27 +834,31 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
   void ApplyTrimmedOffsetLocal(Vector3 offsetLocalUnits, Sprite colorSprite, string colorSliceAddress) {
-    var currentLocalPosition = transform.localPosition;
-    var baseLocalPosition = _hasAppliedTrimmedOffset
-      ? currentLocalPosition - _lastAppliedTrimmedOffsetLocalUnits
-      : currentLocalPosition;
-    transform.localPosition = baseLocalPosition + offsetLocalUnits;
-    _lastAppliedTrimmedOffsetLocalUnits = offsetLocalUnits;
+    var appliedPositionOffsetLocalUnits = ScaleTrimmedOffsetForTransform(offsetLocalUnits);
+    var baseLocalPosition = ResolveTrimmedOffsetBaseLocalPosition(offsetLocalUnits, appliedPositionOffsetLocalUnits);
+    transform.localPosition = baseLocalPosition + appliedPositionOffsetLocalUnits;
+    _lastAppliedTrimmedOffsetLocalUnits = appliedPositionOffsetLocalUnits;
     _hasAppliedTrimmedOffset = true;
+    PersistTrimmedOffsetState();
     LogSpriteApply(
       "offset_applied",
       colorSprite,
       null,
       "address='" + (colorSliceAddress ?? "") + "'" +
-      " local_offset=(" + offsetLocalUnits.x.ToString("0.###") + "," + offsetLocalUnits.y.ToString("0.###") + ")"
+      " source_offset=(" + offsetLocalUnits.x.ToString("0.###") + "," + offsetLocalUnits.y.ToString("0.###") + ")" +
+      " applied_offset=(" + appliedPositionOffsetLocalUnits.x.ToString("0.###") + "," + appliedPositionOffsetLocalUnits.y.ToString("0.###") + ")"
     );
   }
 
   void ClearAppliedTrimmedOffset() {
-    if (!_hasAppliedTrimmedOffset) return;
-    transform.localPosition -= _lastAppliedTrimmedOffsetLocalUnits;
+    if (_hasTrimmedOffsetBaseLocalPosition) {
+      transform.localPosition = _trimmedOffsetBaseLocalPosition;
+    } else if (_hasAppliedTrimmedOffset) {
+      transform.localPosition -= _lastAppliedTrimmedOffsetLocalUnits;
+    }
     _lastAppliedTrimmedOffsetLocalUnits = Vector3.zero;
     _hasAppliedTrimmedOffset = false;
+    PersistTrimmedOffsetState();
   }
 
   void ResetAppliedTrimmedOffsetState(bool clearSliceAddress = true) {
@@ -861,6 +880,129 @@ public class SpriteWithNormals : MonoBehaviour {
     if (_renderer == null || _renderer.sprite == null) return;
     if (string.IsNullOrWhiteSpace(_appliedColorSliceAddress)) return;
     ApplyConfiguredTrimmedOffset(_renderer.sprite, _appliedColorSliceAddress);
+  }
+
+  void SyncSerializedTrimmedOffsetState() {
+    NormalizeSerializedTrimmedOffsetState();
+    _lastAppliedTrimmedOffsetLocalUnits = serializedAppliedTrimmedOffsetLocalUnits;
+    _hasAppliedTrimmedOffset = serializedHasAppliedTrimmedOffset;
+    _trimmedOffsetBaseLocalPosition = serializedTrimmedOffsetBaseLocalPosition;
+    _hasTrimmedOffsetBaseLocalPosition = serializedHasTrimmedOffsetBaseLocalPosition;
+  }
+
+  void NormalizeSerializedTrimmedOffsetState() {
+    var hadAppliedState = serializedHasAppliedTrimmedOffset;
+    var hadBaseState = serializedHasTrimmedOffsetBaseLocalPosition;
+    if (!hadAppliedState && !hadBaseState) return;
+
+    var currentLocalPosition = transform.localPosition;
+    var serializedAppliedOffset = serializedAppliedTrimmedOffsetLocalUnits;
+    var serializedBasePosition = hadBaseState
+      ? serializedTrimmedOffsetBaseLocalPosition
+      : currentLocalPosition - serializedAppliedOffset;
+    var expectedAppliedPosition = serializedBasePosition + serializedAppliedOffset;
+    var normalizedBasePosition = LooksLikeDuplicatedTrimmedOffsetBase(serializedBasePosition, serializedAppliedOffset)
+      ? Vector3.zero
+      : serializedBasePosition;
+
+    var restoredBasePosition = false;
+    if (hadAppliedState && ApproximatelyVector3(currentLocalPosition, expectedAppliedPosition)) {
+      if (!ApproximatelyVector3(currentLocalPosition, normalizedBasePosition)) {
+        transform.localPosition = normalizedBasePosition;
+        restoredBasePosition = true;
+      }
+    }
+
+    if (restoredBasePosition) {
+      Debug.Log(
+        "[SpriteWithNormals] Normalized persisted trimmed offset state for '" + name +
+        "'. current=(" + currentLocalPosition.x.ToString("0.###") + "," + currentLocalPosition.y.ToString("0.###") +
+        ") base=(" + serializedBasePosition.x.ToString("0.###") + "," + serializedBasePosition.y.ToString("0.###") +
+        ") normalized_base=(" + normalizedBasePosition.x.ToString("0.###") + "," + normalizedBasePosition.y.ToString("0.###") +
+        ") applied=(" + serializedAppliedOffset.x.ToString("0.###") + "," + serializedAppliedOffset.y.ToString("0.###") + ")");
+    }
+
+    serializedAppliedTrimmedOffsetLocalUnits = Vector3.zero;
+    serializedHasAppliedTrimmedOffset = false;
+    serializedTrimmedOffsetBaseLocalPosition = Vector3.zero;
+    serializedHasTrimmedOffsetBaseLocalPosition = false;
+
+#if UNITY_EDITOR
+    if (!Application.isPlaying && restoredBasePosition) {
+      UnityEditor.EditorUtility.SetDirty(transform);
+      UnityEditor.EditorUtility.SetDirty(this);
+    }
+#endif
+  }
+
+  static bool LooksLikeDuplicatedTrimmedOffsetBase(Vector3 serializedBasePosition, Vector3 serializedAppliedOffset) {
+    return ComponentsLookDuplicated(serializedBasePosition.x, serializedAppliedOffset.x) &&
+           ComponentsLookDuplicated(serializedBasePosition.y, serializedAppliedOffset.y) &&
+           ComponentsLookDuplicated(serializedBasePosition.z, serializedAppliedOffset.z);
+  }
+
+  static bool ComponentsLookDuplicated(float baseValue, float appliedValue) {
+    var maxAbs = Mathf.Max(Mathf.Abs(baseValue), Mathf.Abs(appliedValue));
+    if (maxAbs <= 0.0005f) return true;
+    if (Mathf.Sign(baseValue) != Mathf.Sign(appliedValue)) return false;
+    return Mathf.Abs(baseValue - appliedValue) <= Mathf.Max(0.1f, maxAbs * 0.1f);
+  }
+
+  void PersistTrimmedOffsetState() {
+    serializedAppliedTrimmedOffsetLocalUnits = _lastAppliedTrimmedOffsetLocalUnits;
+    serializedHasAppliedTrimmedOffset = _hasAppliedTrimmedOffset;
+    serializedTrimmedOffsetBaseLocalPosition = _trimmedOffsetBaseLocalPosition;
+    serializedHasTrimmedOffsetBaseLocalPosition = _hasTrimmedOffsetBaseLocalPosition;
+  }
+
+  Vector3 ResolveTrimmedOffsetBaseLocalPosition(Vector3 sourceOffsetLocalUnits, Vector3 appliedOffsetLocalUnits) {
+    if (_hasTrimmedOffsetBaseLocalPosition) {
+      return _trimmedOffsetBaseLocalPosition;
+    }
+
+    var currentLocalPosition = transform.localPosition;
+    var baseLocalPosition = InferTrimmedOffsetBaseLocalPosition(currentLocalPosition, sourceOffsetLocalUnits, appliedOffsetLocalUnits);
+    _trimmedOffsetBaseLocalPosition = baseLocalPosition;
+    _hasTrimmedOffsetBaseLocalPosition = true;
+    PersistTrimmedOffsetState();
+    return baseLocalPosition;
+  }
+
+  Vector3 InferTrimmedOffsetBaseLocalPosition(Vector3 currentLocalPosition, Vector3 sourceOffsetLocalUnits, Vector3 appliedOffsetLocalUnits) {
+    if (ApproximatelyVector3(currentLocalPosition, Vector3.zero)) {
+      return Vector3.zero;
+    }
+
+    if (ApproximatelyVector3(currentLocalPosition, sourceOffsetLocalUnits) ||
+        ApproximatelyVector3(currentLocalPosition, sourceOffsetLocalUnits * 2f) ||
+        ApproximatelyVector3(currentLocalPosition, appliedOffsetLocalUnits) ||
+        ApproximatelyVector3(currentLocalPosition, appliedOffsetLocalUnits * 2f)) {
+      Debug.Log(
+        "[SpriteWithNormals] Normalized edit-mode trimmed offset baseline for '" + name +
+        "'. current=(" + currentLocalPosition.x.ToString("0.###") + "," + currentLocalPosition.y.ToString("0.###") +
+        ") source_offset=(" + sourceOffsetLocalUnits.x.ToString("0.###") + "," + sourceOffsetLocalUnits.y.ToString("0.###") +
+        ") applied_offset=(" + appliedOffsetLocalUnits.x.ToString("0.###") + "," + appliedOffsetLocalUnits.y.ToString("0.###") + ")");
+      return Vector3.zero;
+    }
+
+    return _hasAppliedTrimmedOffset
+      ? currentLocalPosition - _lastAppliedTrimmedOffsetLocalUnits
+      : currentLocalPosition;
+  }
+
+  static bool ApproximatelyVector3(Vector3 left, Vector3 right, float epsilon = 0.0015f) {
+    return Mathf.Abs(left.x - right.x) <= epsilon &&
+           Mathf.Abs(left.y - right.y) <= epsilon &&
+           Mathf.Abs(left.z - right.z) <= epsilon;
+  }
+
+  Vector3 ScaleTrimmedOffsetForTransform(Vector3 offsetLocalUnits) {
+    var localScale = transform.localScale;
+    var scaleX = Mathf.Abs(localScale.x);
+    var scaleY = Mathf.Abs(localScale.y);
+    if (scaleX <= 0f) scaleX = 1f;
+    if (scaleY <= 0f) scaleY = 1f;
+    return new Vector3(offsetLocalUnits.x * scaleX, offsetLocalUnits.y * scaleY, offsetLocalUnits.z);
   }
 
   static Texture2D GetFallbackNormalTexture() {
@@ -907,6 +1049,29 @@ public class SpriteWithNormals : MonoBehaviour {
     lease.Release();
     lease = null;
   }
+
+#if UNITY_EDITOR
+  public static void RefreshAllInEditor() {
+    var targets = Resources.FindObjectsOfTypeAll<SpriteWithNormals>();
+    if (targets == null || targets.Length <= 0) return;
+
+    var refreshedCount = 0;
+    for (var i = 0; i < targets.Length; i++) {
+      var target = targets[i];
+      if (target == null || EditorUtility.IsPersistent(target)) continue;
+      if (!target.gameObject.scene.IsValid()) continue;
+      if (!target.enabled) continue;
+
+      var refreshFrame = target.IsAnimation ? Mathf.Max(target.LastRequestedFrame, 1) : 0;
+      target.ForceUpdateSpriteAndNormal(refreshFrame);
+      refreshedCount++;
+    }
+
+    if (refreshedCount > 0) {
+      Debug.Log("[SpriteWithNormals] Refreshed edit-mode previews after atlas import. targets=" + refreshedCount);
+    }
+  }
+#endif
 
   void ClearPendingState() {
     _pendingLoadRoutine = null;
@@ -1262,14 +1427,38 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
 #if UNITY_EDITOR
+  Sprite TryResolveEditorSliceFallback(string sliceAddress, string channel) {
+    if (!Application.isEditor || string.IsNullOrWhiteSpace(sliceAddress)) return null;
+    if (!SpriteAddressResolver.TryLoadEditorSprite(sliceAddress, out var editorSprite) || editorSprite == null) {
+      return null;
+    }
+
+    var key = $"{channel}|editor_fallback|{sliceAddress}";
+    if (_sliceMismatchWarnings.Add(key)) {
+      Debug.LogWarning(
+        "[SpriteWithNormals] Editor slice fallback on " + gameObject.name +
+        " channel=" + channel +
+        " address='" + sliceAddress + "'" +
+        " sprite='" + editorSprite.name + "'"
+      );
+    }
+
+    return editorSprite;
+  }
+#endif
+
+#if UNITY_EDITOR
   void ApplyEditorPreview(SpriteAddressPair pair, SpriteLookupKey lookupKey) {
     if (!SpriteAddressResolver.TryLoadEditorSprite(pair.colorAddress, out var colorSprite) || colorSprite == null) {
       Debug.LogError($"[SpriteWithNormals] Editor preview color sprite not found for '{pair.colorAddress}' ({lookupKey})");
       return;
     }
     SpriteAddressResolver.TryLoadEditorSprite(pair.normalAddress, out var normalSprite);
-    if (!string.IsNullOrWhiteSpace(pair.normalAddress) && normalSprite == null)
-      Debug.LogError($"[SpriteWithNormals] Editor preview normal sprite not found for '{pair.normalAddress}' ({lookupKey})");
+    if (!string.IsNullOrWhiteSpace(pair.normalAddress) &&
+        normalSprite == null &&
+        _editorPreviewNormalMissWarnings.Add(pair.normalAddress)) {
+      Debug.LogWarning($"[SpriteWithNormals] Editor preview normal sprite not found for '{pair.normalAddress}' ({lookupKey})");
+    }
     ApplySprites(colorSprite, normalSprite, pair.colorAddress);
   }
 #endif

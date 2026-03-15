@@ -2,12 +2,15 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
+using UnityEditor.U2D.Sprites;
 using UnityEngine;
 
 public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
   const string TrimmedMetadataKind = "trimmed";
   const string GroupedMetadataKind = "grouped";
+  static bool pendingSpriteWithNormalsRefresh;
 
   [Serializable]
   sealed class ImportPixelRect {
@@ -85,20 +88,14 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       if (importer.spriteImportMode != SpriteImportMode.Multiple) {
         importer.spriteImportMode = SpriteImportMode.Multiple;
       }
-
-#pragma warning disable 618
-      importer.spritesheet = definition.sprites.ToArray();
-#pragma warning restore 618
+      ApplySpriteEditorData(importer, definition.sprites, clearSprites: false);
       return;
     }
 
     if (importer.spriteImportMode != SpriteImportMode.Single) {
       importer.spriteImportMode = SpriteImportMode.Single;
     }
-
-#pragma warning disable 618
-    importer.spritesheet = Array.Empty<SpriteMetaData>();
-#pragma warning restore 618
+    ApplySpriteEditorData(importer, definition.sprites, clearSprites: true);
   }
 
   static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths) {
@@ -118,6 +115,10 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
 
     if (metadataAssetPaths.Count > 0) {
       AssetDatabase.SaveAssets();
+    }
+
+    if (atlasAssetPaths.Count > 0) {
+      QueueSpriteWithNormalsRefresh();
     }
 
     if (deletedAssets == null) return;
@@ -153,6 +154,35 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       if (!assetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
       if (!TryBuildImportDefinitionForMetadataAsset(assetPath, out var definitionFromJson)) continue;
       metadataAssetPaths?.Add(definitionFromJson.metadataAssetPath);
+      atlasAssetPaths?.Add(definitionFromJson.atlasAssetPath);
+    }
+  }
+
+  static void QueueSpriteWithNormalsRefresh() {
+    if (pendingSpriteWithNormalsRefresh) return;
+    pendingSpriteWithNormalsRefresh = true;
+    EditorApplication.delayCall += RefreshSpriteWithNormalsPreviews;
+  }
+
+  static void RefreshSpriteWithNormalsPreviews() {
+    pendingSpriteWithNormalsRefresh = false;
+    var targets = Resources.FindObjectsOfTypeAll<SpriteWithNormals>();
+    if (targets == null || targets.Length <= 0) return;
+
+    var refreshedCount = 0;
+    for (var i = 0; i < targets.Length; i++) {
+      var target = targets[i];
+      if (target == null || EditorUtility.IsPersistent(target)) continue;
+      if (!target.gameObject.scene.IsValid()) continue;
+      if (!target.enabled) continue;
+
+      var refreshFrame = target.IsAnimation ? Mathf.Max(target.LastRequestedFrame, 1) : 0;
+      target.ForceUpdateSpriteAndNormal(refreshFrame);
+      refreshedCount++;
+    }
+
+    if (refreshedCount > 0) {
+      Debug.Log("[SpriteWithNormals] Refreshed edit-mode previews after atlas import. targets=" + refreshedCount);
     }
   }
 
@@ -354,6 +384,101 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       border = Vector4.zero
     };
     return true;
+  }
+
+  static void ApplySpriteEditorData(TextureImporter importer, List<SpriteMetaData> sprites, bool clearSprites) {
+    var dataProvider = CreateSpriteEditorDataProvider(importer);
+    if (dataProvider == null) {
+      Debug.LogError("[GeneratedAtlasImport] Failed to create sprite data provider for '" + importer.assetPath + "'.");
+      return;
+    }
+
+    var existingSpriteIds = CollectExistingSpriteIds(dataProvider);
+    var spriteRects = clearSprites ? Array.Empty<SpriteRect>() : BuildSpriteRects(sprites, existingSpriteIds);
+    dataProvider.SetSpriteRects(spriteRects);
+
+    if (dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider))) {
+      var nameFileIdProvider = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
+      var pairs = spriteRects
+        .Select(spriteRect => new SpriteNameFileIdPair(spriteRect.name, spriteRect.spriteID))
+        .ToList();
+      nameFileIdProvider.SetNameFileIdPairs(pairs);
+    }
+    else if (!clearSprites) {
+      Debug.LogWarning(
+        "[GeneratedAtlasImport] Sprite name/fileID provider unavailable for '" + importer.assetPath +
+        "'. spriteCount=" + spriteRects.Length);
+    }
+
+    dataProvider.Apply();
+  }
+
+  static ISpriteEditorDataProvider CreateSpriteEditorDataProvider(TextureImporter importer) {
+    var factory = new SpriteDataProviderFactories();
+    factory.Init();
+    var dataProvider = factory.GetSpriteEditorDataProviderFromObject(importer) as ISpriteEditorDataProvider;
+    dataProvider?.InitSpriteEditorDataProvider();
+    return dataProvider;
+  }
+
+  static Dictionary<string, GUID> CollectExistingSpriteIds(ISpriteEditorDataProvider dataProvider) {
+    var spriteIds = new Dictionary<string, GUID>(StringComparer.Ordinal);
+    if (dataProvider == null) return spriteIds;
+
+    var existingRects = dataProvider.GetSpriteRects();
+    if (existingRects != null) {
+      for (var i = 0; i < existingRects.Length; i++) {
+        var spriteRect = existingRects[i];
+        if (string.IsNullOrWhiteSpace(spriteRect.name) || IsEmptyGuid(spriteRect.spriteID)) continue;
+        spriteIds[spriteRect.name] = spriteRect.spriteID;
+      }
+    }
+
+    if (!dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider))) return spriteIds;
+    return spriteIds;
+  }
+
+  static SpriteRect[] BuildSpriteRects(List<SpriteMetaData> sprites, Dictionary<string, GUID> existingSpriteIds) {
+    if (sprites == null || sprites.Count == 0) return Array.Empty<SpriteRect>();
+
+    var spriteRects = new SpriteRect[sprites.Count];
+    for (var i = 0; i < sprites.Count; i++) {
+      var sprite = sprites[i];
+      var spriteId = ResolveSpriteId(sprite.name, existingSpriteIds);
+      spriteRects[i] = new SpriteRect {
+        name = sprite.name,
+        spriteID = spriteId,
+        rect = sprite.rect,
+        alignment = ConvertAlignment(sprite.alignment),
+        pivot = sprite.pivot,
+        border = sprite.border
+      };
+    }
+
+    return spriteRects;
+  }
+
+  static GUID ResolveSpriteId(string spriteName, Dictionary<string, GUID> existingSpriteIds) {
+    if (!string.IsNullOrWhiteSpace(spriteName) &&
+        existingSpriteIds != null &&
+        existingSpriteIds.TryGetValue(spriteName, out var spriteId) &&
+        !IsEmptyGuid(spriteId)) {
+      return spriteId;
+    }
+
+    return GUID.Generate();
+  }
+
+  static bool IsEmptyGuid(GUID value) {
+    return string.Equals(value.ToString(), default(GUID).ToString(), StringComparison.Ordinal);
+  }
+
+  static SpriteAlignment ConvertAlignment(int alignment) {
+    if (!Enum.IsDefined(typeof(SpriteAlignment), alignment)) {
+      return SpriteAlignment.Center;
+    }
+
+    return (SpriteAlignment)alignment;
   }
 }
 #endif

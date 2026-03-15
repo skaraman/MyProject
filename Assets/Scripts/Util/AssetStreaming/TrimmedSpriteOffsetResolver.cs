@@ -114,7 +114,7 @@ public static class TrimmedSpriteOffsetResolver {
     Action onReady = null) {
     localOffset = Vector3.zero;
     if (sprite == null) return false;
-    if (!TryGetExactOffset(sliceAddress, out var offsetPx, onReady)) return false;
+    if (!TryGetExactOffsetForSprite(sliceAddress, sprite, out var offsetPx, onReady)) return false;
 
     localOffset = ConvertOffsetPixelsToLocalUnits(offsetPx, sprite, flipX, flipY);
     return true;
@@ -133,6 +133,34 @@ public static class TrimmedSpriteOffsetResolver {
     offsetPx = Vector2.zero;
     if (!loadedAtlasOffsets.TryGetValue(atlasAssetPath, out var atlasOffsets) || atlasOffsets == null) return false;
     return atlasOffsets.TryGet(spriteName, out offsetPx);
+  }
+
+  static bool TryGetExactOffsetForSprite(string sliceAddress, Sprite sprite, out Vector2 offsetPx, Action onReady) {
+    offsetPx = Vector2.zero;
+    if (!TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out var expectedSpriteName)) return false;
+
+    var loadedSpriteName = sprite != null ? (sprite.name ?? "") : "";
+    if (TryGetLoadedOffsetForCandidates(atlasAssetPath, loadedSpriteName, expectedSpriteName, out offsetPx)) return true;
+    if (missingAtlasOffsets.Contains(atlasAssetPath)) return false;
+
+#if UNITY_EDITOR
+    if (TryLoadEditorOffsets(atlasAssetPath)) {
+      return TryGetLoadedOffsetForCandidates(atlasAssetPath, loadedSpriteName, expectedSpriteName, out offsetPx);
+    }
+
+    if (Application.isEditor) return false;
+#endif
+
+    if (!Application.isPlaying) return false;
+    RegisterPendingCallback(atlasAssetPath, onReady);
+    StartRuntimeLoad(atlasAssetPath);
+    return false;
+  }
+
+  static bool TryGetLoadedOffsetForCandidates(string atlasAssetPath, string primarySpriteName, string fallbackSpriteName, out Vector2 offsetPx) {
+    if (TryGetLoadedOffset(atlasAssetPath, primarySpriteName, out offsetPx)) return true;
+    if (string.Equals(primarySpriteName, fallbackSpriteName, StringComparison.Ordinal)) return false;
+    return TryGetLoadedOffset(atlasAssetPath, fallbackSpriteName, out offsetPx);
   }
 
 #if UNITY_EDITOR

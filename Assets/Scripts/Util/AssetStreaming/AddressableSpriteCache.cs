@@ -53,6 +53,7 @@ public static class TextureResidencyCache {
     public long queuedAtTicks; // set when first enqueued; used for enqueue->complete latency tracking
     public int sessionCompletionGeneration;
     public bool editorAtlasSupplementPending;
+    public bool editorAtlasSupplementAttempted;
   }
 
   public readonly struct PinSnapshot {
@@ -171,7 +172,12 @@ public static class TextureResidencyCache {
       if (SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out var atlasAssetPath, out var spriteName)) {
         var normalizedAtlasAddress = NormalizeAddress(atlasAssetPath);
         if (!string.Equals(normalizedAtlasAddress, Address, StringComparison.OrdinalIgnoreCase)) return false;
-        return TryGetSpriteFromEntry(entry, spriteName, out sprite);
+        if (TryGetSpriteFromEntry(entry, spriteName, out sprite)) return true;
+#if UNITY_EDITOR
+        return TryGetSpriteFromEntryWithEditorSupplement(entry, spriteName, out sprite);
+#else
+        return false;
+#endif
       }
 
       var normalizedAddress = NormalizeAddress(sliceOrAtlasAddress);
@@ -1068,6 +1074,7 @@ public static class TextureResidencyCache {
     entry.isSuccess = false;
     entry.primarySprite = null;
     entry.spritesByName.Clear();
+    entry.editorAtlasSupplementAttempted = false;
     entry.lastAccessTicks = DateTime.UtcNow.Ticks;
     var atlasLocationKeys = BuildAtlasLocationKeys(entry.address, out var atlasSiblingSliceCount);
     // Ideal frame pacing depends on bounded in-flight starts per frame.
@@ -1171,6 +1178,7 @@ public static class TextureResidencyCache {
     entry.spritesByName.Clear();
     entry.primarySprite = null;
     entry.editorAtlasSupplementPending = false;
+    entry.editorAtlasSupplementAttempted = false;
     if (loadedSprites == null) return;
     for (var i = 0; i < loadedSprites.Count; i++) {
       var sprite = loadedSprites[i];
@@ -1297,6 +1305,39 @@ public static class TextureResidencyCache {
       " editor_count=" + entry.spritesByName.Count +
       " added=" + addedSpriteCount
     );
+  }
+
+  static bool TryGetSpriteFromEntryWithEditorSupplement(CacheEntry entry, string spriteName, out Sprite sprite) {
+    sprite = null;
+    if (entry == null || string.IsNullOrWhiteSpace(spriteName)) return false;
+    if (entry.editorAtlasSupplementAttempted) return false;
+
+    entry.editorAtlasSupplementAttempted = true;
+    var mappedBefore = entry.spritesByName.Count;
+    TrySupplementEntrySpriteMapFromEditor(entry);
+    var resolved = TryGetSpriteFromEntry(entry, spriteName, out sprite);
+    if (resolved) {
+      Debug.LogWarning(
+        "[TextureResidencyCache] On-demand editor atlas supplement resolved sprite" +
+        " address='" + entry.address + "'" +
+        " sprite='" + spriteName.Trim() + "'" +
+        " mapped_before=" + mappedBefore +
+        " mapped_after=" + entry.spritesByName.Count
+      );
+      return true;
+    }
+
+    if (SpriteStreamingRuntimeSettings.EnableDiagnostics) {
+      Debug.LogWarning(
+        "[TextureResidencyCache] On-demand editor atlas supplement did not resolve sprite" +
+        " address='" + entry.address + "'" +
+        " sprite='" + spriteName.Trim() + "'" +
+        " mapped_before=" + mappedBefore +
+        " mapped_after=" + entry.spritesByName.Count
+      );
+    }
+
+    return false;
   }
 #endif
 

@@ -15,6 +15,10 @@ public class CharacterState : MonoBehaviour {
   // Cache list to avoid allocations
   private List<string> cachedKeys = new List<string>();
 
+  static bool ShouldLogLoadStateDebug() {
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
   void Start() {
     offLoadGame = MessageBus.On("loadGame", o => LoadState());
     gearController = GetComponent<GearController>();
@@ -32,6 +36,15 @@ public class CharacterState : MonoBehaviour {
   public void LoadState() {
     var loadedForms = SaveSlotManager.Load("forms");
     var loadedStats = SaveSlotManager.Load("stats");
+    if (ShouldLogLoadStateDebug()) {
+      Debug.Log(
+        "[CharacterState][LoadState] stage=begin" +
+        " slot=" + SaveSlotManager.slot +
+        " forms_keys=" + (loadedForms != null ? loadedForms.Count : 0) +
+        " stats_keys=" + (loadedStats != null ? loadedStats.Count : 0) +
+        " gear_controller=" + (gearController != null ? 1 : 0)
+      );
+    }
     if (loadedForms.Keys.Count != 0) {
       EsperanzaForms.SetActive((string)loadedForms["activeForm"]);
       foreach (var item in (Dictionary<string, int>)loadedForms["unlockedForms"]) {
@@ -47,6 +60,43 @@ public class CharacterState : MonoBehaviour {
     }
     gearController.LoadGear();
     GatherAllStatValues();
+    if (ShouldLogLoadStateDebug()) {
+      var activeForm = loadedForms != null && loadedForms.ContainsKey("activeForm")
+        ? Convert.ToString(loadedForms["activeForm"])
+        : "";
+      Debug.Log(
+        "[CharacterState][LoadState] stage=complete" +
+        " slot=" + SaveSlotManager.slot +
+        " active_form=" + (string.IsNullOrWhiteSpace(activeForm) ? "-" : activeForm.Trim()) +
+        " level=" + level +
+        " gear_controller=" + (gearController != null ? 1 : 0)
+      );
+    }
+  }
+
+  public void InitializeRuntimeStateForNewGame() {
+    gearController ??= GetComponent<GearController>();
+    if (ShouldLogLoadStateDebug()) {
+      Debug.Log(
+        "[CharacterState][LoadState] stage=new_game_begin" +
+        " slot=" + SaveSlotManager.slot +
+        " active_form=" + EsperanzaForms.GetActive() +
+        " gear_controller=" + (gearController != null ? 1 : 0)
+      );
+    }
+
+    gearController?.LoadGear();
+    GatherAllStatValues();
+
+    if (ShouldLogLoadStateDebug()) {
+      Debug.Log(
+        "[CharacterState][LoadState] stage=new_game_complete" +
+        " slot=" + SaveSlotManager.slot +
+        " active_form=" + EsperanzaForms.GetActive() +
+        " level=" + level +
+        " gear_controller=" + (gearController != null ? 1 : 0)
+      );
+    }
   }
 
   public void AddStats(string form, string stat, int amount) {

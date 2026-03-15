@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -82,6 +83,10 @@ public static class SpriteRuntimeResolver {
   // caches for expensive normalization routines
   static readonly Dictionary<string, string> tokenNormCache = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, string> namepartNormCache = new(StringComparer.OrdinalIgnoreCase);
+#if UNITY_EDITOR
+  static readonly HashSet<string> editorSpriteLoadWarnings = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, Dictionary<string, long>> editorMetaSpriteIdsByAssetPath = new(StringComparer.OrdinalIgnoreCase);
+#endif
 
   static AsyncOperationHandle<TextAsset> manifestLoad;
   static Task<Dictionary<string, ManifestEntry>> manifestParse;
@@ -438,6 +443,30 @@ public static class SpriteRuntimeResolver {
     if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return false;
 
     var assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+    if (TryMatchEditorSprite(assets, spriteName, out sprite)) return true;
+
+    var representations = AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath);
+    if (TryMatchEditorSprite(representations, spriteName, out sprite)) return true;
+    if (TryMatchEditorSpriteByMetaFileId(assetPath, spriteName, assets, representations, out sprite)) return true;
+
+    if (editorSpriteLoadWarnings.Add(normalizedAddress)) {
+      Debug.LogWarning(
+        "[SpriteRuntimeResolver] Editor sprite load miss asset='" + assetPath +
+        "' sprite='" + spriteName +
+        "' assets_count=" + (assets?.Length ?? 0) +
+        " representations_count=" + (representations?.Length ?? 0)
+      );
+    }
+
+    return false;
+  }
+#endif
+
+#if UNITY_EDITOR
+  static bool TryMatchEditorSprite(UnityEngine.Object[] assets, string spriteName, out Sprite sprite) {
+    sprite = null;
+    if (assets == null || assets.Length == 0) return false;
+
     Sprite numericMatch = null;
     for (var i = 0; i < assets.Length; i++) {
       var candidate = assets[i] as Sprite;
@@ -455,12 +484,109 @@ public static class SpriteRuntimeResolver {
       numericMatch = candidate;
     }
 
-    if (numericMatch != null) {
-      sprite = numericMatch;
+    if (numericMatch == null) return false;
+    sprite = numericMatch;
+    return true;
+  }
+
+  static bool TryMatchEditorSpriteByMetaFileId(
+    string assetPath,
+    string spriteName,
+    UnityEngine.Object[] assets,
+    UnityEngine.Object[] representations,
+    out Sprite sprite) {
+    sprite = null;
+    if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(spriteName)) return false;
+    if (!TryResolveEditorSpriteLocalFileId(assetPath, spriteName, out var localFileId)) return false;
+
+    if (TryMatchEditorSpriteByLocalFileId(assets, localFileId, out sprite)) return true;
+    if (TryMatchEditorSpriteByLocalFileId(representations, localFileId, out sprite)) return true;
+    return false;
+  }
+
+  static bool TryMatchEditorSpriteByLocalFileId(UnityEngine.Object[] assets, long localFileId, out Sprite sprite) {
+    sprite = null;
+    if (assets == null || assets.Length == 0) return false;
+
+    for (var i = 0; i < assets.Length; i++) {
+      var candidate = assets[i] as Sprite;
+      if (candidate == null) continue;
+      if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(candidate, out _, out long candidateLocalFileId)) continue;
+      if (candidateLocalFileId != localFileId) continue;
+      sprite = candidate;
       return true;
     }
 
     return false;
+  }
+
+  static bool TryResolveEditorSpriteLocalFileId(string assetPath, string spriteName, out long localFileId) {
+    localFileId = 0;
+    if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(spriteName)) return false;
+
+    if (!editorMetaSpriteIdsByAssetPath.TryGetValue(assetPath, out var spriteIdsByName)) {
+      spriteIdsByName = BuildEditorMetaSpriteIdMap(assetPath);
+      editorMetaSpriteIdsByAssetPath[assetPath] = spriteIdsByName;
+    }
+
+    return spriteIdsByName != null && spriteIdsByName.TryGetValue(spriteName, out localFileId);
+  }
+
+  static Dictionary<string, long> BuildEditorMetaSpriteIdMap(string assetPath) {
+    var spriteIdsByName = new Dictionary<string, long>(StringComparer.Ordinal);
+    if (string.IsNullOrWhiteSpace(assetPath)) return spriteIdsByName;
+
+    var metaPath = assetPath + ".meta";
+    if (!File.Exists(metaPath)) return spriteIdsByName;
+
+    var inTable = false;
+    var tableIndent = -1;
+    foreach (var rawLine in File.ReadLines(metaPath)) {
+      var line = rawLine ?? "";
+      var trimmed = line.Trim();
+      var indent = line.Length - line.TrimStart().Length;
+
+      if (!inTable) {
+        if (trimmed.StartsWith("nameFileIdTable:", StringComparison.Ordinal)) {
+          inTable = true;
+          tableIndent = indent;
+        }
+        continue;
+      }
+
+      if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+      if (indent <= tableIndent) {
+        inTable = false;
+        if (trimmed.StartsWith("nameFileIdTable:", StringComparison.Ordinal)) {
+          inTable = true;
+          tableIndent = indent;
+        }
+        continue;
+      }
+
+      var separatorIndex = trimmed.IndexOf(':');
+      if (separatorIndex <= 0 || separatorIndex >= trimmed.Length - 1) continue;
+
+      var name = DecodeEditorMetaScalar(trimmed.Substring(0, separatorIndex));
+      if (string.IsNullOrWhiteSpace(name)) continue;
+
+      var idText = trimmed.Substring(separatorIndex + 1).Trim();
+      if (!long.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedId)) continue;
+      spriteIdsByName[name] = parsedId;
+    }
+
+    return spriteIdsByName;
+  }
+
+  static string DecodeEditorMetaScalar(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+    var trimmed = value.Trim();
+    if (trimmed.Length >= 2 && trimmed[0] == '\'' && trimmed[trimmed.Length - 1] == '\'') {
+      return trimmed.Substring(1, trimmed.Length - 2).Replace("''", "'");
+    }
+
+    return trimmed;
   }
 #endif
 
