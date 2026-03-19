@@ -118,6 +118,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     }
 
     if (atlasAssetPaths.Count > 0) {
+      SpriteWithNormals.InvalidateEditorRuntimeAtlasAvailabilityCache();
       QueueSpriteWithNormalsRefresh();
     }
 
@@ -300,14 +301,14 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       atlasAssetPath = atlasAssetPath,
       metadataAssetPath = metadataAssetPath,
       sourceAtlasAssetPath = ResolveGroupedSourceAtlasAssetPath(payload),
-      sliceAtlas = true,
+      sliceAtlas = !GeneratedAtlasBuildSurrogateUtility.IsBuildSurrogatePath(atlasAssetPath),
       spritePixelsPerUnit = payload.spritePixelsPerUnit,
       spriteMeshType = payload.spriteMeshType,
       hasImporterSnapshot = payload.spritePixelsPerUnit > 0f && payload.spriteMeshType >= 0
     };
 
     BuildSpriteMetadata(payload.sprites, definition.sprites);
-    return definition.sprites.Count > 0;
+    return !definition.sliceAtlas || definition.sprites.Count > 0;
   }
 
   static string ResolveGroupedSourceAtlasAssetPath(GroupedAtlasImportPayload payload) {

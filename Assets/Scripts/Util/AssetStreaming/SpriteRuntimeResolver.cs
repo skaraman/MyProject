@@ -67,11 +67,16 @@ public static class SpriteRuntimeResolver {
     public float lastAccessTime;
   }
 
+  sealed class ParsedShardData {
+    public Dictionary<string, SpriteAddressPair> rows;
+    public Dictionary<string, List<string>> addressesByAtlasPath;
+  }
+
   static readonly Dictionary<string, ManifestEntry> manifestByNamepart = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, List<string>> ambiguousShortNamepartMatches = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, ShardData> loadedShards = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, AsyncOperationHandle<TextAsset>> shardLoads = new(StringComparer.OrdinalIgnoreCase);
-  static readonly Dictionary<string, Task<Dictionary<string, SpriteAddressPair>>> shardParses = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, Task<ParsedShardData>> shardParses = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<string> pendingWarmupNameparts = new();
   static readonly HashSet<string> pendingWarmupNamepartsSet = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, float> shardLoadStartedAt = new(StringComparer.OrdinalIgnoreCase);
@@ -83,6 +88,7 @@ public static class SpriteRuntimeResolver {
   // caches for expensive normalization routines
   static readonly Dictionary<string, string> tokenNormCache = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, string> namepartNormCache = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> atlasSiblingSeenScratch = new(StringComparer.OrdinalIgnoreCase);
 #if UNITY_EDITOR
   static readonly HashSet<string> editorSpriteLoadWarnings = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, Dictionary<string, long>> editorMetaSpriteIdsByAssetPath = new(StringComparer.OrdinalIgnoreCase);
@@ -133,6 +139,7 @@ public static class SpriteRuntimeResolver {
     lookupMissCache.Clear();
     tokenNormCache.Clear();
     namepartNormCache.Clear();
+    atlasSiblingSeenScratch.Clear();
 
     manifestLoadStarted = false;
     manifestReady = false;
@@ -318,7 +325,12 @@ public static class SpriteRuntimeResolver {
     return true;
   }
 
-  public static bool TryCollectAtlasSiblingAddresses(string sliceAddress, List<string> outAddresses, int maxAddresses = 1024) {
+  public static bool TryCollectAtlasSiblingAddresses(
+    string sliceAddress,
+    List<string> outAddresses,
+    int maxAddresses = 1024,
+    HashSet<string> seenAddresses = null
+  ) {
 #if UNITY_EDITOR
     if (!Application.isPlaying) return false;
 #endif
@@ -336,10 +348,13 @@ public static class SpriteRuntimeResolver {
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) return false;
 
     var found = false;
-    var seenAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    for (var i = 0; i < outAddresses.Count; i++) {
-      var existing = NormalizeToken(outAddresses[i]);
-      if (!string.IsNullOrWhiteSpace(existing)) seenAddresses.Add(existing);
+    var activeSeenAddresses = seenAddresses ?? atlasSiblingSeenScratch;
+    if (seenAddresses == null) {
+      activeSeenAddresses.Clear();
+      for (var i = 0; i < outAddresses.Count; i++) {
+        var existing = NormalizeToken(outAddresses[i]);
+        if (!string.IsNullOrWhiteSpace(existing)) activeSeenAddresses.Add(existing);
+      }
     }
 
     foreach (var pair in loadedShards) {
@@ -355,7 +370,7 @@ public static class SpriteRuntimeResolver {
         if (outAddresses.Count >= maxAddresses) return true;
         var candidate = NormalizeToken(siblings[i]);
         if (string.IsNullOrWhiteSpace(candidate)) continue;
-        if (!seenAddresses.Add(candidate)) continue;
+        if (!activeSeenAddresses.Add(candidate)) continue;
         outAddresses.Add(candidate);
       }
     }
@@ -401,7 +416,8 @@ public static class SpriteRuntimeResolver {
             !string.IsNullOrWhiteSpace(shardEntry.assetPath)) {
           var shardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(shardEntry.assetPath);
           if (shardAsset != null && !string.IsNullOrWhiteSpace(shardAsset.text)) {
-            var rows = ParseShardRows(shardAsset.text);
+            var parsedShard = ParseShardRows(shardAsset.text);
+            var rows = parsedShard.rows;
             if (rows != null && rows.Count > 0) {
               var exactKey = BuildRowKey(key.labelPrefix, key.category, key.frame);
               if (rows.TryGetValue(exactKey, out pair)) return true;
@@ -700,10 +716,11 @@ public static class SpriteRuntimeResolver {
         return false;
       }
 
+      var parsedShard = shardParseTask.Result;
       loadedShards[namepart] = new ShardData {
-        rows = shardParseTask.Result ?? new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase),
-        addressesByAtlasPath = null,
-        atlasLookupBuilt = false,
+        rows = parsedShard?.rows ?? new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase),
+        addressesByAtlasPath = parsedShard?.addressesByAtlasPath,
+        atlasLookupBuilt = parsedShard?.addressesByAtlasPath != null,
         lastAccessTime = Time.realtimeSinceStartup
       };
       EnforceShardBudget();
@@ -767,15 +784,14 @@ public static class SpriteRuntimeResolver {
   static void DrainPendingWarmups() {
     if (!manifestReady || pendingWarmupNameparts.Count == 0) return;
 
-    var pending = new List<string>(pendingWarmupNameparts);
-    if (pending.Count > 1) {
-      SortWarmupsByObservedLoadCost(pending);
+    if (pendingWarmupNameparts.Count > 1) {
+      SortWarmupsByObservedLoadCost(pendingWarmupNameparts);
+    }
+    for (var i = 0; i < pendingWarmupNameparts.Count; i++) {
+      TryStartShardWarmup(pendingWarmupNameparts[i]);
     }
     pendingWarmupNameparts.Clear();
     pendingWarmupNamepartsSet.Clear();
-    for (var i = 0; i < pending.Count; i++) {
-      TryStartShardWarmup(pending[i]);
-    }
   }
 
   static void SortWarmupsByObservedLoadCost(List<string> warmups) {
@@ -852,16 +868,20 @@ public static class SpriteRuntimeResolver {
     if (shard.rows == null || shard.rows.Count <= 0) return;
 
     foreach (var pair in shard.rows) {
-      AddAddressToAtlasLookup(shard.addressesByAtlasPath, pair.Value.colorAddress);
-      AddAddressToAtlasLookup(shard.addressesByAtlasPath, pair.Value.normalAddress);
+      AddAddressToAtlasLookup(shard.addressesByAtlasPath, pair.Value.colorAtlasAddress, pair.Value.colorAddress);
+      AddAddressToAtlasLookup(shard.addressesByAtlasPath, pair.Value.normalAtlasAddress, pair.Value.normalAddress);
     }
   }
 
-  static void AddAddressToAtlasLookup(Dictionary<string, List<string>> atlasMap, string sliceAddress) {
+  static void AddAddressToAtlasLookup(Dictionary<string, List<string>> atlasMap, string atlasAssetPath, string sliceAddress) {
     if (atlasMap == null || string.IsNullOrWhiteSpace(sliceAddress)) return;
-    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out _)) return;
-    var normalizedAtlasPath = NormalizeToken(atlasAssetPath);
-    var normalizedSliceAddress = NormalizeToken(sliceAddress);
+    var normalizedAtlasPath = atlasAssetPath;
+    var normalizedSliceAddress = sliceAddress;
+    if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) {
+      if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var parsedAtlasAssetPath, out _)) return;
+      normalizedAtlasPath = NormalizeToken(parsedAtlasAssetPath);
+      normalizedSliceAddress = NormalizeToken(sliceAddress);
+    }
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(normalizedSliceAddress)) return;
 
     if (!atlasMap.TryGetValue(normalizedAtlasPath, out var addresses) || addresses == null) {
@@ -876,6 +896,29 @@ public static class SpriteRuntimeResolver {
       if (string.Equals(addresses[i], normalizedSliceAddress, StringComparison.OrdinalIgnoreCase)) return;
     }
     addresses.Add(normalizedSliceAddress);
+  }
+
+  static void RemoveAddressFromAtlasLookup(Dictionary<string, List<string>> atlasMap, string atlasAssetPath, string sliceAddress) {
+    if (atlasMap == null || string.IsNullOrWhiteSpace(sliceAddress)) return;
+    var normalizedAtlasPath = atlasAssetPath;
+    var normalizedSliceAddress = sliceAddress;
+    if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) {
+      if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var parsedAtlasAssetPath, out _)) return;
+      normalizedAtlasPath = NormalizeToken(parsedAtlasAssetPath);
+      normalizedSliceAddress = NormalizeToken(sliceAddress);
+    }
+    if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(normalizedSliceAddress)) return;
+    if (!atlasMap.TryGetValue(normalizedAtlasPath, out var addresses) || addresses == null) return;
+
+    for (var i = addresses.Count - 1; i >= 0; i--) {
+      if (!string.Equals(addresses[i], normalizedSliceAddress, StringComparison.OrdinalIgnoreCase)) continue;
+      addresses.RemoveAt(i);
+      break;
+    }
+
+    if (addresses.Count <= 0) {
+      atlasMap.Remove(normalizedAtlasPath);
+    }
   }
 
   static void CacheLookupHit(LookupCacheKey key, SpriteAddressPair pair) {
@@ -1012,9 +1055,12 @@ public static class SpriteRuntimeResolver {
     return string.Join(", ", values.GetRange(0, values.Count - 1)) + ", and " + values[values.Count - 1];
   }
 
-  static Dictionary<string, SpriteAddressPair> ParseShardRows(string text, bool allowUnityLogging = true) {
-    var rows = new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase);
-    if (string.IsNullOrWhiteSpace(text)) return rows;
+  static ParsedShardData ParseShardRows(string text, bool allowUnityLogging = true) {
+    var parsedShard = new ParsedShardData {
+      rows = new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase),
+      addressesByAtlasPath = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+    };
+    if (string.IsNullOrWhiteSpace(text)) return parsedShard;
 
     var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
     for (var i = 0; i < lines.Length; i++) {
@@ -1029,19 +1075,27 @@ public static class SpriteRuntimeResolver {
       if (!int.TryParse(cols[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var frame)) continue;
 
       var key = BuildRowKey(form, animation, frame);
-      if (allowUnityLogging && rows.ContainsKey(key)) {
+      if (allowUnityLogging && parsedShard.rows.ContainsKey(key)) {
         RateLimitedWarning(
           "shard-duplicate:" + key,
           "[SpriteRuntimeResolver] Duplicate shard row for key '" + key + "'. Last row wins."
         );
       }
-      rows[key] = SpriteAddressPair.Create(
+      if (parsedShard.rows.TryGetValue(key, out var previousPair)) {
+        RemoveAddressFromAtlasLookup(parsedShard.addressesByAtlasPath, previousPair.colorAtlasAddress, previousPair.colorAddress);
+        RemoveAddressFromAtlasLookup(parsedShard.addressesByAtlasPath, previousPair.normalAtlasAddress, previousPair.normalAddress);
+      }
+
+      var spritePair = SpriteAddressPair.Create(
         NormalizeToken(Unescape(cols[3])),
         NormalizeToken(Unescape(cols[4]))
       );
+      parsedShard.rows[key] = spritePair;
+      AddAddressToAtlasLookup(parsedShard.addressesByAtlasPath, spritePair.colorAtlasAddress, spritePair.colorAddress);
+      AddAddressToAtlasLookup(parsedShard.addressesByAtlasPath, spritePair.normalAtlasAddress, spritePair.normalAddress);
     }
 
-    return rows;
+    return parsedShard;
   }
 
   // TODO: both methods update the cooldown but never emit the message — all resolver diagnostics

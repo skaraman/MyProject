@@ -383,6 +383,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   readonly HashSet<string> scheduledReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> scheduledCriticalReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> warmAddressBatch = new(2048);
+  readonly Dictionary<GameObject, SpriteWithNormals[]> archetypeTargetCache = new();
 
   Coroutine activeRoutine;
   Action<WarmResult> activeCallback;
@@ -397,6 +398,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
   // scratch buffers used to reduce GC pressure in hot paths.
   static readonly List<string> archetypeKeyBuffer = new();
+  static readonly HashSet<string> archetypeKeySeenBuffer = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<string> sliceScratch = new();
   static readonly List<string> sortedLabelBuffer = new();
   static readonly List<string> highPriorityAddressBatchBuffer = new();
@@ -404,14 +406,61 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   static readonly HashSet<string> rescueSeenAddressBuffer = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<EnemyController> rescueEnemyControllerBuffer = new();
   static readonly List<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation> locationBuffer = new();
+  readonly HashSet<string> normalizedTokenSetScratch = new(StringComparer.OrdinalIgnoreCase);
+  readonly List<string> rescueDispatchBuffer = new(64);
+  Coroutine rescueDispatchRoutine;
 
   const int MinWarmPlanFrameAddressProbeBudget = 32768;
   const int MaxWarmPlanFrameAddressProbeBudget = 1000000;
+  const float WarmPlanSliceBudgetSeconds = 0.004f;
+  const int WarmPlanSliceWorkItemBudget = 24;
   const int MaxAnimationSamplesPerClip = 8;
   const int DesktopWarmOutstandingTarget = 1500;
   const int MobileWarmOutstandingTarget = 900;
   const int ThreadedWarmPlanMinAddressCount = 512;
   const int ThreadedWarmPlanMinProcessorCount = 4;
+
+  enum WarmPlanSliceAction {
+    Continue = 0,
+    Yield = 1,
+    Stop = 2
+  }
+
+  sealed class WarmPlanSliceBudget {
+    readonly float maxSliceSeconds;
+    readonly int maxWorkItems;
+    float sliceStartedAt;
+    int sliceWorkItems;
+
+    public int YieldedFrames { get; private set; }
+    public int TotalWorkItems { get; private set; }
+    public float MaxObservedSliceSeconds { get; private set; }
+
+    public WarmPlanSliceBudget(float maxSliceSeconds, int maxWorkItems) {
+      this.maxSliceSeconds = Mathf.Max(maxSliceSeconds, 0.001f);
+      this.maxWorkItems = Math.Max(maxWorkItems, 1);
+      Reset();
+    }
+
+    public bool Consume() {
+      TotalWorkItems++;
+      sliceWorkItems++;
+      return sliceWorkItems >= maxWorkItems || Time.realtimeSinceStartup - sliceStartedAt >= maxSliceSeconds;
+    }
+
+    public void RecordYield() {
+      var elapsed = Mathf.Max(Time.realtimeSinceStartup - sliceStartedAt, 0f);
+      if (elapsed > MaxObservedSliceSeconds) {
+        MaxObservedSliceSeconds = elapsed;
+      }
+      YieldedFrames++;
+    }
+
+    public void Reset() {
+      sliceStartedAt = Time.realtimeSinceStartup;
+      sliceWorkItems = 0;
+    }
+  }
 
   sealed class ThreadedWarmPlanSnapshot {
     public readonly List<string> warmAddressBatch;
@@ -460,18 +509,19 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   public static string BuildEnemyArchetypeToken(string locationId, Dictionary<string, GameObject> enemyArchetypePrefabsByType) {
     var normalizedLocation = NormalizeToken(locationId);
     archetypeKeyBuffer.Clear();
+    archetypeKeySeenBuffer.Clear();
     if (enemyArchetypePrefabsByType != null) {
-      var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
       foreach (var pair in enemyArchetypePrefabsByType) {
         var key = NormalizeToken(pair.Key);
         if (string.IsNullOrWhiteSpace(key)) continue;
-        if (!seenKeys.Add(key)) continue;
+        if (!archetypeKeySeenBuffer.Add(key)) continue;
         archetypeKeyBuffer.Add(key);
       }
     }
     archetypeKeyBuffer.Sort(StringComparer.OrdinalIgnoreCase);
     var keyCsv = archetypeKeyBuffer.Count > 0 ? string.Join(",", archetypeKeyBuffer) : "none";
     archetypeKeyBuffer.Clear();
+    archetypeKeySeenBuffer.Clear();
     return "location:" + normalizedLocation + "|enemies:" + keyCsv;
   }
 
@@ -549,6 +599,10 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       StopCoroutine(activeRoutine);
       activeRoutine = null;
     }
+    if (rescueDispatchRoutine != null) {
+      StopCoroutine(rescueDispatchRoutine);
+      rescueDispatchRoutine = null;
+    }
     activeCallback = null;
     hasActiveProgress = false;
     activeProgress = default;
@@ -574,7 +628,13 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     warmPlanDroppedHighPriorityAddresses = 0;
     // Build a minimal first-pass scope first; ideal startup keeps this pass
     // focused on first-contact visuals so soft timeout can be met consistently.
-    BuildWarmPlan(request, includeResolvedAddressSweeps: false);
+    yield return BuildWarmPlanRoutine(
+      request,
+      includeResolvedAddressSweeps: false,
+      includeStaticSeedWork: true,
+      deadlineAt: hardTimeoutAt,
+      debugLogs: debugLogs
+    );
 
     if (warmLibrarySet.Count > 0) {
       yield return ResolveLibraryAtlasDependenciesRoutine(hardTimeoutAt, debugLogs);
@@ -589,7 +649,13 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var extendedSweepDeadline = hardTimeoutAt + Mathf.Max(request.timeoutSeconds, 2.0f);
     while (true) {
       var resolverIdle = SpriteRuntimeResolver.IsWarmupIdle();
-      BuildWarmPlan(request, includeResolvedAddressSweeps: true);
+      yield return BuildWarmPlanRoutine(
+        request,
+        includeResolvedAddressSweeps: true,
+        includeStaticSeedWork: false,
+        deadlineAt: hardTimeoutAt,
+        debugLogs: debugLogs
+      );
       resolverSweepFrames++;
       var hasResolvedAddresses = warmAddressSet.Count > 0;
       var now = Time.realtimeSinceStartup;
@@ -631,7 +697,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       );
     }
 
-    ExpandPlayerAtlasSeeds();
+    yield return ExpandPlayerAtlasSeedsRoutine(context, hardTimeoutAt, debugLogs);
 
     if (debugLogs) {
       var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
@@ -825,270 +891,354 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     callback?.Invoke(result);
   }
 
-  void BuildWarmPlan(WarmRequest request, bool includeResolvedAddressSweeps) {
-    // Ideal warm plans stay narrow: critical first-frame visuals first, then
-    // nearby enemies/effects. A broad set increases queue tail and timeout risk.
-    AddLibraries(request.extraCriticalLibraries);
-    AddLibraries(request.extraWarmLibraries);
-    CollectLabels(request.extraCriticalLabels, markCritical: true);
-    CollectLabels(request.extraWarmLabels, markCritical: false);
-    CollectLabels(SpriteStreamingRuntimeSettings.CriticalAddressableLabels, markCritical: true);
-    CollectLabels(SpriteStreamingRuntimeSettings.WarmAddressableLabels, markCritical: false);
-    CollectLabels(SpriteStreamingRuntimeSettings.WarmUiAddressableLabels, markCritical: false);
-    // TODO(smooth-first-play): Keep these label sets populated with first-contact animations
-    // (spawn/idle/locomotion) so warm gates bias toward frames seen immediately after unlock.
-    if (HasReachedWarmAddressCap()) return;
-    AddDirectAddresses(request.extraCriticalAddresses, markCritical: true, markHighPriority: true);
-    if (HasReachedWarmAddressCap()) return;
-    AddDirectAddresses(request.extraWarmAddresses, markCritical: false, markHighPriority: false);
-    if (HasReachedWarmAddressCap()) return;
+  IEnumerator BuildWarmPlanRoutine(
+    WarmRequest request,
+    bool includeResolvedAddressSweeps,
+    bool includeStaticSeedWork,
+    float deadlineAt,
+    bool debugLogs
+  ) {
+    var budget = new WarmPlanSliceBudget(WarmPlanSliceBudgetSeconds, WarmPlanSliceWorkItemBudget);
+
+    if (includeStaticSeedWork) {
+      AddLibraries(request.extraCriticalLibraries);
+      AddLibraries(request.extraWarmLibraries);
+      CollectLabels(request.extraCriticalLabels, markCritical: true);
+      CollectLabels(request.extraWarmLabels, markCritical: false);
+      CollectLabels(SpriteStreamingRuntimeSettings.CriticalAddressableLabels, markCritical: true);
+      CollectLabels(SpriteStreamingRuntimeSettings.WarmAddressableLabels, markCritical: false);
+      CollectLabels(SpriteStreamingRuntimeSettings.WarmUiAddressableLabels, markCritical: false);
+      AddDirectAddresses(request.extraCriticalAddresses, markCritical: true, markHighPriority: true);
+      AddDirectAddresses(request.extraWarmAddresses, markCritical: false, markHighPriority: false);
+      if (ShouldAbortWarmPlanPass(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineAt, debugLogs)) yield break;
+    }
 
     if (request.playerController != null) {
-      CollectPlayerWarmPlan(
+      yield return CollectPlayerWarmPlan(
         request.playerController,
         request.playerWarmFrames,
         request.effectWarmFrames,
         request.includeEffects,
         includeResolvedAddressSweeps,
-        request.criticalPlayerEffectKeys
+        includeStaticSeedWork,
+        request.criticalPlayerEffectKeys,
+        budget,
+        deadlineAt
       );
-      if (HasReachedWarmAddressCap()) return;
+      if (ShouldAbortWarmPlanPass(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineAt, debugLogs)) yield break;
     }
 
     if (request.criticalEnemyControllers != null && request.criticalEnemyControllers.Length > 0) {
       for (var i = 0; i < request.criticalEnemyControllers.Length; i++) {
-        if (HasReachedWarmAddressCap()) return;
-        CollectEnemyControllerWarmPlan(
+        yield return CollectEnemyControllerWarmPlan(
           request.criticalEnemyControllers[i],
           request.enemyWarmFrames,
           request.effectWarmFrames,
           request.includeEffects,
           includeResolvedAddressSweeps,
-          markCritical: true
+          includeStaticSeedWork,
+          markCritical: true,
+          budget: budget,
+          deadlineAt: deadlineAt
         );
+        if (ShouldAbortWarmPlanPass(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineAt, debugLogs)) yield break;
       }
     }
 
     if (request.enemyControllers != null && request.enemyControllers.Length > 0) {
       for (var i = 0; i < request.enemyControllers.Length; i++) {
-        if (HasReachedWarmAddressCap()) return;
-        CollectEnemyControllerWarmPlan(
+        yield return CollectEnemyControllerWarmPlan(
           request.enemyControllers[i],
           request.enemyWarmFrames,
           request.effectWarmFrames,
           request.includeEffects,
           includeResolvedAddressSweeps,
-          markCritical: false
+          includeStaticSeedWork,
+          markCritical: false,
+          budget: budget,
+          deadlineAt: deadlineAt
         );
+        if (ShouldAbortWarmPlanPass(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineAt, debugLogs)) yield break;
       }
     }
 
     if (request.enemyArchetypePrefabsByType != null && request.enemyArchetypePrefabsByType.Count > 0) {
-      if (HasReachedWarmAddressCap()) return;
-      CollectEnemyArchetypeWarmPlan(request.enemyArchetypePrefabsByType, request.enemyWarmFrames, request.effectWarmFrames, request.includeEffects, includeResolvedAddressSweeps);
+      yield return CollectEnemyArchetypeWarmPlan(
+        request.enemyArchetypePrefabsByType,
+        request.enemyWarmFrames,
+        request.effectWarmFrames,
+        request.includeEffects,
+        includeResolvedAddressSweeps,
+        includeStaticSeedWork,
+        budget,
+        deadlineAt
+      );
+      if (ShouldAbortWarmPlanPass(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineAt, debugLogs)) yield break;
     }
+
+    LogWarmPlanPassSummary(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineHit: false, debugLogs: debugLogs);
   }
 
-  void CollectPlayerWarmPlan(
+  IEnumerator CollectPlayerWarmPlan(
     GearController controller,
     int warmFrames,
     int effectWarmFrames,
     bool includeEffects,
     bool includeResolvedAddressSweeps,
-    List<string> criticalPlayerEffectKeys
+    bool includeStaticSeedWork,
+    List<string> criticalPlayerEffectKeys,
+    WarmPlanSliceBudget budget,
+    float deadlineAt
   ) {
-    if (controller == null) return;
-    if (HasReachedWarmAddressCap()) return;
-    // Player animation manifest source of truth is Data/Animations.cs (Animations.Esperanza).
+    if (controller == null || HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
     var playerAnimationManifest = Animations.Esperanza;
-    AddLibrariesFromGameObjects(controller.SkinObjects);
-    AddLibrariesFromGameObjects(controller.GearObjects);
-    if (HasReachedWarmAddressCap()) return;
-    if (includeEffects && controller.effectNode != null) {
-      AddLibrary(controller.effectNode.libraryName);
-    }
-    if (HasReachedWarmAddressCap()) return;
-    if (!includeResolvedAddressSweeps) return;
 
-    CollectAtlasSeedAddressesForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, playerCriticalAtlasSeedAddresses);
-    if (HasReachedWarmAddressCap()) return;
-    CollectAtlasSeedAddressesForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, playerWarmAtlasSeedAddresses);
-    if (HasReachedWarmAddressCap()) return;
-    CollectAnimationStartsForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, markCritical: true);
-    if (HasReachedWarmAddressCap()) return;
-    CollectAnimationStartsForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, markCritical: false);
-    if (HasReachedWarmAddressCap()) return;
-
-    if (includeEffects && controller.effectNode != null) {
-      var criticalEffectKeySet = BuildNormalizedTokenSet(criticalPlayerEffectKeys);
-      if (criticalEffectKeySet != null && criticalEffectKeySet.Count > 0) {
-        CollectEffectStartsForTarget(
-          controller.effectNode,
-          Effects.Esperanza,
-          effectWarmFrames,
-          markCritical: true,
-          allowInactive: false,
-          includedEffectKeys: criticalEffectKeySet
-        );
-        if (HasReachedWarmAddressCap()) return;
-        CollectEffectStartsForTarget(
-          controller.effectNode,
-          Effects.Things,
-          effectWarmFrames,
-          markCritical: true,
-          allowInactive: false,
-          includedEffectKeys: criticalEffectKeySet
-        );
-        if (HasReachedWarmAddressCap()) return;
-        CollectEffectStartsForTarget(
-          controller.effectNode,
-          Effects.Imp,
-          effectWarmFrames,
-          markCritical: true,
-          allowInactive: false,
-          includedEffectKeys: criticalEffectKeySet
-        );
-        if (HasReachedWarmAddressCap()) return;
+    if (includeStaticSeedWork) {
+      yield return AddLibrariesFromGameObjects(controller.SkinObjects, budget, deadlineAt);
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+      yield return AddLibrariesFromGameObjects(controller.GearObjects, budget, deadlineAt);
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+      if (includeEffects && controller.effectNode != null) {
+        AddLibrary(controller.effectNode.libraryName);
       }
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+    }
 
-      CollectEffectStartsForTarget(
+    if (!includeResolvedAddressSweeps) yield break;
+
+    yield return CollectAtlasSeedAddressesForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, playerCriticalAtlasSeedAddresses, budget, deadlineAt);
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+    yield return CollectAtlasSeedAddressesForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, playerWarmAtlasSeedAddresses, budget, deadlineAt);
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+    yield return CollectAnimationStartsForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, markCritical: true, budget: budget, deadlineAt: deadlineAt);
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+    yield return CollectAnimationStartsForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, markCritical: false, budget: budget, deadlineAt: deadlineAt);
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+
+    if (!includeEffects || controller.effectNode == null) yield break;
+
+    var criticalEffectKeySet = BuildNormalizedTokenSet(criticalPlayerEffectKeys);
+    if (criticalEffectKeySet != null && criticalEffectKeySet.Count > 0) {
+      yield return CollectEffectStartsForTarget(
         controller.effectNode,
         Effects.Esperanza,
         effectWarmFrames,
-        markCritical: false,
+        markCritical: true,
+        budget: budget,
+        deadlineAt: deadlineAt,
         allowInactive: false,
-        excludedEffectKeys: criticalEffectKeySet
+        includedEffectKeys: criticalEffectKeySet
       );
-      if (HasReachedWarmAddressCap()) return;
-      CollectEffectStartsForTarget(
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+      yield return CollectEffectStartsForTarget(
         controller.effectNode,
         Effects.Things,
         effectWarmFrames,
-        markCritical: false,
+        markCritical: true,
+        budget: budget,
+        deadlineAt: deadlineAt,
         allowInactive: false,
-        excludedEffectKeys: criticalEffectKeySet
+        includedEffectKeys: criticalEffectKeySet
       );
-      if (HasReachedWarmAddressCap()) return;
-      CollectEffectStartsForTarget(
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+      yield return CollectEffectStartsForTarget(
         controller.effectNode,
         Effects.Imp,
         effectWarmFrames,
-        markCritical: false,
+        markCritical: true,
+        budget: budget,
+        deadlineAt: deadlineAt,
         allowInactive: false,
-        excludedEffectKeys: criticalEffectKeySet
+        includedEffectKeys: criticalEffectKeySet
       );
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
     }
+
+    yield return CollectEffectStartsForTarget(
+      controller.effectNode,
+      Effects.Esperanza,
+      effectWarmFrames,
+      markCritical: false,
+      budget: budget,
+      deadlineAt: deadlineAt,
+      allowInactive: false,
+      excludedEffectKeys: criticalEffectKeySet
+    );
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+    yield return CollectEffectStartsForTarget(
+      controller.effectNode,
+      Effects.Things,
+      effectWarmFrames,
+      markCritical: false,
+      budget: budget,
+      deadlineAt: deadlineAt,
+      allowInactive: false,
+      excludedEffectKeys: criticalEffectKeySet
+    );
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+    yield return CollectEffectStartsForTarget(
+      controller.effectNode,
+      Effects.Imp,
+      effectWarmFrames,
+      markCritical: false,
+      budget: budget,
+      deadlineAt: deadlineAt,
+      allowInactive: false,
+      excludedEffectKeys: criticalEffectKeySet
+    );
   }
 
-  void CollectEnemyControllerWarmPlan(
+  IEnumerator CollectEnemyControllerWarmPlan(
     EnemyController controller,
     int warmFrames,
     int effectWarmFrames,
     bool includeEffects,
     bool includeResolvedAddressSweeps,
-    bool markCritical
+    bool includeStaticSeedWork,
+    bool markCritical,
+    WarmPlanSliceBudget budget,
+    float deadlineAt
   ) {
-    if (controller == null) return;
-    if (controller.spriteObjects == null || controller.spriteObjects.Length == 0) return;
-    if (HasReachedWarmAddressCap()) return;
+    if (controller == null || controller.spriteObjects == null || controller.spriteObjects.Length == 0) yield break;
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     var enemyType = NormalizeToken(controller.enemyType);
-    if (string.IsNullOrWhiteSpace(enemyType)) return;
-    if (!Animations.Enemies.TryGetValue(enemyType, out var enemyAnimations) || enemyAnimations == null || enemyAnimations.Count == 0) return;
+    if (string.IsNullOrWhiteSpace(enemyType)) yield break;
+    if (!Animations.Enemies.TryGetValue(enemyType, out var enemyAnimations) || enemyAnimations == null || enemyAnimations.Count == 0) yield break;
 
-    AddLibrariesFromGameObjects(controller.spriteObjects);
-    if (includeEffects && controller.effectNode != null) {
-      AddLibrary(controller.effectNode.libraryName);
+    if (includeStaticSeedWork) {
+      yield return AddLibrariesFromGameObjects(controller.spriteObjects, budget, deadlineAt);
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+      if (includeEffects && controller.effectNode != null) {
+        AddLibrary(controller.effectNode.libraryName);
+      }
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
     }
-    if (HasReachedWarmAddressCap()) return;
-    if (!includeResolvedAddressSweeps) return;
 
-    CollectAnimationStartsForObjects(controller.spriteObjects, enemyAnimations, warmFrames, markCritical);
-    if (HasReachedWarmAddressCap()) return;
+    if (!includeResolvedAddressSweeps) yield break;
+
+    yield return CollectAnimationStartsForObjects(controller.spriteObjects, enemyAnimations, warmFrames, markCritical, budget, deadlineAt);
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     if (includeEffects && controller.effectNode != null) {
-      CollectEffectStartsForTarget(controller.effectNode, ResolveEnemyEffectAnimations(enemyType), effectWarmFrames, markCritical);
+      yield return CollectEffectStartsForTarget(
+        controller.effectNode,
+        ResolveEnemyEffectAnimations(enemyType),
+        effectWarmFrames,
+        markCritical,
+        budget,
+        deadlineAt
+      );
     }
   }
 
-  void CollectEnemyArchetypeWarmPlan(
+  IEnumerator CollectEnemyArchetypeWarmPlan(
     Dictionary<string, GameObject> enemyArchetypePrefabsByType,
     int warmFrames,
     int effectWarmFrames,
     bool includeEffects,
-    bool includeResolvedAddressSweeps
+    bool includeResolvedAddressSweeps,
+    bool includeStaticSeedWork,
+    WarmPlanSliceBudget budget,
+    float deadlineAt
   ) {
-    if (enemyArchetypePrefabsByType == null || enemyArchetypePrefabsByType.Count == 0) return;
-    if (HasReachedWarmAddressCap()) return;
+    if (enemyArchetypePrefabsByType == null || enemyArchetypePrefabsByType.Count == 0) yield break;
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     foreach (var pair in enemyArchetypePrefabsByType) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var enemyType = NormalizeToken(pair.Key);
       var root = pair.Value;
       if (string.IsNullOrWhiteSpace(enemyType) || root == null) continue;
       if (!Animations.Enemies.TryGetValue(enemyType, out var enemyAnimations) || enemyAnimations == null || enemyAnimations.Count == 0) continue;
 
-      var targets = root.GetComponentsInChildren<SpriteWithNormals>(true);
+      var targets = GetCachedArchetypeTargets(root);
+      var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+      if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+      if (sliceAction == WarmPlanSliceAction.Yield) {
+        budget.RecordYield();
+        TextureResidencyCache.Pump();
+        yield return null;
+        budget.Reset();
+      }
+
       for (var i = 0; i < targets.Length; i++) {
-        if (HasReachedWarmAddressCap()) return;
+        if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
         var target = targets[i];
         if (!IsTargetWarmable(target, allowInactive: true)) continue;
-        AddLibrary(target.libraryName);
-        if (!includeResolvedAddressSweeps) continue;
-        CollectAnimationStartsForTarget(target, enemyAnimations, warmFrames, markCritical: false, allowInactive: true);
+        if (includeStaticSeedWork) {
+          AddLibrary(target.libraryName);
+        }
+        if (!includeResolvedAddressSweeps) {
+          sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+          if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+          if (sliceAction == WarmPlanSliceAction.Yield) {
+            budget.RecordYield();
+            TextureResidencyCache.Pump();
+            yield return null;
+            budget.Reset();
+          }
+          continue;
+        }
+        yield return CollectAnimationStartsForTarget(target, enemyAnimations, warmFrames, markCritical: false, budget: budget, deadlineAt: deadlineAt, allowInactive: true);
       }
 
       if (!includeEffects || !includeResolvedAddressSweeps) continue;
       var effectAnimations = ResolveEnemyEffectAnimations(enemyType);
       if (effectAnimations == null || effectAnimations.Count == 0) continue;
       for (var i = 0; i < targets.Length; i++) {
-        if (HasReachedWarmAddressCap()) return;
+        if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
         var target = targets[i];
         if (!IsTargetWarmable(target, allowInactive: true)) continue;
-        CollectEffectStartsForTarget(target, effectAnimations, effectWarmFrames, markCritical: false, allowInactive: true);
+        yield return CollectEffectStartsForTarget(target, effectAnimations, effectWarmFrames, markCritical: false, budget: budget, deadlineAt: deadlineAt, allowInactive: true);
       }
     }
   }
 
-  void CollectAnimationStartsForObjects(
+  IEnumerator CollectAnimationStartsForObjects(
     GameObject[] objects,
     Dictionary<string, AnimData> animations,
     int warmFrames,
-    bool markCritical
+    bool markCritical,
+    WarmPlanSliceBudget budget,
+    float deadlineAt
   ) {
-    if (objects == null || objects.Length == 0) return;
-    if (animations == null || animations.Count == 0) return;
-    if (HasReachedWarmAddressCap()) return;
+    if (objects == null || objects.Length == 0) yield break;
+    if (animations == null || animations.Count == 0) yield break;
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     var clampedWarmFrames = Mathf.Max(warmFrames, 1);
     for (var i = 0; i < objects.Length; i++) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
       if (!IsTargetWarmable(target)) continue;
-      CollectAnimationStartsForTarget(target, animations, clampedWarmFrames, markCritical);
+      yield return CollectAnimationStartsForTarget(target, animations, clampedWarmFrames, markCritical, budget, deadlineAt);
     }
   }
 
-  void CollectAnimationStartsForTarget(
+  IEnumerator CollectAnimationStartsForTarget(
     SpriteWithNormals target,
     Dictionary<string, AnimData> animations,
     int warmFrames,
     bool markCritical,
+    WarmPlanSliceBudget budget,
+    float deadlineAt,
     bool allowInactive = false
   ) {
-    if (!IsTargetWarmable(target, allowInactive)) return;
-    if (animations == null || animations.Count == 0) return;
+    if (!IsTargetWarmable(target, allowInactive)) yield break;
+    if (animations == null || animations.Count == 0) yield break;
 
     if (!target.IsAnimation) {
-      if (!TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) return;
-      AddPairAddresses(staticPair, markCritical);
-      return;
+      if (TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) {
+        AddPairAddresses(staticPair, markCritical);
+      }
+      yield break;
     }
 
     foreach (var pair in animations) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var animationName = pair.Key;
       var anim = pair.Value;
       if (anim == null || string.IsNullOrWhiteSpace(animationName)) continue;
@@ -1098,27 +1248,39 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       var clipEnd = Mathf.Max(anim.end, clipStart);
       var frameEnd = Mathf.Min(clipEnd, clipStart + Mathf.Max(warmFrames, 1) - 1);
       for (var frame = clipStart; frame <= frameEnd; frame++) {
-        if (HasReachedWarmAddressCap()) return;
-        if (!TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) continue;
-        AddPairAddresses(addressPair, markCritical);
+        if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+        if (TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) {
+          AddPairAddresses(addressPair, markCritical);
+        }
+
+        var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+        if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+        if (sliceAction == WarmPlanSliceAction.Yield) {
+          budget.RecordYield();
+          TextureResidencyCache.Pump();
+          yield return null;
+          budget.Reset();
+        }
       }
     }
   }
 
-  void CollectEffectStartsForTarget(
+  IEnumerator CollectEffectStartsForTarget(
     SpriteWithNormals target,
     Dictionary<string, EffectData> effects,
     int warmFrames,
     bool markCritical,
+    WarmPlanSliceBudget budget,
+    float deadlineAt,
     bool allowInactive = false,
     ISet<string> includedEffectKeys = null,
     ISet<string> excludedEffectKeys = null
   ) {
-    if (!IsTargetWarmable(target, allowInactive)) return;
-    if (effects == null || effects.Count == 0) return;
+    if (!IsTargetWarmable(target, allowInactive)) yield break;
+    if (effects == null || effects.Count == 0) yield break;
 
     foreach (var pair in effects) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var effectName = pair.Key;
       var effect = pair.Value;
       if (effect == null || string.IsNullOrWhiteSpace(effectName)) continue;
@@ -1135,16 +1297,27 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       var clipEnd = Mathf.Max(effect.end, clipStart);
       var frameEnd = Mathf.Min(clipEnd, clipStart + Mathf.Max(warmFrames, 1) - 1);
       for (var frame = clipStart; frame <= frameEnd; frame++) {
-        if (HasReachedWarmAddressCap()) return;
-        if (!TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, effectName)) continue;
-        AddPairAddresses(addressPair, markCritical);
+        if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+        if (TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, effectName)) {
+          AddPairAddresses(addressPair, markCritical);
+        }
+
+        var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+        if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+        if (sliceAction == WarmPlanSliceAction.Yield) {
+          budget.RecordYield();
+          TextureResidencyCache.Pump();
+          yield return null;
+          budget.Reset();
+        }
       }
     }
   }
 
-  static HashSet<string> BuildNormalizedTokenSet(List<string> values) {
+  ISet<string> BuildNormalizedTokenSet(List<string> values) {
     if (values == null || values.Count <= 0) return null;
-    var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+    var set = normalizedTokenSetScratch;
+    set.Clear();
     for (var i = 0; i < values.Count; i++) {
       var normalized = NormalizeToken(values[i]);
       if (string.IsNullOrWhiteSpace(normalized)) continue;
@@ -1215,48 +1388,53 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     return count;
   }
 
-  void CollectAtlasSeedAddressesForObjects(
+  IEnumerator CollectAtlasSeedAddressesForObjects(
     GameObject[] objects,
     Dictionary<string, AnimData> animations,
     int warmFrames,
-    HashSet<string> seedSet
+    HashSet<string> seedSet,
+    WarmPlanSliceBudget budget,
+    float deadlineAt
   ) {
-    if (objects == null || objects.Length == 0) return;
-    if (animations == null || animations.Count == 0) return;
-    if (seedSet == null) return;
-    if (HasReachedWarmAddressCap()) return;
+    if (objects == null || objects.Length == 0) yield break;
+    if (animations == null || animations.Count == 0) yield break;
+    if (seedSet == null) yield break;
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     var clampedWarmFrames = Mathf.Max(warmFrames, 1);
     for (var i = 0; i < objects.Length; i++) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
       if (!IsTargetWarmable(target)) continue;
-      CollectAtlasSeedAddressesForTarget(target, animations, clampedWarmFrames, seedSet);
+      yield return CollectAtlasSeedAddressesForTarget(target, animations, clampedWarmFrames, seedSet, budget, deadlineAt);
     }
   }
 
-  void CollectAtlasSeedAddressesForTarget(
+  IEnumerator CollectAtlasSeedAddressesForTarget(
     SpriteWithNormals target,
     Dictionary<string, AnimData> animations,
     int warmFrames,
-    HashSet<string> seedSet
+    HashSet<string> seedSet,
+    WarmPlanSliceBudget budget,
+    float deadlineAt
   ) {
-    if (!IsTargetWarmable(target)) return;
-    if (animations == null || animations.Count == 0 || seedSet == null) return;
-    if (HasReachedWarmAddressCap()) return;
+    if (!IsTargetWarmable(target)) yield break;
+    if (animations == null || animations.Count == 0 || seedSet == null) yield break;
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
     var requestedSamples = Mathf.Clamp(Mathf.Max(warmFrames, 1), 1, 3);
 
     if (!target.IsAnimation) {
-      if (!TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) return;
-      AddAtlasSeedAddress(staticPair.RuntimeColorAddress, seedSet);
-      AddAtlasSeedAddress(staticPair.RuntimeNormalAddress, seedSet);
-      return;
+      if (TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) {
+        AddAtlasSeedAddress(staticPair.RuntimeColorAddress, seedSet);
+        AddAtlasSeedAddress(staticPair.RuntimeNormalAddress, seedSet);
+      }
+      yield break;
     }
 
     foreach (var pair in animations) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var animationName = pair.Key;
       var anim = pair.Value;
       if (anim == null || string.IsNullOrWhiteSpace(animationName)) continue;
@@ -1270,7 +1448,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       var lastFrame = int.MinValue;
 
       for (var sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {
-        if (HasReachedWarmAddressCap()) return;
+        if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
         var frame = sampleCount <= 1
           ? clipStart
           : Mathf.RoundToInt(Mathf.Lerp(clipStart, clipEnd, sampleIndex / (float)sampleDenominator));
@@ -1278,9 +1456,19 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
         if (frame == lastFrame) continue;
         lastFrame = frame;
 
-        if (!TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) continue;
-        AddAtlasSeedAddress(addressPair.RuntimeColorAddress, seedSet);
-        AddAtlasSeedAddress(addressPair.RuntimeNormalAddress, seedSet);
+        if (TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) {
+          AddAtlasSeedAddress(addressPair.RuntimeColorAddress, seedSet);
+          AddAtlasSeedAddress(addressPair.RuntimeNormalAddress, seedSet);
+        }
+
+        var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+        if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+        if (sliceAction == WarmPlanSliceAction.Yield) {
+          budget.RecordYield();
+          TextureResidencyCache.Pump();
+          yield return null;
+          budget.Reset();
+        }
       }
     }
   }
@@ -1290,32 +1478,134 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     seedSet.Add(address.Trim());
   }
 
-  void ExpandPlayerAtlasSeeds() {
-    if (!SpriteStreamingRuntimeSettings.EnableAtlasExpansionOnSliceRequest) return;
-    if (HasReachedWarmAddressCap()) return;
-    ExpandAtlasSeedSet(playerCriticalAtlasSeedAddresses, markHighPriority: false);
-    if (HasReachedWarmAddressCap()) return;
-    ExpandAtlasSeedSet(playerWarmAtlasSeedAddresses, markHighPriority: false);
+  IEnumerator ExpandPlayerAtlasSeedsRoutine(WarmContext context, float deadlineAt, bool debugLogs) {
+    if (!SpriteStreamingRuntimeSettings.EnableAtlasExpansionOnSliceRequest) yield break;
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
+
+    var budget = new WarmPlanSliceBudget(WarmPlanSliceBudgetSeconds, WarmPlanSliceWorkItemBudget);
+    yield return ExpandAtlasSeedSet(playerCriticalAtlasSeedAddresses, markHighPriority: false, budget: budget, deadlineAt: deadlineAt);
+    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) {
+      LogAtlasSeedExpansionSummary(context, budget, deadlineHit: HasWarmPlanDeadlineElapsed(deadlineAt), debugLogs: debugLogs);
+      yield break;
+    }
+    yield return ExpandAtlasSeedSet(playerWarmAtlasSeedAddresses, markHighPriority: false, budget: budget, deadlineAt: deadlineAt);
+    LogAtlasSeedExpansionSummary(context, budget, deadlineHit: HasWarmPlanDeadlineElapsed(deadlineAt), debugLogs: debugLogs);
   }
 
-  void ExpandAtlasSeedSet(HashSet<string> seedSet, bool markHighPriority) {
-    if (seedSet == null || seedSet.Count <= 0) return;
+  IEnumerator ExpandAtlasSeedSet(HashSet<string> seedSet, bool markHighPriority, WarmPlanSliceBudget budget, float deadlineAt) {
+    if (seedSet == null || seedSet.Count <= 0) yield break;
     foreach (var seedAddress in seedSet) {
-      if (HasReachedWarmAddressCap()) return;
+      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       if (string.IsNullOrWhiteSpace(seedAddress)) continue;
       AddWarmAddress(seedAddress, markHighPriority);
+
+      var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+      if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+      if (sliceAction == WarmPlanSliceAction.Yield) {
+        budget.RecordYield();
+        TextureResidencyCache.Pump();
+        yield return null;
+        budget.Reset();
+      }
     }
   }
 
-  void AddLibrariesFromGameObjects(GameObject[] objects) {
-    if (objects == null || objects.Length == 0) return;
+  IEnumerator AddLibrariesFromGameObjects(GameObject[] objects, WarmPlanSliceBudget budget, float deadlineAt) {
+    if (objects == null || objects.Length == 0) yield break;
     for (var i = 0; i < objects.Length; i++) {
+      if (HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
       var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
       if (target == null) continue;
       AddLibrary(target.libraryName);
+
+      var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
+      if (sliceAction == WarmPlanSliceAction.Stop) yield break;
+      if (sliceAction == WarmPlanSliceAction.Yield) {
+        budget.RecordYield();
+        TextureResidencyCache.Pump();
+        yield return null;
+        budget.Reset();
+      }
     }
+  }
+
+  SpriteWithNormals[] GetCachedArchetypeTargets(GameObject root) {
+    if (root == null) return Array.Empty<SpriteWithNormals>();
+    if (archetypeTargetCache.TryGetValue(root, out var cachedTargets) && cachedTargets != null) {
+      return cachedTargets;
+    }
+    var targets = root.GetComponentsInChildren<SpriteWithNormals>(true);
+    archetypeTargetCache[root] = targets ?? Array.Empty<SpriteWithNormals>();
+    return archetypeTargetCache[root];
+  }
+
+  bool ShouldAbortWarmPlanPass(
+    WarmRequest request,
+    bool includeResolvedAddressSweeps,
+    bool includeStaticSeedWork,
+    WarmPlanSliceBudget budget,
+    float deadlineAt,
+    bool debugLogs
+  ) {
+    var deadlineHit = HasWarmPlanDeadlineElapsed(deadlineAt);
+    if (!deadlineHit && !HasReachedWarmAddressCap()) return false;
+    LogWarmPlanPassSummary(request, includeResolvedAddressSweeps, includeStaticSeedWork, budget, deadlineHit, debugLogs);
+    return true;
+  }
+
+  void LogWarmPlanPassSummary(
+    WarmRequest request,
+    bool includeResolvedAddressSweeps,
+    bool includeStaticSeedWork,
+    WarmPlanSliceBudget budget,
+    bool deadlineHit,
+    bool debugLogs
+  ) {
+    if (!debugLogs) return;
+    if (!deadlineHit && (budget == null || budget.YieldedFrames <= 0)) return;
+    Debug.Log(
+      "[StreamingWarmOrchestrator] Warm plan pass." +
+      " context=" + request.context +
+      " static_seed=" + (includeStaticSeedWork ? 1 : 0) +
+      " resolved_sweep=" + (includeResolvedAddressSweeps ? 1 : 0) +
+      " yielded_frames=" + (budget != null ? budget.YieldedFrames : 0) +
+      " work_items=" + (budget != null ? budget.TotalWorkItems : 0) +
+      " max_slice_ms=" + ((budget != null ? budget.MaxObservedSliceSeconds : 0f) * 1000f).ToString("0.0") +
+      " deadline_hit=" + (deadlineHit ? 1 : 0) +
+      " libraries=" + warmLibrarySet.Count +
+      " labels=" + warmLabelSet.Count +
+      " addresses=" + warmAddressSet.Count +
+      " critical=" + criticalReadyAddressSet.Count +
+      " frame_probes=" + warmPlanFrameAddressProbeCount
+    );
+  }
+
+  void LogAtlasSeedExpansionSummary(WarmContext context, WarmPlanSliceBudget budget, bool deadlineHit, bool debugLogs) {
+    if (!debugLogs) return;
+    if (!deadlineHit && (budget == null || budget.YieldedFrames <= 0)) return;
+    Debug.Log(
+      "[StreamingWarmOrchestrator] Atlas seed expansion." +
+      " context=" + context +
+      " yielded_frames=" + (budget != null ? budget.YieldedFrames : 0) +
+      " work_items=" + (budget != null ? budget.TotalWorkItems : 0) +
+      " max_slice_ms=" + ((budget != null ? budget.MaxObservedSliceSeconds : 0f) * 1000f).ToString("0.0") +
+      " deadline_hit=" + (deadlineHit ? 1 : 0) +
+      " seed_critical=" + playerCriticalAtlasSeedAddresses.Count +
+      " seed_warm=" + playerWarmAtlasSeedAddresses.Count
+    );
+  }
+
+  static bool HasWarmPlanDeadlineElapsed(float deadlineAt) {
+    return deadlineAt > 0f && Time.realtimeSinceStartup >= deadlineAt;
+  }
+
+  static WarmPlanSliceAction NoteWarmPlanWork(WarmPlanSliceBudget budget, float deadlineAt) {
+    if (HasWarmPlanDeadlineElapsed(deadlineAt)) return WarmPlanSliceAction.Stop;
+    if (budget == null) return WarmPlanSliceAction.Continue;
+    if (!budget.Consume()) return WarmPlanSliceAction.Continue;
+    return WarmPlanSliceAction.Yield;
   }
 
   void AddLibraries(List<string> libraries) {
@@ -1447,7 +1737,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
     var warmAddresses = new List<string>(warmAddressSet);
     var readyAddresses = new List<string>(readyAddressSet);
-    var finalizeTask = Task.Run(() => BuildThreadedWarmPlanSnapshot(warmAddresses, readyAddresses));
+    var criticalReadyAddresses = new List<string>(criticalReadyAddressSet);
+    var finalizeTask = Task.Run(() => BuildThreadedWarmPlanSnapshot(warmAddresses, readyAddresses, criticalReadyAddresses));
     var waitedFrames = 0;
 
     while (!finalizeTask.IsCompleted) {
@@ -1514,7 +1805,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
   static ThreadedWarmPlanSnapshot BuildThreadedWarmPlanSnapshot(
     List<string> warmAddresses,
-    List<string> readyAddresses
+    List<string> readyAddresses,
+    List<string> criticalReadyAddresses
   ) {
     var batch = warmAddresses ?? new List<string>();
     if (batch.Count > 1) {
@@ -1537,7 +1829,14 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       }
     }
 
-    var scheduledCriticalAddresses = new HashSet<string>(scheduledReadyAddresses, StringComparer.OrdinalIgnoreCase);
+    var scheduledCriticalAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (criticalReadyAddresses != null) {
+      for (var i = 0; i < criticalReadyAddresses.Count; i++) {
+        var address = NormalizeToken(criticalReadyAddresses[i]);
+        if (string.IsNullOrWhiteSpace(address) || !scheduledAddresses.Contains(address)) continue;
+        scheduledCriticalAddresses.Add(address);
+      }
+    }
     return new ThreadedWarmPlanSnapshot(batch, scheduledAddresses, scheduledReadyAddresses, scheduledCriticalAddresses);
   }
 
@@ -1624,19 +1923,31 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     }
 
     if (rescueAddressBuffer.Count > 0) {
-      StartCoroutine(TextureResidencyCache.RequestLoadBatchThrottled(
-        new List<string>(rescueAddressBuffer), // Copy to new list as buffer will be cleared
-        TextureResidencyCache.LoadPriority.Immediate,
-        // Rescue loads should hydrate full atlas families, not single slices, to prevent immediate re-stalls.
-        allowAtlasExpansion: true,
-        enqueueBudgetPerFrame: 32,
-        warmGateManaged: true
-      ));
+      if (rescueDispatchRoutine != null) {
+        StopCoroutine(rescueDispatchRoutine);
+        rescueDispatchRoutine = null;
+      }
+      rescueDispatchBuffer.Clear();
+      rescueDispatchBuffer.AddRange(rescueAddressBuffer);
+      rescueDispatchRoutine = StartCoroutine(DispatchFirstAnimationRescueLoads());
     }
 
     rescueAddressBuffer.Clear();
     rescueSeenAddressBuffer.Clear();
     rescueEnemyControllerBuffer.Clear();
+  }
+
+  IEnumerator DispatchFirstAnimationRescueLoads() {
+    yield return TextureResidencyCache.RequestLoadBatchThrottled(
+      rescueDispatchBuffer,
+      TextureResidencyCache.LoadPriority.Immediate,
+      // Rescue loads should hydrate full atlas families, not single slices, to prevent immediate re-stalls.
+      allowAtlasExpansion: true,
+      enqueueBudgetPerFrame: 32,
+      warmGateManaged: true
+    );
+    rescueDispatchBuffer.Clear();
+    rescueDispatchRoutine = null;
   }
 
   int ResolveWarmOutstandingTarget() {
@@ -1710,9 +2021,10 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       scheduledReadyAddressSet.Add(address);
     }
 
-    // No warm-gate priority partitioning: critical scope tracks the same complete
-    // scheduled ready-set so loading waits for full residency.
-    foreach (var address in scheduledReadyAddressSet) {
+    // Critical scope must stay limited to first-frame addresses so soft timeout can
+    // release once gameplay-safe visuals are ready while the rest continues warming.
+    foreach (var address in criticalReadyAddressSet) {
+      if (!scheduledAddressSet.Contains(address)) continue;
       scheduledCriticalReadyAddressSet.Add(address);
     }
   }
@@ -1730,9 +2042,12 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     scheduledAddressSet.Clear();
     scheduledReadyAddressSet.Clear();
     scheduledCriticalReadyAddressSet.Clear();
+    archetypeTargetCache.Clear();
     playerCriticalAtlasSeedAddresses.Clear();
     playerWarmAtlasSeedAddresses.Clear();
     warmAddressBatch.Clear();
+    normalizedTokenSetScratch.Clear();
+    rescueDispatchBuffer.Clear();
   }
 
   IEnumerator ResolveLibraryAtlasDependenciesRoutine(float hardTimeoutAt, bool debugLogs) {
@@ -1778,7 +2093,9 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       if (Time.realtimeSinceStartup >= hardTimeoutAt) yield break;
       var label = labels[i];
       var isCritical = criticalReadyLabelSet.Contains(label);
-      var locHandle = Addressables.LoadResourceLocationsAsync(label, typeof(Sprite));
+      // Visible sprite subasset catalog entries are disabled during builds, so
+      // label warmup must resolve the atlas asset locations directly.
+      var locHandle = Addressables.LoadResourceLocationsAsync(label);
       // TODO(smooth-first-play): If a critical label resolves a very large location list, split
       // the resulting address set into deterministic chunks and enqueue high-value chunks first.
       while (!locHandle.IsDone) {

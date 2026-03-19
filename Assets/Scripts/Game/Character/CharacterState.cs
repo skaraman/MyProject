@@ -19,9 +19,13 @@ public class CharacterState : MonoBehaviour {
     return Application.isEditor || Debug.isDebugBuild;
   }
 
+  void EnsureRuntimeReferences() {
+    gearController ??= GetComponent<GearController>();
+  }
+
   void Start() {
     offLoadGame = MessageBus.On("loadGame", o => LoadState());
-    gearController = GetComponent<GearController>();
+    EnsureRuntimeReferences();
   }
 
   void OnDestroy() {
@@ -34,6 +38,7 @@ public class CharacterState : MonoBehaviour {
   }
 
   public void LoadState() {
+    EnsureRuntimeReferences();
     var loadedForms = SaveSlotManager.Load("forms");
     var loadedStats = SaveSlotManager.Load("stats");
     if (ShouldLogLoadStateDebug()) {
@@ -75,7 +80,7 @@ public class CharacterState : MonoBehaviour {
   }
 
   public void InitializeRuntimeStateForNewGame() {
-    gearController ??= GetComponent<GearController>();
+    EnsureRuntimeReferences();
     if (ShouldLogLoadStateDebug()) {
       Debug.Log(
         "[CharacterState][LoadState] stage=new_game_begin" +

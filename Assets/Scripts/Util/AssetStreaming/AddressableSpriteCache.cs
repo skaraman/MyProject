@@ -11,6 +11,96 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEditor;
 #endif
 
+static class GeneratedAtlasSpriteSynthesisUtility {
+  const string GroupedMetadataKind = "grouped";
+
+  [Serializable]
+  sealed class ImportPixelRect {
+    public int x;
+    public int y;
+    public int width;
+    public int height;
+  }
+
+  [Serializable]
+  sealed class GroupedAtlasImportPayload {
+    public string metadataKind;
+    public float spritePixelsPerUnit;
+    public List<GroupedSpriteImportPayload> sprites = new();
+  }
+
+  [Serializable]
+  sealed class GroupedSpriteImportPayload {
+    public string name;
+    public bool empty;
+    public ImportPixelRect packedRect;
+  }
+
+  public static bool TryCreateGroupedSurrogateSprites(Sprite atlasSprite, TextAsset metadataAsset, out List<Sprite> sprites) {
+    sprites = null;
+    if (atlasSprite == null || metadataAsset == null || string.IsNullOrWhiteSpace(metadataAsset.text)) return false;
+
+    GroupedAtlasImportPayload payload;
+    try {
+      payload = JsonUtility.FromJson<GroupedAtlasImportPayload>(metadataAsset.text);
+    }
+    catch {
+      return false;
+    }
+
+    if (payload == null || payload.sprites == null || payload.sprites.Count <= 0) return false;
+    if (!string.IsNullOrWhiteSpace(payload.metadataKind) &&
+        !string.Equals(payload.metadataKind, GroupedMetadataKind, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var texture = atlasSprite.texture;
+    if (texture == null) return false;
+
+    var pixelsPerUnit = payload.spritePixelsPerUnit > 0f
+      ? payload.spritePixelsPerUnit
+      : (atlasSprite.pixelsPerUnit > 0f ? atlasSprite.pixelsPerUnit : 100f);
+
+    sprites = new List<Sprite>(payload.sprites.Count);
+    for (var i = 0; i < payload.sprites.Count; i++) {
+      var spritePayload = payload.sprites[i];
+      if (spritePayload == null || spritePayload.empty) continue;
+      if (string.IsNullOrWhiteSpace(spritePayload.name) || spritePayload.packedRect == null) continue;
+
+      var rect = new Rect(
+        spritePayload.packedRect.x,
+        spritePayload.packedRect.y,
+        spritePayload.packedRect.width,
+        spritePayload.packedRect.height
+      );
+      if (rect.width <= 0f || rect.height <= 0f) continue;
+      if (rect.xMin < 0f || rect.yMin < 0f || rect.xMax > texture.width || rect.yMax > texture.height) continue;
+
+      var sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), pixelsPerUnit, 0u, SpriteMeshType.FullRect);
+      if (sprite == null) continue;
+      sprite.name = spritePayload.name.Trim();
+      sprites.Add(sprite);
+    }
+
+    return sprites.Count > 0;
+  }
+
+  public static void DestroySprites(List<Sprite> sprites) {
+    if (sprites == null || sprites.Count <= 0) return;
+    for (var i = 0; i < sprites.Count; i++) {
+      var sprite = sprites[i];
+      if (sprite == null) continue;
+      if (Application.isPlaying) {
+        UnityEngine.Object.Destroy(sprite);
+      }
+      else {
+        UnityEngine.Object.DestroyImmediate(sprite);
+      }
+    }
+    sprites.Clear();
+  }
+}
+
 public static class TextureResidencyCache {
   public enum LoadPriority {
     Immediate = 0,
@@ -37,7 +127,14 @@ public static class TextureResidencyCache {
     public string address;
     public AsyncOperationHandle<IList<IResourceLocation>> locationHandle;
     public AsyncOperationHandle<IList<Sprite>> handle;
+    public AsyncOperationHandle<Sprite> groupedSingleSpriteHandle;
+    public AsyncOperationHandle<TextAsset> groupedMetadataHandle;
+    public readonly List<IResourceLocation> pendingAssetLoadLocations = new(4);
+    public readonly List<IResourceLocation> activeAssetLoadLocations = new(4);
+    public readonly HashSet<string> pendingExactSliceSupplementAddresses = new(StringComparer.Ordinal);
+    public readonly HashSet<string> failedExactSliceSupplementAddresses = new(StringComparer.Ordinal);
     public readonly Dictionary<string, Sprite> spritesByName = new(StringComparer.Ordinal);
+    public readonly List<Sprite> generatedSprites = new();
     public readonly HashSet<int> registeredTextureIds = new();
     public Sprite primarySprite;
     public int pinCount;
@@ -54,6 +151,15 @@ public static class TextureResidencyCache {
     public int sessionCompletionGeneration;
     public bool editorAtlasSupplementPending;
     public bool editorAtlasSupplementAttempted;
+    public bool pendingLoadFinalize;
+    public bool pendingLoadSucceeded;
+    public int pendingResourceLocationCount;
+    public int pendingExpectedSiblingSliceCount;
+    public bool pendingAssetLoadStart;
+    public bool pendingDirectSubAssetLoad;
+    public bool pendingGroupedGeneratedAtlasLoad;
+    public int pendingAssetLoadResourceLocationCount;
+    public int pendingAssetLoadExpectedSiblingSliceCount;
   }
 
   public readonly struct PinSnapshot {
@@ -150,8 +256,12 @@ public static class TextureResidencyCache {
     CacheEntry entry;
     bool released;
 
-    internal Lease(CacheEntry entry) {
+    internal Lease() {
+    }
+
+    internal void Bind(CacheEntry entry) {
       this.entry = entry;
+      released = false;
     }
 
     public bool IsDone => entry == null || entry.isDone;
@@ -169,12 +279,36 @@ public static class TextureResidencyCache {
     public bool TryGetSpriteByAddress(string sliceOrAtlasAddress, out Sprite sprite) {
       sprite = null;
       if (entry == null || !entry.isDone || !entry.isSuccess) return false;
+      return TryGetSpriteByAddressInternal(entry, sliceOrAtlasAddress, allowEditorSupplement: true, out sprite);
+    }
+
+    public bool TryGetSpriteByAddressWithoutEditorSupplement(string sliceOrAtlasAddress, out Sprite sprite) {
+      sprite = null;
+      if (entry == null || !entry.isDone || !entry.isSuccess) return false;
+      return TryGetSpriteByAddressInternal(entry, sliceOrAtlasAddress, allowEditorSupplement: false, out sprite);
+    }
+
+    public bool NeedsPendingSpriteMapSupplement(string sliceOrAtlasAddress) {
+      if (entry == null || !entry.isDone || !entry.isSuccess) return false;
+      if (!entry.editorAtlasSupplementPending) return false;
+      if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out _, out _)) return false;
+      if (TryGetSpriteByAddressWithoutEditorSupplement(sliceOrAtlasAddress, out _)) return false;
+      EnsureOverlayExactSliceSupplement(entry, sliceOrAtlasAddress);
+      return true;
+    }
+
+    bool TryGetSpriteByAddressInternal(CacheEntry targetEntry, string sliceOrAtlasAddress, bool allowEditorSupplement, out Sprite sprite) {
+      sprite = null;
+      if (targetEntry == null || !targetEntry.isDone || !targetEntry.isSuccess) return false;
       if (SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out var atlasAssetPath, out var spriteName)) {
         var normalizedAtlasAddress = NormalizeAddress(atlasAssetPath);
         if (!string.Equals(normalizedAtlasAddress, Address, StringComparison.OrdinalIgnoreCase)) return false;
-        if (TryGetSpriteFromEntry(entry, spriteName, out sprite)) return true;
+        if (TryGetSpriteFromEntry(targetEntry, spriteName, out sprite)) return true;
 #if UNITY_EDITOR
-        return TryGetSpriteFromEntryWithEditorSupplement(entry, spriteName, out sprite);
+        if (allowEditorSupplement) {
+          return TryGetSpriteFromEntryWithEditorSupplement(targetEntry, spriteName, out sprite);
+        }
+        return false;
 #else
         return false;
 #endif
@@ -182,17 +316,19 @@ public static class TextureResidencyCache {
 
       var normalizedAddress = NormalizeAddress(sliceOrAtlasAddress);
       if (!string.Equals(normalizedAddress, Address, StringComparison.OrdinalIgnoreCase)) return false;
-      sprite = entry.primarySprite;
+      sprite = targetEntry.primarySprite;
       return sprite != null;
     }
 
     public void Release() {
       if (released) return;
       released = true;
-      if (entry != null) {
-        ReleaseInternal(entry);
-      }
+      var releasedEntry = entry;
       entry = null;
+      if (releasedEntry != null) {
+        ReleaseInternal(releasedEntry);
+      }
+      ReturnLeaseToPool(this);
     }
   }
 
@@ -208,17 +344,31 @@ public static class TextureResidencyCache {
     public bool pinEntry;
   }
 
+  readonly struct ExactSliceSupplementRequest {
+    public readonly CacheEntry entry;
+    public readonly string sliceAddress;
+
+    public ExactSliceSupplementRequest(CacheEntry entry, string sliceAddress) {
+      this.entry = entry;
+      this.sliceAddress = string.IsNullOrWhiteSpace(sliceAddress) ? "" : sliceAddress.Trim();
+    }
+  }
+
   static readonly Dictionary<string, CacheEntry> cache = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<int, int> textureRefCounts = new();
   static readonly Dictionary<int, long> textureBytesById = new();
   static readonly Queue<CacheEntry> immediateQueue = new();
   static readonly Queue<CacheEntry> warmupQueue = new();
   static readonly Queue<CacheEntry> backgroundQueue = new();
+  static readonly Queue<CacheEntry> pendingAssetLoadStartQueue = new();
+  static readonly Queue<CacheEntry> pendingLoadFinalizeQueue = new();
+  static readonly Queue<ExactSliceSupplementRequest> pendingExactSliceSupplementQueue = new();
   static readonly Queue<CacheEntry> pendingTextureRegisterQueue = new();
   static readonly Dictionary<string, DeferredRequestState> deferredRequests = new(StringComparer.OrdinalIgnoreCase);
   static readonly Queue<string> deferredImmediateQueue = new();
   static readonly Queue<string> deferredWarmupQueue = new();
   static readonly Queue<string> deferredBackgroundQueue = new();
+  static readonly Stack<Lease> pooledLeases = new();
   static readonly Dictionary<string, OwnerPinState> ownerPins = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> desiredOwnerAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<string> ownerReleaseAddressScratch = new(256);
@@ -259,7 +409,9 @@ public static class TextureResidencyCache {
   static int pinClassBudgetDroppedAddresses;
   static int ownerPinMutationDepth;
   static int lastBudgetMaintainFrame = -1;
-  static bool enableLoadCompletionDiagnostics = false;
+  static bool enableLoadStartDiagnostics = true;
+  static float loadStartSlowThresholdMs = 25f;
+  static bool enableLoadCompletionDiagnostics = true;
   static float loadCompletionSlowStepThresholdMs = 50f;
   static int loadCompletionDiagFrame = -1;
   static float loadCompletionDiagFrameTotalMs;
@@ -284,38 +436,54 @@ public static class TextureResidencyCache {
   static int atlasExpansionCountThisFrame;
   static int atlasExpansionAddressBudgetFrame = -1;
   static int atlasExpansionAddressesQueuedThisFrame;
+  static float overlayStartTokens;
+  static float overlayStartTokenLastRefillAt = -1f;
   static int completionPressureUntilFrame = -1;
   static int sessionTotalScheduled;
   static int sessionTotalCompleted;
   static int sessionExpectedTotal;
   static int sessionGeneration;
+  const int MaxPooledLeaseCount = 32768;
   const int RequestDiagRequestThreshold = 5000;
   const int RequestDiagQueueAddsThreshold = 5000;
   const int RequestDiagNewEntriesThreshold = 2000;
   const float RequestDiagPumpMsThreshold = 20f;
+  static readonly bool EnableStrictSerialLoadingDebounce = true;
+  const int StrictSerialLoadingBudgetPerFrame = 1;
   const int AtlasExpansionMaxPerFrame = 4;
-  const int AtlasExpansionMaxPerFrameLoading = 24;
+  const int AtlasExpansionMaxPerFrameLoading = 4;
   const int AtlasExpansionHardSiblingCap = 96;
   const int AtlasExpansionMaxAddressesPerFrame = 256;
-  const int AtlasExpansionMaxAddressesPerFrameLoading = 2048;
+  const int AtlasExpansionMaxAddressesPerFrameLoading = 64;
   const int CompletionPressureCooldownFrames = 8;
   const float CompletionPressureOverlayScale = 0.35f;
   const int DesktopInFlightLoadCap = 96;
   const int MobileInFlightLoadCap = 64;
+  const int DesktopOverlayInFlightLoadCap = 12;
+  const int MobileOverlayInFlightLoadCap = 8;
   const int DesktopGameplayInFlightLoadCap = 48;
   const int MobileGameplayInFlightLoadCap = 32;
   const int DesktopGameplayMaxStartsPerFrameCap = 6;
   const int MobileGameplayMaxStartsPerFrameCap = 4;
   const int DesktopGameplayImmediateBurstCap = 4;
   const int MobileGameplayImmediateBurstCap = 2;
-  const int DeferredFlushOverlayBudgetPerFrame = 32;
+  const float DesktopOverlayStartRatePerSecond = 10f;
+  const float MobileOverlayStartRatePerSecond = 6f;
+  const int DesktopOverlayStartBurstCap = 4;
+  const int MobileOverlayStartBurstCap = 3;
+  const int DeferredFlushOverlayBudgetPerFrame = 8;
   const int DeferredFlushDefaultBudgetPerFrame = 64;
   const int DeferredFlushPressureBudgetPerFrame = 16;
   const int CompletionRegisterOverlayBudgetPerFrame = 16;
   const int CompletionRegisterLoadingBudgetPerFrame = 24;
   const int CompletionRegisterGameplayBudgetPerFrame = 12;
+  const int CompletionFinalizeOverlayBudgetPerFrame = 1;
+  const int CompletionFinalizeLoadingBudgetPerFrame = 4;
+  const int CompletionFinalizeGameplayBudgetPerFrame = 8;
+  const float CompletionFollowupOverlayBudgetMs = 1.5f;
+  const float CompletionFollowupLoadingBudgetMs = 3.0f;
 #if UNITY_EDITOR
-  const int EditorAtlasSupplementOverlayBudgetPerFrame = 2;
+  const int EditorAtlasSupplementOverlayBudgetPerFrame = 1;
   const int EditorAtlasSupplementLoadingBudgetPerFrame = 4;
   const int EditorAtlasSupplementGameplayBudgetPerFrame = 1;
 #endif
@@ -370,6 +538,8 @@ public static class TextureResidencyCache {
     atlasExpansionCountThisFrame = 0;
     atlasExpansionAddressBudgetFrame = -1;
     atlasExpansionAddressesQueuedThisFrame = 0;
+    overlayStartTokens = 0f;
+    overlayStartTokenLastRefillAt = -1f;
     completionPressureUntilFrame = -1;
     sessionTotalScheduled = 0;
     sessionTotalCompleted = 0;
@@ -380,7 +550,11 @@ public static class TextureResidencyCache {
     immediateQueue.Clear();
     warmupQueue.Clear();
     backgroundQueue.Clear();
+    pendingAssetLoadStartQueue.Clear();
+    pendingLoadFinalizeQueue.Clear();
+    pendingExactSliceSupplementQueue.Clear();
     pendingTextureRegisterQueue.Clear();
+    pooledLeases.Clear();
 #if UNITY_EDITOR
     pendingEditorAtlasSupplementQueue.Clear();
     editorAtlasSupplementWarnings.Clear();
@@ -396,6 +570,8 @@ public static class TextureResidencyCache {
     gameplayColdMissAtlasKeys.Clear();
     atlasSiblingAddressScratch.Clear();
     ownerDemoteScratch.Clear();
+    enableLoadStartDiagnostics = true;
+    loadStartSlowThresholdMs = 25f;
     PurgeAll();
   }
 
@@ -497,7 +673,7 @@ public static class TextureResidencyCache {
     RecordGameplayColdAtlasMiss(normalizedAddress, hit);
     QueueEntryForLoad(entry, priority, pinEntry: true, runPumpAndMaintain, warmGateManaged);
     TryExpandAtlasOnSliceRequest(requestedAddress, priority, runPumpAndMaintain);
-    return new Lease(entry);
+    return AcquireLease(entry);
   }
 
   public static void RequestLoad(
@@ -611,7 +787,65 @@ public static class TextureResidencyCache {
     MaintainBudget();
   }
 
+  public static IEnumerator RequestLoadBatchThrottled(
+    IList<string> addresses,
+    int startInclusive,
+    int count,
+    LoadPriority priority = LoadPriority.Warmup,
+    bool allowAtlasExpansion = true,
+    int enqueueBudgetPerFrame = 128,
+    bool warmGateManaged = false,
+    [CallerMemberName] string callerMemberName = "",
+    [CallerFilePath] string callerFilePath = "",
+    [CallerLineNumber] int callerLineNumber = 0
+  ) {
+    if (addresses == null || addresses.Count <= 0 || count <= 0) yield break;
+    var start = Mathf.Clamp(startInclusive, 0, addresses.Count);
+    var requestedCount = Math.Max(count, 0);
+    var endExclusive = (int)Math.Min((long)addresses.Count, (long)start + requestedCount);
+    if (start >= endExclusive) yield break;
+
+    var requestDiagnosticsEnabled = ShouldLogRequestFrameDiagnostics();
+    var sourceTag = requestDiagnosticsEnabled
+      ? BuildRequestDiagSourceTag(callerMemberName, callerFilePath, callerLineNumber)
+      : null;
+
+    enqueueBudgetPerFrame = ResolveAdaptiveEnqueueBudgetPerFrame(enqueueBudgetPerFrame);
+    var remainingThisFrame = enqueueBudgetPerFrame;
+
+    for (var i = start; i < endExclusive; i++) {
+      var address = addresses[i];
+      var normalizedAddress = NormalizeAddress(address);
+      if (string.IsNullOrEmpty(normalizedAddress)) continue;
+      if (requestDiagnosticsEnabled) {
+        RecordRequestForFrame(isAcquire: false, sourceTag: sourceTag);
+      }
+
+      var entry = ResolveEntryForLoad(normalizedAddress, out var hit);
+      RecordLookup(hit);
+      RecordGameplayColdAtlasMiss(normalizedAddress, hit);
+      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged);
+      if (allowAtlasExpansion) {
+        TryExpandAtlasOnSliceRequest(address, priority, runPumpAndMaintain: false);
+      }
+
+      remainingThisFrame--;
+      if (remainingThisFrame > 0) continue;
+
+      Pump();
+      MaintainBudget();
+      remainingThisFrame = enqueueBudgetPerFrame;
+      yield return null;
+    }
+
+    Pump();
+    MaintainBudget();
+  }
+
   static int ResolveAdaptiveEnqueueBudgetPerFrame(int requestedBudgetPerFrame) {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
     var budget = Mathf.Clamp(requestedBudgetPerFrame, 50, 200);
     var memoryMb = Math.Max(SystemInfo.systemMemorySize, 0);
     if (memoryMb > 0 && memoryMb <= 4096) budget = Math.Min(budget, 80);
@@ -875,8 +1109,10 @@ public static class TextureResidencyCache {
       return;
     }
     var startedBefore = startedLoadsThisFrame;
+    var overlayStartAllowance = ResolveOverlayStartAllowance(maxStarts);
 
     while (startedLoadsThisFrame < maxStarts && inFlightLoads < maxInFlightLoads) {
+      if (overlayStartAllowance == 0) break;
       if (!TryDequeueNext(out var entry, out var sourcePriority)) break;
       if (entry == null || entry.isEvicted) continue;
       if (!entry.isQueued) continue;
@@ -889,6 +1125,10 @@ public static class TextureResidencyCache {
       ClearQueuedFlag(entry);
       StartLoad(entry);
       startedLoadsThisFrame++;
+      if (overlayStartAllowance != int.MaxValue) {
+        overlayStartAllowance = Math.Max(overlayStartAllowance - 1, 0);
+        ConsumeOverlayStartToken();
+      }
     }
 
     // Drain a bounded set of remaining Immediate requests so Warmup/Background
@@ -922,6 +1162,9 @@ public static class TextureResidencyCache {
   }
 
   static int ResolveMaxStartsPerFrame(CacheSettings cfg) {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
     var baseStarts = Math.Max(cfg.maxAddressableStartsPerFrame, 1);
     if (!SpriteStreamingLoadingState.IsLoadingOverlayActive) {
       var gameplayCap = Application.isMobilePlatform
@@ -942,7 +1185,10 @@ public static class TextureResidencyCache {
 
   static int ResolveImmediateBurstBudget() {
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
-      return int.MaxValue;
+      // The main pump already prioritizes Immediate ahead of Warmup/Background.
+      // Allowing a second unbounded Immediate drain here bypasses the overlay cap
+      // and creates the large queue bursts seen in loading-heartbeat gaps.
+      return 0;
     }
     return Application.isMobilePlatform
       ? MobileGameplayImmediateBurstCap
@@ -950,13 +1196,16 @@ public static class TextureResidencyCache {
   }
 
   static int ResolveMaxInFlightLoads() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
     var cap = Application.isMobilePlatform ? MobileInFlightLoadCap : DesktopInFlightLoadCap;
     var memoryMb = Math.Max(SystemInfo.systemMemorySize, 0);
     if (memoryMb > 0 && memoryMb <= 4096) cap = Math.Min(cap, 64);
     else if (memoryMb > 0 && memoryMb <= 8192) cap = Math.Min(cap, 96);
 
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
-      var overlayCap = Application.isMobilePlatform ? 48 : 64;
+      var overlayCap = Application.isMobilePlatform ? MobileOverlayInFlightLoadCap : DesktopOverlayInFlightLoadCap;
       cap = Math.Min(cap, overlayCap);
     }
     else {
@@ -968,11 +1217,17 @@ public static class TextureResidencyCache {
 
     if (IsCompletionPressureActive()) {
       var throttled = Mathf.CeilToInt(cap * 0.75f);
-      var minThrottledCap = Application.isMobilePlatform ? 24 : 32;
+      var minThrottledCap = IsLoadingScreenStreamingContextActive()
+        ? (Application.isMobilePlatform ? MobileOverlayInFlightLoadCap : DesktopOverlayInFlightLoadCap)
+        : (Application.isMobilePlatform ? 24 : 32);
       cap = Mathf.Max(throttled, minThrottledCap);
     }
 
-    return Math.Max(cap, Application.isMobilePlatform ? 24 : 32);
+    var minCap = Application.isMobilePlatform ? 24 : 32;
+    if (IsLoadingScreenStreamingContextActive()) {
+      minCap = Application.isMobilePlatform ? MobileOverlayInFlightLoadCap : DesktopOverlayInFlightLoadCap;
+    }
+    return Math.Max(cap, minCap);
   }
 
   public static void Release(Lease lease) {
@@ -1029,6 +1284,9 @@ public static class TextureResidencyCache {
     immediateQueue.Clear();
     warmupQueue.Clear();
     backgroundQueue.Clear();
+    pendingAssetLoadStartQueue.Clear();
+    pendingLoadFinalizeQueue.Clear();
+    pendingExactSliceSupplementQueue.Clear();
     pendingTextureRegisterQueue.Clear();
     textureRefCounts.Clear();
     textureBytesById.Clear();
@@ -1074,41 +1332,307 @@ public static class TextureResidencyCache {
     entry.isSuccess = false;
     entry.primarySprite = null;
     entry.spritesByName.Clear();
+    GeneratedAtlasSpriteSynthesisUtility.DestroySprites(entry.generatedSprites);
+    entry.pendingExactSliceSupplementAddresses.Clear();
+    entry.failedExactSliceSupplementAddresses.Clear();
     entry.editorAtlasSupplementAttempted = false;
+    entry.activeAssetLoadLocations.Clear();
     entry.lastAccessTicks = DateTime.UtcNow.Ticks;
-    var atlasLocationKeys = BuildAtlasLocationKeys(entry.address, out var atlasSiblingSliceCount);
-    // Ideal frame pacing depends on bounded in-flight starts per frame.
-    // Pump/start budgets keep this call from turning into bursty main-thread work.
-    entry.locationHandle = atlasLocationKeys != null && atlasLocationKeys.Count > 1
-      ? Addressables.LoadResourceLocationsAsync(atlasLocationKeys, Addressables.MergeMode.Union, typeof(Sprite))
-      : Addressables.LoadResourceLocationsAsync(entry.address, typeof(Sprite));
-    entry.countedInFlight = true;
-    inFlightLoads++;
-    SpriteStreamingDiagnostics.RecordLoadStarted();
-    SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
-    SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+    var groupedGeneratedAtlasLoad = IsGroupedGeneratedAtlasSurrogateAddress(entry.address);
+    if (ShouldLogRequestFrameDiagnostics()) {
+      Debug.Log(
+        "[TextureResidencyCache][PrimaryLoad] mode=" + (groupedGeneratedAtlasLoad ? "grouped_generated_atlas" : "direct_subassets") +
+        " address='" + entry.address + "'" +
+        " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
+        " warm_gate_running=" + (StreamingWarmOrchestrator.IsWarmGateRunning ? 1 : 0)
+      );
+    }
+    if (groupedGeneratedAtlasLoad) {
+      EnqueuePendingGroupedGeneratedAtlasLoadStart(entry);
+    }
+    else {
+      EnqueuePendingDirectAssetLoadStart(entry);
+    }
+    pendingQueueStateRecord = true;
+  }
 
-    entry.locationHandle.Completed += locationOp => {
-      if (entry == null || entry.isEvicted) {
-        MarkInFlightComplete(entry);
-        SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
+  static bool IsGroupedGeneratedAtlasSurrogateAddress(string address) {
+    var normalizedAddress = NormalizeAddress(address);
+    return GeneratedAtlasBuildSurrogateUtility.IsBuildSurrogatePath(normalizedAddress);
+  }
+
+  static void EnqueuePendingDirectAssetLoadStart(CacheEntry entry) {
+    if (entry == null || entry.isEvicted) return;
+    entry.pendingDirectSubAssetLoad = true;
+    entry.pendingAssetLoadResourceLocationCount = 1;
+    entry.pendingAssetLoadExpectedSiblingSliceCount = 0;
+    if (entry.pendingAssetLoadStart) return;
+    entry.pendingAssetLoadStart = true;
+    pendingAssetLoadStartQueue.Enqueue(entry);
+  }
+
+  static void EnqueuePendingGroupedGeneratedAtlasLoadStart(CacheEntry entry) {
+    if (entry == null || entry.isEvicted) return;
+    entry.pendingGroupedGeneratedAtlasLoad = true;
+    entry.pendingAssetLoadResourceLocationCount = 1;
+    entry.pendingAssetLoadExpectedSiblingSliceCount = 0;
+    if (entry.pendingAssetLoadStart) return;
+    entry.pendingAssetLoadStart = true;
+    pendingAssetLoadStartQueue.Enqueue(entry);
+  }
+
+  static void EnqueuePendingAssetLoadStart(
+    CacheEntry entry,
+    IList<IResourceLocation> resourceLocations,
+    int resourceLocationCount,
+    int expectedSiblingSliceCount
+  ) {
+    if (entry == null || entry.isEvicted) return;
+    entry.pendingAssetLoadLocations.Clear();
+    if (resourceLocations != null) {
+      for (var i = 0; i < resourceLocations.Count; i++) {
+        var location = resourceLocations[i];
+        if (location == null) continue;
+        entry.pendingAssetLoadLocations.Add(location);
+      }
+    }
+    entry.pendingAssetLoadResourceLocationCount = Math.Max(resourceLocationCount, 0);
+    entry.pendingAssetLoadExpectedSiblingSliceCount = Math.Max(expectedSiblingSliceCount, 0);
+    if (entry.pendingAssetLoadStart) return;
+    entry.pendingAssetLoadStart = true;
+    pendingAssetLoadStartQueue.Enqueue(entry);
+  }
+
+  static void ClearPendingAssetLoadStart(CacheEntry entry) {
+    if (entry == null) return;
+    entry.pendingAssetLoadStart = false;
+    entry.pendingDirectSubAssetLoad = false;
+    entry.pendingGroupedGeneratedAtlasLoad = false;
+    entry.pendingAssetLoadResourceLocationCount = 0;
+    entry.pendingAssetLoadExpectedSiblingSliceCount = 0;
+    entry.pendingAssetLoadLocations.Clear();
+  }
+
+  static void ClearActiveAssetLoadLocations(CacheEntry entry) {
+    if (entry == null) return;
+    entry.activeAssetLoadLocations.Clear();
+  }
+
+  static int ResolvePendingAssetLoadStartBudgetPerFrame() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
+    if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
+      return 1;
+    }
+    return 4;
+  }
+
+  static void TryCompleteGroupedGeneratedAtlasLoad(
+    CacheEntry entry,
+    int resourceLocationCount,
+    int expectedSiblingSliceCount,
+    bool diagnosticsEnabled,
+    float callbackStartedAt
+  ) {
+    if (entry == null || entry.isEvicted || !entry.pendingGroupedGeneratedAtlasLoad) return;
+    if (!entry.groupedSingleSpriteHandle.IsValid() || !entry.groupedMetadataHandle.IsValid()) return;
+    if (!entry.groupedSingleSpriteHandle.IsDone || !entry.groupedMetadataHandle.IsDone) return;
+
+    ClearPendingAssetLoadStart(entry);
+    MarkInFlightComplete(entry);
+
+    if (entry.queuedAtTicks > 0) {
+      var latencyMs = (float)((DateTime.UtcNow.Ticks - entry.queuedAtTicks) * (1000.0 / TimeSpan.TicksPerSecond));
+      RecordLoadCompleteLatency(latencyMs);
+      entry.queuedAtTicks = 0;
+    }
+
+    var loadSucceeded =
+      entry.groupedSingleSpriteHandle.Status == AsyncOperationStatus.Succeeded &&
+      entry.groupedSingleSpriteHandle.Result != null &&
+      entry.groupedMetadataHandle.Status == AsyncOperationStatus.Succeeded &&
+      entry.groupedMetadataHandle.Result != null;
+
+    SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
+    ClearActiveAssetLoadLocations(entry);
+
+    if (entry.isEvicted) {
+      ClearPendingLoadFinalize(entry);
+      entry.loadStarted = false;
+      pendingQueueStateRecord = true;
+      if (diagnosticsEnabled) {
+        var evictedMs = ComputeElapsedMs(callbackStartedAt);
+        RecordLoadCompletionFrameCost(evictedMs, 0f, 0f, entry.address);
+      }
+      return;
+    }
+
+    EnqueuePendingLoadFinalize(entry, loadSucceeded, resourceLocationCount, expectedSiblingSliceCount);
+    pendingQueueStateRecord = true;
+
+    if (diagnosticsEnabled) {
+      var callbackMs = ComputeElapsedMs(callbackStartedAt);
+      if (callbackMs > 0.1f) {
+        RecordLoadCompletionFrameCost(callbackMs, 0f, 0f, entry.address + " (grouped_callback_enqueue)");
+      }
+    }
+  }
+
+  static void ProcessPendingAssetLoadStarts(float deadlineAt) {
+    var budget = Math.Max(ResolvePendingAssetLoadStartBudgetPerFrame(), 1);
+    var processed = 0;
+    while (processed < budget && pendingAssetLoadStartQueue.Count > 0) {
+      if (!HasCompletionFollowupBudgetRemaining(deadlineAt)) break;
+      var entry = pendingAssetLoadStartQueue.Dequeue();
+      if (entry == null || !entry.pendingAssetLoadStart) continue;
+
+      if (entry.isEvicted) {
+        ClearPendingAssetLoadStart(entry);
         ReleaseLocationHandle(entry);
-        return;
+        continue;
       }
 
-      if (locationOp.Status != AsyncOperationStatus.Succeeded || locationOp.Result == null || locationOp.Result.Count <= 0) {
+      if (entry.pendingGroupedGeneratedAtlasLoad) {
+        var groupedLoadStartedAt = ShouldMeasureLoadStartCosts() ? Time.realtimeSinceStartup : 0f;
+        var metadataAddress = GeneratedAtlasBuildSurrogateUtility.BuildMetadataAssetPath(entry.address);
+        entry.groupedSingleSpriteHandle = Addressables.LoadAssetAsync<Sprite>(entry.address);
+        entry.groupedMetadataHandle = Addressables.LoadAssetAsync<TextAsset>(metadataAddress);
+        MaybeLogSlowLoadStart(
+          phase: "load_grouped_surrogate",
+          address: entry.address,
+          startedAt: groupedLoadStartedAt,
+          locationCount: 2
+        );
+        var groupedResourceLocationCount = entry.pendingAssetLoadResourceLocationCount;
+        var groupedExpectedSiblingSliceCount = entry.pendingAssetLoadExpectedSiblingSliceCount;
+        entry.pendingAssetLoadStart = false;
+
+        entry.countedInFlight = true;
+        inFlightLoads++;
+        SpriteStreamingDiagnostics.RecordLoadStarted();
+        SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
+        SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+
+        entry.groupedSingleSpriteHandle.Completed += _ => {
+          var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
+          var callbackStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
+          TryCompleteGroupedGeneratedAtlasLoad(
+            entry,
+            groupedResourceLocationCount,
+            groupedExpectedSiblingSliceCount,
+            diagnosticsEnabled,
+            callbackStartedAt
+          );
+        };
+
+        entry.groupedMetadataHandle.Completed += _ => {
+          var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
+          var callbackStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
+          TryCompleteGroupedGeneratedAtlasLoad(
+            entry,
+            groupedResourceLocationCount,
+            groupedExpectedSiblingSliceCount,
+            diagnosticsEnabled,
+            callbackStartedAt
+          );
+        };
+
+        processed++;
+        continue;
+      }
+
+      if (entry.pendingDirectSubAssetLoad) {
+        var directLoadStartedAt = ShouldMeasureLoadStartCosts() ? Time.realtimeSinceStartup : 0f;
+        entry.handle = Addressables.LoadAssetAsync<IList<Sprite>>(entry.address);
+        MaybeLogSlowLoadStart(
+          phase: "load_subassets",
+          address: entry.address,
+          startedAt: directLoadStartedAt,
+          locationCount: 1
+        );
+        var directResourceLocationCount = entry.pendingAssetLoadResourceLocationCount;
+        var directExpectedSiblingSliceCount = entry.pendingAssetLoadExpectedSiblingSliceCount;
+        ClearPendingAssetLoadStart(entry);
+
+        entry.countedInFlight = true;
+        inFlightLoads++;
+        SpriteStreamingDiagnostics.RecordLoadStarted();
+        SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
+        SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+
+        entry.handle.Completed += assetOp => {
+          var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
+          var callbackStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
+          MarkInFlightComplete(entry);
+
+          if (entry.queuedAtTicks > 0) {
+            var latencyMs = (float)((DateTime.UtcNow.Ticks - entry.queuedAtTicks) * (1000.0 / TimeSpan.TicksPerSecond));
+            RecordLoadCompleteLatency(latencyMs);
+            entry.queuedAtTicks = 0;
+          }
+
+          var loadSucceeded = assetOp.Status == AsyncOperationStatus.Succeeded && assetOp.Result != null && assetOp.Result.Count > 0;
+          SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
+          ClearActiveAssetLoadLocations(entry);
+
+          if (entry.isEvicted) {
+            ClearPendingLoadFinalize(entry);
+            entry.loadStarted = false;
+            pendingQueueStateRecord = true;
+            if (diagnosticsEnabled) {
+              var evictedMs = ComputeElapsedMs(callbackStartedAt);
+              RecordLoadCompletionFrameCost(evictedMs, 0f, 0f, entry.address);
+            }
+            return;
+          }
+
+          EnqueuePendingLoadFinalize(entry, loadSucceeded, directResourceLocationCount, directExpectedSiblingSliceCount);
+          pendingQueueStateRecord = true;
+
+          if (diagnosticsEnabled) {
+            var callbackMs = ComputeElapsedMs(callbackStartedAt);
+            if (callbackMs > 0.1f) {
+              RecordLoadCompletionFrameCost(callbackMs, 0f, 0f, entry.address + " (callback_enqueue)");
+            }
+          }
+        };
+
+        processed++;
+        continue;
+      }
+
+      if (entry.pendingAssetLoadLocations.Count <= 0) {
+        ClearPendingAssetLoadStart(entry);
         FinalizeLoadFailure(entry, diagnosticsEnabled: ShouldLogLoadCompletionDiagnostics(), completionStartedAt: Time.realtimeSinceStartup);
         ReleaseLocationHandle(entry);
-        return;
+        continue;
       }
 
-      var resourceLocationCount = locationOp.Result.Count;
-      entry.handle = Addressables.LoadAssetsAsync<Sprite>(locationOp.Result, null, releaseDependenciesOnFailure: false);
+      var loadLocations = entry.activeAssetLoadLocations;
+      loadLocations.Clear();
+      for (var i = 0; i < entry.pendingAssetLoadLocations.Count; i++) {
+        var location = entry.pendingAssetLoadLocations[i];
+        if (location == null) continue;
+        loadLocations.Add(location);
+      }
+      var loadStartStartedAt = ShouldMeasureLoadStartCosts() ? Time.realtimeSinceStartup : 0f;
+      entry.handle = Addressables.LoadAssetsAsync<Sprite>(loadLocations, null, releaseDependenciesOnFailure: false);
+      MaybeLogSlowLoadStart(
+        phase: "load_assets",
+        address: entry.address,
+        startedAt: loadStartStartedAt,
+        locationCount: entry.pendingAssetLoadResourceLocationCount
+      );
+      var resourceLocationCount = entry.pendingAssetLoadResourceLocationCount;
+      var expectedSiblingSliceCount = entry.pendingAssetLoadExpectedSiblingSliceCount;
+      ClearPendingAssetLoadStart(entry);
+      ReleaseLocationHandle(entry);
+
       entry.handle.Completed += assetOp => {
         var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
-        var completionStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
+        var callbackStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
         MarkInFlightComplete(entry);
-        entry.loadStarted = false;
 
         if (entry.queuedAtTicks > 0) {
           var latencyMs = (float)((DateTime.UtcNow.Ticks - entry.queuedAtTicks) * (1000.0 / TimeSpan.TicksPerSecond));
@@ -1118,48 +1642,47 @@ public static class TextureResidencyCache {
 
         var loadSucceeded = assetOp.Status == AsyncOperationStatus.Succeeded && assetOp.Result != null && assetOp.Result.Count > 0;
         SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
+        ClearActiveAssetLoadLocations(entry);
 
         if (entry.isEvicted) {
-          ReleaseLocationHandle(entry);
+          ClearPendingLoadFinalize(entry);
+          entry.loadStarted = false;
           pendingQueueStateRecord = true;
           if (diagnosticsEnabled) {
-            var evictedMs = ComputeElapsedMs(completionStartedAt);
+            var evictedMs = ComputeElapsedMs(callbackStartedAt);
             RecordLoadCompletionFrameCost(evictedMs, 0f, 0f, entry.address);
           }
           return;
         }
 
-        entry.isDone = true;
-        entry.isSuccess = loadSucceeded;
-        PopulateEntrySpriteMap(entry, entry.isSuccess ? assetOp.Result : null);
-        entry.lastAccessTicks = DateTime.UtcNow.Ticks;
-        LogIncompleteAtlasSpriteMap(entry, atlasSiblingSliceCount, resourceLocationCount, entry.isSuccess ? assetOp.Result.Count : 0);
-
-        if (entry.isSuccess) {
-          EnqueuePendingTextureRegister(entry);
-        }
-
-        ReleaseLocationHandle(entry);
-        pendingBudgetMaintain = true;
+        EnqueuePendingLoadFinalize(entry, loadSucceeded, resourceLocationCount, expectedSiblingSliceCount);
         pendingQueueStateRecord = true;
 
         if (diagnosticsEnabled) {
-          var totalMs = ComputeElapsedMs(completionStartedAt);
-          RecordLoadCompletionFrameCost(totalMs, 0f, 0f, entry.address);
+          var callbackMs = ComputeElapsedMs(callbackStartedAt);
+          if (callbackMs > 0.1f) {
+            RecordLoadCompletionFrameCost(callbackMs, 0f, 0f, entry.address + " (callback_enqueue)");
+          }
         }
       };
-    };
+
+      processed++;
+    }
   }
 
   static void FinalizeLoadFailure(CacheEntry entry, bool diagnosticsEnabled, float completionStartedAt) {
     if (entry == null) return;
     MarkInFlightComplete(entry);
+    ClearPendingAssetLoadStart(entry);
+    ClearActiveAssetLoadLocations(entry);
+    ClearPendingLoadFinalize(entry);
     entry.loadStarted = false;
     entry.isDone = true;
     entry.isSuccess = false;
     SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
     entry.primarySprite = null;
     entry.spritesByName.Clear();
+    GeneratedAtlasSpriteSynthesisUtility.DestroySprites(entry.generatedSprites);
     if (entry.queuedAtTicks > 0) {
       var latencyMs = (float)((DateTime.UtcNow.Ticks - entry.queuedAtTicks) * (1000.0 / TimeSpan.TicksPerSecond));
       RecordLoadCompleteLatency(latencyMs);
@@ -1171,6 +1694,44 @@ public static class TextureResidencyCache {
       var totalMs = ComputeElapsedMs(completionStartedAt);
       RecordLoadCompletionFrameCost(totalMs, 0f, 0f, entry.address);
     }
+  }
+
+  static Lease AcquireLease(CacheEntry entry) {
+    var lease = pooledLeases.Count > 0
+      ? pooledLeases.Pop()
+      : new Lease();
+    lease.Bind(entry);
+    return lease;
+  }
+
+  static void ReturnLeaseToPool(Lease lease) {
+    if (lease == null) return;
+    if (pooledLeases.Count >= MaxPooledLeaseCount) return;
+    pooledLeases.Push(lease);
+  }
+
+  static void ClearPendingLoadFinalize(CacheEntry entry) {
+    if (entry == null) return;
+    entry.pendingLoadFinalize = false;
+    entry.pendingLoadSucceeded = false;
+    entry.pendingResourceLocationCount = 0;
+    entry.pendingExpectedSiblingSliceCount = 0;
+  }
+
+  static void EnqueuePendingLoadFinalize(
+    CacheEntry entry,
+    bool loadSucceeded,
+    int resourceLocationCount,
+    int expectedSiblingSliceCount
+  ) {
+    if (entry == null || entry.isEvicted) return;
+    entry.pendingLoadSucceeded = loadSucceeded;
+    entry.pendingResourceLocationCount = Math.Max(resourceLocationCount, 0);
+    entry.pendingExpectedSiblingSliceCount = Math.Max(expectedSiblingSliceCount, 0);
+    if (entry.pendingLoadFinalize) return;
+    entry.pendingLoadFinalize = true;
+    pendingLoadFinalizeQueue.Enqueue(entry);
+    pendingBudgetMaintain = true;
   }
 
   static void PopulateEntrySpriteMap(CacheEntry entry, IList<Sprite> loadedSprites) {
@@ -1190,13 +1751,16 @@ public static class TextureResidencyCache {
       entry.spritesByName[sprite.name] = sprite;
     }
 #if UNITY_EDITOR
-    EnqueueEditorAtlasSpriteMapSupplement(entry, loadedSprites.Count);
+    if (!IsGroupedGeneratedAtlasSurrogateAddress(entry.address)) {
+      EnqueueEditorAtlasSpriteMapSupplement(entry, loadedSprites.Count);
+    }
 #endif
   }
 
   static List<object> BuildAtlasLocationKeys(string atlasAddress, out int siblingSliceCount) {
     siblingSliceCount = 0;
     if (string.IsNullOrWhiteSpace(atlasAddress)) return null;
+    if (ShouldUseSingleAddressPrimaryLoad()) return null;
 
     const int MaxAtlasPrimaryLoadKeys = 512;
     atlasSiblingAddressScratch.Clear();
@@ -1222,6 +1786,12 @@ public static class TextureResidencyCache {
     return siblingSliceCount > 0 ? keys : null;
   }
 
+  static bool ShouldUseSingleAddressPrimaryLoad() {
+    // During the loading overlay, "one request" should stay one addressable load.
+    // Atlas sibling expansion can still happen later through the paced expansion path.
+    return IsProtectedLoadingScreenStreamingContextActive();
+  }
+
   static void LogIncompleteAtlasSpriteMap(CacheEntry entry, int expectedSiblingSliceCount, int resourceLocationCount, int loadedSpriteCount) {
     if (entry == null || !entry.isSuccess) return;
     if (expectedSiblingSliceCount <= 0) return;
@@ -1239,6 +1809,12 @@ public static class TextureResidencyCache {
   }
 
 #if UNITY_EDITOR
+  static bool ShouldLogVerboseEditorSupplementDiagnostics() {
+    if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
   static void EnqueueEditorAtlasSpriteMapSupplement(CacheEntry entry, int loadedSpriteCount) {
     if (entry == null) return;
     if (entry.spritesByName.Count > 1) return;
@@ -1250,7 +1826,10 @@ public static class TextureResidencyCache {
   }
 
   static int ResolveEditorAtlasSupplementBudgetPerFrame() {
-    if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
+    if (IsProtectedLoadingScreenStreamingContextActive()) {
       return EditorAtlasSupplementOverlayBudgetPerFrame;
     }
     if (queuedEntryCount > 0 || inFlightLoads > 0 || deferredRequests.Count > 0) {
@@ -1259,10 +1838,12 @@ public static class TextureResidencyCache {
     return EditorAtlasSupplementGameplayBudgetPerFrame;
   }
 
-  static void ProcessPendingEditorAtlasSupplements() {
+  static void ProcessPendingEditorAtlasSupplements(float deadlineAt) {
+    if (ShouldUseOverlayExactSliceSupplement()) return;
     var budget = Math.Max(ResolveEditorAtlasSupplementBudgetPerFrame(), 1);
     var processed = 0;
     while (processed < budget && pendingEditorAtlasSupplementQueue.Count > 0) {
+      if (!HasCompletionFollowupBudgetRemaining(deadlineAt)) break;
       var entry = pendingEditorAtlasSupplementQueue.Dequeue();
       if (entry == null) continue;
       entry.editorAtlasSupplementPending = false;
@@ -1278,6 +1859,7 @@ public static class TextureResidencyCache {
     if (entry.spritesByName.Count > 1) return;
     if (string.IsNullOrWhiteSpace(entry.address)) return;
 
+    entry.editorAtlasSupplementAttempted = true;
     var assets = AssetDatabase.LoadAllAssetsAtPath(entry.address);
     if (assets == null || assets.Length <= 0) return;
 
@@ -1297,7 +1879,7 @@ public static class TextureResidencyCache {
 
     if (entry.spritesByName.Count <= 1) return;
     if (!editorAtlasSupplementWarnings.Add(entry.address)) return;
-    if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return;
+    if (!ShouldLogVerboseEditorSupplementDiagnostics()) return;
 
     Debug.LogWarning(
       "[TextureResidencyCache] Supplemented editor atlas sprite map address='" + entry.address +
@@ -1317,17 +1899,19 @@ public static class TextureResidencyCache {
     TrySupplementEntrySpriteMapFromEditor(entry);
     var resolved = TryGetSpriteFromEntry(entry, spriteName, out sprite);
     if (resolved) {
-      Debug.LogWarning(
-        "[TextureResidencyCache] On-demand editor atlas supplement resolved sprite" +
-        " address='" + entry.address + "'" +
-        " sprite='" + spriteName.Trim() + "'" +
-        " mapped_before=" + mappedBefore +
-        " mapped_after=" + entry.spritesByName.Count
-      );
+      if (ShouldLogVerboseEditorSupplementDiagnostics()) {
+        Debug.LogWarning(
+          "[TextureResidencyCache] On-demand editor atlas supplement resolved sprite" +
+          " address='" + entry.address + "'" +
+          " sprite='" + spriteName.Trim() + "'" +
+          " mapped_before=" + mappedBefore +
+          " mapped_after=" + entry.spritesByName.Count
+        );
+      }
       return true;
     }
 
-    if (SpriteStreamingRuntimeSettings.EnableDiagnostics) {
+    if (ShouldLogVerboseEditorSupplementDiagnostics()) {
       Debug.LogWarning(
         "[TextureResidencyCache] On-demand editor atlas supplement did not resolve sprite" +
         " address='" + entry.address + "'" +
@@ -1340,6 +1924,89 @@ public static class TextureResidencyCache {
     return false;
   }
 #endif
+
+  static bool ShouldUseOverlayExactSliceSupplement() {
+    if (!Application.isEditor) return false;
+    return IsProtectedLoadingScreenStreamingContextActive();
+  }
+
+  static void EnsureOverlayExactSliceSupplement(CacheEntry entry, string sliceOrAtlasAddress) {
+    if (!ShouldUseOverlayExactSliceSupplement()) return;
+    if (entry == null || entry.isEvicted || !entry.isDone || !entry.isSuccess) return;
+    if (string.IsNullOrWhiteSpace(sliceOrAtlasAddress)) return;
+    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out _, out _)) return;
+
+    var normalizedSliceAddress = sliceOrAtlasAddress.Trim();
+    if (entry.pendingExactSliceSupplementAddresses.Contains(normalizedSliceAddress)) return;
+    if (entry.failedExactSliceSupplementAddresses.Contains(normalizedSliceAddress)) return;
+
+    entry.pendingExactSliceSupplementAddresses.Add(normalizedSliceAddress);
+    pendingExactSliceSupplementQueue.Enqueue(new ExactSliceSupplementRequest(entry, normalizedSliceAddress));
+  }
+
+  static int ResolveExactSliceSupplementBudgetPerFrame() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
+    if (ShouldUseOverlayExactSliceSupplement()) {
+      return 1;
+    }
+    return 4;
+  }
+
+  static void ProcessPendingExactSliceSupplements(float deadlineAt) {
+    var budget = Math.Max(ResolveExactSliceSupplementBudgetPerFrame(), 1);
+    var processed = 0;
+    while (processed < budget && pendingExactSliceSupplementQueue.Count > 0) {
+      if (!HasCompletionFollowupBudgetRemaining(deadlineAt)) break;
+      var request = pendingExactSliceSupplementQueue.Dequeue();
+      var entry = request.entry;
+      var sliceAddress = request.sliceAddress;
+      if (entry == null || string.IsNullOrWhiteSpace(sliceAddress)) continue;
+      if (!entry.pendingExactSliceSupplementAddresses.Contains(sliceAddress)) continue;
+      if (entry.isEvicted || !entry.isDone || !entry.isSuccess) {
+        entry.pendingExactSliceSupplementAddresses.Remove(sliceAddress);
+        continue;
+      }
+
+      var loadStartedAt = ShouldMeasureLoadStartCosts() ? Time.realtimeSinceStartup : 0f;
+      var handle = Addressables.LoadAssetAsync<Sprite>(sliceAddress);
+      MaybeLogSlowLoadStart(
+        phase: "exact_slice_supplement",
+        address: sliceAddress,
+        startedAt: loadStartedAt,
+        locationCount: 1
+      );
+      handle.Completed += operation => {
+        if (entry != null) {
+          entry.pendingExactSliceSupplementAddresses.Remove(sliceAddress);
+          if (entry.isEvicted) {
+            entry.failedExactSliceSupplementAddresses.Add(sliceAddress);
+          }
+          else if (operation.Status == AsyncOperationStatus.Succeeded && operation.Result != null) {
+            var sprite = operation.Result;
+            if (entry.primarySprite == null) {
+              entry.primarySprite = sprite;
+            }
+            if (!string.IsNullOrWhiteSpace(sprite.name)) {
+              entry.spritesByName[sprite.name] = sprite;
+            }
+            entry.failedExactSliceSupplementAddresses.Remove(sliceAddress);
+          }
+          else {
+            entry.failedExactSliceSupplementAddresses.Add(sliceAddress);
+          }
+          pendingQueueStateRecord = true;
+        }
+
+        if (operation.IsValid()) {
+          Addressables.Release(operation);
+        }
+      };
+
+      processed++;
+    }
+  }
 
   static void ReleaseLocationHandle(CacheEntry entry) {
     if (entry == null) return;
@@ -1672,12 +2339,24 @@ public static class TextureResidencyCache {
   static void ReleaseHandle(CacheEntry entry) {
     if (entry == null) return;
     MarkInFlightComplete(entry);
+    GeneratedAtlasSpriteSynthesisUtility.DestroySprites(entry.generatedSprites);
     if (entry.handle.IsValid()) {
       Addressables.Release(entry.handle);
+    }
+    if (entry.groupedSingleSpriteHandle.IsValid()) {
+      Addressables.Release(entry.groupedSingleSpriteHandle);
+    }
+    if (entry.groupedMetadataHandle.IsValid()) {
+      Addressables.Release(entry.groupedMetadataHandle);
     }
     ReleaseLocationHandle(entry);
 
     entry.handle = default;
+    entry.groupedSingleSpriteHandle = default;
+    entry.groupedMetadataHandle = default;
+    ClearPendingAssetLoadStart(entry);
+    entry.pendingExactSliceSupplementAddresses.Clear();
+    entry.failedExactSliceSupplementAddresses.Clear();
     entry.primarySprite = null;
     entry.spritesByName.Clear();
     entry.isDone = false;
@@ -1686,6 +2365,7 @@ public static class TextureResidencyCache {
     entry.registeredTextureIds.Clear();
     entry.loadStarted = false;
     entry.countedInFlight = false;
+    ClearPendingLoadFinalize(entry);
     ClearQueuedFlag(entry);
   }
 
@@ -2049,6 +2729,9 @@ public static class TextureResidencyCache {
     var flushBudget = SpriteStreamingLoadingState.IsLoadingOverlayActive
       ? DeferredFlushOverlayBudgetPerFrame
       : DeferredFlushDefaultBudgetPerFrame;
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      flushBudget = StrictSerialLoadingBudgetPerFrame;
+    }
     if (queuedEntryCount >= 512 || inFlightLoads >= 64) {
       flushBudget = Math.Min(flushBudget, DeferredFlushPressureBudgetPerFrame);
     }
@@ -2072,7 +2755,7 @@ public static class TextureResidencyCache {
   }
 
   static void ProcessPendingCompletionFollowups() {
-    if (!pendingBudgetMaintain && !pendingQueueStateRecord && pendingTextureRegisterQueue.Count <= 0
+    if (!pendingBudgetMaintain && !pendingQueueStateRecord && pendingAssetLoadStartQueue.Count <= 0 && pendingLoadFinalizeQueue.Count <= 0 && pendingExactSliceSupplementQueue.Count <= 0 && pendingTextureRegisterQueue.Count <= 0
 #if UNITY_EDITOR
       && pendingEditorAtlasSupplementQueue.Count <= 0
 #endif
@@ -2083,15 +2766,28 @@ public static class TextureResidencyCache {
     var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
     var measureFollowupCost = diagnosticsEnabled || SpriteStreamingLoadingState.IsLoadingOverlayActive;
     var followupStartedAt = measureFollowupCost ? Time.realtimeSinceStartup : 0f;
+    var followupDeadlineAt = ResolveCompletionFollowupDeadline(followupStartedAt);
+
+    if (pendingAssetLoadStartQueue.Count > 0 && HasCompletionFollowupBudgetRemaining(followupDeadlineAt)) {
+      ProcessPendingAssetLoadStarts(followupDeadlineAt);
+    }
+
+    if (pendingLoadFinalizeQueue.Count > 0 && HasCompletionFollowupBudgetRemaining(followupDeadlineAt)) {
+      ProcessPendingLoadFinalizations(followupDeadlineAt);
+    }
+
+    if (pendingExactSliceSupplementQueue.Count > 0 && HasCompletionFollowupBudgetRemaining(followupDeadlineAt)) {
+      ProcessPendingExactSliceSupplements(followupDeadlineAt);
+    }
 
 #if UNITY_EDITOR
-    if (pendingEditorAtlasSupplementQueue.Count > 0) {
-      ProcessPendingEditorAtlasSupplements();
+    if (pendingEditorAtlasSupplementQueue.Count > 0 && HasCompletionFollowupBudgetRemaining(followupDeadlineAt)) {
+      ProcessPendingEditorAtlasSupplements(followupDeadlineAt);
     }
 #endif
 
-    if (pendingTextureRegisterQueue.Count > 0) {
-      ProcessPendingTextureRegistrations();
+    if (pendingTextureRegisterQueue.Count > 0 && HasCompletionFollowupBudgetRemaining(followupDeadlineAt)) {
+      ProcessPendingTextureRegistrations(followupDeadlineAt);
     }
 
     var followupMs = measureFollowupCost ? ComputeElapsedMs(followupStartedAt) : 0f;
@@ -2117,6 +2813,9 @@ public static class TextureResidencyCache {
   }
 
   static int ResolveCompletionRegisterBudgetPerFrame() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
       return CompletionRegisterOverlayBudgetPerFrame;
     }
@@ -2126,10 +2825,101 @@ public static class TextureResidencyCache {
     return CompletionRegisterGameplayBudgetPerFrame;
   }
 
-  static void ProcessPendingTextureRegistrations() {
+  static int ResolveCompletionFinalizeBudgetPerFrame() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
+    if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
+      return CompletionFinalizeOverlayBudgetPerFrame;
+    }
+    if (queuedEntryCount > 0 || inFlightLoads > 0 || deferredRequests.Count > 0) {
+      return CompletionFinalizeLoadingBudgetPerFrame;
+    }
+    return CompletionFinalizeGameplayBudgetPerFrame;
+  }
+
+  static void ProcessPendingLoadFinalizations(float deadlineAt) {
+    var budget = Math.Max(ResolveCompletionFinalizeBudgetPerFrame(), 1);
+    var processed = 0;
+    var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
+    while (processed < budget && pendingLoadFinalizeQueue.Count > 0) {
+      if (!HasCompletionFollowupBudgetRemaining(deadlineAt)) break;
+      var entry = pendingLoadFinalizeQueue.Dequeue();
+      if (entry == null || !entry.pendingLoadFinalize) continue;
+      if (entry.isEvicted) {
+        ClearPendingLoadFinalize(entry);
+        continue;
+      }
+
+      var finalizeStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
+      var loadedSprites = ResolvePendingLoadFinalizeSprites(entry, out var loadSucceeded);
+
+      entry.loadStarted = false;
+      entry.isDone = true;
+      entry.isSuccess = loadSucceeded;
+      PopulateEntrySpriteMap(entry, loadedSprites);
+      entry.lastAccessTicks = DateTime.UtcNow.Ticks;
+      LogIncompleteAtlasSpriteMap(
+        entry,
+        entry.pendingExpectedSiblingSliceCount,
+        entry.pendingResourceLocationCount,
+        loadSucceeded && loadedSprites != null ? loadedSprites.Count : 0
+      );
+
+      if (entry.isSuccess) {
+        EnqueuePendingTextureRegister(entry);
+      }
+
+      ClearPendingLoadFinalize(entry);
+      pendingBudgetMaintain = true;
+      pendingQueueStateRecord = true;
+      if (diagnosticsEnabled) {
+        var finalizeMs = ComputeElapsedMs(finalizeStartedAt);
+        if (finalizeMs > 0.1f) {
+          RecordLoadCompletionFrameCost(finalizeMs, 0f, 0f, entry.address + " (finalize)");
+        }
+      }
+      processed++;
+    }
+  }
+
+  static IList<Sprite> ResolvePendingLoadFinalizeSprites(CacheEntry entry, out bool loadSucceeded) {
+    loadSucceeded = false;
+    if (entry == null || !entry.pendingLoadSucceeded) return null;
+    if (entry.groupedSingleSpriteHandle.IsValid() || entry.groupedMetadataHandle.IsValid()) {
+      if (!entry.groupedSingleSpriteHandle.IsValid() || !entry.groupedMetadataHandle.IsValid()) {
+        return null;
+      }
+
+      var atlasSprite = entry.groupedSingleSpriteHandle.Result;
+      var metadataAsset = entry.groupedMetadataHandle.Result;
+      if (!GeneratedAtlasSpriteSynthesisUtility.TryCreateGroupedSurrogateSprites(atlasSprite, metadataAsset, out var generatedSprites)) {
+        Debug.LogWarning(
+          "[TextureResidencyCache] Failed to synthesize grouped surrogate sprites" +
+          " address='" + entry.address + "'" +
+          " metadata='" + GeneratedAtlasBuildSurrogateUtility.BuildMetadataAssetPath(entry.address) + "'"
+        );
+        return null;
+      }
+
+      entry.generatedSprites.Clear();
+      entry.generatedSprites.AddRange(generatedSprites);
+      loadSucceeded = entry.generatedSprites.Count > 0;
+      return entry.generatedSprites;
+    }
+
+    if (!entry.handle.IsValid()) return null;
+    var loadedSprites = entry.handle.Result;
+    if (loadedSprites == null || loadedSprites.Count <= 0) return null;
+    loadSucceeded = true;
+    return loadedSprites;
+  }
+
+  static void ProcessPendingTextureRegistrations(float deadlineAt) {
     var budget = Math.Max(ResolveCompletionRegisterBudgetPerFrame(), 1);
     var processed = 0;
     while (processed < budget && pendingTextureRegisterQueue.Count > 0) {
+      if (!HasCompletionFollowupBudgetRemaining(deadlineAt)) break;
       var entry = pendingTextureRegisterQueue.Dequeue();
       if (entry == null || entry.isEvicted || entry.hasTextureRegistration) continue;
       if (!entry.isDone || !entry.isSuccess || entry.primarySprite == null) continue;
@@ -2143,6 +2933,12 @@ public static class TextureResidencyCache {
     if (!Application.isPlaying) return;
     var loadingContextActive = StreamingWarmOrchestrator.IsWarmGateRunning || SpriteStreamingLoadingState.IsLoadingOverlayActive;
     if (!loadingContextActive) return;
+    if (IsProtectedLoadingScreenStreamingContextActive()) {
+      // Protected startup already has a curated warm plan. Expanding every slice
+      // into atlas siblings here only grows deferred backlog and can force large
+      // shard atlas-lookup builds onto the main thread during the overlay.
+      return;
+    }
     var allowLoadingExpansion = requestPriority != LoadPriority.Background;
     if (!allowLoadingExpansion) return;
     if (!TryConsumeAtlasExpansionBudget()) return;
@@ -2204,6 +3000,9 @@ public static class TextureResidencyCache {
     }
     var loadingContextActive = StreamingWarmOrchestrator.IsWarmGateRunning || SpriteStreamingLoadingState.IsLoadingOverlayActive;
     var maxPerFrame = loadingContextActive ? AtlasExpansionMaxPerFrameLoading : AtlasExpansionMaxPerFrame;
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      maxPerFrame = StrictSerialLoadingBudgetPerFrame;
+    }
     if (atlasExpansionCountThisFrame >= maxPerFrame) return false;
     atlasExpansionCountThisFrame++;
     return true;
@@ -2217,6 +3016,9 @@ public static class TextureResidencyCache {
     }
     var loadingContextActive = StreamingWarmOrchestrator.IsWarmGateRunning || SpriteStreamingLoadingState.IsLoadingOverlayActive;
     var maxAddressesPerFrame = loadingContextActive ? AtlasExpansionMaxAddressesPerFrameLoading : AtlasExpansionMaxAddressesPerFrame;
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      maxAddressesPerFrame = StrictSerialLoadingBudgetPerFrame;
+    }
     if (atlasExpansionAddressesQueuedThisFrame >= maxAddressesPerFrame) return false;
     atlasExpansionAddressesQueuedThisFrame++;
     return true;
@@ -2347,8 +3149,104 @@ public static class TextureResidencyCache {
     return "live";
   }
 
+  static int ResolveOverlayStartAllowance(int maxStarts) {
+    if (!IsLoadingScreenStreamingContextActive()) {
+      overlayStartTokens = 0f;
+      overlayStartTokenLastRefillAt = -1f;
+      return int.MaxValue;
+    }
+
+    // Token bucket pacing keeps overlay load starts smooth even when Pump() is
+    // called multiple times in one frame or after a long stall.
+    RefillOverlayStartTokens();
+    var remainingFrameStarts = Math.Max(maxStarts - startedLoadsThisFrame, 0);
+    var availableTokens = Mathf.FloorToInt(overlayStartTokens);
+    return Mathf.Clamp(Math.Min(availableTokens, remainingFrameStarts), 0, remainingFrameStarts);
+  }
+
+  static void ConsumeOverlayStartToken() {
+    if (!IsLoadingScreenStreamingContextActive()) return;
+    overlayStartTokens = Mathf.Max(overlayStartTokens - 1f, 0f);
+  }
+
+  static void RefillOverlayStartTokens() {
+    if (!IsLoadingScreenStreamingContextActive()) {
+      overlayStartTokens = 0f;
+      overlayStartTokenLastRefillAt = -1f;
+      return;
+    }
+
+    var now = Time.realtimeSinceStartup;
+    var burstCap = ResolveOverlayStartBurstCap();
+    if (overlayStartTokenLastRefillAt < 0f) {
+      overlayStartTokenLastRefillAt = now;
+      overlayStartTokens = burstCap;
+      return;
+    }
+
+    var elapsed = Mathf.Max(now - overlayStartTokenLastRefillAt, 0f);
+    overlayStartTokenLastRefillAt = now;
+    overlayStartTokens = Mathf.Min(
+      overlayStartTokens + (elapsed * ResolveOverlayStartRatePerSecond()),
+      burstCap
+    );
+  }
+
+  static float ResolveOverlayStartRatePerSecond() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
+    return Application.isMobilePlatform
+      ? MobileOverlayStartRatePerSecond
+      : DesktopOverlayStartRatePerSecond;
+  }
+
+  static int ResolveOverlayStartBurstCap() {
+    if (ShouldUseStrictSerialLoadingDebounce()) {
+      return StrictSerialLoadingBudgetPerFrame;
+    }
+    return Application.isMobilePlatform
+      ? MobileOverlayStartBurstCap
+      : DesktopOverlayStartBurstCap;
+  }
+
+  static float ResolveCompletionFollowupDeadline(float startedAt) {
+    if (!IsCompletionFollowupDeadlineActive()) return float.PositiveInfinity;
+    return startedAt + (ResolveCompletionFollowupBudgetMs() / 1000f);
+  }
+
+  static bool HasCompletionFollowupBudgetRemaining(float deadlineAt) {
+    return float.IsPositiveInfinity(deadlineAt) || Time.realtimeSinceStartup < deadlineAt;
+  }
+
+  static bool IsCompletionFollowupDeadlineActive() {
+    return IsLoadingScreenStreamingContextActive() ||
+      queuedEntryCount > 0 ||
+      inFlightLoads > 0 ||
+      deferredRequests.Count > 0;
+  }
+
+  static float ResolveCompletionFollowupBudgetMs() {
+    if (IsLoadingScreenStreamingContextActive()) {
+      return CompletionFollowupOverlayBudgetMs;
+    }
+    if (queuedEntryCount > 0 || inFlightLoads > 0 || deferredRequests.Count > 0) {
+      return CompletionFollowupLoadingBudgetMs;
+    }
+    return float.PositiveInfinity;
+  }
+
   static bool IsLoadingScreenStreamingContextActive() {
     return StreamingWarmOrchestrator.IsWarmGateRunning || SpriteStreamingLoadingState.IsLoadingOverlayActive;
+  }
+
+  static bool IsProtectedLoadingScreenStreamingContextActive() {
+    return StreamingWarmOrchestrator.IsWarmGateRunning || SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive;
+  }
+
+  static bool ShouldUseStrictSerialLoadingDebounce() {
+    if (!EnableStrictSerialLoadingDebounce) return false;
+    return IsLoadingScreenStreamingContextActive();
   }
 
   static bool ShouldLogRequestFrameDiagnostics() {
@@ -2368,6 +3266,32 @@ public static class TextureResidencyCache {
     if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
     if (!IsLoadingScreenStreamingContextActive()) return false;
     return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  static bool ShouldMeasureLoadStartCosts() {
+    if (!enableLoadStartDiagnostics) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
+    if (!IsLoadingScreenStreamingContextActive()) return false;
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  static float ResolveLoadStartSlowThresholdMs() {
+    return Mathf.Max(loadStartSlowThresholdMs, 1f);
+  }
+
+  static void MaybeLogSlowLoadStart(string phase, string address, float startedAt, int locationCount) {
+    if (!ShouldMeasureLoadStartCosts()) return;
+    var elapsedMs = ComputeElapsedMs(startedAt);
+    if (elapsedMs < ResolveLoadStartSlowThresholdMs()) return;
+    Debug.LogWarning(
+      "[TextureResidencyCache][LoadStartDiag] phase=" + (string.IsNullOrWhiteSpace(phase) ? "unknown" : phase.Trim()) +
+      " start_ms=" + elapsedMs.ToString("0.0") +
+      " queued=" + queuedEntryCount +
+      " in_flight=" + inFlightLoads +
+      " deferred=" + deferredRequests.Count +
+      " locations=" + Math.Max(locationCount, 0) +
+      " address='" + (address ?? "") + "'"
+    );
   }
 
   static float ResolveLoadCompletionSlowThresholdMs() {
@@ -2416,6 +3340,17 @@ public static class TextureResidencyCache {
     if (loadCompletionDiagFrameTotalMs < thresholdMs) return;
 
     loadCompletionDiagFrameReported = true;
+    Debug.LogWarning(
+      "[TextureResidencyCache][CompletionDiag] frame=" + frame +
+      " total_ms=" + loadCompletionDiagFrameTotalMs.ToString("0.0") +
+      " register_ms=" + loadCompletionDiagFrameRegisterMs.ToString("0.0") +
+      " maintain_ms=" + loadCompletionDiagFrameMaintainMs.ToString("0.0") +
+      " steps=" + loadCompletionDiagFrameCount +
+      " queued=" + queuedEntryCount +
+      " in_flight=" + inFlightLoads +
+      " deferred=" + deferredRequests.Count +
+      " address='" + (address ?? "") + "'"
+    );
 
   }
 

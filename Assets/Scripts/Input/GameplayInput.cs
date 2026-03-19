@@ -76,6 +76,7 @@ public class GameplayInput : MonoBehaviour {
   private PendingSuperAttack pendingSuperAttack1; // attack1 + attack2 -> superattack1
   private PendingSuperAttack pendingSuperAttack2; // attack3 + attack4 -> superattack2
   private int lastAttackGateLogFrame = -1;
+  private float nextPlayerReferenceResolveAt = -1f;
 
   void Start() {
     actions.Add(MessageBus.On("gameplay.attack1", o => { if (_IsPressed(o)) attack1(); }));
@@ -93,8 +94,7 @@ public class GameplayInput : MonoBehaviour {
     actions.Add(MessageBus.On("gameplay.charDown", o => charDown(o)));
     actions.Add(MessageBus.On("gameplay.charLeft", o => charLeft(o)));
     actions.Add(MessageBus.On("gameplay.charRight", o => charRight(o)));
-    cameraRB = cam.GetComponent<Rigidbody2D>();
-    erb = EsperanzaParent.GetComponent<Rigidbody2D>();
+    TryResolvePlayerReferences(force: true);
   }
 
   bool _IsPressed(object o) {
@@ -162,6 +162,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void Update() {
+    TryResolvePlayerReferences();
     if (erb == null || gearController == null) return;
     _CameraFollow();
     var moveInput = _ResolveMoveInput();
@@ -174,6 +175,59 @@ public class GameplayInput : MonoBehaviour {
     _ProcessMovementVelocity(moveInput);
     _RecoverToStanceWhenActionEnds();
     _ProcessMovementAnimation(moveInput);
+  }
+
+  void TryResolvePlayerReferences(bool force = false) {
+    if (!force &&
+        cameraRB != null &&
+        erb != null &&
+        gearController != null &&
+        characterState != null &&
+        EsperanzaParent != null) {
+      return;
+    }
+
+    var now = Time.unscaledTime;
+    if (!force && nextPlayerReferenceResolveAt >= 0f && now < nextPlayerReferenceResolveAt) {
+      return;
+    }
+
+    nextPlayerReferenceResolveAt = now + 0.25f;
+
+    if (cameraRB == null && cam != null) {
+      cameraRB = cam.GetComponent<Rigidbody2D>();
+    }
+
+    if (EsperanzaParent == null) {
+      if (gearController != null) {
+        EsperanzaParent = gearController.gameObject;
+      }
+      else if (characterState != null) {
+        EsperanzaParent = characterState.gameObject;
+      }
+    }
+
+    if (gearController == null && EsperanzaParent != null) {
+      gearController = EsperanzaParent.GetComponent<GearController>();
+    }
+    gearController ??= FindFirstObjectByType<GearController>();
+
+    if (characterState == null && EsperanzaParent != null) {
+      characterState = EsperanzaParent.GetComponent<CharacterState>();
+    }
+    if (characterState == null && gearController != null) {
+      characterState = gearController.GetComponent<CharacterState>();
+    }
+    characterState ??= FindFirstObjectByType<CharacterState>();
+
+    if (EsperanzaParent == null && gearController != null) {
+      EsperanzaParent = gearController.gameObject;
+    }
+    if (EsperanzaParent == null && characterState != null) {
+      EsperanzaParent = characterState.gameObject;
+    }
+
+    erb = EsperanzaParent != null ? EsperanzaParent.GetComponent<Rigidbody2D>() : null;
   }
 
   void attack1() { _HandleAttackPress(1); }

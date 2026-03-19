@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 public enum LocationObjectiveType {
   FinalKillCount = 0,
@@ -48,36 +50,88 @@ public class LocationObjective {
 [Serializable]
 public class LocationPrefabData {
   public GameObject prefab;
-  public string resourcePath;
+  public string assetPath;
   public Vector3 localPosition;
   public Vector3 localEulerAngles;
   public Vector3 localScale = Vector3.one;
-  bool resourceLoadAttempted;
+
+  bool addressablesLoadAttempted;
+
+  static readonly Dictionary<string, GameObject> prefabCache = new(StringComparer.OrdinalIgnoreCase);
 
   public LocationPrefabData(
     GameObject prefab = null,
-    string resourcePath = "",
+    string assetPath = "",
     Vector3? localPosition = null,
     Vector3? localEulerAngles = null,
     Vector3? localScale = null
   ) {
     this.prefab = prefab;
-    this.resourcePath = string.IsNullOrWhiteSpace(resourcePath) ? "" : resourcePath.Trim();
+    this.assetPath = string.IsNullOrWhiteSpace(assetPath) ? "" : assetPath.Trim();
     this.localPosition = localPosition ?? Vector3.zero;
     this.localEulerAngles = localEulerAngles ?? Vector3.zero;
     this.localScale = localScale ?? Vector3.one;
   }
 
-  public string ResourcePath => string.IsNullOrWhiteSpace(resourcePath) ? "" : resourcePath.Trim();
+  public string AssetPath => string.IsNullOrWhiteSpace(assetPath) ? "" : assetPath.Trim();
 
   public GameObject ResolvePrefab() {
     if (prefab != null) return prefab;
-    if (resourceLoadAttempted) return null;
-    var path = ResourcePath;
-    if (string.IsNullOrWhiteSpace(path)) return null;
-    resourceLoadAttempted = true;
-    prefab = Resources.Load<GameObject>(path);
+
+    var address = AssetPath;
+    if (string.IsNullOrWhiteSpace(address)) {
+      Debug.LogWarning("[LocationPrefabData] Addressable prefab address is empty.");
+      return null;
+    }
+
+    if (TryGetCachedPrefab(address, out var cachedPrefab)) {
+      prefab = cachedPrefab;
+      Debug.Log("[LocationPrefabData] Using cached addressable prefab address='" + address + "'.");
+      return prefab;
+    }
+
+    if (addressablesLoadAttempted) return null;
+    addressablesLoadAttempted = true;
+    prefab = LoadPrefabFromAddressables(address);
     return prefab;
+  }
+
+  static bool TryGetCachedPrefab(string address, out GameObject cachedPrefab) {
+    cachedPrefab = null;
+    if (string.IsNullOrWhiteSpace(address)) return false;
+    return prefabCache.TryGetValue(address, out cachedPrefab) && cachedPrefab != null;
+  }
+
+  GameObject LoadPrefabFromAddressables(string address) {
+    var startedAt = Time.realtimeSinceStartup;
+
+    // Load the prefab asset, not an instance. LocationManager owns instantiation and staged child activation.
+    var loadHandle = Addressables.LoadAssetAsync<GameObject>(address);
+    var loadedPrefab = loadHandle.WaitForCompletion();
+
+    if (loadHandle.Status == AsyncOperationStatus.Succeeded && loadedPrefab != null) {
+      prefabCache[address] = loadedPrefab;
+      var loadSeconds = Time.realtimeSinceStartup - startedAt;
+      Debug.Log(
+        "[LocationPrefabData] Loaded addressable prefab address='" + address +
+        "' load_s=" + loadSeconds.ToString("0.0000") +
+        " child_count=" + loadedPrefab.transform.childCount
+      );
+      return loadedPrefab;
+    }
+
+    var status = loadHandle.Status.ToString();
+    var errorMessage = loadHandle.OperationException != null ? loadHandle.OperationException.Message : "none";
+    if (loadHandle.IsValid()) {
+      Addressables.Release(loadHandle);
+    }
+
+    Debug.LogError(
+      "[LocationPrefabData] Failed to load addressable prefab address='" + address +
+      "' status=" + status +
+      " error='" + errorMessage + "'"
+    );
+    return null;
   }
 }
 
@@ -182,7 +236,7 @@ public static class LocationEnemyData {
           LocationObjective.SurvivalTime(60f, "Survive for 60 seconds")
         },
         locationPrefabData: new LocationPrefabData(
-          resourcePath: "Locations/DomeCity",
+          assetPath: "Assets/Prefabs/Locations/DomeCity.prefab", // Updated path
           localPosition: Vector3.zero,
           localEulerAngles: Vector3.zero,
           localScale: Vector3.one
@@ -232,5 +286,3 @@ public static class LocationEnemyData {
     return DomeCityLocationId;
   }
 }
-
-

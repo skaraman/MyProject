@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -90,6 +91,10 @@ public class SingleSceneManager : MonoBehaviour {
   private float loadingProgressIdleStartedAt = -1f;
   private bool loadingProgressObservedWork;
   private float loadingProgressNextDebugLogAt = -1f;
+  private float loadingHeartbeatStartedAt = -1f;
+  private float loadingHeartbeatLastLoggedAt = -1f;
+  private int loadingHeartbeatCount;
+  private float loadingHeartbeatNextLogAt = -1f;
   private int loadingBlockingReadyCount;
   private int loadingBlockingTotalCount;
   private bool loadingBlockingCriticalReady;
@@ -100,6 +105,8 @@ public class SingleSceneManager : MonoBehaviour {
   const float LoadingZeroPercentStallDelaySeconds = 1.5f;
   const float LoadingZeroPercentStallLogIntervalSeconds = 2.0f;
   const float LoadingWaitStateLogIntervalSeconds = 2.0f;
+  const float LoadingHeartbeatLogIntervalSeconds = 1.0f;
+  const float LoadingHeartbeatAcceptableGapSeconds = 2.0f;
 
   public GameObject MainMenu;
   public GameObject LoadMenu;
@@ -111,12 +118,10 @@ public class SingleSceneManager : MonoBehaviour {
 
   public AutoSaver autoSaver;
   public SaveSlotView saveSlotView;
-  // Runtime tuning targets:
-  // - Critical warm scope should complete within soft timeout on normal loads.
-  // - Gate-time queue pressure should trend down quickly (avoid long tails > ~1500 outstanding).
-  // - In-flight addressable loads should usually stay under ~128 to reduce completion spikes.
-  // - Pre-unlock resident pinning should stay bounded (prefer <= ~2048 addresses on desktop).
-  // - Estimated resident texture bytes should sit under configured soft budget with headroom.
+  [Header("Player Bootstrap")]
+  [SerializeField] GameObject playerCharacterPrefab;
+  // Loading policy: the overlay animation should keep advancing while work is in flight.
+  // A heartbeat gap over 2 seconds counts as a loading hitch and requires investigation.
   const bool useScenarioWarmGate = true;
   const float startWarmTimeoutSeconds = 2.0f;
   const float startWarmHardTimeoutSeconds = 25.0f;
@@ -181,6 +186,13 @@ public class SingleSceneManager : MonoBehaviour {
   const float postUnlockPinReleaseDelaySeconds = 8.0f;
   const int postUnlockPinReleaseMaxOutstanding = 192;
   const float postUnlockPinReleaseTimeoutSeconds = 20.0f;
+  static readonly WaitForSecondsRealtime FadeToBlackDelay = new(Mathf.Max(fadeToBlackSeconds, 0f));
+  static readonly WaitForSecondsRealtime WarmGateLeadDelay = new(Mathf.Max(fadeLeadSeconds, 0f));
+  static readonly WaitForSecondsRealtime FallbackTransitionDelay = new(Mathf.Max(fallbackTransitionSeconds, 0f));
+  static readonly WaitForSecondsRealtime StartupFadeWatchdogDelay = new(Mathf.Max(startupFadeWatchdogSeconds, 0f));
+  static readonly WaitForSecondsRealtime RevealCleanupDelay = new(Mathf.Max(fadeFromBlackSeconds + 0.15f, 0.5f));
+  static readonly WaitForSecondsRealtime FadeFromBlackDelay = new(Mathf.Max(fadeFromBlackSeconds, 0f));
+  static readonly WaitForSecondsRealtime PostUnlockPinReleaseDelay = new(Mathf.Max(postUnlockPinReleaseDelaySeconds, 0f));
   static readonly string defaultStartLocation = LocationEnemyData.DomeCityLocationId;
   const string mainMenuFlowLocationId = LocationEnemyData.MainMenuLocationId;
   const string gameplayFlowFallbackLocationId = LocationEnemyData.DomeCityLocationId;
@@ -217,6 +229,16 @@ public class SingleSceneManager : MonoBehaviour {
   readonly List<string> preUnlockResidentPinReadyAddressScratch = new(16384);
   readonly HashSet<string> preUnlockResidentPinSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly Stack<Transform> findChildScratch = new(64);
+  readonly Stack<IEnumerator> preUnlockEnumeratorStack = new(32);
+  readonly List<string> warmRequestCriticalLibrariesScratch = new(64);
+  readonly List<string> warmRequestCriticalAddressesScratch = new(512);
+  readonly List<string> warmRequestWarmLibrariesScratch = new(128);
+  readonly List<string> warmRequestWarmAddressesScratch = new(2048);
+  readonly List<string> warmRequestCriticalLabelsScratch = new(64);
+  readonly List<string> warmRequestWarmLabelsScratch = new(128);
+  readonly List<string> combatPopulationTypesScratch = new(16);
+  readonly List<string> criticalPlayerEffectKeysScratch = new(CorePlayerEffectWarmKeys.Length);
+  readonly StringBuilder loadFlowLogBuilder = new(1024);
   MaterialPropertyBlock loadingBlackscreenPropertyBlock;
   EnemyController[] activeEnemyControllersCache = Array.Empty<EnemyController>();
   float activeEnemyControllersCacheRefreshedAt = -1f;
@@ -313,6 +335,7 @@ public class SingleSceneManager : MonoBehaviour {
     loadingProgressIdleStartedAt = -1f;
     loadingProgressObservedWork = false;
     loadingProgressNextDebugLogAt = -1f;
+    ResetLoadingHeartbeatDebugState();
     ResetBlockingProgressState();
 
     if (LoadingScreen == null) {
@@ -349,6 +372,7 @@ public class SingleSceneManager : MonoBehaviour {
 
   void UpdateLoadingScreenFeedback() {
     if (!PrepareLoadingScreenFeedbackState()) return;
+    MaybeLogLoadingScreenHeartbeat();
     if (!loadingOverlayChildrenReady) return;
     var percent = CalculateLoadingPercentFromTextureQueue();
     UpdateLoadingScreenPercentText(percent);
@@ -369,6 +393,7 @@ public class SingleSceneManager : MonoBehaviour {
       loadingProgressIdleStartedAt = -1f;
       loadingProgressObservedWork = false;
       loadingProgressNextDebugLogAt = -1f;
+      ResetLoadingHeartbeatDebugState();
       ResetBlockingProgressState();
       ResetZeroPercentStallDebugState();
       SetLoadingLightActive(false);
@@ -418,6 +443,13 @@ public class SingleSceneManager : MonoBehaviour {
   void ResetZeroPercentStallDebugState() {
     loadingZeroPercentStartedAt = -1f;
     loadingZeroPercentNextLogAt = -1f;
+  }
+
+  void ResetLoadingHeartbeatDebugState() {
+    loadingHeartbeatStartedAt = -1f;
+    loadingHeartbeatLastLoggedAt = -1f;
+    loadingHeartbeatCount = 0;
+    loadingHeartbeatNextLogAt = -1f;
   }
 
   void CaptureBlockingProgressStateFromWarmResult(WarmResult result) {
@@ -552,16 +584,18 @@ public class SingleSceneManager : MonoBehaviour {
       out var blockingCriticalReady,
       out var blockingHardBypassUsed
     );
+    var locationActivationPending = LocationManager.HasPendingActivationWork;
     if (hasBlockingProgress && (blockingTotalCount > 0 || blockingProgress > 0f)) {
       loadingProgressObservedWork = true;
     }
 
     var blockingReady = hasBlockingProgress &&
-      IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue);
+      IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue) &&
+      !locationActivationPending;
 
     var hasOutstandingWork = hasBlockingProgress
       ? !blockingReady
-      : (remainingWork > 0 || !resolverIdle || !playerReady);
+      : (remainingWork > 0 || !resolverIdle || !playerReady || locationActivationPending);
     if (hasOutstandingWork) {
       loadingProgressIdleStartedAt = -1f;
     }
@@ -827,8 +861,139 @@ public class SingleSceneManager : MonoBehaviour {
     );
   }
 
-  static bool ShouldLogLoadFlowDebug() {
+  static bool ShouldLogLoadFlowWarnings() {
     return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  static bool ShouldLogLoadFlowDebug() {
+    if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
+    return ShouldLogLoadFlowWarnings();
+  }
+
+  StringBuilder BeginLoadFlowLog(string prefix) {
+    var builder = loadFlowLogBuilder;
+    builder.Clear();
+    builder.Append(prefix);
+    return builder;
+  }
+
+  static void AppendLoadFlowField(StringBuilder builder, string name, string value) {
+    if (builder == null || string.IsNullOrWhiteSpace(name)) return;
+    builder.Append(' ').Append(name).Append('=').Append(value ?? "");
+  }
+
+  static void AppendLoadFlowInt(StringBuilder builder, string name, int value) {
+    if (builder == null || string.IsNullOrWhiteSpace(name)) return;
+    builder.Append(' ').Append(name).Append('=').Append(value);
+  }
+
+  static void AppendLoadFlowFloat(StringBuilder builder, string name, float value, string format = "0.000") {
+    if (builder == null || string.IsNullOrWhiteSpace(name)) return;
+    builder.Append(' ').Append(name).Append('=').Append(value.ToString(format));
+  }
+
+  static void AppendLoadFlowBool(StringBuilder builder, string name, bool value) {
+    if (builder == null || string.IsNullOrWhiteSpace(name)) return;
+    builder.Append(' ').Append(name).Append('=').Append(value ? 1 : 0);
+  }
+
+  static string ResolveLoadFlowValue(string value, string fallback = "-") {
+    return string.IsNullOrWhiteSpace(value) ? fallback : value;
+  }
+
+  void MaybeLogLoadingScreenHeartbeat() {
+    var shouldLogWarnings = ShouldLogLoadFlowWarnings();
+    var shouldLogVerbose = ShouldLogLoadFlowDebug();
+    if (!shouldLogWarnings && !shouldLogVerbose) return;
+    var now = Time.realtimeSinceStartup;
+    if (loadingHeartbeatStartedAt < 0f) {
+      loadingHeartbeatStartedAt = now;
+      loadingHeartbeatLastLoggedAt = now;
+      loadingHeartbeatCount = 0;
+      loadingHeartbeatNextLogAt = now;
+    }
+    if (now < loadingHeartbeatNextLogAt) return;
+    var scheduledAt = loadingHeartbeatNextLogAt;
+    var gapSeconds = Mathf.Max(now - loadingHeartbeatLastLoggedAt, 0f);
+    var overdueSeconds = Mathf.Max(now - scheduledAt, 0f);
+    var missedBeats = overdueSeconds > 0f
+      ? Mathf.FloorToInt(overdueSeconds / LoadingHeartbeatLogIntervalSeconds)
+      : 0;
+    if (gapSeconds > LoadingHeartbeatAcceptableGapSeconds && shouldLogWarnings) {
+      var warningBuilder = BeginLoadFlowLog("[SingleSceneManager][LoadingHeartbeatGap]");
+      AppendLoadFlowFloat(warningBuilder, "gap_s", gapSeconds);
+      AppendLoadFlowFloat(warningBuilder, "acceptable_s", LoadingHeartbeatAcceptableGapSeconds);
+      AppendLoadFlowInt(warningBuilder, "missed_beats", missedBeats);
+      AppendLoadFlowInt(warningBuilder, "investigation_required", 1);
+      AppendLoadFlowField(warningBuilder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
+      AppendLoadFlowField(warningBuilder, "current_section", ResolveCurrentSection().ToString());
+      AppendLoadFlowField(warningBuilder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
+      Debug.LogWarning(warningBuilder.ToString());
+    }
+    loadingHeartbeatLastLoggedAt = now;
+    loadingHeartbeatCount++;
+    loadingHeartbeatNextLogAt = loadingHeartbeatStartedAt + (loadingHeartbeatCount * LoadingHeartbeatLogIntervalSeconds);
+    while (loadingHeartbeatNextLogAt <= now) {
+      loadingHeartbeatCount++;
+      loadingHeartbeatNextLogAt = loadingHeartbeatStartedAt + (loadingHeartbeatCount * LoadingHeartbeatLogIntervalSeconds);
+    }
+    if (!shouldLogVerbose) return;
+
+    var remainingWork = GetRemainingStreamingWork(
+      out var queue,
+      out var session,
+      out var outstanding,
+      out _
+    );
+    var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
+    var resolverIdle = SpriteRuntimeResolver.IsWarmupIdle();
+    var playerReady = IsPlayerFirstFrameReady();
+    var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "" : blocker;
+    var hasBlockingProgress = TryGetBlockingProgressState(
+      out var blockingProgress,
+      out var blockingReadyCount,
+      out var blockingTotalCount,
+      out var blockingCriticalReady,
+      out var blockingHardBypassUsed
+    );
+    var locationActivationPending = LocationManager.HasPendingActivationWork;
+
+    var infoBuilder = BeginLoadFlowLog("[SingleSceneManager][LoadingHeartbeat]");
+    AppendLoadFlowFloat(infoBuilder, "elapsed_s", now - loadingHeartbeatStartedAt);
+    AppendLoadFlowFloat(infoBuilder, "gap_s", gapSeconds);
+    AppendLoadFlowFloat(infoBuilder, "scheduled_at_s", Mathf.Max(scheduledAt - loadingHeartbeatStartedAt, 0f));
+    AppendLoadFlowInt(infoBuilder, "missed_beats", missedBeats);
+    AppendLoadFlowInt(infoBuilder, "frame", Time.frameCount);
+    AppendLoadFlowFloat(infoBuilder, "dt_unscaled", Time.unscaledDeltaTime);
+    AppendLoadFlowField(infoBuilder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
+    AppendLoadFlowField(infoBuilder, "current_section", ResolveCurrentSection().ToString());
+    AppendLoadFlowField(infoBuilder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
+    AppendLoadFlowBool(infoBuilder, "loading_root", LoadingScreen != null && LoadingScreen.activeSelf);
+    AppendLoadFlowBool(infoBuilder, "black_hold", holdBlackscreenOpaqueDuringLoad);
+    AppendLoadFlowBool(infoBuilder, "black_visible", loadingBlackscreen != null && loadingBlackscreen.activeInHierarchy);
+    AppendLoadFlowBool(infoBuilder, "progress_ui", IsLoadingProgressUiVisible());
+    AppendLoadFlowBool(infoBuilder, "overlay_children_ready", loadingOverlayChildrenReady);
+    AppendLoadFlowInt(infoBuilder, "percent", loadingPercent);
+    AppendLoadFlowInt(infoBuilder, "session_completed", session.completedTotal);
+    AppendLoadFlowInt(infoBuilder, "session_total", session.EffectiveTotal);
+    AppendLoadFlowInt(infoBuilder, "remaining_work", remainingWork);
+    AppendLoadFlowInt(infoBuilder, "queue_queued", queue.queuedCount);
+    AppendLoadFlowInt(infoBuilder, "queue_in_flight", queue.inFlightCount);
+    AppendLoadFlowInt(infoBuilder, "outstanding", outstanding);
+    AppendLoadFlowInt(infoBuilder, "deferred_pending", deferredSnapshot.pendingCount);
+    AppendLoadFlowBool(infoBuilder, "resolver_idle", resolverIdle);
+    AppendLoadFlowBool(infoBuilder, "player_ready", playerReady);
+    AppendLoadFlowBool(infoBuilder, "player_animation_held", playerAnimationHeldForLoadingOverlay);
+    AppendLoadFlowField(infoBuilder, "player_blocker", playerReady ? "-" : ResolveLoadFlowValue(blockerSummary));
+    AppendLoadFlowBool(infoBuilder, "blocking_mode", hasBlockingProgress);
+    AppendLoadFlowInt(infoBuilder, "blocking_ready_count", blockingReadyCount);
+    AppendLoadFlowInt(infoBuilder, "blocking_total_count", blockingTotalCount);
+    AppendLoadFlowFloat(infoBuilder, "blocking_progress", blockingProgress);
+    AppendLoadFlowBool(infoBuilder, "blocking_critical_ready", blockingCriticalReady);
+    AppendLoadFlowBool(infoBuilder, "blocking_hard_bypass", blockingHardBypassUsed);
+    AppendLoadFlowBool(infoBuilder, "location_activation_pending", locationActivationPending);
+    Debug.Log(infoBuilder.ToString());
   }
 
   void LogStartGameRequest(bool isNewGame, SaveData loadedSlot) {
@@ -904,7 +1069,7 @@ public class SingleSceneManager : MonoBehaviour {
     float targetProgress,
     int actualPercent
   ) {
-    if (!ShouldLogLoadFlowDebug()) return;
+    if (!ShouldLogLoadFlowWarnings()) return;
     if (!loadingOverlayChildrenReady || actualPercent > 0) {
       ResetZeroPercentStallDebugState();
       return;
@@ -927,38 +1092,38 @@ public class SingleSceneManager : MonoBehaviour {
     loadingZeroPercentNextLogAt = now + LoadingZeroPercentStallLogIntervalSeconds;
     var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
     var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "" : blocker;
-    Debug.LogWarning(
-      "[SingleSceneManager][LoadingZeroStall] elapsed_s=" + (now - loadingZeroPercentStartedAt).ToString("0.000") +
-      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
-      " current_section=" + ResolveCurrentSection() +
-      " current_location=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
-      " slot=" + SaveSlotManager.slot +
-      " target_progress=" + targetProgress.ToString("0.000") +
-      " actual_percent=" + actualPercent +
-      " goal_total=" + loadingProgressGoalTotal +
-      " goal_remaining_best=" + loadingProgressGoalBestRemaining +
-      " remaining_work=" + remainingWork +
-      " session_expected=" + session.expectedTotal +
-      " session_scheduled=" + session.scheduledTotal +
-      " session_completed=" + session.completedTotal +
-      " session_total=" + session.EffectiveTotal +
-      " queue_queued=" + queue.queuedCount +
-      " queue_in_flight=" + queue.inFlightCount +
-      " deferred_pending=" + deferredSnapshot.pendingCount +
-      " outstanding=" + outstanding +
-      " blocking_mode=" + (usingBlockingProgress ? 1 : 0) +
-      " blocking_ready_count=" + blockingReadyCount +
-      " blocking_total_count=" + blockingTotalCount +
-      " blocking_progress=" + blockingProgress.ToString("0.000") +
-      " blocking_critical_ready=" + (blockingCriticalReady ? 1 : 0) +
-      " blocking_hard_bypass=" + (blockingHardBypassUsed ? 1 : 0) +
-      " blocking_ready=" + (blockingReady ? 1 : 0) +
-      " resolver_idle=" + (resolverIdle ? 1 : 0) +
-      " player_ready=" + (playerReady ? 1 : 0) +
-      " player_blocker=" + (string.IsNullOrWhiteSpace(blockerSummary) ? "-" : blockerSummary) +
-      " progress_ui=" + (IsLoadingProgressUiVisible() ? 1 : 0) +
-      " loading_light=" + (loadingLightObject != null && loadingLightObject.activeSelf ? 1 : 0)
-    );
+    var warningBuilder = BeginLoadFlowLog("[SingleSceneManager][LoadingZeroStall]");
+    AppendLoadFlowFloat(warningBuilder, "elapsed_s", now - loadingZeroPercentStartedAt);
+    AppendLoadFlowField(warningBuilder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
+    AppendLoadFlowField(warningBuilder, "current_section", ResolveCurrentSection().ToString());
+    AppendLoadFlowField(warningBuilder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
+    AppendLoadFlowInt(warningBuilder, "slot", SaveSlotManager.slot);
+    AppendLoadFlowFloat(warningBuilder, "target_progress", targetProgress);
+    AppendLoadFlowInt(warningBuilder, "actual_percent", actualPercent);
+    AppendLoadFlowInt(warningBuilder, "goal_total", loadingProgressGoalTotal);
+    AppendLoadFlowInt(warningBuilder, "goal_remaining_best", loadingProgressGoalBestRemaining);
+    AppendLoadFlowInt(warningBuilder, "remaining_work", remainingWork);
+    AppendLoadFlowInt(warningBuilder, "session_expected", session.expectedTotal);
+    AppendLoadFlowInt(warningBuilder, "session_scheduled", session.scheduledTotal);
+    AppendLoadFlowInt(warningBuilder, "session_completed", session.completedTotal);
+    AppendLoadFlowInt(warningBuilder, "session_total", session.EffectiveTotal);
+    AppendLoadFlowInt(warningBuilder, "queue_queued", queue.queuedCount);
+    AppendLoadFlowInt(warningBuilder, "queue_in_flight", queue.inFlightCount);
+    AppendLoadFlowInt(warningBuilder, "deferred_pending", deferredSnapshot.pendingCount);
+    AppendLoadFlowInt(warningBuilder, "outstanding", outstanding);
+    AppendLoadFlowBool(warningBuilder, "blocking_mode", usingBlockingProgress);
+    AppendLoadFlowInt(warningBuilder, "blocking_ready_count", blockingReadyCount);
+    AppendLoadFlowInt(warningBuilder, "blocking_total_count", blockingTotalCount);
+    AppendLoadFlowFloat(warningBuilder, "blocking_progress", blockingProgress);
+    AppendLoadFlowBool(warningBuilder, "blocking_critical_ready", blockingCriticalReady);
+    AppendLoadFlowBool(warningBuilder, "blocking_hard_bypass", blockingHardBypassUsed);
+    AppendLoadFlowBool(warningBuilder, "blocking_ready", blockingReady);
+    AppendLoadFlowBool(warningBuilder, "resolver_idle", resolverIdle);
+    AppendLoadFlowBool(warningBuilder, "player_ready", playerReady);
+    AppendLoadFlowField(warningBuilder, "player_blocker", playerReady ? "-" : ResolveLoadFlowValue(blockerSummary));
+    AppendLoadFlowBool(warningBuilder, "progress_ui", IsLoadingProgressUiVisible());
+    AppendLoadFlowBool(warningBuilder, "loading_light", loadingLightObject != null && loadingLightObject.activeSelf);
+    Debug.LogWarning(warningBuilder.ToString());
   }
 
   void MaybeLogStreamingIdleWaitState(
@@ -979,6 +1144,7 @@ public class SingleSceneManager : MonoBehaviour {
     bool blockingCriticalReady,
     bool blockingHardBypassUsed,
     bool blockingReady,
+    bool locationActivationPending,
     bool warmupDone
   ) {
     if (!ShouldLogLoadFlowDebug()) return;
@@ -992,34 +1158,41 @@ public class SingleSceneManager : MonoBehaviour {
     var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
     var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "" : blocker;
     var playerController = ResolvePlayerAnimationController();
-    Debug.Log(
-      "[SingleSceneManager][WaitForIdle] elapsed_s=" + elapsed.ToString("0.000") +
-      " min_wait_s=" + minimumWaitSeconds.ToString("0.000") +
-      " timeout_s=" + timeoutSeconds.ToString("0.000") +
-      " stable_frames=" + stableFrames +
-      " stable_required=" + stableFramesRequired +
-      " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
-      " current_section=" + ResolveCurrentSection() +
-      " current_location=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
-      " current_percent=" + loadingPercent +
-      " queue_idle=" + (queueIdle ? 1 : 0) +
-      " resolver_idle=" + (resolverIdle ? 1 : 0) +
-      " player_ready=" + (playerReady ? 1 : 0) +
-      " player_animation_held=" + (playerAnimationHeldForLoadingOverlay ? 1 : 0) +
-      " player_animation=" + (playerController != null && !string.IsNullOrWhiteSpace(playerController.CurrentAnimation) ? playerController.CurrentAnimation.Trim() : "-") +
-      " player_blocker=" + (string.IsNullOrWhiteSpace(blockerSummary) ? "-" : blockerSummary) +
-      " queue_queued=" + queue.queuedCount +
-      " queue_in_flight=" + queue.inFlightCount +
-      " deferred_pending=" + deferredPending +
-      " blocking_mode=" + (hasBlockingProgress ? 1 : 0) +
-      " blocking_ready_count=" + blockingReadyCount +
-      " blocking_total_count=" + blockingTotalCount +
-      " blocking_progress=" + blockingProgress.ToString("0.000") +
-      " blocking_critical_ready=" + (blockingCriticalReady ? 1 : 0) +
-      " blocking_hard_bypass=" + (blockingHardBypassUsed ? 1 : 0) +
-      " blocking_ready=" + (blockingReady ? 1 : 0) +
-      " warmup_done=" + (warmupDone ? 1 : 0)
+    var infoBuilder = BeginLoadFlowLog("[SingleSceneManager][WaitForIdle]");
+    AppendLoadFlowFloat(infoBuilder, "elapsed_s", elapsed);
+    AppendLoadFlowFloat(infoBuilder, "min_wait_s", minimumWaitSeconds);
+    AppendLoadFlowFloat(infoBuilder, "timeout_s", timeoutSeconds);
+    AppendLoadFlowInt(infoBuilder, "stable_frames", stableFrames);
+    AppendLoadFlowInt(infoBuilder, "stable_required", stableFramesRequired);
+    AppendLoadFlowField(infoBuilder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
+    AppendLoadFlowField(infoBuilder, "current_section", ResolveCurrentSection().ToString());
+    AppendLoadFlowField(infoBuilder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
+    AppendLoadFlowInt(infoBuilder, "current_percent", loadingPercent);
+    AppendLoadFlowBool(infoBuilder, "queue_idle", queueIdle);
+    AppendLoadFlowBool(infoBuilder, "resolver_idle", resolverIdle);
+    AppendLoadFlowBool(infoBuilder, "player_ready", playerReady);
+    AppendLoadFlowBool(infoBuilder, "player_animation_held", playerAnimationHeldForLoadingOverlay);
+    AppendLoadFlowField(
+      infoBuilder,
+      "player_animation",
+      playerController != null && !string.IsNullOrWhiteSpace(playerController.CurrentAnimation)
+        ? playerController.CurrentAnimation.Trim()
+        : "-"
     );
+    AppendLoadFlowField(infoBuilder, "player_blocker", playerReady ? "-" : ResolveLoadFlowValue(blockerSummary));
+    AppendLoadFlowInt(infoBuilder, "queue_queued", queue.queuedCount);
+    AppendLoadFlowInt(infoBuilder, "queue_in_flight", queue.inFlightCount);
+    AppendLoadFlowInt(infoBuilder, "deferred_pending", deferredPending);
+    AppendLoadFlowBool(infoBuilder, "blocking_mode", hasBlockingProgress);
+    AppendLoadFlowInt(infoBuilder, "blocking_ready_count", blockingReadyCount);
+    AppendLoadFlowInt(infoBuilder, "blocking_total_count", blockingTotalCount);
+    AppendLoadFlowFloat(infoBuilder, "blocking_progress", blockingProgress);
+    AppendLoadFlowBool(infoBuilder, "blocking_critical_ready", blockingCriticalReady);
+    AppendLoadFlowBool(infoBuilder, "blocking_hard_bypass", blockingHardBypassUsed);
+    AppendLoadFlowBool(infoBuilder, "blocking_ready", blockingReady);
+    AppendLoadFlowBool(infoBuilder, "location_activation_pending", locationActivationPending);
+    AppendLoadFlowBool(infoBuilder, "warmup_done", warmupDone);
+    Debug.Log(infoBuilder.ToString());
   }
 
   static bool ShouldLogLoadingProgressDebug() {
@@ -1197,6 +1370,124 @@ public class SingleSceneManager : MonoBehaviour {
       fallback ??= candidate;
     }
     return fallback;
+  }
+
+  void EnsureGameplayPlayerBootstrap(string source) {
+    var existing = FindScenePlayerController();
+    if (existing != null) {
+      EnsureGameplayPlayerEnabled(existing);
+      ApplyGameplayPlayerReferences(existing.gameObject, source, instantiated: false);
+      return;
+    }
+
+    if (playerCharacterPrefab == null) {
+      Debug.LogWarning(
+        "[SingleSceneManager][PlayerBootstrap] stage=missing_prefab" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim())
+      );
+      return;
+    }
+
+    if (Scene == null) {
+      Debug.LogWarning(
+        "[SingleSceneManager][PlayerBootstrap] stage=missing_scene_root" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " prefab=" + playerCharacterPrefab.name
+      );
+      return;
+    }
+
+    var instance = Instantiate(playerCharacterPrefab, Scene.transform, false);
+    instance.name = playerCharacterPrefab.name;
+    var gear = instance.GetComponent<GearController>();
+    if (gear == null) {
+      Debug.LogWarning(
+        "[SingleSceneManager][PlayerBootstrap] stage=missing_gear_controller" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " prefab=" + instance.name
+      );
+      return;
+    }
+
+    EnsureGameplayPlayerEnabled(gear);
+    ApplyGameplayPlayerReferences(instance, source, instantiated: true);
+  }
+
+  GearController FindScenePlayerController() {
+    if (Scene == null) return null;
+    var controllers = Scene.GetComponentsInChildren<GearController>(true);
+    for (var i = 0; i < controllers.Length; i++) {
+      var candidate = controllers[i];
+      if (candidate == null) continue;
+      var go = candidate.gameObject;
+      if (go == null || !go.scene.IsValid()) continue;
+      if ((go.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  void EnsureGameplayPlayerEnabled(GearController gear) {
+    if (gear == null) return;
+
+    var root = gear.gameObject;
+    if (root != null && !root.activeSelf) {
+      root.SetActive(true);
+    }
+
+    if (!gear.enabled) {
+      gear.enabled = true;
+    }
+
+    var characterState = gear.GetComponent<CharacterState>();
+    if (characterState != null && !characterState.enabled) {
+      characterState.enabled = true;
+    }
+  }
+
+  CharacterState ResolvePlayerCharacterState() {
+    var player = ResolvePlayerGearController();
+    var characterState = player != null ? player.GetComponent<CharacterState>() : null;
+    return characterState ?? FindFirstObjectByType<CharacterState>();
+  }
+
+  void ApplyGameplayPlayerReferences(GameObject playerRoot, string source, bool instantiated) {
+    if (playerRoot == null) return;
+
+    var gear = playerRoot.GetComponent<GearController>();
+    var characterState = playerRoot.GetComponent<CharacterState>();
+    if (gear != null) {
+      cachedPlayerGearController = gear;
+    }
+
+    var gameplayInput = FindFirstObjectByType<GameplayInput>();
+    if (gameplayInput != null) {
+      gameplayInput.EsperanzaParent = playerRoot;
+      if (gear != null) {
+        gameplayInput.gearController = gear;
+      }
+      if (characterState != null) {
+        gameplayInput.characterState = characterState;
+      }
+    }
+
+    if (autoSaver != null && characterState != null) {
+      autoSaver.characterState = characterState;
+    }
+
+    cachedGameplayInput = gameplayInput;
+    gameplayInputCacheRefreshedAt = -1f;
+
+    if (!ShouldLogLoadFlowDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][PlayerBootstrap] stage=ready" +
+      " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+      " action=" + (instantiated ? "instantiate" : "reuse") +
+      " player=" + playerRoot.name +
+      " gameplay_input=" + (gameplayInput != null ? 1 : 0) +
+      " character_state=" + (characterState != null ? 1 : 0) +
+      " parent=" + (playerRoot.transform.parent != null ? playerRoot.transform.parent.name : "-")
+    );
   }
 
   int ResolveSpriteReadinessFrame(SpriteWithNormals sprite) {
@@ -1646,6 +1937,7 @@ public class SingleSceneManager : MonoBehaviour {
 
     LogSectionTransitionState("begin", previousSection, request.targetSection, overlayTag, request.showProgressUi);
     SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
+    SpriteRuntimeResolver.WarmupLibraries(Array.Empty<string>());
     ResetLoadingProgressForPhase(force: true);
     if (request.switchInputMapToNone) {
       _SwitchMap("none");
@@ -1760,6 +2052,9 @@ public class SingleSceneManager : MonoBehaviour {
     pendingRevealSection = Section.Gameplay;
     LogSectionTransitionState("begin", previousSection, Section.Gameplay, overlayTag, true);
     SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
+    // Start resolver manifest work as soon as the overlay appears so shard warmup can
+    // overlap the fade/black window instead of waiting for the first sprite request.
+    SpriteRuntimeResolver.WarmupLibraries(Array.Empty<string>());
     ResetLoadingProgressForPhase(force: true);
     if (switchInputMapToNone) {
       _SwitchMap("none");
@@ -1772,6 +2067,8 @@ public class SingleSceneManager : MonoBehaviour {
     if (resolveLocationForStart) {
       ResolveAndApplyLocationForStart(isNewGame, loadedSlot);
     }
+
+    EnsureGameplayPlayerBootstrap(overlayTag);
 
     if (!isNewGame) {
       LogLoadStateDispatch("before_load_game_message");
@@ -1786,9 +2083,11 @@ public class SingleSceneManager : MonoBehaviour {
       if (isNewGame) {
         PrepareNewGameRuntimeStateUnderLoadingOverlay();
       }
+      // Freeze the player on a stable first-contact frame while the overlay is up.
+      // Otherwise the runtime loader chases advancing animation frames behind black.
+      HoldPlayerAnimationForLoadingOverlay("warm_gate");
       if (sendReadyForSpawns) {
         MessageBus.Send("ReadyForSpawns");
-        yield return null;
       }
     }
 
@@ -1809,16 +2108,24 @@ public class SingleSceneManager : MonoBehaviour {
 
     if (!applyGameplayStateBeforeWarmGate) {
       ApplyGameplayStateUnderBlack();
+      HoldPlayerAnimationForLoadingOverlay("wait_for_streaming_idle");
     }
 
-    HoldPlayerAnimationForLoadingOverlay("wait_for_streaming_idle");
     yield return WaitForStreamingIdleBeforeUnlock(prefetchVisibleSprites: true, warmAnimationsBeforeUnlock: true);
     yield return UnlockGameplayFromBlackRoutine(overlayTag);
   }
 
   void ApplySavedGameplayStateUnderLoadingOverlay() {
-    LogLoadStateDispatch("dispatch_load_game");
-    MessageBus.Send("loadGame");
+    EnsureGameplayPlayerBootstrap("load_game");
+    var characterState = ResolvePlayerCharacterState();
+    if (characterState != null) {
+      LogLoadStateDispatch("direct_load_game");
+      characterState.LoadState();
+    }
+    else {
+      LogLoadStateDispatch("dispatch_load_game");
+      MessageBus.Send("loadGame");
+    }
     if (!ShouldLogLoadingProgressDebug()) return;
     Debug.Log(
       "[SingleSceneManager][LoadState] Applied save-state under loading overlay" +
@@ -1829,6 +2136,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void PrepareNewGameRuntimeStateUnderLoadingOverlay() {
+    EnsureGameplayPlayerBootstrap("new_game");
     var player = ResolvePlayerGearController();
     var characterState = player != null
       ? player.GetComponent<CharacterState>()
@@ -1889,7 +2197,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
 
     if (!restarted && string.IsNullOrWhiteSpace(controller.CurrentAnimation)) {
-      if (ShouldLogLoadFlowDebug()) {
+      if (ShouldLogLoadFlowWarnings()) {
         Debug.LogWarning(
           "[SingleSceneManager][PlayerAnimationHold] stage=skip_missing_animation" +
           " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
@@ -1964,7 +2272,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
     var waitSeconds = Mathf.Max(fadeToBlackSeconds, 0f);
     if (waitSeconds > 0f) {
-      yield return new WaitForSecondsRealtime(waitSeconds);
+      yield return FadeToBlackDelay;
     }
     ForceBlackscreenVisible(true);
     SetLoadingBlackscreenHold(true);
@@ -1980,12 +2288,12 @@ public class SingleSceneManager : MonoBehaviour {
     var allowGameplayUnlock = true;
     var leadSeconds = Mathf.Max(fadeLeadSeconds, 0f);
     if (leadSeconds > 0f) {
-      yield return new WaitForSecondsRealtime(leadSeconds);
+      yield return WarmGateLeadDelay;
     }
 
     if (!useScenarioWarmGate || !Application.isPlaying) {
       if (fallbackTransitionSeconds > 0f) {
-        yield return new WaitForSecondsRealtime(fallbackTransitionSeconds);
+        yield return FallbackTransitionDelay;
       }
       onComplete?.Invoke(allowGameplayUnlock);
       yield break;
@@ -1997,7 +2305,7 @@ public class SingleSceneManager : MonoBehaviour {
     var orchestrator = StreamingWarmOrchestrator.Instance;
     if (orchestrator == null) {
       if (fallbackTransitionSeconds > 0f) {
-        yield return new WaitForSecondsRealtime(fallbackTransitionSeconds);
+        yield return FallbackTransitionDelay;
       }
       onComplete?.Invoke(allowGameplayUnlock);
       yield break;
@@ -2018,7 +2326,7 @@ public class SingleSceneManager : MonoBehaviour {
 
     if (!completed && !hasResult) {
       if (fallbackTransitionSeconds > 0f) {
-        yield return new WaitForSecondsRealtime(fallbackTransitionSeconds);
+        yield return FallbackTransitionDelay;
       }
       onComplete?.Invoke(allowGameplayUnlock);
       yield break;
@@ -2088,34 +2396,40 @@ public class SingleSceneManager : MonoBehaviour {
   IEnumerator RunPreUnlockStepWithBudget(IEnumerator routine, float deadline, string stage) {
     if (routine == null) yield break;
 
-    var stack = new Stack<IEnumerator>();
+    var stack = preUnlockEnumeratorStack;
+    stack.Clear();
     stack.Push(routine);
 
-    while (true) {
-      if (stack.Count <= 0) {
-        yield break;
-      }
+    try {
+      while (true) {
+        if (stack.Count <= 0) {
+          yield break;
+        }
 
-      if (!float.IsInfinity(deadline) && Time.realtimeSinceStartup >= deadline) {
-        DisposeEnumeratorStack(stack);
-        LogPreUnlockBlockingBudget(stage, deadline, "budget_exhausted");
-        yield break;
-      }
+        if (!float.IsInfinity(deadline) && Time.realtimeSinceStartup >= deadline) {
+          LogPreUnlockBlockingBudget(stage, deadline, "budget_exhausted");
+          yield break;
+        }
 
-      var currentRoutine = stack.Peek();
-      if (!currentRoutine.MoveNext()) {
-        DisposeEnumerator(currentRoutine);
-        stack.Pop();
-        continue;
-      }
+        var currentRoutine = stack.Peek();
+        if (!currentRoutine.MoveNext()) {
+          DisposeEnumerator(currentRoutine);
+          stack.Pop();
+          continue;
+        }
 
-      var yielded = currentRoutine.Current;
-      if (yielded is IEnumerator nestedRoutine) {
-        stack.Push(nestedRoutine);
-        continue;
-      }
+        var yielded = currentRoutine.Current;
+        if (yielded is IEnumerator nestedRoutine) {
+          stack.Push(nestedRoutine);
+          continue;
+        }
 
-      yield return yielded;
+        yield return yielded;
+      }
+    }
+    finally {
+      DisposeEnumeratorStack(stack);
+      stack.Clear();
     }
   }
 
@@ -2279,9 +2593,10 @@ public class SingleSceneManager : MonoBehaviour {
         out var blockingCriticalReady,
         out var blockingHardBypassUsed
       );
+      var locationActivationPending = LocationManager.HasPendingActivationWork;
       var blockingReady = hasBlockingProgress
-        ? IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue)
-        : (queueIdle && resolverIdle && playerReady);
+        ? IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue) && !locationActivationPending
+        : (queueIdle && resolverIdle && playerReady && !locationActivationPending);
 
       if (minimumWaitReached && blockingReady) {
         stableFrames++;
@@ -2307,6 +2622,7 @@ public class SingleSceneManager : MonoBehaviour {
         blockingCriticalReady,
         blockingHardBypassUsed,
         blockingReady,
+        locationActivationPending,
         warmupDone
       );
 
@@ -2335,7 +2651,7 @@ public class SingleSceneManager : MonoBehaviour {
         var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
         var queueFullyDrained = queue.queuedCount <= 0 && queue.inFlightCount <= 0 && deferredPending <= 0;
         var forcedByBlockingReady = !allowStreamingIdleTimeoutBypass && hasBlockingProgress && blockingReady;
-        var forcedByLegacyDrain = !allowStreamingIdleTimeoutBypass && !hasBlockingProgress && queueFullyDrained;
+        var forcedByLegacyDrain = !allowStreamingIdleTimeoutBypass && !hasBlockingProgress && queueFullyDrained && !locationActivationPending;
         if (allowStreamingIdleTimeoutBypass || forcedByBlockingReady || forcedByLegacyDrain) {
           if (warmAnimationsBeforeUnlock && !warmupDone) {
             warmupDone = true;
@@ -2800,8 +3116,11 @@ public class SingleSceneManager : MonoBehaviour {
       var remaining = addresses.Count - processedCount;
       var count = Mathf.Min(BatchSize, remaining);
       var chunkStart = processedCount;
+      QueuePreUnlockTrimmedMetadataWarmup(addresses, chunkStart, count);
       yield return TextureResidencyCache.RequestLoadBatchThrottled(
-        EnumerateAddressRange(addresses, chunkStart, count),
+        addresses,
+        chunkStart,
+        count,
         TextureResidencyCache.LoadPriority.Warmup,
         // Atlas-first preload: ensure sibling slices from the same atlas are resident before gameplay unlock.
         allowAtlasExpansion: true,
@@ -2814,6 +3133,20 @@ public class SingleSceneManager : MonoBehaviour {
       queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
       enqueueBudget = ResolvePreUnlockEnqueueBudget(queue);
     }
+  }
+
+  void QueuePreUnlockTrimmedMetadataWarmup(List<string> addresses, int startInclusive, int count) {
+    if (addresses == null || addresses.Count <= 0 || count <= 0) return;
+    var queuedAtlasMetadata = TrimmedSpriteOffsetResolver.QueueWarmupAtlasMetadataBatch(addresses, startInclusive, count);
+    if (queuedAtlasMetadata <= 0) return;
+
+    TrimmedSpriteOffsetResolver.PumpDeferredRuntimeLoads();
+    if (!ShouldLogLoadingProgressDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][PreUnlockMetadataWarmup] start=" + startInclusive +
+      " count=" + count +
+      " queued_atlas_metadata=" + queuedAtlasMetadata
+    );
   }
 
   SpriteWithNormals[] ResolvePreUnlockVisibleSpriteTargets() {
@@ -2926,17 +3259,6 @@ public class SingleSceneManager : MonoBehaviour {
     return Mathf.Clamp(Mathf.Max(queueBasedCount, playerAddressCount), min: 0, max: totalAddressCount);
   }
 
-  IEnumerable<string> EnumerateAddressRange(List<string> addresses, int startInclusive, int count) {
-    if (addresses == null || addresses.Count <= 0 || count <= 0) yield break;
-    var start = Mathf.Clamp(startInclusive, 0, addresses.Count);
-    var end = Mathf.Clamp(start + count, start, addresses.Count);
-    for (var i = start; i < end; i++) {
-      var address = addresses[i];
-      if (string.IsNullOrWhiteSpace(address)) continue;
-      yield return address;
-    }
-  }
-
   float ResolveRequiredWarmRatio(WarmGateMode context, float configuredRatio, EnemyController[] activeEnemies) {
     var ratio = Mathf.Clamp(configuredRatio, 0.5f, 0.99f);
     if (context != WarmGateMode.LoadSave) return ratio;
@@ -3002,14 +3324,20 @@ public class SingleSceneManager : MonoBehaviour {
     EnemyController[] activeEnemies
   ) {
     var profile = LocationWarmRegistryRuntime.ResolveForLocation(LocationManager.currentLocation);
-    var criticalLibraries = new List<string>();
-    var criticalAddresses = new List<string>();
-    var warmLibraries = new List<string>();
-    var warmAddresses = new List<string>();
-    var criticalLabels = new List<string>();
-    var warmLabels = new List<string>();
+    warmRequestCriticalLibrariesScratch.Clear();
+    warmRequestCriticalAddressesScratch.Clear();
+    warmRequestWarmLibrariesScratch.Clear();
+    warmRequestWarmAddressesScratch.Clear();
+    warmRequestCriticalLabelsScratch.Clear();
+    warmRequestWarmLabelsScratch.Clear();
+    var criticalLibraries = warmRequestCriticalLibrariesScratch;
+    var criticalAddresses = warmRequestCriticalAddressesScratch;
+    var warmLibraries = warmRequestWarmLibrariesScratch;
+    var warmAddresses = warmRequestWarmAddressesScratch;
+    var criticalLabels = warmRequestCriticalLabelsScratch;
+    var warmLabels = warmRequestWarmLabelsScratch;
     var archetypes = ResolveLocationArchetypePrefabs(profile);
-    var combatPopulationTypes = ResolveCombatPopulationWarmTypes(activeEnemies, archetypes);
+    var combatPopulationTypes = ResolveCombatPopulationWarmTypes(activeEnemies, archetypes, combatPopulationTypesScratch);
     if (profile != null) {
       profile.CollectGameplayWarmLists(
         combatPopulationTypes,
@@ -3023,7 +3351,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
 
     var criticalEnemies = ResolveCriticalWarmEnemies(activeEnemies, playerController);
-    var criticalPlayerEffectKeys = ResolveCriticalPlayerEffectKeys(playerController);
+    var criticalPlayerEffectKeys = ResolveCriticalPlayerEffectKeys(playerController, criticalPlayerEffectKeysScratch);
     var token = StreamingWarmOrchestrator.BuildEnemyArchetypeToken(LocationManager.currentLocation, archetypes);
     var tunedRequiredRatio = ResolveRequiredWarmRatio(context, requiredRatio, activeEnemies);
     LogWarmRequestScope(
@@ -3058,7 +3386,7 @@ public class SingleSceneManager : MonoBehaviour {
         idempotencyToken: token,
         skipIfTokenAlreadyWarm: true,
         criticalPlayerEffectKeys: criticalPlayerEffectKeys,
-        allowCriticalReadySoftTimeout: false
+        allowCriticalReadySoftTimeout: true
       );
     }
 
@@ -3078,7 +3406,7 @@ public class SingleSceneManager : MonoBehaviour {
         idempotencyToken: "",
         skipIfTokenAlreadyWarm: false,
         criticalPlayerEffectKeys: criticalPlayerEffectKeys,
-        allowCriticalReadySoftTimeout: false
+        allowCriticalReadySoftTimeout: true
       );
     }
 
@@ -3100,15 +3428,17 @@ public class SingleSceneManager : MonoBehaviour {
       idempotencyToken: token,
       skipIfTokenAlreadyWarm: true,
       criticalPlayerEffectKeys: criticalPlayerEffectKeys,
-      allowCriticalReadySoftTimeout: false
+      allowCriticalReadySoftTimeout: true
     );
   }
 
   List<string> ResolveCombatPopulationWarmTypes(
     EnemyController[] activeEnemies,
-    Dictionary<string, GameObject> archetypes
+    Dictionary<string, GameObject> archetypes,
+    List<string> output
   ) {
-    var enemyTypes = new List<string>();
+    var enemyTypes = output ?? combatPopulationTypesScratch;
+    enemyTypes.Clear();
 
     if (activeEnemies != null) {
       for (var i = 0; i < activeEnemies.Length; i++) {
@@ -3188,12 +3518,13 @@ public class SingleSceneManager : MonoBehaviour {
     return criticalEnemies;
   }
 
-  List<string> ResolveCriticalPlayerEffectKeys(GearController playerController) {
+  List<string> ResolveCriticalPlayerEffectKeys(GearController playerController, List<string> output) {
     if (!warmGatePreloadCorePlayerEffects || playerController == null || playerController.effectNode == null) {
       return null;
     }
 
-    var keys = new List<string>(CorePlayerEffectWarmKeys.Length);
+    var keys = output ?? criticalPlayerEffectKeysScratch;
+    keys.Clear();
     for (var i = 0; i < CorePlayerEffectWarmKeys.Length; i++) {
       var key = CorePlayerEffectWarmKeys[i];
       if (string.IsNullOrWhiteSpace(key)) continue;
@@ -3323,7 +3654,7 @@ public class SingleSceneManager : MonoBehaviour {
   IEnumerator StartupFadeWatchdogRoutine() {
     var wait = Mathf.Max(startupFadeWatchdogSeconds, 0f);
     if (wait > 0f) {
-      yield return new WaitForSecondsRealtime(wait);
+      yield return StartupFadeWatchdogDelay;
     }
     if (IsLoadingFlowActive()) {
       startupFadeWatchdogRoutine = null;
@@ -3566,7 +3897,7 @@ public class SingleSceneManager : MonoBehaviour {
   IEnumerator EnsureBlackscreenClearsAfterUnlockRoutine(Section revealedSection, string overlayTag) {
     var waitSeconds = Mathf.Max(fadeFromBlackSeconds + 0.15f, 0.5f);
     if (waitSeconds > 0f) {
-      yield return new WaitForSecondsRealtime(waitSeconds);
+      yield return RevealCleanupDelay;
     }
     if (!holdBlackscreenOpaqueDuringLoad) {
       ForceBlackscreenVisible(false);
@@ -3587,7 +3918,7 @@ public class SingleSceneManager : MonoBehaviour {
     LogSectionTransitionState("reveal_complete", currentSection, sectionToReveal, overlayTag, false);
     var pinReleaseDelay = Mathf.Max(postUnlockPinReleaseDelaySeconds, 0f);
     if (pinReleaseDelay > 0f) {
-      yield return new WaitForSecondsRealtime(pinReleaseDelay);
+      yield return PostUnlockPinReleaseDelay;
     }
     var releaseOutstandingCap = Mathf.Max(postUnlockPinReleaseMaxOutstanding, 0);
     var releaseTimeout = Mathf.Max(postUnlockPinReleaseTimeoutSeconds, 0f);
@@ -3693,6 +4024,7 @@ public class SingleSceneManager : MonoBehaviour {
 
   IEnumerator FadeFromBlackRoutine(string overlayTag, Section revealedSection) {
     FinalizeLoadingProgressForRelease();
+    SpriteStreamingLoadingState.ReleaseOverlayProtection();
     SetLoadingBlackscreenHold(false);
     if (blackscreen != null) {
       PlayBlackscreen("alphaOut");
@@ -3706,7 +4038,7 @@ public class SingleSceneManager : MonoBehaviour {
     unlockFadeFailSafeRoutine = StartCoroutine(EnsureBlackscreenClearsAfterUnlockRoutine(revealedSection, overlayTag));
     var waitSeconds = Mathf.Max(fadeFromBlackSeconds, 0f);
     if (waitSeconds > 0f) {
-      yield return new WaitForSecondsRealtime(waitSeconds);
+      yield return FadeFromBlackDelay;
     }
   }
 

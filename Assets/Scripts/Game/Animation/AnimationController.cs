@@ -95,6 +95,10 @@ public class AnimationController {
   private readonly List<string> appearancePinAddressBuffer = new(512);
   private readonly HashSet<string> appearancePinAddressSet = new(StringComparer.OrdinalIgnoreCase);
   private readonly HashSet<string> predictedAnimations = new(StringComparer.Ordinal);
+  private readonly List<string> warmPlaybackAnimationScratch = new(16);
+  private readonly HashSet<string> warmPlaybackAnimationSeenScratch = new(StringComparer.Ordinal);
+  private readonly List<string> warmPlaybackAddressScratch = new(512);
+  private readonly HashSet<string> warmPlaybackSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private bool pinSnapshotStreamingEnabled;
   private int pinSnapshotWindowFrames = int.MinValue;
   private int pinSnapshotPredictedAnimations = int.MinValue;
@@ -800,8 +804,10 @@ public class AnimationController {
     int maxFramesPerAnimation = MaxSwitchReadinessWindowFrames
   ) {
     if (!Application.isPlaying) return 0;
-    var addresses = new List<string>(512);
-    var seenAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var addresses = warmPlaybackAddressScratch;
+    var seenAddresses = warmPlaybackSeenAddressScratch;
+    addresses.Clear();
+    seenAddresses.Clear();
     var added = CollectWarmPlaybackAddresses(addresses, seenAddresses, passCount, maxAnimations, maxFramesPerAnimation);
     if (addresses.Count > 0) {
       TextureResidencyCache.RequestLoadBatch(
@@ -810,6 +816,8 @@ public class AnimationController {
         allowAtlasExpansion: true
       );
     }
+    addresses.Clear();
+    seenAddresses.Clear();
     return added;
   }
 
@@ -872,8 +880,15 @@ public class AnimationController {
 
   List<string> CollectWarmPlaybackAnimations(int maxAnimations) {
     maxAnimations = Math.Max(maxAnimations, 1);
-    var ordered = new List<string>(Math.Min(maxAnimations, animationData.Count));
-    var seen = new HashSet<string>(StringComparer.Ordinal);
+    var ordered = warmPlaybackAnimationScratch;
+    var seen = warmPlaybackAnimationSeenScratch;
+    ordered.Clear();
+    seen.Clear();
+
+    var targetCapacity = Math.Min(maxAnimations, animationData.Count);
+    if (targetCapacity > ordered.Capacity) {
+      ordered.Capacity = targetCapacity;
+    }
 
     TryAddWarmPlaybackAnimation(currentAnimation, ordered, seen, maxAnimations);
     TryAddWarmPlaybackAnimation(defaultAnimation, ordered, seen, maxAnimations);

@@ -13,7 +13,7 @@ public static class SpriteStreamingHotsetConfigurator {
   const string DefaultGameplayScenePath = "Assets/Scenes/MyCurrent.unity";
   static readonly Regex guidRegex = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
 
-  [MenuItem("Tools/Sprite Streaming/4) Apply Hotset (Scenes + Location Prefabs)")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Hotset")]
   public static void ApplyPerformanceHotsetMenu() {
     ApplyPerformanceHotset(rebuildRuntimeIndexFirst: true, saveAndRefreshAtEnd: true, logResult: true);
   }
@@ -84,7 +84,7 @@ public static class SpriteStreamingHotsetConfigurator {
     }
   }
 
-  [MenuItem("Tools/Sprite Streaming/3) Apply Unified Import Flow (All Sprite Textures)")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Unified Import Flow")]
   public static void ApplyUnifiedImportFlowMenu() {
     ApplyUnifiedImportFlow(saveAndRefreshAtEnd: true, logResult: true);
   }

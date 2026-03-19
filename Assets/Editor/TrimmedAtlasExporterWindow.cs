@@ -149,7 +149,7 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
   string analyzedSourcePath = "";
   string analyzedSettingsSignature = "";
 
-  [MenuItem("Tools/Sprite Streaming/Trim Atlas + Export Offsets")]
+  [MenuItem("Tools/Sprite Streaming/Authoring/Trim Atlas + Export Offsets")]
   static void ShowWindow() {
     GetWindow<TrimmedAtlasExporterWindow>("Trim Atlas Export");
   }

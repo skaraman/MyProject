@@ -371,7 +371,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   string analyzedSourceFolderPath = "";
   List<GroupCandidate> scannedCandidates = new();
 
-  [MenuItem("Tools/Sprite Streaming/Group Esperanza Gear Atlases")]
+  [MenuItem("Tools/Sprite Streaming/Authoring/Group Esperanza Gear Atlases")]
   static void ShowWindow() {
     GetWindow<EsperanzaGearGroupAtlasWindow>("Gear + Skin Atlases");
   }

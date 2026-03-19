@@ -1,5 +1,7 @@
 #if UNITY_EDITOR
 using UnityEditor;
+using UnityEditor.AddressableAssets;
+using UnityEditor.AddressableAssets.Settings;
 using UnityEngine;
 
 [InitializeOnLoad]
@@ -17,7 +19,7 @@ public static class LocationWarmProfileBootstrap {
     EditorApplication.delayCall += () => EnsureLocationWarmAssets(logResult: false, saveAndRefresh: false);
   }
 
-  [MenuItem("Tools/Sprite Streaming/2) Sync Location Profiles (Prefab Bindings)")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Sync Location Profiles")]
   public static void InitializeLocationWarmProfilesMenu() {
     EnsureLocationWarmAssets(logResult: true, saveAndRefresh: true);
   }
@@ -99,6 +101,10 @@ public static class LocationWarmProfileBootstrap {
       EditorUtility.SetDirty(registry);
     }
 
+    if (EnsureLocationPrefabAddressables(logResult)) {
+      changed = true;
+    }
+
     if (changed && saveAndRefresh) {
       AssetDatabase.SaveAssets();
       AssetDatabase.Refresh();
@@ -127,6 +133,82 @@ public static class LocationWarmProfileBootstrap {
       }
       current = next;
     }
+  }
+
+  static bool EnsureLocationPrefabAddressables(bool logResult) {
+    var settings = AddressableAssetSettingsDefaultObject.GetSettings(true);
+    if (settings == null) {
+      if (logResult) {
+        Debug.LogWarning("[LocationWarmProfileBootstrap] Addressables settings were not found while syncing location prefabs.");
+      }
+      return false;
+    }
+
+    var defaultGroup = settings.DefaultGroup;
+    if (defaultGroup == null) {
+      if (logResult) {
+        Debug.LogWarning("[LocationWarmProfileBootstrap] Default Addressables group was not found while syncing location prefabs.");
+      }
+      return false;
+    }
+
+    var changed = false;
+    var syncedCount = 0;
+    foreach (var pair in LocationEnemyData.locations) {
+      var assetPath = NormalizeAssetPath(pair.Value?.locationPrefabData?.AssetPath);
+      if (string.IsNullOrWhiteSpace(assetPath)) continue;
+      syncedCount++;
+      if (EnsureLocationPrefabAddressableEntry(settings, defaultGroup, assetPath)) {
+        changed = true;
+      }
+    }
+
+    if (logResult) {
+      Debug.Log(
+        "[LocationWarmProfileBootstrap] Synced location prefab Addressables entries. count=" + syncedCount +
+        " changed=" + changed + "."
+      );
+    }
+
+    return changed;
+  }
+
+  static bool EnsureLocationPrefabAddressableEntry(
+    AddressableAssetSettings settings,
+    AddressableAssetGroup defaultGroup,
+    string assetPath
+  ) {
+    if (settings == null || defaultGroup == null || string.IsNullOrWhiteSpace(assetPath)) return false;
+
+    var guid = AssetDatabase.AssetPathToGUID(assetPath);
+    if (string.IsNullOrWhiteSpace(guid)) return false;
+
+    var changed = false;
+    var entry = settings.FindAssetEntry(guid);
+    if (entry == null) {
+      entry = settings.CreateOrMoveEntry(guid, defaultGroup, false, false);
+      changed = entry != null;
+    }
+
+    if (entry == null) return changed;
+
+    if (!string.Equals(entry.address, assetPath, System.StringComparison.Ordinal)) {
+      entry.SetAddress(assetPath, false);
+      changed = true;
+    }
+
+    if (changed) {
+      if (entry.parentGroup != null) {
+        EditorUtility.SetDirty(entry.parentGroup);
+      }
+      EditorUtility.SetDirty(settings);
+    }
+
+    return changed;
+  }
+
+  static string NormalizeAssetPath(string assetPath) {
+    return string.IsNullOrWhiteSpace(assetPath) ? "" : assetPath.Replace("\\", "/").Trim();
   }
 }
 #endif

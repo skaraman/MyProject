@@ -51,6 +51,16 @@ public class Spawner : MonoBehaviour {
       return;
     }
 
+    if (ShouldDeferEnemyWaveWarmupToActiveLoadingOverlay()) {
+      timer = 0f;
+      canSpawn = true;
+      Debug.Log(
+        "[Spawner] Skipping local enemy-wave warmup because an active loading overlay/warm gate is already warming startup archetypes." +
+        " location='" + LocationManager.currentLocation + "'"
+      );
+      return;
+    }
+
     var archetypes = BuildCurrentLocationArchetypeMapForWarmup();
     if (archetypes.Count <= 0) {
       canSpawn = true;
@@ -75,6 +85,11 @@ public class Spawner : MonoBehaviour {
       timer = 0f;
       canSpawn = true;
     });
+  }
+
+  static bool ShouldDeferEnemyWaveWarmupToActiveLoadingOverlay() {
+    if (!Application.isPlaying) return false;
+    return SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning;
   }
 
   void Update() {

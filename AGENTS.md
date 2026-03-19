@@ -14,6 +14,10 @@ add debug logs to values to eschew assumptions,
 dont just fix symptoms, instead look for the root cause
 
 i will not give up on you if we solve or fix problems, you will keep being needed by me
+do not explain or reiterate analysis, just work on the code
 
-# current objective - 
-# sprite shader effects animations
+
+current objective - 
+reduce loadingheartbeat gaps to 2s or less, 
+use PerformanceGoal.md to track progress
+setup location prefab loading algorithm smoothness and dynamic smart loading
