@@ -9,36 +9,43 @@ public class ButtonGroup : MonoBehaviour {
   GameObject hoverButton;
 
   public void SetHoverButton(GameObject target) {
-    for (int i = 0; i < buttons.Count; i++) {
-      var btn = buttons[i];
-      var shouldBeActive = btn == target;
-      if (shouldBeActive) {
-        // Highlight button on hover
-        HandleHoverState(btn);
-        hoverButton = btn;
-      }
-      else {
-        // Remove highlight from other buttons
-        HandleUnhoverState(btn);
-      }
+    if (hoverButton == target) return;
+
+    if (hoverButton == null) {
+      ClearHoverStateExcept(target);
+    }
+
+    if (hoverButton != null) {
+      HandleUnhoverState(hoverButton);
+      hoverButton = null;
+    }
+
+    if (target != null) {
+      HandleHoverState(target);
+      hoverButton = target;
     }
   }
 
   public void SetActiveButton(GameObject target) {
-    for (int i = 0; i < buttons.Count; i++) {
-      var btn = buttons[i];
-      var shouldBeActive = btn == target;
-      if (shouldBeActive) {
-        HandleActiveState(btn);
-        activeButton = target;
-      }
-      else {
-        HandleInactiveState(btn);
-      }
+    if (activeButton == target) return;
+
+    if (activeButton == null) {
+      ClearActiveStateExcept(target);
+    }
+
+    if (activeButton != null) {
+      HandleInactiveState(activeButton);
+      activeButton = null;
+    }
+
+    if (target != null) {
+      HandleActiveState(target);
+      activeButton = target;
     }
   }
 
   public void SetHoverIndex(int index) {
+    if (hoverIndex == index) return;
     if (index == -1) {
       hoverIndex = -1;
       SetHoverButton(null);
@@ -53,6 +60,7 @@ public class ButtonGroup : MonoBehaviour {
   }
 
   public void SetActiveIndex(int index) {
+    if (activeIndex == index) return;
     if (index == -1) {
       activeIndex = -1;
       SetActiveButton(null);
@@ -72,17 +80,26 @@ public class ButtonGroup : MonoBehaviour {
   public GameObject GetHoverButton() {
     return hoverButton;
   }
-  protected virtual void HandleActiveState(GameObject button) {
-    Debug.Log("override this");
+
+  void ClearHoverStateExcept(GameObject target) {
+    for (int i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null || button == target) continue;
+      HandleUnhoverState(button);
+    }
   }
-  protected virtual void HandleInactiveState(GameObject button) {
-    Debug.Log("override this");
+
+  void ClearActiveStateExcept(GameObject target) {
+    for (int i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null || button == target) continue;
+      HandleInactiveState(button);
+    }
   }
-  protected virtual void HandleHoverState(GameObject button) {
-    Debug.Log("override this");
-  }
-  protected virtual void HandleUnhoverState(GameObject button) {
-    Debug.Log("override this");
-  }
+
+  protected virtual void HandleActiveState(GameObject button) { }
+  protected virtual void HandleInactiveState(GameObject button) { }
+  protected virtual void HandleHoverState(GameObject button) { }
+  protected virtual void HandleUnhoverState(GameObject button) { }
 }
 

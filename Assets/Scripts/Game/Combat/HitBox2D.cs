@@ -19,7 +19,7 @@ public class HitBox2D : MonoBehaviour {
   [Tooltip("Optional identifier for filtering hit reactions (attack name/type).")]
   public string hitId;
 
-  private readonly HashSet<int> hitHurtBoxIds = new();
+  private readonly HashSet<ulong> hitHurtBoxIds = new();
   private float nextHitTime;
 
   void Reset() {
@@ -51,12 +51,13 @@ public class HitBox2D : MonoBehaviour {
   private void HandleContact(Collider2D other) {
     if (!isActiveAndEnabled || other == null) return;
     if (ignoreSameRoot && other.transform.root == transform.root) return;
-    if (hitCooldown > 0f && Time.time < nextHitTime) return;
+    var now = TimeScale.GetNow(this);
+    if (hitCooldown > 0f && now < nextHitTime) return;
 
     var hurtBox = other.GetComponentInParent<HurtBox2D>();
     if (hurtBox != null && hurtBox.isActiveAndEnabled) {
       if (hitEachHurtBoxOnce) {
-        var id = hurtBox.GetInstanceID();
+        var id = ObjectEntityId.GetRawValue(hurtBox);
         if (hitHurtBoxIds.Contains(id)) return;
         hitHurtBoxIds.Add(id);
       }
@@ -64,7 +65,7 @@ public class HitBox2D : MonoBehaviour {
       // Let the HurtBox validate and receive the hit
       hurtBox.ReceiveHit(this);
       if (hitCooldown > 0f) {
-        nextHitTime = Time.time + hitCooldown;
+        nextHitTime = now + hitCooldown;
       }
     }
   }

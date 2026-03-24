@@ -4,8 +4,6 @@ using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 #if ENABLE_INPUT_SYSTEM
-using UnityEngine.UIElements.InputSystem;
-using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 #endif
 

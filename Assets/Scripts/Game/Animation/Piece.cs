@@ -97,7 +97,7 @@ public class Piece : MonoBehaviour {
   void Update() {
     if (!launched || done) return;
     if (hasCrossedZero) {
-      timer += Time.deltaTime;
+      timer += TimeScale.GetDeltaTime(this);
       if (timer >= lifeAfterFakeBounce) {
         done = true;
         freezeRoutine = StartCoroutine(FreezePhysicsAndFade());
@@ -112,7 +112,7 @@ public class Piece : MonoBehaviour {
       rb.simulated = false;
     }
     all1.Play("fadeOut");
-    yield return new WaitForSeconds(2);
+    yield return TimeScale.WaitForSecondsScaled(2f, this);
     gameObject.SetActive(false);
     freezeRoutine = null;
   }

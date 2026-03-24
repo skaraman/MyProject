@@ -45,10 +45,66 @@ public static class FormStatIncreases {
       ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["CDMG"] = 1, ["BONUS"] = 1 }
     }
   };
+
+  public static List<string> GetOrderedMajorStats(string formName) {
+    var orderedStats = new List<string>();
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm)) {
+      return orderedStats;
+    }
+
+    if (!increases.TryGetValue(resolvedForm, out var statMap) || statMap == null) {
+      return orderedStats;
+    }
+
+    foreach (var stat in statMap.Keys) {
+      orderedStats.Add(stat);
+    }
+
+    return orderedStats;
+  }
+
+  public static string ResolveMajorStatKey(string formName, string statName) {
+    if (string.IsNullOrWhiteSpace(statName)) {
+      return null;
+    }
+
+    var orderedStats = GetOrderedMajorStats(formName);
+    for (var i = 0; i < orderedStats.Count; i++) {
+      var key = orderedStats[i];
+      if (string.Equals(key, statName.Trim(), System.StringComparison.OrdinalIgnoreCase)) {
+        return key;
+      }
+    }
+
+    return null;
+  }
+
+  public static List<KeyValuePair<string, float>> GetOrderedMinorStats(string formName, string majorStat) {
+    var orderedStats = new List<KeyValuePair<string, float>>();
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    var resolvedMajorStat = ResolveMajorStatKey(resolvedForm, majorStat);
+    if (string.IsNullOrWhiteSpace(resolvedForm) || string.IsNullOrWhiteSpace(resolvedMajorStat)) {
+      return orderedStats;
+    }
+
+    if (!increases.TryGetValue(resolvedForm, out var statMap) ||
+        statMap == null ||
+        !statMap.TryGetValue(resolvedMajorStat, out var minorStats) ||
+        minorStats == null) {
+      return orderedStats;
+    }
+
+    foreach (var stat in minorStats) {
+      orderedStats.Add(new KeyValuePair<string, float>(stat.Key, stat.Value));
+    }
+
+    return orderedStats;
+  }
 }
 
 public static class FormStatsValues {
-  public static Dictionary<string, Dictionary<string, int>> values { set; get; } = new Dictionary<string, Dictionary<string, int>> {
+  static readonly Dictionary<string, Dictionary<string, int>> DefaultValues = new Dictionary<string, Dictionary<string, int>> {
     ["Base"] = new Dictionary<string, int> { ["STR"] = 1, ["DEX"] = 1, ["END"] = 1, ["INT"] = 1, ["LCK"] = 1 },
     ["Bolt"] = new Dictionary<string, int> { ["DEX"] = 0, ["END"] = 0, ["AMP"] = 0, ["VLT"] = 0, ["LCK"] = 0 },
     ["Fire"] = new Dictionary<string, int> { ["STR"] = 0, ["END"] = 0, ["PYR"] = 0, ["EMB"] = 0, ["LCK"] = 0 },
@@ -56,6 +112,93 @@ public static class FormStatsValues {
     ["Aqua"] = new Dictionary<string, int> { ["INT"] = 0, ["DEX"] = 0, ["VAP"] = 0, ["MOI"] = 0, ["LCK"] = 0 },
     ["Dark"] = new Dictionary<string, int> { ["UMB"] = 0, ["VOI"] = 0, ["ABY"] = 0, ["ECL"] = 0, ["LCK"] = 0 }
   };
+
+  public static Dictionary<string, Dictionary<string, int>> values { get; private set; } = Clone(DefaultValues);
+
+  public static void ResetToDefaults() {
+    values = Clone(DefaultValues);
+    EnsureAllKnownForms();
+  }
+
+  public static void EnsureAllKnownForms() {
+    foreach (var form in FormStatIncreases.increases) {
+      EnsureForm(form.Key);
+    }
+  }
+
+  public static void EnsureForm(string formName) {
+    if (string.IsNullOrWhiteSpace(formName)) {
+      return;
+    }
+
+    if (!values.TryGetValue(formName, out var stats) || stats == null) {
+      stats = CreateDefaultFormStats(formName);
+      values[formName] = stats;
+    }
+
+    if (!FormStatIncreases.increases.TryGetValue(formName, out var statMap) || statMap == null) {
+      return;
+    }
+
+    foreach (var stat in statMap.Keys) {
+      if (!stats.ContainsKey(stat)) {
+        stats[stat] = 0;
+      }
+    }
+  }
+
+  public static int GetValue(string formName, string statName) {
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    var resolvedStat = FormStatIncreases.ResolveMajorStatKey(resolvedForm, statName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) || string.IsNullOrWhiteSpace(resolvedStat)) {
+      return 0;
+    }
+
+    EnsureForm(resolvedForm);
+    if (!values.TryGetValue(resolvedForm, out var stats) || stats == null) {
+      return 0;
+    }
+
+    return stats.TryGetValue(resolvedStat, out var value) ? value : 0;
+  }
+
+  public static int GetDefaultValue(string formName, string statName) {
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    var resolvedStat = FormStatIncreases.ResolveMajorStatKey(resolvedForm, statName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) || string.IsNullOrWhiteSpace(resolvedStat)) {
+      return 0;
+    }
+
+    if (!DefaultValues.TryGetValue(resolvedForm, out var defaults) || defaults == null) {
+      return 0;
+    }
+
+    return defaults.TryGetValue(resolvedStat, out var value) ? value : 0;
+  }
+
+  static Dictionary<string, Dictionary<string, int>> Clone(Dictionary<string, Dictionary<string, int>> source) {
+    var clone = new Dictionary<string, Dictionary<string, int>>();
+    foreach (var form in source) {
+      clone[form.Key] = new Dictionary<string, int>(form.Value);
+    }
+    return clone;
+  }
+
+  static Dictionary<string, int> CreateDefaultFormStats(string formName) {
+    if (DefaultValues.TryGetValue(formName, out var defaults)) {
+      return new Dictionary<string, int>(defaults);
+    }
+
+    var valuesForForm = new Dictionary<string, int>();
+    if (!FormStatIncreases.increases.TryGetValue(formName, out var statMap) || statMap == null) {
+      return valuesForForm;
+    }
+
+    foreach (var stat in statMap.Keys) {
+      valuesForForm[stat] = 0;
+    }
+    return valuesForForm;
+  }
 }
 
 public static class AllStatValues {

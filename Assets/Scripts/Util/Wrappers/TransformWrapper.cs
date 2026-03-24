@@ -7,6 +7,7 @@ public class TransformWrapper : TimeScaledTransform {
   private Vector3 lastPos, lastRot, lastScale;
 
   void Start() {
+    InitializeTimeScaleTracking();
     cachedTransform = transform;
     lastPos = cachedTransform.localPosition;
     lastRot = cachedTransform.localRotation.eulerAngles;
@@ -65,31 +66,64 @@ public class TransformWrapper : TimeScaledTransform {
 }
 
 public class TimeScaledTransform : MonoBehaviour {
-  public int timeScaleIndex = 1;
+  [HideInInspector] public int timeScaleIndex = 1;
   Vector3 prevPosition;
   Vector3 prevRotation;
   Vector3 prevScale;
+  Rigidbody2D cachedRigidbody2D;
+  Rigidbody cachedRigidbody3D;
+  bool hasResolvedDrivenRigidbody;
+  bool hasDrivenRigidbody;
+  bool timeScaleContextResolved;
+  bool isManagedByTimeScale;
+  SceneTimeScaleTarget cachedOwnerTarget;
+  int cachedLayerIndex = 1;
+  int cachedManagerStateVersion = int.MinValue;
   protected Transform cachedTransform;
 
+  void OnEnable() {
+    InitializeTimeScaleTracking();
+  }
+
   void Start() {
+    InitializeTimeScaleTracking();
+  }
+
+  void OnTransformParentChanged() {
+    InvalidateTimeScaleContext();
+    SyncPreviousState();
+  }
+
+  protected void InitializeTimeScaleTracking() {
     cachedTransform = transform;
-    prevPosition = cachedTransform.position;
-    prevRotation = cachedTransform.eulerAngles;
-    prevScale = cachedTransform.localScale;
+    SyncPreviousState(cachedTransform.position, cachedTransform.eulerAngles, cachedTransform.localScale);
+    InvalidateCachedRuntimeContext();
   }
 
   void LateUpdate() {
     if (cachedTransform == null) cachedTransform = transform;
-    if (!TimeScale.Factors.TryGetValue(timeScaleIndex, out var factor)) return;
+
+    ResolveDrivenRigidbodyState();
+    if (hasDrivenRigidbody) {
+      SyncPreviousState();
+      return;
+    }
 
     var currentPosition = cachedTransform.position;
     var currentRotation = cachedTransform.eulerAngles;
     var currentScale = cachedTransform.localScale;
 
+    var manager = SceneTimeScaleManager.Instance;
+    ResolveTimeScaleContextIfNeeded(manager);
+    if (!isManagedByTimeScale || manager == null) {
+      SyncPreviousState(currentPosition, currentRotation, currentScale);
+      return;
+    }
+
+    var resolvedLayerIndex = cachedOwnerTarget != null ? cachedOwnerTarget.LayerIndex : cachedLayerIndex;
+    var factor = manager.GetEffectiveFactorForLayer(resolvedLayerIndex);
     if (Mathf.Abs(factor - 1f) <= 0.0001f) {
-      prevPosition = currentPosition;
-      prevRotation = currentRotation;
-      prevScale = currentScale;
+      SyncPreviousState(currentPosition, currentRotation, currentScale);
       return;
     }
 
@@ -112,8 +146,66 @@ public class TimeScaledTransform : MonoBehaviour {
     cachedTransform.eulerAngles = newRot;
     cachedTransform.localScale = newScale;
 
-    prevPosition = newPos;
-    prevRotation = newRot;
-    prevScale = newScale;
+    SyncPreviousState(newPos, newRot, newScale);
+  }
+
+  void InvalidateCachedRuntimeContext() {
+    cachedRigidbody2D = null;
+    cachedRigidbody3D = null;
+    hasResolvedDrivenRigidbody = false;
+    hasDrivenRigidbody = false;
+    InvalidateTimeScaleContext();
+  }
+
+  void InvalidateTimeScaleContext() {
+    timeScaleContextResolved = false;
+    isManagedByTimeScale = false;
+    cachedOwnerTarget = null;
+    cachedLayerIndex = 1;
+    cachedManagerStateVersion = int.MinValue;
+  }
+
+  void ResolveDrivenRigidbodyState() {
+    if (hasResolvedDrivenRigidbody) {
+      if (!hasDrivenRigidbody) return;
+      if (cachedRigidbody2D != null || cachedRigidbody3D != null) return;
+      hasResolvedDrivenRigidbody = false;
+    }
+
+    hasResolvedDrivenRigidbody = true;
+    cachedRigidbody2D = null;
+    cachedRigidbody3D = null;
+    if (cachedTransform != null) {
+      cachedTransform.TryGetComponent(out cachedRigidbody2D);
+      cachedTransform.TryGetComponent(out cachedRigidbody3D);
+    }
+    hasDrivenRigidbody = cachedRigidbody2D != null || cachedRigidbody3D != null;
+  }
+
+  void ResolveTimeScaleContextIfNeeded(SceneTimeScaleManager manager) {
+    var managerStateVersion = SceneTimeScaleManager.StateVersion;
+    if (timeScaleContextResolved && cachedManagerStateVersion == managerStateVersion) return;
+
+    timeScaleContextResolved = true;
+    cachedManagerStateVersion = managerStateVersion;
+    isManagedByTimeScale = false;
+    cachedOwnerTarget = null;
+    cachedLayerIndex = 1;
+
+    if (manager == null || cachedTransform == null) return;
+    if (!manager.TryResolveLayerContext(cachedTransform, out cachedOwnerTarget, out cachedLayerIndex)) return;
+
+    isManagedByTimeScale = true;
+  }
+
+  void SyncPreviousState() {
+    if (cachedTransform == null) return;
+    SyncPreviousState(cachedTransform.position, cachedTransform.eulerAngles, cachedTransform.localScale);
+  }
+
+  void SyncPreviousState(Vector3 position, Vector3 rotation, Vector3 scale) {
+    prevPosition = position;
+    prevRotation = rotation;
+    prevScale = scale;
   }
 }

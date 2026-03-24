@@ -6,12 +6,6 @@ using UnityEditor;
 #endif
 
 [Serializable]
-public struct EnemyArchetypeProfileEntry {
-  public string enemyType;
-  public GameObject prefab;
-}
-
-[Serializable]
 public struct WarmPackContent {
   public List<string> spriteLibraries;
   public List<string> directAddresses;
@@ -28,6 +22,8 @@ public struct CombatPopulationWarmPackEntry {
 
 [CreateAssetMenu(fileName = "LocationWarmProfile", menuName = "Sprite Streaming/Location Warm Profile")]
 public class LocationWarmProfile : ScriptableObject {
+  static readonly HashSet<string> autoPackDiagnosticsLoggedLocations = new(StringComparer.OrdinalIgnoreCase);
+
   [SerializeField] string locationId = "DomeCity";
   [SerializeField] GameObject locationPrefab;
   // careful: these lists should only contain assets that are visible in the first few
@@ -46,7 +42,6 @@ public class LocationWarmProfile : ScriptableObject {
   [SerializeField] WarmPackContent currentRoomPack;
   [SerializeField] WarmPackContent adjacentRoomPack;
   [SerializeField] List<CombatPopulationWarmPackEntry> combatPopulationPacks = new();
-  [SerializeField] List<EnemyArchetypeProfileEntry> enemyArchetypes = new();
 
   public string LocationId => string.IsNullOrWhiteSpace(locationId) ? "" : locationId.Trim();
   public GameObject LocationPrefab => ResolveLocationPrefab();
@@ -59,18 +54,6 @@ public class LocationWarmProfile : ScriptableObject {
   public IReadOnlyList<string> WarmUiDirectAddresses => warmUiDirectAddresses;
   public IReadOnlyList<string> WarmUiAddressableLabels => warmUiAddressableLabels;
 
-  public Dictionary<string, GameObject> BuildEnemyArchetypePrefabMap() {
-    var map = new Dictionary<string, GameObject>(StringComparer.OrdinalIgnoreCase);
-    if (enemyArchetypes == null || enemyArchetypes.Count <= 0) return map;
-
-    for (var i = 0; i < enemyArchetypes.Count; i++) {
-      var entry = enemyArchetypes[i];
-      if (string.IsNullOrWhiteSpace(entry.enemyType) || entry.prefab == null) continue;
-      map[entry.enemyType.Trim()] = entry.prefab;
-    }
-    return map;
-  }
-
   public void CollectGameplayWarmLists(
     IEnumerable<string> combatEnemyTypes,
     List<string> outCriticalLibraries,
@@ -80,7 +63,7 @@ public class LocationWarmProfile : ScriptableObject {
     List<string> outCriticalLabels = null,
     List<string> outWarmLabels = null
   ) {
-    AddLocationPrefabWarmLists(outCriticalLibraries, outCriticalAddresses);
+    AddAutoDerivedLocationStageWarmLists(outCriticalLibraries, outCriticalAddresses, outWarmLibraries, outWarmAddresses);
     // Explicit area packs come first so their room/combat ordering survives duplicate
     // elimination. Legacy extra lists remain as a compatibility tail until profiles are
     // fully migrated onto current-room / adjacent-room / combat declarations.
@@ -136,15 +119,112 @@ public class LocationWarmProfile : ScriptableObject {
     return null;
   }
 
-  void AddLocationPrefabWarmLists(List<string> outLibraries, List<string> outAddresses) {
+  void AddAutoDerivedLocationStageWarmLists(
+    List<string> outCriticalLibraries,
+    List<string> outCriticalAddresses,
+    List<string> outWarmLibraries,
+    List<string> outWarmAddresses
+  ) {
     var prefab = ResolveLocationPrefab();
     if (prefab == null) return;
 
-    var targets = prefab.GetComponentsInChildren<SpriteWithNormals>(true);
+    var criticalLibraryStart = outCriticalLibraries != null ? outCriticalLibraries.Count : 0;
+    var criticalAddressStart = outCriticalAddresses != null ? outCriticalAddresses.Count : 0;
+    var warmLibraryStart = outWarmLibraries != null ? outWarmLibraries.Count : 0;
+    var warmAddressStart = outWarmAddresses != null ? outWarmAddresses.Count : 0;
+    var root = prefab.transform;
+    var bg = FindDirectChild(root, "BG");
+    var fg = FindDirectChild(root, "FG");
+    var bgTargetCount = 0;
+    var fgStaticTargetCount = 0;
+    var fgDynamicTargetCount = 0;
+    var fgDestructTargetCount = 0;
+    var fallbackTargetCount = 0;
+    CollectLocationStageWarmTargets(bg, outCriticalLibraries, outCriticalAddresses, ref bgTargetCount);
+    CollectLocationStageWarmTargets(FindDirectChild(fg, "Static"), outCriticalLibraries, outCriticalAddresses, ref fgStaticTargetCount);
+    CollectLocationStageWarmTargets(FindDirectChild(fg, "Dynamic"), outWarmLibraries, outWarmAddresses, ref fgDynamicTargetCount);
+    CollectLocationStageWarmTargets(FindDirectChild(fg, "Destruct"), outWarmLibraries, outWarmAddresses, ref fgDestructTargetCount);
+    var criticalTargetCount = bgTargetCount + fgStaticTargetCount;
+    var warmTargetCount = fgDynamicTargetCount + fgDestructTargetCount;
+
+    var usedFallback = criticalTargetCount <= 0 && warmTargetCount <= 0;
+    if (usedFallback) {
+      CollectLocationStageWarmTargets(root, outCriticalLibraries, outCriticalAddresses, ref fallbackTargetCount);
+      criticalTargetCount = fallbackTargetCount;
+    }
+
+    MaybeLogAutoDerivedStageWarmLists(
+      usedFallback,
+      bgTargetCount,
+      fgStaticTargetCount,
+      fgDynamicTargetCount,
+      fgDestructTargetCount,
+      fallbackTargetCount,
+      criticalTargetCount,
+      warmTargetCount,
+      criticalLibrariesAdded: (outCriticalLibraries != null ? outCriticalLibraries.Count : 0) - criticalLibraryStart,
+      criticalAddressesAdded: (outCriticalAddresses != null ? outCriticalAddresses.Count : 0) - criticalAddressStart,
+      warmLibrariesAdded: (outWarmLibraries != null ? outWarmLibraries.Count : 0) - warmLibraryStart,
+      warmAddressesAdded: (outWarmAddresses != null ? outWarmAddresses.Count : 0) - warmAddressStart
+    );
+  }
+
+  void MaybeLogAutoDerivedStageWarmLists(
+    bool usedFallback,
+    int bgTargetCount,
+    int fgStaticTargetCount,
+    int fgDynamicTargetCount,
+    int fgDestructTargetCount,
+    int fallbackTargetCount,
+    int criticalTargetCount,
+    int warmTargetCount,
+    int criticalLibrariesAdded,
+    int criticalAddressesAdded,
+    int warmLibrariesAdded,
+    int warmAddressesAdded
+  ) {
+    if (!ShouldLogAutoPackDiagnostics()) return;
+    var locationKey = string.IsNullOrWhiteSpace(LocationId) ? name : LocationId;
+    if (string.IsNullOrWhiteSpace(locationKey)) locationKey = name;
+    if (!autoPackDiagnosticsLoggedLocations.Add(locationKey)) return;
+
+    Debug.Log(
+      "[LocationWarmProfile][AutoPack] location='" + locationKey + "'" +
+      " mode=" + (usedFallback ? "full_prefab_fallback" : "stage_derived") +
+      " bg_targets=" + Math.Max(bgTargetCount, 0) +
+      " fg_static_targets=" + Math.Max(fgStaticTargetCount, 0) +
+      " fg_dynamic_targets=" + Math.Max(fgDynamicTargetCount, 0) +
+      " fg_destruct_targets=" + Math.Max(fgDestructTargetCount, 0) +
+      " fallback_targets=" + Math.Max(fallbackTargetCount, 0) +
+      " critical_targets=" + Math.Max(criticalTargetCount, 0) +
+      " warm_targets=" + Math.Max(warmTargetCount, 0) +
+      " critical_libraries=" + Math.Max(criticalLibrariesAdded, 0) +
+      " critical_addresses=" + Math.Max(criticalAddressesAdded, 0) +
+      " warm_libraries=" + Math.Max(warmLibrariesAdded, 0) +
+      " warm_addresses=" + Math.Max(warmAddressesAdded, 0)
+    );
+  }
+
+  static bool ShouldLogAutoPackDiagnostics() {
+    if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  static void CollectLocationStageWarmTargets(
+    Transform root,
+    List<string> outLibraries,
+    List<string> outAddresses,
+    ref int targetCount
+  ) {
+    if (root == null) return;
+
+    var targets = root.GetComponentsInChildren<SpriteWithNormals>(true);
     for (var i = 0; i < targets.Length; i++) {
       var target = targets[i];
       if (!IsPrefabWarmable(target)) continue;
 
+      targetCount++;
       AddUniqueValue(outLibraries, target.libraryName);
 
       var lookupFrame = target.IsAnimation ? 1 : 0;
@@ -153,6 +233,16 @@ public class LocationWarmProfile : ScriptableObject {
       AddUniqueValue(outAddresses, pair.RuntimeColorAddress);
       AddUniqueValue(outAddresses, pair.RuntimeNormalAddress);
     }
+  }
+
+  static Transform FindDirectChild(Transform parent, string childName) {
+    if (parent == null || string.IsNullOrWhiteSpace(childName)) return null;
+    for (var i = 0; i < parent.childCount; i++) {
+      var child = parent.GetChild(i);
+      if (child == null) continue;
+      if (string.Equals(child.name, childName, StringComparison.OrdinalIgnoreCase)) return child;
+    }
+    return null;
   }
 
   void AddCombatPopulationPacks(

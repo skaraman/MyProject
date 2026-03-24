@@ -9,7 +9,13 @@
 			"forcerenderingoff",
 			"renderinglayermask"
 		],
-		"chatgpt.openOnStartup": true,
-		"git.ignoreLimitWarning": true
+		"chatgpt.openOnStartup": false,
+		"git.ignoreLimitWarning": true,
+		"git.decorations.enabled": false,
+		"git.autorefresh": false,
+		"scm.diffDecorations": "none",
+		"terminal.integrated.env.windows": {
+			"MSBUILDDISABLENODEREUSE": "1"
+		}
 	}
 }

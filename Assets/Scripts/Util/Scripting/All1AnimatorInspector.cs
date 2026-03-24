@@ -245,7 +245,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
     _renderer.GetPropertyBlock(_propBlock);
     changed = false;
-    deltaTime = Time.deltaTime;
+    deltaTime = TimeScale.GetDeltaTime(this);
 
     for (int i = activeFloatAnimations.Count - 1; i >= 0; i--) {
       var anim = activeFloatAnimations[i];

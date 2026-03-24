@@ -37,6 +37,7 @@ public class MouseManager : MonoBehaviour {
 
   void Update() {
     clickCacheTimer -= Time.unscaledDeltaTime;
+    if (clickCacheTimer < 0f) clickCacheTimer = 0f;
 
     if (!mainCamera || mouse == null) return;
 
@@ -46,12 +47,7 @@ public class MouseManager : MonoBehaviour {
     var target = hit ? hit.gameObject : null;
 
     if (target != lastHovered) {
-      if (lastHovered) MessageBus.Send(exitKey, lastHovered);
-      if (target) MessageBus.Send(hoverKey, target);
-      lastHovered = target;
-    }
-    else if (target) {
-      MessageBus.Send(hoverKey, target);
+      UpdateHoverTarget(target);
     }
 
     if (target) {
@@ -95,6 +91,12 @@ public class MouseManager : MonoBehaviour {
   }
 
   public void SwitchMap(string newMap) {
+    if (lastHovered) {
+      MessageBus.Send(exitKey, lastHovered);
+    }
+    lastHovered = null;
+    lastClickedTarget = null;
+    clickCacheTimer = 0f;
     hoverKey = $"{newMap}.hover";
     exitKey = $"{newMap}.unhover";
     clickKey = $"{newMap}.click";
@@ -106,5 +108,15 @@ public class MouseManager : MonoBehaviour {
     scrollUpKey = $"{newMap}.scrollUp";
     scrollDownKey = $"{newMap}.scrollDown";
     Debug.Log($"[MouseManager] Swapped to: {newMap}");
+  }
+
+  void UpdateHoverTarget(GameObject target) {
+    if (lastHovered) {
+      MessageBus.Send(exitKey, lastHovered);
+    }
+    if (target) {
+      MessageBus.Send(hoverKey, target);
+    }
+    lastHovered = target;
   }
 }

@@ -29,7 +29,6 @@ MonoBehaviour:
   m_StripUnusedVariants: 1
   m_StripScreenCoordOverrideVariants: 1
   supportRuntimeDebugDisplay: 0
-  m_EnableRenderGraph: 0
   m_Settings:
     m_SettingsList:
       m_List:
@@ -67,13 +66,13 @@ MonoBehaviour:
       - rid: 4887636641479917570
       - rid: 2753576668020867072
       - rid: 2753576668020867073
+      - rid: 6761756165976096768
     m_RuntimeSettings:
       m_List:
       - rid: 7774565946453917981
       - rid: 7774565946453917983
       - rid: 7774565946453917986
       - rid: 7774565946453917988
-      - rid: 7774565946453917989
       - rid: 7774565946453917991
       - rid: 7774565946453917992
       - rid: 7774565946453917994
@@ -81,6 +80,7 @@ MonoBehaviour:
       - rid: 7774565946453918001
       - rid: 1591462856708587524
       - rid: 1591462856708587525
+      - rid: 4887636641479917569
       - rid: 2753576668020867073
   m_AssetVersion: 10
   m_ObsoleteDefaultVolumeProfile: {fileID: 0}
@@ -259,6 +259,17 @@ MonoBehaviour:
       data:
         m_Version: 0
         m_UberPostShader: {fileID: 4800000, guid: fe4f13c1004a07d4ea1e30bfd0326d9e, type: 3}
+    - rid: 6761756165976096768
+      type: {class: WorldRenderPipelineResources, ns: UnityEngine.PathTracing.Core, asm: Unity.PathTracing.Runtime}
+      data:
+        _version: 3
+        _blitCubemap: {fileID: 7200000, guid: 5a992812cb320d146a66cc600200cce7, type: 3}
+        _blitGrayScaleCookie: {fileID: 7200000, guid: 557fa399e33bf7647bda5697c5c158df, type: 3}
+        _setAlphaChannelShader: {fileID: 7200000, guid: 5efaea0e81c66334aa9d062d6573e6fd, type: 3}
+        _environmentImportanceSamplingBuild: {fileID: 7200000, guid: 5bb2534d2411d344cbc54f880232640f, type: 3}
+        _skyBoxMesh: {fileID: 4300000, guid: 0529e6c5f6dea8c4a8c2835ed7de57cb, type: 2}
+        _sixFaceSkyBoxMesh: {fileID: 4300000, guid: a80925ceebd011741b42509226cefc74, type: 2}
+        _buildLightGridShader: {fileID: 7200000, guid: 16e47c1641bd0104e92b624601457bb0, type: 3}
     - rid: 7774565946453917981
       type: {class: UniversalRenderPipelineDebugShaders, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:
@@ -324,7 +335,6 @@ MonoBehaviour:
       type: {class: RenderGraphSettings, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:
         m_Version: 0
-        m_EnableRenderCompatibilityMode: 0
     - rid: 7774565946453917990
       type: {class: UniversalRenderPipelineEditorMaterials, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.Runtime}
       data:

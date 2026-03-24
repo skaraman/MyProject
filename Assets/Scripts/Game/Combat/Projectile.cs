@@ -56,12 +56,13 @@ public class Projectile : MonoBehaviour {
   }
 
   void Update() {
-    animationController.Tick(Time.deltaTime);
-    UpdateLifetime(Time.deltaTime);
+    var scaledDeltaTime = TimeScale.GetDeltaTime(this);
+    animationController.Tick(scaledDeltaTime);
+    UpdateLifetime(scaledDeltaTime);
   }
 
   void FixedUpdate() {
-    Move(Time.fixedDeltaTime);
+    Move(TimeScale.GetFixedDeltaTime(this));
   }
 
   void OnDisable() {

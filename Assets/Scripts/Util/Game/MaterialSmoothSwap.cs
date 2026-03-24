@@ -32,7 +32,7 @@ public class MaterialSmoothSwap : MonoBehaviour {
     float elapsed = 0f;
     Material runtimeMat = _renderer.material;
     while (elapsed < blendDuration) {
-      elapsed += Time.deltaTime;
+      elapsed += TimeScale.GetDeltaTime(this);
       float t = Mathf.Clamp01(elapsed / blendDuration);
       float curveT = blendCurve.Evaluate(t);
       runtimeMat.Lerp(fromMat, toMat, curveT);

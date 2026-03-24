@@ -384,6 +384,11 @@ namespace CustomInspector.Extensions
 
                         IList dirtyList = (IList)dirtyValue;
                         IList cleanList = (IList)property.GetValue();
+                        if (cleanList == null)
+                        {
+                            Debug.LogWarning($"[PropertyConversions] Skipping array sync for '{property.propertyPath}' because the serialized value could not be materialized as an IList.");
+                            return false;
+                        }
 
                         //Debug.Log($"dirtyList {dirtyList.Count} | cleanList {cleanList.Count}");
 

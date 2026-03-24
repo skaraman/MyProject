@@ -11,9 +11,10 @@ using UnityEngine;
 public static class SpriteStreamingHotsetConfigurator {
   const string SpriteWithNormalsScriptPath = "Assets/Scripts/Util/Game/SpriteWithNormals.cs";
   const string DefaultGameplayScenePath = "Assets/Scenes/MyCurrent.unity";
+  const int AutomaticTextureFormat = -1;
   static readonly Regex guidRegex = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Hotset")]
+  [MenuItem("Tools/Sprite Streaming/5) Apply Hotset")]
   public static void ApplyPerformanceHotsetMenu() {
     ApplyPerformanceHotset(rebuildRuntimeIndexFirst: true, saveAndRefreshAtEnd: true, logResult: true);
   }
@@ -84,7 +85,7 @@ public static class SpriteStreamingHotsetConfigurator {
     }
   }
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Unified Import Flow")]
+  [MenuItem("Tools/Sprite Streaming/3) Apply Unified Import Flow")]
   public static void ApplyUnifiedImportFlowMenu() {
     ApplyUnifiedImportFlow(saveAndRefreshAtEnd: true, logResult: true);
   }
@@ -369,13 +370,19 @@ public static class SpriteStreamingHotsetConfigurator {
     if (shardPathByNamepart == null || shardPathByNamepart.Count == 0) return texturePaths;
 
     Debug.Log($"[SpriteStreamingHotsetConfigurator] ResolveHotsetTextureAssetPaths: Processing {requestedNameparts.Count} requested nameparts against {shardPathByNamepart.Count} shards.");
+    var remappedRequestsLogged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     foreach (var requested in requestedNameparts) {
       var normalizedRequested = SpriteAddressResolver.NormalizeNamePart(requested);
       if (string.IsNullOrWhiteSpace(normalizedRequested)) continue;
-      if (!TryResolveShardPath(normalizedRequested, shardPathByNamepart, out var shardPath)) {
+      if (!TryResolveShardPath(normalizedRequested, shardPathByNamepart, out var shardPath, out var resolvedNamepart)) {
         Debug.LogWarning($"[SpriteStreamingHotsetConfigurator] ResolveHotsetTextureAssetPaths: Could not resolve shard path for namepart '{normalizedRequested}'.");
         continue;
+      }
+      if (!string.Equals(normalizedRequested, resolvedNamepart, StringComparison.OrdinalIgnoreCase) &&
+          remappedRequestsLogged.Add(normalizedRequested)) {
+        Debug.LogWarning(
+          $"[SpriteStreamingHotsetConfigurator] ResolveHotsetTextureAssetPaths: Remapped missing namepart '{normalizedRequested}' to '{resolvedNamepart}' by unique leaf name.");
       }
 
       var shardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(shardPath);
@@ -420,23 +427,67 @@ public static class SpriteStreamingHotsetConfigurator {
     return texturePaths;
   }
 
-  static bool TryResolveShardPath(string requestedNamepart, Dictionary<string, string> shardPathByNamepart, out string shardPath) {
+  static bool TryResolveShardPath(
+    string requestedNamepart,
+    Dictionary<string, string> shardPathByNamepart,
+    out string shardPath,
+    out string resolvedNamepart
+  ) {
     shardPath = "";
+    resolvedNamepart = "";
     if (string.IsNullOrWhiteSpace(requestedNamepart) || shardPathByNamepart == null || shardPathByNamepart.Count == 0) return false;
 
     if (shardPathByNamepart.TryGetValue(requestedNamepart, out shardPath) && !string.IsNullOrWhiteSpace(shardPath)) {
+      resolvedNamepart = requestedNamepart;
       return true;
     }
 
-    if (requestedNamepart.IndexOf('/') >= 0) return false;
-    var suffix = "/" + requestedNamepart;
-    foreach (var pair in shardPathByNamepart) {
-      if (!pair.Key.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
-      shardPath = pair.Value;
-      return !string.IsNullOrWhiteSpace(shardPath);
+    if (TryResolveUniqueLeafNamepart(requestedNamepart, shardPathByNamepart, out resolvedNamepart, out shardPath)) {
+      return true;
     }
 
     return false;
+  }
+
+  static bool TryResolveUniqueLeafNamepart(
+    string requestedNamepart,
+    Dictionary<string, string> shardPathByNamepart,
+    out string resolvedNamepart,
+    out string shardPath
+  ) {
+    resolvedNamepart = "";
+    shardPath = "";
+    if (string.IsNullOrWhiteSpace(requestedNamepart) || shardPathByNamepart == null || shardPathByNamepart.Count == 0) return false;
+
+    var slash = requestedNamepart.LastIndexOf('/');
+    var leafName = slash >= 0 && slash < requestedNamepart.Length - 1
+      ? SpriteAddressResolver.NormalizeNamePart(requestedNamepart.Substring(slash + 1))
+      : SpriteAddressResolver.NormalizeNamePart(requestedNamepart);
+    if (string.IsNullOrWhiteSpace(leafName)) return false;
+
+    var suffix = "/" + leafName;
+    string matchedNamepart = "";
+    string matchedShardPath = "";
+    foreach (var pair in shardPathByNamepart) {
+      if (!string.Equals(pair.Key, leafName, StringComparison.OrdinalIgnoreCase) &&
+          !pair.Key.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      if (!string.IsNullOrWhiteSpace(matchedNamepart) &&
+          !string.Equals(matchedNamepart, pair.Key, StringComparison.OrdinalIgnoreCase)) {
+        return false;
+      }
+
+      matchedNamepart = pair.Key;
+      matchedShardPath = pair.Value;
+    }
+
+    if (string.IsNullOrWhiteSpace(matchedNamepart) || string.IsNullOrWhiteSpace(matchedShardPath)) return false;
+
+    resolvedNamepart = matchedNamepart;
+    shardPath = matchedShardPath;
+    return true;
   }
 
   static HashSet<string> ApplyStreamingImporterSettings(HashSet<string> texturePaths) {
@@ -476,7 +527,65 @@ public static class SpriteStreamingHotsetConfigurator {
       AssetDatabase.StopAssetEditing();
     }
 
+    LogTransparentTextureFormatAudit(changed, "ApplyStreamingImporterSettings");
     return changed;
+  }
+
+  static void LogTransparentTextureFormatAudit(HashSet<string> texturePaths, string context) {
+    if (texturePaths == null || texturePaths.Count <= 0) return;
+
+    var transparentTextureCount = 0;
+    var explicitFormatTextureCount = 0;
+    var explicitFormatPlatformCount = 0;
+
+    foreach (var texturePath in texturePaths) {
+      var importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+      if (importer == null) continue;
+      if (!importer.alphaIsTransparency) continue;
+
+      transparentTextureCount++;
+      if (!HasExplicitPlatformFormat(importer, out var platformDetails)) continue;
+
+      explicitFormatTextureCount++;
+      explicitFormatPlatformCount += platformDetails.Count;
+      Debug.LogWarning(
+        "[SpriteStreamingHotsetConfigurator] Transparent texture still has explicit platform format after policy apply." +
+        " context=" + context +
+        " path=" + texturePath +
+        " platforms=" + string.Join(",", platformDetails)
+      );
+    }
+
+    Debug.Log(
+      "[SpriteStreamingHotsetConfigurator] Transparent texture format audit." +
+      " context=" + context +
+      " changedTextures=" + texturePaths.Count +
+      " transparentTextures=" + transparentTextureCount +
+      " texturesWithExplicitFormats=" + explicitFormatTextureCount +
+      " explicitPlatformFormats=" + explicitFormatPlatformCount
+    );
+  }
+
+  static bool HasExplicitPlatformFormat(TextureImporter importer, out List<string> platformDetails) {
+    platformDetails = new List<string>();
+    if (importer == null) return false;
+
+    CollectExplicitPlatformFormat(importer, "Standalone", platformDetails);
+    CollectExplicitPlatformFormat(importer, "Android", platformDetails);
+    CollectExplicitPlatformFormat(importer, "iPhone", platformDetails);
+    return platformDetails.Count > 0;
+  }
+
+  static void CollectExplicitPlatformFormat(TextureImporter importer, string platformName, List<string> platformDetails) {
+    if (importer == null || string.IsNullOrWhiteSpace(platformName) || platformDetails == null) return;
+
+    var settings = importer.GetPlatformTextureSettings(platformName);
+    if (!settings.overridden) return;
+
+    var serializedFormat = (int)settings.format;
+    if (serializedFormat == AutomaticTextureFormat) return;
+
+    platformDetails.Add(platformName + ":" + serializedFormat.ToString(CultureInfo.InvariantCulture));
   }
 
   static string EstimateSizeDeltaBucket(int changedTextureCount) {

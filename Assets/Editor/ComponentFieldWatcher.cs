@@ -62,12 +62,12 @@ public static class ComponentFieldWatcher {
     editModeCache.Clear();
     currentCache.Clear();
 
-    MonitorAllEditMode<MonoBehaviour>(UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None));
+    MonitorAllEditMode<MonoBehaviour>(FindAllMonoBehaviours());
   }
 
   static void StoreOriginalValues() {
     playModeOriginalCache.Clear();
-    var allMonoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+    var allMonoBehaviours = FindAllMonoBehaviours();
     foreach (var obj in allMonoBehaviours) {
       if (ShouldMonitorObject(obj))
         playModeOriginalCache[obj] = GetFieldSnapshot(obj);
@@ -76,7 +76,7 @@ public static class ComponentFieldWatcher {
 
   static void InitializePlayModeInspectorCache() {
     playModeInspectorCache.Clear();
-    var allMonoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+    var allMonoBehaviours = FindAllMonoBehaviours();
     foreach (var obj in allMonoBehaviours) {
       if (ShouldMonitorObject(obj))
         playModeInspectorCache[obj] = GetFieldSnapshot(obj);
@@ -84,7 +84,7 @@ public static class ComponentFieldWatcher {
   }
 
   static void MonitorPlayModeInspectorChanges() {
-    var allMonoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+    var allMonoBehaviours = FindAllMonoBehaviours();
 
     foreach (var obj in allMonoBehaviours) {
       if (!ShouldMonitorObject(obj)) continue;
@@ -172,8 +172,12 @@ public static class ComponentFieldWatcher {
   }
 
   static void MonitorEditModeChanges() {
-    var allMonoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+    var allMonoBehaviours = FindAllMonoBehaviours();
     MonitorAllEditMode<MonoBehaviour>(allMonoBehaviours);
+  }
+
+  static MonoBehaviour[] FindAllMonoBehaviours() {
+    return UnityEngine.Object.FindObjectsByType<MonoBehaviour>();
   }
 
   static void MonitorAllEditMode<T>(T[] objects) where T : UnityEngine.Object {
@@ -236,7 +240,7 @@ public static class ComponentFieldWatcher {
 
   static void RestoreEditModeCache() {
     currentCache.Clear();
-    var allMonoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+    var allMonoBehaviours = FindAllMonoBehaviours();
     foreach (var obj in allMonoBehaviours) {
       if (ShouldMonitorObject(obj))
         editModeCache[obj] = GetFieldSnapshot(obj);

@@ -8,6 +8,7 @@ public class EnemyController : MonoBehaviour {
   const float PlayerTransformRefreshSeconds = 0.5f;
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
+  [Button(nameof(AwardPlaceholderKillXp), label = "Award XP", size = Size.small)] public bool awardPlaceholderXp;
 
   [Header("Sprite Parts")]
   [Tooltip("Parts that carry SpriteWithNormals components. If left empty, children are auto-discovered.")]
@@ -30,6 +31,8 @@ public class EnemyController : MonoBehaviour {
   public string enemyType;
   public string defaultAnimation = "Idle";
   public bool playOnStart = true;
+  [Header("XP Placeholder")]
+  [SerializeField, Min(0)] int placeholderKillXpReward = 100;
   [Header("Streaming Warmup")]
   [SerializeField] bool prewarmEnemyAnimationStarts = true;
   [SerializeField, Min(1)] int prewarmFramesPerAnimation = 1;
@@ -55,8 +58,8 @@ public class EnemyController : MonoBehaviour {
 
   void Awake() {
     enemyInfo = GetComponent<EnemyInfo>();
-    appearanceOwnerId = "enemy:" + gameObject.GetInstanceID().ToString();
-    effectAppearanceOwnerId = effectNode != null ? "effect:" + effectNode.GetInstanceID().ToString() : "";
+    appearanceOwnerId = "enemy:" + ObjectEntityId.GetString(gameObject);
+    effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
     ResetDebugPlaybackFlags();
     ResolveEnemyTypeFromComponent();
     ConfigureEffectController();
@@ -87,11 +90,12 @@ public class EnemyController : MonoBehaviour {
     RefreshRuntimeResidency();
     animationController.SlowDown = slowDown;
     animationController.ForceLoop = forceLoop;
-    animationController.Tick(Time.deltaTime);
+    var scaledDeltaTime = TimeScale.GetDeltaTime(this);
+    animationController.Tick(scaledDeltaTime);
     if (effectControllerInitialized) {
       effectAnimationController.SlowDown = slowDown;
       effectAnimationController.ForceLoop = forceLoop;
-      effectAnimationController.Tick(Time.deltaTime);
+      effectAnimationController.Tick(scaledDeltaTime);
     }
   }
 
@@ -258,6 +262,31 @@ public class EnemyController : MonoBehaviour {
 
   public AnimationController Controller => animationController;
 
+  public void AwardPlaceholderKillXp() {
+    var characterState = FindAnyObjectByType<CharacterState>();
+    var activeForm = EsperanzaForms.GetActive();
+    if (characterState == null) {
+      Debug.LogWarning(
+        "[EnemyController][AwardPlaceholderKillXp] Missing CharacterState" +
+        " enemy_type='" + (enemyType ?? "") +
+        "' reward=" + placeholderKillXpReward +
+        " active_form='" + activeForm + "'"
+      );
+      return;
+    }
+
+    var levelsGained = characterState.GrantActiveFormXp(
+      placeholderKillXpReward,
+      "enemy_placeholder:" + NormalizeEnemyType(enemyType)
+    );
+    Debug.Log(
+      "[EnemyController][AwardPlaceholderKillXp] enemy_type='" + (enemyType ?? "") +
+      "' reward=" + placeholderKillXpReward +
+      " active_form='" + activeForm +
+      "' levels_gained=" + levelsGained
+    );
+  }
+
   private void HookAnimationEvents() {
     if (animationController == null) return;
     animationController.OnEffectTriggered = HandleEffectTriggered;
@@ -362,7 +391,7 @@ public class EnemyController : MonoBehaviour {
     if (!Application.isPlaying || animationController == null) return;
     if (!force) {
       var refreshInterval = Mathf.Max(SpriteStreamingRuntimeSettings.EnemyResidencyRefreshFrameInterval, 1);
-      var frameBucket = Mathf.Abs(GetInstanceID()) % refreshInterval;
+      var frameBucket = ObjectEntityId.GetModulo(this, refreshInterval);
       if ((Time.frameCount % refreshInterval) != frameBucket) return;
     }
 
@@ -435,7 +464,7 @@ public class EnemyController : MonoBehaviour {
     }
 
     cachedPlayerTransformRefreshedAt = now;
-    var playerGear = FindFirstObjectByType<GearController>();
+    var playerGear = FindAnyObjectByType<GearController>();
     cachedPlayerTransform = playerGear != null ? playerGear.transform : null;
     return cachedPlayerTransform;
   }

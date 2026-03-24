@@ -77,7 +77,10 @@ public class MainMenuInput : ButtonGroup {
   public void MouseHover(object target) {
     if (!(target is GameObject targetButton)) return;
 
-    activeIndexMainMenu = buttons.IndexOf(targetButton);
+    var resolvedIndex = ResolveButtonIndex(targetButton);
+    if (resolvedIndex < 0 || resolvedIndex == activeIndexMainMenu) return;
+
+    activeIndexMainMenu = resolvedIndex;
     SetActiveIndex(activeIndexMainMenu);
   }
 
@@ -125,6 +128,24 @@ public class MainMenuInput : ButtonGroup {
       }
     }
     return null;
+  }
+
+  int ResolveButtonIndex(GameObject targetButton) {
+    if (targetButton == null) return -1;
+
+    var directIndex = buttons.IndexOf(targetButton);
+    if (directIndex >= 0) return directIndex;
+
+    var targetTransform = targetButton.transform;
+    for (int i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) continue;
+      if (targetTransform.IsChildOf(button.transform)) {
+        return i;
+      }
+    }
+
+    return -1;
   }
 
   void ClampActiveIndex() {

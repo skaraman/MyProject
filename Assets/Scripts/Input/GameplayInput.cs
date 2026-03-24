@@ -78,7 +78,16 @@ public class GameplayInput : MonoBehaviour {
   private int lastAttackGateLogFrame = -1;
   private float nextPlayerReferenceResolveAt = -1f;
 
+  void OnEnable() {
+    RegisterInputHandlers();
+  }
+
   void Start() {
+    TryResolvePlayerReferences(force: true);
+  }
+
+  void RegisterInputHandlers() {
+    if (actions.Count > 0) return;
     actions.Add(MessageBus.On("gameplay.attack1", o => { if (_IsPressed(o)) attack1(); }));
     actions.Add(MessageBus.On("gameplay.attack2", o => { if (_IsPressed(o)) attack2(); }));
     actions.Add(MessageBus.On("gameplay.attack3", o => { if (_IsPressed(o)) attack3(); }));
@@ -94,7 +103,6 @@ public class GameplayInput : MonoBehaviour {
     actions.Add(MessageBus.On("gameplay.charDown", o => charDown(o)));
     actions.Add(MessageBus.On("gameplay.charLeft", o => charLeft(o)));
     actions.Add(MessageBus.On("gameplay.charRight", o => charRight(o)));
-    TryResolvePlayerReferences(force: true);
   }
 
   bool _IsPressed(object o) {
@@ -210,7 +218,7 @@ public class GameplayInput : MonoBehaviour {
     if (gearController == null && EsperanzaParent != null) {
       gearController = EsperanzaParent.GetComponent<GearController>();
     }
-    gearController ??= FindFirstObjectByType<GearController>();
+    gearController ??= FindAnyObjectByType<GearController>();
 
     if (characterState == null && EsperanzaParent != null) {
       characterState = EsperanzaParent.GetComponent<CharacterState>();
@@ -218,7 +226,7 @@ public class GameplayInput : MonoBehaviour {
     if (characterState == null && gearController != null) {
       characterState = gearController.GetComponent<CharacterState>();
     }
-    characterState ??= FindFirstObjectByType<CharacterState>();
+    characterState ??= FindAnyObjectByType<CharacterState>();
 
     if (EsperanzaParent == null && gearController != null) {
       EsperanzaParent = gearController.gameObject;
@@ -265,10 +273,10 @@ public class GameplayInput : MonoBehaviour {
 
     float peakY = jumpGroundLocalY + jumpHeight;
     float halfDuration = Mathf.Max(0.01f, jumpDuration * 0.5f);
-    LeanTween.cancel(erb.gameObject);
+    CancelPlayerTweens();
     LeanTween.sequence()
-      .append(LeanTween.moveLocalY(erb.gameObject, peakY, halfDuration).setEaseOutQuad())
-      .append(LeanTween.moveLocalY(erb.gameObject, jumpGroundLocalY, halfDuration).setEaseInQuad())
+      .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, peakY, halfDuration).setEaseOutQuad(), halfDuration))
+      .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, jumpGroundLocalY, halfDuration).setEaseInQuad(), halfDuration))
       .append(() => {
         isGrounded = true;
         isJumping = false;
@@ -338,9 +346,10 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _CameraFollow() {
-    Vector3 targetPos = erb.transform.localPosition;
-    Vector3 currentPos = cameraRB.transform.localPosition; // Changed to localPosition
-    Vector3 newPos = Vector3.MoveTowards(currentPos, targetPos, 1f);
+      Vector3 targetPos = erb.transform.localPosition;
+      Vector3 currentPos = cameraRB.transform.localPosition; // Changed to localPosition
+    var followStep = 1f * Mathf.Max(GetSceneTimeFactor(), 0f);
+    Vector3 newPos = Vector3.MoveTowards(currentPos, targetPos, followStep);
     cameraRB.transform.localPosition = newPos; // Set localPosition instead of MovePosition
   }
 
@@ -350,9 +359,10 @@ public class GameplayInput : MonoBehaviour {
 
     float speed = (10 + AllStatValues.Esperanza["MVSP"]);
     float moveMultiplier = stanceTimeRemainingSeconds > 0f ? stanceMoveMultiplier : (moveMode == MoveMode.Sprint ? sprintMultiplier : 1f);
+    var sceneFactor = GetSceneTimeFactor();
 
-    erb.linearVelocityX = moveInput.x * speed * moveMultiplier;
-    erb.linearVelocityY = moveInput.y * speed * moveMultiplier;
+    erb.linearVelocityX = moveInput.x * speed * moveMultiplier * sceneFactor;
+    erb.linearVelocityY = moveInput.y * speed * moveMultiplier * sceneFactor;
 
     if (stanceTimeRemainingSeconds > 0f) return;
 
@@ -414,7 +424,7 @@ public class GameplayInput : MonoBehaviour {
       }
 
       if (moveMode == MoveMode.Run) {
-        sustainedMoveSeconds += Time.deltaTime;
+        sustainedMoveSeconds += GetSceneDeltaTime();
         if (sustainedMoveSeconds >= sprintSustainSeconds) {
           moveMode = MoveMode.Sprint;
         }
@@ -429,7 +439,7 @@ public class GameplayInput : MonoBehaviour {
         wasSprintingWhenStopped = moveMode == MoveMode.Sprint;
       }
       else {
-        timeSinceMoveStopSeconds += Time.deltaTime;
+        timeSinceMoveStopSeconds += GetSceneDeltaTime();
         if (timeSinceMoveStopSeconds >= sprintResumeWindowSeconds) {
           wasSprintingWhenStopped = false;
           moveMode = MoveMode.Run;
@@ -442,7 +452,7 @@ public class GameplayInput : MonoBehaviour {
 
   void _TickStanceTimer() {
     if (stanceTimeRemainingSeconds <= 0f) return;
-    stanceTimeRemainingSeconds = Mathf.Max(0f, stanceTimeRemainingSeconds - Time.deltaTime);
+    stanceTimeRemainingSeconds = Mathf.Max(0f, stanceTimeRemainingSeconds - GetSceneDeltaTime());
   }
 
   void _EnterStance(bool resetTimer = true) {
@@ -455,7 +465,7 @@ public class GameplayInput : MonoBehaviour {
 
   void _ApplyJumpMomentum() {
     if (erb == null) return;
-    erb.linearVelocity = jumpMomentum;
+    erb.linearVelocity = jumpMomentum * GetSceneTimeFactor();
   }
 
   void _RecoverToStanceWhenActionEnds() {
@@ -504,7 +514,7 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _HandleAttackPress(int index) {
-    float now = Time.time;
+    float now = GetSceneNow();
     var actionKey = index == 1 ? "attack1"
       : index == 2 ? "attack2"
       : index == 3 ? "attack3"
@@ -690,15 +700,43 @@ public class GameplayInput : MonoBehaviour {
 
     float currentY = erb.transform.localPosition.y;
     float boostedPeakY = currentY + airAttackBoostHeight;
-    LeanTween.cancel(erb.gameObject);
+    CancelPlayerTweens();
     LeanTween.sequence()
-      .append(LeanTween.moveLocalY(erb.gameObject, boostedPeakY, 0.12f).setEaseOutQuad())
-      .append(LeanTween.delayedCall(erb.gameObject, airAttackBoostHangSeconds, () => { }))
-      .append(LeanTween.moveLocalY(erb.gameObject, jumpGroundLocalY, 0.18f).setEaseInQuad())
+      .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, boostedPeakY, 0.12f).setEaseOutQuad(), 0.12f))
+      .append(RegisterPlayerTween(LeanTween.delayedCall(erb.gameObject, airAttackBoostHangSeconds, () => { }), airAttackBoostHangSeconds))
+      .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, jumpGroundLocalY, 0.18f).setEaseInQuad(), 0.18f))
       .append(() => {
         isGrounded = true;
         isJumping = false;
         HandleLanding();
       });
+  }
+
+  void CancelPlayerTweens() {
+    if (erb == null) return;
+    LeanTween.cancel(erb.gameObject);
+    TimeScale.UnregisterTweens(erb.gameObject);
+  }
+
+  LTDescr RegisterPlayerTween(LTDescr descr, float baseDuration) {
+    return TimeScale.RegisterTween(ResolveSceneTimeContextTransform(), descr, baseDuration);
+  }
+
+  Transform ResolveSceneTimeContextTransform() {
+    if (erb != null) return erb.transform;
+    if (EsperanzaParent != null) return EsperanzaParent.transform;
+    return null;
+  }
+
+  float GetSceneTimeFactor() {
+    return TimeScale.GetEffectiveFactor(ResolveSceneTimeContextTransform());
+  }
+
+  float GetSceneDeltaTime() {
+    return TimeScale.GetDeltaTime(ResolveSceneTimeContextTransform());
+  }
+
+  float GetSceneNow() {
+    return TimeScale.GetNow(ResolveSceneTimeContextTransform());
   }
 }

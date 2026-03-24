@@ -61,6 +61,7 @@ public static class HierarchyCaretMemory
   private static string lastSavedFingerprint = string.Empty;
   private static bool autoSaveSuppressed;
   private static string autoSaveSuppressedContextKey = string.Empty;
+  private static bool loggedHierarchyIdTruncationWarning;
 
   static HierarchyCaretMemory()
   {
@@ -461,10 +462,41 @@ public static class HierarchyCaretMemory
         target = component.gameObject;
       }
 
-      ids.Add(target.GetInstanceID());
+      if (TryGetHierarchyObjectId(target, out var hierarchyObjectId))
+      {
+        ids.Add(hierarchyObjectId);
+      }
     }
 
     return ids.ToArray();
+  }
+
+  private static bool TryGetHierarchyObjectId(UnityEngine.Object target, out int hierarchyObjectId)
+  {
+    hierarchyObjectId = 0;
+    if (target == null)
+    {
+      return false;
+    }
+
+#if UNITY_6000_3_OR_NEWER
+    var entityId = target.GetEntityId();
+    var rawEntityId = UnityEngine.EntityId.ToULong(entityId);
+    hierarchyObjectId = unchecked((int)rawEntityId);
+
+    if (!loggedHierarchyIdTruncationWarning && (rawEntityId >> 32) != 0UL)
+    {
+      loggedHierarchyIdTruncationWarning = true;
+      Debug.LogWarning($"[HierarchyCaretMemory] Truncated EntityId while resolving hierarchy state. target={target.name} type={target.GetType().Name} entityId={rawEntityId}");
+    }
+
+    return true;
+#else
+#pragma warning disable CS0618
+    hierarchyObjectId = target.GetInstanceID();
+#pragma warning restore CS0618
+    return true;
+#endif
   }
 
   private static bool ResolveReflection(Type runtimeWindowType = null)

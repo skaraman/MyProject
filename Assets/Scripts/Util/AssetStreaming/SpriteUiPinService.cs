@@ -187,7 +187,7 @@ public static class SpriteUiPinService {
 
   static string BuildOwnerId(SpriteWithNormals target) {
     if (target == null) return "";
-    return "ui:" + target.GetInstanceID().ToString();
+    return "ui:" + ObjectEntityId.GetString(target);
   }
 
   static void ReleaseOwner(string ownerId) {

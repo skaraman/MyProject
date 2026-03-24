@@ -5,6 +5,8 @@ using UnityEditor;
 using UnityEngine;
 
 public static class SpriteStreamingTextureImportPolicy {
+  const int AutomaticTextureFormat = -1;
+
   public static bool Apply(TextureImporter importer, bool forceMultipleSpriteImportMode) {
     if (importer == null) return false;
 
@@ -53,12 +55,34 @@ public static class SpriteStreamingTextureImportPolicy {
         platformChanged = true;
       }
 
+      if (TryResetTransparentSpritePlatformFormat(importer, platformName, settings)) {
+        platformChanged = true;
+      }
+
       if (!platformChanged) continue;
       importer.SetPlatformTextureSettings(settings);
       changed = true;
     }
 
     return changed;
+  }
+
+  static bool TryResetTransparentSpritePlatformFormat(TextureImporter importer, string platformName, TextureImporterPlatformSettings settings) {
+    if (importer == null) return false;
+    if (settings == null) return false;
+    if (!importer.alphaIsTransparency) return false;
+
+    var serializedFormat = (int)settings.format;
+    if (serializedFormat == AutomaticTextureFormat) return false;
+
+    Debug.Log(
+      "[SpriteStreamingTextureImportPolicy] Reset explicit platform format to Automatic for transparent sprite. path=" +
+      importer.assetPath +
+      " platform=" + platformName +
+      " format=" + serializedFormat);
+
+    settings.format = (TextureImporterFormat)AutomaticTextureFormat;
+    return true;
   }
 
   static List<string> BuildPlatformTargetList() {

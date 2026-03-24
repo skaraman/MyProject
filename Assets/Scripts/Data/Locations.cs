@@ -267,6 +267,22 @@ public static class LocationEnemyData {
     return true;
   }
 
+  public static bool TryGetLocationByPrefab(GameObject prefab, out LocationInfo locationInfo) {
+    locationInfo = null;
+    if (prefab == null) return false;
+
+    var selectedAssetPath = GetPrefabAssetPath(prefab);
+    foreach (var pair in locations) {
+      var candidate = pair.Value;
+      if (candidate == null) continue;
+      if (!DoesLocationUsePrefab(candidate, prefab, selectedAssetPath)) continue;
+      locationInfo = candidate;
+      return true;
+    }
+
+    return false;
+  }
+
   public static LocationInfo GetLocationOrDefault(string locationId) {
     if (TryGetLocation(locationId, out var location)) return location;
     if (TryGetLocation(GetDefaultLocation(), out var fallback)) return fallback;
@@ -284,5 +300,41 @@ public static class LocationEnemyData {
       if (!string.IsNullOrWhiteSpace(pair.Key) && pair.Value != null) return pair.Key;
     }
     return DomeCityLocationId;
+  }
+
+  static bool DoesLocationUsePrefab(LocationInfo locationInfo, GameObject prefab, string selectedAssetPath) {
+    if (locationInfo == null || prefab == null) return false;
+
+    var prefabData = locationInfo.locationPrefabData;
+    if (prefabData == null) return false;
+    if (ReferenceEquals(prefabData.prefab, prefab)) return true;
+
+    var configuredAssetPath = NormalizeAssetPath(prefabData.AssetPath);
+    if (!string.IsNullOrWhiteSpace(selectedAssetPath) &&
+        !string.IsNullOrWhiteSpace(configuredAssetPath) &&
+        string.Equals(configuredAssetPath, selectedAssetPath, StringComparison.OrdinalIgnoreCase)) {
+      return true;
+    }
+
+    if (prefabData.prefab == null && string.IsNullOrWhiteSpace(configuredAssetPath)) {
+      return false;
+    }
+
+    var resolvedPrefab = prefabData.ResolvePrefab();
+    return ReferenceEquals(resolvedPrefab, prefab);
+  }
+
+  static string NormalizeAssetPath(string assetPath) {
+    return string.IsNullOrWhiteSpace(assetPath)
+      ? ""
+      : assetPath.Trim().Replace('\\', '/');
+  }
+
+  static string GetPrefabAssetPath(GameObject prefab) {
+#if UNITY_EDITOR
+    return NormalizeAssetPath(UnityEditor.AssetDatabase.GetAssetPath(prefab));
+#else
+    return "";
+#endif
   }
 }

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using Object = UnityEngine.Object;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -39,8 +40,8 @@ public static class SpriteRuntimeResolver {
     public bool Equals(LookupCacheKey other) {
       return frame == other.frame &&
              string.Equals(shardKey, other.shardKey, StringComparison.OrdinalIgnoreCase) &&
-             string.Equals(labelPrefix, other.labelPrefix, StringComparison.OrdinalIgnoreCase) &&
-             string.Equals(category, other.category, StringComparison.OrdinalIgnoreCase);
+             string.Equals(labelPrefix, other.labelPrefix, StringComparison.Ordinal) &&
+             string.Equals(category, other.category, StringComparison.Ordinal);
     }
 
     public override bool Equals(object obj) {
@@ -51,8 +52,8 @@ public static class SpriteRuntimeResolver {
       unchecked {
         var hash = 17;
         hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(shardKey ?? "");
-        hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(labelPrefix ?? "");
-        hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(category ?? "");
+        hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(labelPrefix ?? "");
+        hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(category ?? "");
         hash = (hash * 31) + frame;
         return hash;
       }
@@ -86,7 +87,7 @@ public static class SpriteRuntimeResolver {
   static readonly Dictionary<LookupCacheKey, SpriteAddressPair> lookupHitCache = new();
   static readonly HashSet<LookupCacheKey> lookupMissCache = new();
   // caches for expensive normalization routines
-  static readonly Dictionary<string, string> tokenNormCache = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, string> tokenNormCache = new(StringComparer.Ordinal);
   static readonly Dictionary<string, string> namepartNormCache = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> atlasSiblingSeenScratch = new(StringComparer.OrdinalIgnoreCase);
 #if UNITY_EDITOR
@@ -250,7 +251,7 @@ public static class SpriteRuntimeResolver {
     return true;
   }
 
-  public static bool TryResolve(SpriteLookupKey key, out SpriteAddressPair pair) {
+  public static bool TryResolve(SpriteLookupKey key, out SpriteAddressPair pair, Object logContext = null) {
     pair = default;
 #if UNITY_EDITOR
     if (!Application.isPlaying) return false;
@@ -258,7 +259,7 @@ public static class SpriteRuntimeResolver {
     if (!EnsureManifestReady()) return false;
 
     var normalizedNamepart = NormalizeNamePart(key.namepart);
-    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry)) return false;
+    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry, logContext)) return false;
 
     var shardKey = string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
     var cacheKey = new LookupCacheKey(shardKey, key.labelPrefix, key.category, key.frame);
@@ -298,7 +299,7 @@ public static class SpriteRuntimeResolver {
     return false;
   }
 
-  public static bool IsLookupPending(SpriteLookupKey key) {
+  public static bool IsLookupPending(SpriteLookupKey key, Object logContext = null) {
 #if UNITY_EDITOR
     if (!Application.isPlaying) return false;
 #endif
@@ -309,7 +310,7 @@ public static class SpriteRuntimeResolver {
     }
 
     var normalizedNamepart = NormalizeNamePart(key.namepart);
-    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry)) return false;
+    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry, logContext)) return false;
 
     var shardKey = string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
     if (loadedShards.ContainsKey(shardKey)) return false;
@@ -323,6 +324,23 @@ public static class SpriteRuntimeResolver {
 
     StartShardLoad(shardKey, shardEntry);
     return true;
+  }
+
+  public static void InvalidateLookup(SpriteLookupKey key, bool reloadShard = false) {
+#if UNITY_EDITOR
+    if (!Application.isPlaying) return;
+#endif
+    var normalizedNamepart = NormalizeNamePart(key.namepart);
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return;
+
+    var shardKey = ResolveShardKey(normalizedNamepart);
+    InvalidateLookupCacheEntry(new LookupCacheKey(shardKey, key.labelPrefix, key.category, key.frame));
+    if (key.frame != 0) {
+      InvalidateLookupCacheEntry(new LookupCacheKey(shardKey, key.labelPrefix, key.category, 0));
+    }
+
+    if (!reloadShard) return;
+    loadedShards.Remove(shardKey);
   }
 
   public static bool TryCollectAtlasSiblingAddresses(
@@ -405,14 +423,14 @@ public static class SpriteRuntimeResolver {
   }
 
 #if UNITY_EDITOR
-  public static bool TryResolveEditor(SpriteLookupKey key, out SpriteAddressPair pair) {
+  public static bool TryResolveEditor(SpriteLookupKey key, out SpriteAddressPair pair, Object logContext = null) {
     pair = default;
     var manifestAsset = LoadEditorManifestAsset();
     if (manifestAsset != null && !string.IsNullOrWhiteSpace(manifestAsset.text)) {
       var manifestRows = ParseManifestRows(manifestAsset.text);
       if (manifestRows.Count > 0) {
         var normalizedNamepart = NormalizeNamePart(key.namepart);
-        if (TryGetManifestEntryForNamepart(manifestRows, normalizedNamepart, out var shardEntry) &&
+        if (TryGetManifestEntryForNamepart(manifestRows, normalizedNamepart, out var shardEntry, logContext) &&
             !string.IsNullOrWhiteSpace(shardEntry.assetPath)) {
           var shardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(shardEntry.assetPath);
           if (shardAsset != null && !string.IsNullOrWhiteSpace(shardAsset.text)) {
@@ -620,12 +638,19 @@ public static class SpriteRuntimeResolver {
     return rows.TryGetValue(aliasKey, out pair);
   }
 
-  static bool TryGetManifestEntryForNamepart(Dictionary<string, ManifestEntry> rows, string requestedNamepart, out ManifestEntry entry) {
+  static bool TryGetManifestEntryForNamepart(
+    Dictionary<string, ManifestEntry> rows,
+    string requestedNamepart,
+    out ManifestEntry entry,
+    Object logContext = null
+  ) {
     entry = default;
     if (rows == null || rows.Count == 0) return false;
     if (string.IsNullOrWhiteSpace(requestedNamepart)) return false;
 
     if (rows.TryGetValue(requestedNamepart, out entry)) return true;
+
+    if (TryResolveMovedFullPathAlias(rows, requestedNamepart, out entry, logContext)) return true;
 
     if (requestedNamepart.IndexOf('/') >= 0) return false;
 
@@ -633,12 +658,55 @@ public static class SpriteRuntimeResolver {
         ambiguousMatches != null &&
         ambiguousMatches.Count > 1) {
       RateLimitedWarning(
-        "shortkey-ambiguous-request:" + requestedNamepart,
-        "[SpriteRuntimeResolver] " + BuildShortKeyAmbiguityError(requestedNamepart, ambiguousMatches)
+        BuildContextualWarningKey("shortkey-ambiguous-request:" + requestedNamepart, logContext),
+        AppendWarningContext("[SpriteRuntimeResolver] " + BuildShortKeyAmbiguityError(requestedNamepart, ambiguousMatches), logContext),
+        logContext
       );
     }
 
     return false;
+  }
+
+  static bool TryResolveMovedFullPathAlias(
+    Dictionary<string, ManifestEntry> rows,
+    string requestedNamepart,
+    out ManifestEntry entry,
+    Object logContext = null
+  ) {
+    entry = default;
+    if (rows == null || rows.Count == 0 || string.IsNullOrWhiteSpace(requestedNamepart)) return false;
+
+    var slash = requestedNamepart.LastIndexOf('/');
+    if (slash < 0 || slash >= requestedNamepart.Length - 1) return false;
+
+    var leafName = NormalizeNamePart(requestedNamepart.Substring(slash + 1));
+    if (string.IsNullOrWhiteSpace(leafName)) return false;
+
+    if (ambiguousShortNamepartMatches.TryGetValue(leafName, out var ambiguousMatches) &&
+        ambiguousMatches != null &&
+        ambiguousMatches.Count > 1) {
+      RateLimitedWarning(
+        BuildContextualWarningKey("moved-fullpath-ambiguous-request:" + requestedNamepart, logContext),
+        AppendWarningContext("[SpriteRuntimeResolver] " + BuildShortKeyAmbiguityError(leafName, ambiguousMatches), logContext),
+        logContext
+      );
+      return false;
+    }
+
+    if (!rows.TryGetValue(leafName, out entry)) return false;
+
+    var canonicalNamepart = string.IsNullOrWhiteSpace(entry.namepart) ? leafName : entry.namepart;
+    if (!string.Equals(canonicalNamepart, requestedNamepart, StringComparison.OrdinalIgnoreCase)) {
+      RateLimitedWarning(
+        BuildContextualWarningKey("moved-fullpath-remap:" + requestedNamepart, logContext),
+        AppendWarningContext("[SpriteRuntimeResolver] Remapped missing namepart '" + requestedNamepart +
+        "' to '" + canonicalNamepart +
+        "' by unique short name '" + leafName + "'.", logContext),
+        logContext
+      );
+    }
+
+    return true;
   }
 
   static bool EnsureManifestReady() {
@@ -718,7 +786,7 @@ public static class SpriteRuntimeResolver {
 
       var parsedShard = shardParseTask.Result;
       loadedShards[namepart] = new ShardData {
-        rows = parsedShard?.rows ?? new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase),
+        rows = parsedShard?.rows ?? new Dictionary<string, SpriteAddressPair>(StringComparer.Ordinal),
         addressesByAtlasPath = parsedShard?.addressesByAtlasPath,
         atlasLookupBuilt = parsedShard?.addressesByAtlasPath != null,
         lastAccessTime = Time.realtimeSinceStartup
@@ -939,6 +1007,20 @@ public static class SpriteRuntimeResolver {
     lookupMissCache.Add(key);
   }
 
+  static void InvalidateLookupCacheEntry(LookupCacheKey key) {
+    lookupHitCache.Remove(key);
+    lookupMissCache.Remove(key);
+  }
+
+  static string ResolveShardKey(string normalizedNamepart) {
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return "";
+    if ((manifestReady || EnsureManifestReady()) &&
+        TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry)) {
+      return string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
+    }
+    return normalizedNamepart;
+  }
+
   static Dictionary<string, ManifestEntry> ParseManifestRows(string text, bool allowUnityLogging = true) {
     var rows = new Dictionary<string, ManifestEntry>(StringComparer.OrdinalIgnoreCase);
     if (string.IsNullOrWhiteSpace(text)) return rows;
@@ -1057,7 +1139,7 @@ public static class SpriteRuntimeResolver {
 
   static ParsedShardData ParseShardRows(string text, bool allowUnityLogging = true) {
     var parsedShard = new ParsedShardData {
-      rows = new Dictionary<string, SpriteAddressPair>(StringComparer.OrdinalIgnoreCase),
+      rows = new Dictionary<string, SpriteAddressPair>(StringComparer.Ordinal),
       addressesByAtlasPath = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
     };
     if (string.IsNullOrWhiteSpace(text)) return parsedShard;
@@ -1104,12 +1186,24 @@ public static class SpriteRuntimeResolver {
     var now = Time.realtimeSinceStartup;
     if (logCooldown.TryGetValue(key, out var last) && now - last < 5f) return;
     logCooldown[key] = now;
+    Debug.Log(message);
   }
 
-  static void RateLimitedWarning(string key, string message) {
+  static void RateLimitedWarning(string key, string message, Object logContext = null) {
     var now = Time.realtimeSinceStartup;
     if (logCooldown.TryGetValue(key, out var last) && now - last < 5f) return;
     logCooldown[key] = now;
+    Debug.LogWarning(message, logContext);
+  }
+
+  static string BuildContextualWarningKey(string key, Object logContext) {
+    if (logContext == null) return key ?? "";
+    return (key ?? "") + "|ctx:" + ObjectEntityId.GetRawValue(logContext);
+  }
+
+  static string AppendWarningContext(string message, Object logContext) {
+    if (logContext == null) return message ?? "";
+    return (message ?? "") + " gameobject='" + logContext.name + "'";
   }
 
   static string BuildRowKey(string form, string animation, int frame) {

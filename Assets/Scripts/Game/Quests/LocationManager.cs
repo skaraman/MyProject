@@ -17,9 +17,16 @@ public class LocationManager : MonoBehaviour {
   const int RuntimeActivationMaxOutstanding = 2;
   const int RuntimeActivationMaxInFlight = 1;
 
+  enum ActivationStageRole {
+    Blocking = 0,
+    Deferred = 1
+  }
+
   sealed class ActivationStagePlan {
     public Transform root;
+    public ActivationStageRole role;
     public readonly List<Transform> nodes = new();
+    public bool BlocksReveal => role == ActivationStageRole.Blocking;
   }
 
   static LocationManager runtimeInstance;
@@ -41,15 +48,21 @@ public class LocationManager : MonoBehaviour {
   readonly List<Action> actions = new();
   readonly HashSet<string> locationLibraryScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> locationLibraryListScratch = new(64);
+  readonly List<string> locationDeferredLibraryListScratch = new(64);
   readonly List<string> relativeNodeSegmentsScratch = new(16);
   LocationInfo activeLocation;
   string currentLocationId = "";
   GameObject activeLocationInstance;
-  Coroutine pendingLocationActivationRoutine;
+  Coroutine pendingBlockingLocationActivationRoutine;
+  Coroutine pendingDeferredLocationActivationRoutine;
   int pendingLocationActivationGeneration;
 
   public static bool HasPendingActivationWork =>
-    runtimeInstance != null && runtimeInstance.pendingLocationActivationRoutine != null;
+    runtimeInstance != null &&
+    (runtimeInstance.pendingBlockingLocationActivationRoutine != null ||
+     runtimeInstance.pendingDeferredLocationActivationRoutine != null);
+  public static bool HasPendingBlockingActivationWork =>
+    runtimeInstance != null && runtimeInstance.pendingBlockingLocationActivationRoutine != null;
   public string CurrentLocationId => currentLocationId;
   public LocationInfo CurrentLocation => activeLocation;
   public IReadOnlyList<LocationObjective> CurrentObjectives =>
@@ -118,7 +131,7 @@ public class LocationManager : MonoBehaviour {
     activeLocation = info;
     var logVerbose = ShouldLogVerboseLoadDebug();
 
-    if (!changedLocation && pendingLocationActivationRoutine != null) {
+    if (!changedLocation && HasPendingActivationWork) {
       if (logVerbose) {
         Debug.Log(
           "[LocationManager] Skipping duplicate pending location load id='" + resolvedId +
@@ -171,17 +184,22 @@ public class LocationManager : MonoBehaviour {
       : locationRoot != null
         ? locationRoot
         : transform;
-    var requiredLibraries = locationLibraryListScratch;
-    CollectPrefabLibraries(prefab, requiredLibraries);
+    var blockingLibraries = locationLibraryListScratch;
+    var deferredLibraries = locationDeferredLibraryListScratch;
+    CollectPrefabLibraries(prefab, blockingLibraries, includeBlockingStages: true, includeDeferredStages: false);
+    CollectPrefabLibraries(prefab, deferredLibraries, includeBlockingStages: false, includeDeferredStages: true);
+    var blockingLibrarySnapshot = blockingLibraries.Count > 0 ? new List<string>(blockingLibraries) : null;
+    var deferredLibrarySnapshot = deferredLibraries.Count > 0 ? new List<string>(deferredLibraries) : null;
     pendingLocationActivationGeneration++;
-    pendingLocationActivationRoutine = StartCoroutine(
+    pendingBlockingLocationActivationRoutine = StartCoroutine(
       ActivateLocationPrefabWhenResolverReady(
         pendingLocationActivationGeneration,
         info.id,
         prefab,
         prefabData,
         parent,
-        requiredLibraries
+        blockingLibrarySnapshot,
+        deferredLibrarySnapshot
       )
     );
     MessageBus.Send("LocationLocationChanged", null);
@@ -199,9 +217,14 @@ public class LocationManager : MonoBehaviour {
 
   void StopPendingLocationActivation() {
     pendingLocationActivationGeneration++;
-    if (pendingLocationActivationRoutine == null) return;
-    StopCoroutine(pendingLocationActivationRoutine);
-    pendingLocationActivationRoutine = null;
+    if (pendingBlockingLocationActivationRoutine != null) {
+      StopCoroutine(pendingBlockingLocationActivationRoutine);
+      pendingBlockingLocationActivationRoutine = null;
+    }
+    if (pendingDeferredLocationActivationRoutine != null) {
+      StopCoroutine(pendingDeferredLocationActivationRoutine);
+      pendingDeferredLocationActivationRoutine = null;
+    }
   }
 
   bool ShouldWaitForResolverBarrier(List<string> requiredLibraries) {
@@ -210,20 +233,48 @@ public class LocationManager : MonoBehaviour {
     return requiredLibraries != null && requiredLibraries.Count > 0;
   }
 
-  void CollectPrefabLibraries(GameObject prefab, List<string> output) {
+  void CollectPrefabLibraries(
+    GameObject prefab,
+    List<string> output,
+    bool includeBlockingStages = true,
+    bool includeDeferredStages = true
+  ) {
     if (output == null) return;
     output.Clear();
     if (prefab == null) return;
     locationLibraryScratch.Clear();
-    var targets = prefab.GetComponentsInChildren<SpriteWithNormals>(true);
-    for (var i = 0; i < targets.Length; i++) {
-      var target = targets[i];
-      if (target == null || string.IsNullOrWhiteSpace(target.libraryName)) continue;
-      locationLibraryScratch.Add(target.libraryName.Trim());
+    if (includeBlockingStages && includeDeferredStages) {
+      CollectStageLibraries(prefab.transform, locationLibraryScratch);
+    }
+    else {
+      var root = prefab.transform;
+      var bg = FindDirectChild(root, "BG");
+      var fg = FindDirectChild(root, "FG");
+      if (includeBlockingStages) {
+        CollectStageLibraries(bg, locationLibraryScratch);
+        CollectStageLibraries(FindDirectChild(fg, "Static"), locationLibraryScratch);
+        if (locationLibraryScratch.Count <= 0) {
+          CollectStageLibraries(root, locationLibraryScratch);
+        }
+      }
+      if (includeDeferredStages) {
+        CollectStageLibraries(FindDirectChild(fg, "Dynamic"), locationLibraryScratch);
+        CollectStageLibraries(FindDirectChild(fg, "Destruct"), locationLibraryScratch);
+      }
     }
     if (locationLibraryScratch.Count <= 0) return;
     foreach (var library in locationLibraryScratch) {
       output.Add(library);
+    }
+  }
+
+  static void CollectStageLibraries(Transform root, HashSet<string> output) {
+    if (root == null || output == null) return;
+    var targets = root.GetComponentsInChildren<SpriteWithNormals>(true);
+    for (var i = 0; i < targets.Length; i++) {
+      var target = targets[i];
+      if (target == null || string.IsNullOrWhiteSpace(target.libraryName)) continue;
+      output.Add(target.libraryName.Trim());
     }
   }
 
@@ -233,19 +284,20 @@ public class LocationManager : MonoBehaviour {
     GameObject prefab,
     LocationPrefabData prefabData,
     Transform parent,
-    List<string> requiredLibraries
+    List<string> blockingLibraries,
+    List<string> deferredLibraries
   ) {
-    var shouldWaitForBarrier = ShouldWaitForResolverBarrier(requiredLibraries);
+    var shouldWaitForBarrier = ShouldWaitForResolverBarrier(blockingLibraries);
     var logVerbose = ShouldLogVerboseLoadDebug();
-    if (requiredLibraries != null && requiredLibraries.Count > 0) {
-      SpriteRuntimeResolver.WarmupLibraries(requiredLibraries);
+    if (blockingLibraries != null && blockingLibraries.Count > 0) {
+      SpriteRuntimeResolver.WarmupLibraries(blockingLibraries);
     }
 
     var startedAt = Time.realtimeSinceStartup;
     if (shouldWaitForBarrier && logVerbose) {
       Debug.Log(
         "[LocationManager] Deferring location activation id='" + locationId +
-        "' libraries=" + requiredLibraries.Count +
+        "' libraries=" + blockingLibraries.Count +
         " overlay_active=1"
       );
     }
@@ -253,7 +305,7 @@ public class LocationManager : MonoBehaviour {
     while (shouldWaitForBarrier &&
            activationGeneration == pendingLocationActivationGeneration &&
            SpriteStreamingLoadingState.IsLoadingOverlayActive &&
-           !SpriteRuntimeResolver.AreShardsReady(requiredLibraries)) {
+           !SpriteRuntimeResolver.AreShardsReady(blockingLibraries)) {
       var waitedSeconds = Time.realtimeSinceStartup - startedAt;
       if (waitedSeconds >= OverlayLocationResolverBarrierTimeoutSeconds) {
         break;
@@ -262,18 +314,18 @@ public class LocationManager : MonoBehaviour {
     }
 
     if (activationGeneration != pendingLocationActivationGeneration) {
-      pendingLocationActivationRoutine = null;
+      pendingBlockingLocationActivationRoutine = null;
       yield break;
     }
 
     if (!string.Equals(currentLocationId, locationId, StringComparison.OrdinalIgnoreCase)) {
-      pendingLocationActivationRoutine = null;
+      pendingBlockingLocationActivationRoutine = null;
       yield break;
     }
 
     if (shouldWaitForBarrier && logVerbose) {
       var totalWaitSeconds = Time.realtimeSinceStartup - startedAt;
-      var shardsReady = SpriteRuntimeResolver.AreShardsReady(requiredLibraries);
+      var shardsReady = SpriteRuntimeResolver.AreShardsReady(blockingLibraries);
       Debug.Log(
         "[LocationManager] Activating deferred location id='" + locationId +
         "' waited_s=" + totalWaitSeconds.ToString("0.000") +
@@ -285,15 +337,38 @@ public class LocationManager : MonoBehaviour {
     if (TryInstantiateStagedLocationPrefab(locationId, prefab, prefabData, parent, out var stagedInstance, out var stagePlans)) {
       activeLocationInstance = stagedInstance;
       MessageBus.Send("LocationLocationChanged", activeLocationInstance);
-      yield return ActivateLocationStageChildren(activationGeneration, locationId, stagePlans);
+      SplitActivationStagePlans(stagePlans, out var blockingPlans, out var deferredPlans);
+      if (logVerbose) {
+        Debug.Log(
+          "[LocationManager] Stage split id='" + locationId +
+          "' blocking_stages=" + blockingPlans.Count +
+          " deferred_stages=" + deferredPlans.Count
+        );
+      }
+      if (blockingPlans.Count > 0) {
+        yield return ActivateLocationStageChildren(activationGeneration, locationId, blockingPlans);
+      }
       if (activationGeneration == pendingLocationActivationGeneration) {
-        pendingLocationActivationRoutine = null;
+        pendingBlockingLocationActivationRoutine = null;
+      }
+      if (activationGeneration != pendingLocationActivationGeneration) {
+        yield break;
+      }
+      if (deferredPlans.Count > 0) {
+        pendingDeferredLocationActivationRoutine = StartCoroutine(
+          ActivateDeferredLocationStageChildrenAfterReveal(
+            activationGeneration,
+            locationId,
+            deferredPlans,
+            deferredLibraries
+          )
+        );
       }
       yield break;
     }
 
     activeLocationInstance = InstantiateConfiguredLocationPrefab(locationId, prefab, prefabData, parent);
-    pendingLocationActivationRoutine = null;
+    pendingBlockingLocationActivationRoutine = null;
     MessageBus.Send("LocationLocationChanged", activeLocationInstance);
   }
 
@@ -335,21 +410,56 @@ public class LocationManager : MonoBehaviour {
     if (contentRoot == null) return false;
 
     var orderedPlans = new List<ActivationStagePlan>(4);
-    AddStagePlan(orderedPlans, FindDirectChild(contentRoot, "BG"));
+    AddStagePlan(orderedPlans, FindDirectChild(contentRoot, "BG"), ActivationStageRole.Blocking);
     var fg = FindDirectChild(contentRoot, "FG");
-    AddStagePlan(orderedPlans, FindDirectChild(fg, "Static"));
-    AddStagePlan(orderedPlans, FindDirectChild(fg, "Dynamic"));
-    AddStagePlan(orderedPlans, FindDirectChild(fg, "Destruct"));
+    AddStagePlan(orderedPlans, FindDirectChild(fg, "Static"), ActivationStageRole.Blocking);
+    AddStagePlan(orderedPlans, FindDirectChild(fg, "Dynamic"), ActivationStageRole.Deferred);
+    AddStagePlan(orderedPlans, FindDirectChild(fg, "Destruct"), ActivationStageRole.Deferred);
     if (orderedPlans.Count <= 0) return false;
+    var hasBlockingStage = false;
+    for (var i = 0; i < orderedPlans.Count; i++) {
+      if (!orderedPlans[i].BlocksReveal) continue;
+      hasBlockingStage = true;
+      break;
+    }
+    if (!hasBlockingStage) {
+      orderedPlans[0].role = ActivationStageRole.Blocking;
+    }
     stagePlans = orderedPlans;
     return true;
   }
 
-  static void AddStagePlan(List<ActivationStagePlan> stagePlans, Transform stageRoot) {
+  static void AddStagePlan(List<ActivationStagePlan> stagePlans, Transform stageRoot, ActivationStageRole role) {
     if (stagePlans == null || stageRoot == null) return;
-    var plan = new ActivationStagePlan { root = stageRoot };
+    var plan = new ActivationStagePlan { root = stageRoot, role = role };
     CollectActivationNodesDepthFirst(stageRoot, plan.nodes);
     stagePlans.Add(plan);
+  }
+
+  static void SplitActivationStagePlans(
+    List<ActivationStagePlan> source,
+    out List<ActivationStagePlan> blockingPlans,
+    out List<ActivationStagePlan> deferredPlans
+  ) {
+    blockingPlans = new List<ActivationStagePlan>(source != null ? source.Count : 0);
+    deferredPlans = new List<ActivationStagePlan>(source != null ? source.Count : 0);
+    if (source == null || source.Count <= 0) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      var plan = source[i];
+      if (plan == null || plan.root == null) continue;
+      if (plan.BlocksReveal) {
+        blockingPlans.Add(plan);
+      }
+      else {
+        deferredPlans.Add(plan);
+      }
+    }
+
+    if (blockingPlans.Count <= 0 && deferredPlans.Count > 0) {
+      blockingPlans.Add(deferredPlans[0]);
+      deferredPlans.RemoveAt(0);
+    }
   }
 
   static Transform FindDirectChild(Transform parent, string childName) {
@@ -450,6 +560,31 @@ public class LocationManager : MonoBehaviour {
         "[LocationManager] Completed staged activation id='" + locationId +
         "' stages=" + stagePlans.Count
       );
+    }
+  }
+
+  IEnumerator ActivateDeferredLocationStageChildrenAfterReveal(
+    int activationGeneration,
+    string locationId,
+    List<ActivationStagePlan> deferredPlans,
+    List<string> deferredLibraries
+  ) {
+    if (deferredLibraries != null && deferredLibraries.Count > 0) {
+      SpriteRuntimeResolver.WarmupLibraries(deferredLibraries);
+    }
+    while (activationGeneration == pendingLocationActivationGeneration &&
+           SpriteStreamingLoadingState.IsLoadingOverlayActive) {
+      yield return null;
+    }
+    if (activationGeneration != pendingLocationActivationGeneration ||
+        !string.Equals(currentLocationId, locationId, StringComparison.OrdinalIgnoreCase)) {
+      pendingDeferredLocationActivationRoutine = null;
+      yield break;
+    }
+
+    yield return ActivateLocationStageChildren(activationGeneration, locationId, deferredPlans);
+    if (activationGeneration == pendingLocationActivationGeneration) {
+      pendingDeferredLocationActivationRoutine = null;
     }
   }
 

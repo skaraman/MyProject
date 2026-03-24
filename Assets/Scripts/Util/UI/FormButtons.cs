@@ -4,50 +4,103 @@ using UnityEngine;
 public class FormButtons : ButtonGroup {
 
   void Start() {
-    foreach (var btn in buttons) {
-      if (btn.name == "Base") continue;
-      foreach (var form in EsperanzaForms.Unlocked) {
-        if (btn.name == form.Key) {
-          btn.GetComponent<ReferenceListGameObject>().Get(2).SetActive(false);
-          btn.GetComponent<ReferenceListGameObject>().Get(1).SetActive(true);
-        }
+    RefreshState();
+  }
+
+  void OnEnable() {
+    RefreshState();
+  }
+
+  public void RefreshState() {
+    RefreshUnlockedVisuals();
+    SyncActiveFormSelection();
+  }
+
+  public void RefreshUnlockedVisuals() {
+    for (var i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) continue;
+
+      var refs = button.GetComponent<ReferenceListGameObject>();
+      if (refs == null) continue;
+
+      var isUnlocked = EsperanzaForms.IsUnlocked(button.name);
+      var activeState = refs.Get(0);
+      var idleState = refs.Get(1);
+      var lockedState = refs.Get(2);
+
+      if (lockedState != null) {
+        lockedState.SetActive(!isUnlocked);
+      }
+
+      if (!isUnlocked) {
+        if (activeState != null) activeState.SetActive(false);
+        if (idleState != null) idleState.SetActive(false);
+        continue;
+      }
+
+      if (activeIndex == i) {
+        if (activeState != null) activeState.SetActive(true);
+        if (idleState != null) idleState.SetActive(false);
+      } else {
+        if (activeState != null) activeState.SetActive(false);
+        if (idleState != null) idleState.SetActive(true);
       }
     }
   }
 
-  protected override void HandleActiveState(GameObject button) {
-    if (button.GetComponent<ReferenceListGameObject>().Get(2)) {
-      if (button.GetComponent<ReferenceListGameObject>().Get(2).activeSelf) return;
+  public void SyncActiveFormSelection() {
+    var activeForm = EsperanzaForms.GetActive();
+    if (string.IsNullOrWhiteSpace(activeForm)) {
+      SetActiveIndex(-1);
+      return;
     }
-    button.GetComponent<ReferenceListGameObject>().Get(0).SetActive(true);
-    button.GetComponent<ReferenceListGameObject>().Get(1).SetActive(false);
+
+    for (var i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) continue;
+      if (!string.Equals(button.name, activeForm, System.StringComparison.OrdinalIgnoreCase)) continue;
+      SetActiveIndex(i);
+      return;
+    }
+
+    SetActiveIndex(-1);
+  }
+
+  protected override void HandleActiveState(GameObject button) {
+    if (IsLocked(button)) return;
+    var refs = button.GetComponent<ReferenceListGameObject>();
+    if (refs == null) return;
+    refs.Get(0)?.SetActive(true);
+    refs.Get(1)?.SetActive(false);
   }
 
   protected override void HandleInactiveState(GameObject button) {
-    if (button.GetComponent<ReferenceListGameObject>().Get(2)) {
-      if (button.GetComponent<ReferenceListGameObject>().Get(2).activeSelf) return;
-    }
-    button.GetComponent<ReferenceListGameObject>().Get(0).SetActive(false);
-    button.GetComponent<ReferenceListGameObject>().Get(1).SetActive(true);
+    if (IsLocked(button)) return;
+    var refs = button.GetComponent<ReferenceListGameObject>();
+    if (refs == null) return;
+    refs.Get(0)?.SetActive(false);
+    refs.Get(1)?.SetActive(true);
   }
 
   protected override void HandleHoverState(GameObject button) {
-    if (button.GetComponent<ReferenceListGameObject>().Get(2)) {
-      if (button.GetComponent<ReferenceListGameObject>().Get(2).activeSelf) return;
-    }
-    var shader = button.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(0);
-    var shader2 = button.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(1);
-    shader.SetKeyword("OUTBASE_ON", true);
-    shader2.SetKeyword("OUTBASE_ON", true);
+    if (IsLocked(button)) return;
+    var shaders = button.GetComponent<ReferenceListAllIn1AnimatorInspector>();
+    if (shaders == null) return;
+    shaders.Get(0)?.SetKeyword("OUTBASE_ON", true);
+    shaders.Get(1)?.SetKeyword("OUTBASE_ON", true);
   }
 
   protected override void HandleUnhoverState(GameObject button) {
-    if (button.GetComponent<ReferenceListGameObject>().Get(2)) {
-      if (button.GetComponent<ReferenceListGameObject>().Get(2).activeSelf) return;
-    }
-    var shader = button.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(0);
-    var shader2 = button.GetComponent<ReferenceListAllIn1AnimatorInspector>().Get(1);
-    shader2.SetKeyword("OUTBASE_ON", false);
-    shader.SetKeyword("OUTBASE_ON", false);
+    if (IsLocked(button)) return;
+    var shaders = button.GetComponent<ReferenceListAllIn1AnimatorInspector>();
+    if (shaders == null) return;
+    shaders.Get(1)?.SetKeyword("OUTBASE_ON", false);
+    shaders.Get(0)?.SetKeyword("OUTBASE_ON", false);
+  }
+
+  bool IsLocked(GameObject button) {
+    if (button == null) return true;
+    return !EsperanzaForms.IsUnlocked(button.name);
   }
 }

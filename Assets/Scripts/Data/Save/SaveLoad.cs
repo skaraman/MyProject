@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
 using UnityEngine;
 
@@ -74,6 +73,7 @@ public class SaveData : Dictionary<string, object> {
   /// Flattens any complex object into primitive key-value pairs
   /// </summary>
   public void SetComplex<T>(string prefix, T obj) {
+    ClearPrefix(prefix);
     var flattened = FlattenObject(prefix, obj);
     foreach (var kvp in flattened) {
       this[kvp.Key] = kvp.Value;
@@ -185,116 +185,213 @@ public class SaveData : Dictionary<string, object> {
   }
 
   private T UnflattenObject<T>(string prefix, Func<T> constructor) {
-    // Check if object was null
-    if (ContainsKey($"{prefix}_null") && (bool)this[$"{prefix}_null"]) {
-      return default(T);
+    var resolved = UnflattenValue(prefix, typeof(T), () => constructor());
+    if (resolved == null) {
+      return default;
     }
 
-    var type = typeof(T);
-    var obj = constructor();
-
-    // Handle Dictionary<string, TValue>
-    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
-        type.GetGenericArguments()[0] == typeof(string)) {
-
-      var valueType = type.GetGenericArguments()[1];
-      var dict = obj as System.Collections.IDictionary;
-
-      if (ContainsKey($"{prefix}_count")) {
-        var keys = this.Keys.Where(k => k.StartsWith($"{prefix}_") && k != $"{prefix}_count")
-          .Select(k => k.Substring($"{prefix}_".Length))
-          .Where(k => !k.Contains("_") || IsComplexKey(k, prefix))
-          .Distinct();
-
-        foreach (var key in keys) {
-          var value = UnflattenValue($"{prefix}_{key}", valueType);
-          if (value != null || !valueType.IsValueType) {
-            dict[key] = value;
-          }
-        }
-      }
-      return obj;
+    if (resolved is T typedValue) {
+      return typedValue;
     }
 
-    // Handle Lists
-    if (typeof(System.Collections.IList).IsAssignableFrom(type) && type.IsGenericType) {
-      var list = obj as System.Collections.IList;
-      var elementType = type.GetGenericArguments()[0];
+    return (T)Convert.ChangeType(resolved, typeof(T));
+  }
 
-      if (ContainsKey($"{prefix}_count")) {
-        int count = (int)this[$"{prefix}_count"];
-        for (int i = 0; i < count; i++) {
-          var value = UnflattenValue($"{prefix}_{i}", elementType);
-          list.Add(value);
-        }
-      }
-      return obj;
+  private object UnflattenValue(string prefix, Type targetType, Func<object> constructor = null) {
+    if (ContainsKey($"{prefix}_null") && Convert.ToBoolean(this[$"{prefix}_null"])) {
+      return null;
     }
 
-    // Handle custom objects
-    var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                        .Where(p => p.CanRead && p.CanWrite);
-    var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
+    var nullableUnderlyingType = Nullable.GetUnderlyingType(targetType);
+    if (nullableUnderlyingType != null) {
+      return UnflattenValue(prefix, nullableUnderlyingType, constructor);
+    }
 
-    foreach (var prop in properties) {
-      try {
-        var value = UnflattenValue($"{prefix}_{prop.Name}", prop.PropertyType);
-        if (value != null || !prop.PropertyType.IsValueType) {
-          prop.SetValue(obj, value);
-        }
+    if (IsPrimitive(targetType)) {
+      if (!ContainsKey(prefix)) {
+        return GetDefaultValue(targetType);
       }
-      catch (Exception e) {
-        Debug.LogWarning($"Failed to unflatten property {prop.Name}: {e.Message}");
+
+      return Convert.ChangeType(this[prefix], targetType);
+    }
+
+    if (IsStringKeyDictionary(targetType)) {
+      return UnflattenDictionary(prefix, targetType, constructor);
+    }
+
+    if (IsListType(targetType)) {
+      return UnflattenList(prefix, targetType, constructor);
+    }
+
+    if (!HasPrefix(prefix)) {
+      return constructor != null ? constructor() : GetDefaultValue(targetType);
+    }
+
+    var instance = constructor != null ? constructor() : CreateInstance(targetType);
+    if (instance == null) {
+      return GetDefaultValue(targetType);
+    }
+
+    PopulateObject(instance, prefix, targetType);
+    return instance;
+  }
+
+  object UnflattenDictionary(string prefix, Type targetType, Func<object> constructor = null) {
+    var valueType = targetType.GetGenericArguments()[1];
+    var dictionary = (System.Collections.IDictionary)(constructor != null ? constructor() : CreateInstance(targetType));
+    if (dictionary == null) {
+      return GetDefaultValue(targetType);
+    }
+
+    foreach (var childKey in GetDirectChildKeys(prefix)) {
+      var valuePrefix = $"{prefix}_{childKey}";
+      var value = UnflattenValue(valuePrefix, valueType);
+      dictionary[childKey] = value;
+    }
+
+    return dictionary;
+  }
+
+  object UnflattenList(string prefix, Type targetType, Func<object> constructor = null) {
+    var list = (System.Collections.IList)(constructor != null ? constructor() : CreateInstance(targetType));
+    if (list == null) {
+      return GetDefaultValue(targetType);
+    }
+
+    var elementType = targetType.IsArray
+      ? targetType.GetElementType()
+      : targetType.GetGenericArguments()[0];
+    var indexedPrefixes = GetDirectChildKeys(prefix)
+      .Select(key => {
+        var parsed = int.TryParse(key, out var index);
+        return new { key, parsed, index };
+      })
+      .Where(entry => entry.parsed)
+      .OrderBy(entry => entry.index);
+
+    if (targetType.IsArray) {
+      var values = new List<object>();
+      foreach (var entry in indexedPrefixes) {
+        values.Add(UnflattenValue($"{prefix}_{entry.key}", elementType));
       }
+
+      var array = Array.CreateInstance(elementType, values.Count);
+      for (var i = 0; i < values.Count; i++) {
+        array.SetValue(values[i], i);
+      }
+      return array;
+    }
+
+    foreach (var entry in indexedPrefixes) {
+      list.Add(UnflattenValue($"{prefix}_{entry.key}", elementType));
+    }
+
+    return list;
+  }
+
+  void PopulateObject(object instance, string prefix, Type targetType) {
+    var properties = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+      .Where(p => p.CanRead && p.CanWrite);
+    var fields = targetType.GetFields(BindingFlags.Public | BindingFlags.Instance);
+
+    foreach (var property in properties) {
+      TryAssignMember(
+        instance,
+        prefix,
+        property.Name,
+        property.PropertyType,
+        value => property.SetValue(instance, value),
+        $"property {property.Name}"
+      );
     }
 
     foreach (var field in fields) {
-      try {
-        var value = UnflattenValue($"{prefix}_{field.Name}", field.FieldType);
-        if (value != null || !field.FieldType.IsValueType) {
-          field.SetValue(obj, value);
-        }
-      }
-      catch (Exception e) {
-        Debug.LogWarning($"Failed to unflatten field {field.Name}: {e.Message}");
-      }
+      TryAssignMember(
+        instance,
+        prefix,
+        field.Name,
+        field.FieldType,
+        value => field.SetValue(instance, value),
+        $"field {field.Name}"
+      );
     }
-
-    return obj;
   }
 
-  private object UnflattenValue(string prefix, Type targetType) {
-    if (IsPrimitive(targetType)) {
-      return ContainsKey(prefix) ? Convert.ChangeType(this[prefix], targetType) : GetDefaultValue(targetType);
+  void TryAssignMember(
+    object instance,
+    string prefix,
+    string memberName,
+    Type memberType,
+    Action<object> assign,
+    string description
+  ) {
+    var memberPrefix = $"{prefix}_{memberName}";
+    if (!HasPrefix(memberPrefix)) {
+      return;
     }
 
-    if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Dictionary<,>)) {
-      var method = typeof(SaveData).GetMethod(nameof(UnflattenObject), BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(string), typeof(Func<>).MakeGenericType(targetType) }, null);
-      var genericMethod = method.MakeGenericMethod(targetType);
-      var constructor = Expression.Lambda(Expression.New(targetType)).Compile();
-      return genericMethod.Invoke(this, new object[] { prefix, constructor });
+    try {
+      var value = UnflattenValue(memberPrefix, memberType);
+      if (value == null && memberType.IsValueType && Nullable.GetUnderlyingType(memberType) == null) {
+        return;
+      }
+      assign(value);
     }
-
-    if (typeof(System.Collections.IList).IsAssignableFrom(targetType) && targetType.IsGenericType) {
-      var method = typeof(SaveData).GetMethod(nameof(UnflattenObject), BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(string) }, null);
-      var genericMethod = method.MakeGenericMethod(targetType);
-      return genericMethod.Invoke(this, new object[] { prefix });
+    catch (Exception e) {
+      Debug.LogWarning($"Failed to unflatten {description}: {e.Message}");
     }
-
-    // Custom objects
-    if (targetType.GetConstructor(Type.EmptyTypes) != null) {
-      var method = typeof(SaveData).GetMethod(nameof(UnflattenObject), BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(string) }, null);
-      var genericMethod = method.MakeGenericMethod(targetType);
-      return genericMethod.Invoke(this, new object[] { prefix });
-    }
-
-    return GetDefaultValue(targetType);
   }
 
-  private bool IsComplexKey(string key, string prefix) {
-    var remaining = key;
-    var parts = remaining.Split('_');
-    return parts.Length == 1; // Simple key like "Base", not nested like "Base_SomeProperty"
+  IEnumerable<string> GetDirectChildKeys(string prefix) {
+    var childPrefix = $"{prefix}_";
+    var directChildren = new HashSet<string>(StringComparer.Ordinal);
+
+    foreach (var key in Keys) {
+      if (!key.StartsWith(childPrefix, StringComparison.Ordinal)) {
+        continue;
+      }
+
+      if (string.Equals(key, $"{prefix}_count", StringComparison.Ordinal) ||
+          string.Equals(key, $"{prefix}_null", StringComparison.Ordinal)) {
+        continue;
+      }
+
+      var remainder = key.Substring(childPrefix.Length);
+      if (string.IsNullOrWhiteSpace(remainder)) {
+        continue;
+      }
+
+      var separatorIndex = remainder.IndexOf('_');
+      var childKey = separatorIndex >= 0 ? remainder.Substring(0, separatorIndex) : remainder;
+      if (!string.IsNullOrWhiteSpace(childKey)) {
+        directChildren.Add(childKey);
+      }
+    }
+
+    return directChildren;
+  }
+
+  bool IsStringKeyDictionary(Type type) {
+    return type.IsGenericType &&
+           type.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
+           type.GetGenericArguments()[0] == typeof(string);
+  }
+
+  bool IsListType(Type type) {
+    if (type.IsArray) {
+      return true;
+    }
+
+    return typeof(System.Collections.IList).IsAssignableFrom(type) && type.IsGenericType;
+  }
+
+  object CreateInstance(Type type) {
+    try {
+      return Activator.CreateInstance(type);
+    }
+    catch {
+      return null;
+    }
   }
 
   private bool IsPrimitive(Type type) {
@@ -314,7 +411,10 @@ public class SaveData : Dictionary<string, object> {
   /// Remove all keys with the specified prefix
   /// </summary>
   public void ClearPrefix(string prefix) {
-    var keysToRemove = Keys.Where(k => k.StartsWith(prefix)).ToList();
+    var keysToRemove = Keys
+      .Where(k => string.Equals(k, prefix, StringComparison.Ordinal) ||
+                  k.StartsWith($"{prefix}_", StringComparison.Ordinal))
+      .ToList();
     foreach (var key in keysToRemove) {
       Remove(key);
     }
@@ -324,14 +424,16 @@ public class SaveData : Dictionary<string, object> {
   /// Check if any keys exist with the specified prefix
   /// </summary>
   public bool HasPrefix(string prefix) {
-    return Keys.Any(k => k.StartsWith(prefix));
+    return Keys.Any(k => string.Equals(k, prefix, StringComparison.Ordinal) ||
+                         k.StartsWith($"{prefix}_", StringComparison.Ordinal));
   }
 
   /// <summary>
   /// Get all keys with the specified prefix
   /// </summary>
   public IEnumerable<string> GetKeysWithPrefix(string prefix) {
-    return Keys.Where(k => k.StartsWith(prefix));
+    return Keys.Where(k => string.Equals(k, prefix, StringComparison.Ordinal) ||
+                           k.StartsWith($"{prefix}_", StringComparison.Ordinal));
   }
   #endregion
 }

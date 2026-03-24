@@ -93,12 +93,11 @@ namespace CustomInspector.Extensions
                 else if (type == typeof(ulong))
                     return (ulong)property.longValue;
 #endif
-                else if (type == typeof(short))
-                    return (short)property.intValue;
-                else if (type == typeof(ushort))
-                    return (ushort)property.intValue;
-                else if (type == typeof(byte))
-                    return (byte)property.intValue;
+                else if (type == typeof(short)
+                    || type == typeof(ushort)
+                    || type == typeof(byte)
+                    || type == typeof(sbyte))
+                    return Convert.ChangeType(property.intValue, type);
                 else
                 {
                     Debug.LogError($"Unimplemented int type: {type}");

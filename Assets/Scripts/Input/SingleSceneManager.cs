@@ -3,7 +3,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using CustomInspector;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 
 public class SingleSceneManager : MonoBehaviour {
@@ -120,6 +122,9 @@ public class SingleSceneManager : MonoBehaviour {
   public SaveSlotView saveSlotView;
   [Header("Player Bootstrap")]
   [SerializeField] GameObject playerCharacterPrefab;
+  [Header("Debug")]
+  [SerializeField] bool debugMode;
+  [SerializeField, ShowIf(nameof(debugMode)), AssetsOnly] GameObject debugLocationPrefab;
   // Loading policy: the overlay animation should keep advancing while work is in flight.
   // A heartbeat gap over 2 seconds counts as a loading hitch and requires investigation.
   const bool useScenarioWarmGate = true;
@@ -186,6 +191,7 @@ public class SingleSceneManager : MonoBehaviour {
   const float postUnlockPinReleaseDelaySeconds = 8.0f;
   const int postUnlockPinReleaseMaxOutstanding = 192;
   const float postUnlockPinReleaseTimeoutSeconds = 20.0f;
+  const int startupLoadMenuPrewarmFrames = 2;
   static readonly WaitForSecondsRealtime FadeToBlackDelay = new(Mathf.Max(fadeToBlackSeconds, 0f));
   static readonly WaitForSecondsRealtime WarmGateLeadDelay = new(Mathf.Max(fadeLeadSeconds, 0f));
   static readonly WaitForSecondsRealtime FallbackTransitionDelay = new(Mathf.Max(fallbackTransitionSeconds, 0f));
@@ -202,9 +208,11 @@ public class SingleSceneManager : MonoBehaviour {
   private Coroutine startGameRoutine;
   private Coroutine resumeGameplayRoutine;
   private Coroutine startupGameplayRoutine;
+  private Coroutine startupMainMenuRevealRoutine;
   private Coroutine startupFadeWatchdogRoutine;
   private Coroutine unlockFadeFailSafeRoutine;
   private Coroutine sectionTransitionRoutine;
+  private Coroutine deferredPostRevealWarmupRoutine;
   private GearController cachedPlayerGearController;
   private int pauseMenuOpenAppearanceRevision = -1;
   private bool holdBlackscreenOpaqueDuringLoad;
@@ -216,6 +224,10 @@ public class SingleSceneManager : MonoBehaviour {
   private Section settingsReturnTarget = Section.MainMenu;
   private Section currentSection = Section.None;
   private Section pendingRevealSection = Section.None;
+  private bool dialogInputOverrideActive;
+  private bool startupInDebugGameplay;
+  private bool loadMenuStartupPrewarmed;
+  private string startupDebugLocationId = "";
   private GameObject settingsCloseButton;
   private GameObject settingsHoveredTarget;
   private string activeInputMap = "";
@@ -228,6 +240,8 @@ public class SingleSceneManager : MonoBehaviour {
   readonly List<string> preUnlockResidentPinAddressScratch = new(16384);
   readonly List<string> preUnlockResidentPinReadyAddressScratch = new(16384);
   readonly HashSet<string> preUnlockResidentPinSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  readonly List<string> deferredPostRevealWarmupAddressScratch = new(4096);
+  readonly HashSet<string> deferredPostRevealWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly Stack<Transform> findChildScratch = new(64);
   readonly Stack<IEnumerator> preUnlockEnumeratorStack = new(32);
   readonly List<string> warmRequestCriticalLibrariesScratch = new(64);
@@ -269,6 +283,7 @@ public class SingleSceneManager : MonoBehaviour {
   void RegisterMessageBusHandlers() {
     actions.Add(MessageBus.On("startGame", o => StartGame()));
     actions.Add(MessageBus.On("openLoadMenu", o => OpenLoadMenu()));
+    actions.Add(MessageBus.On("closeLoadMenu", o => CloseLoadMenu()));
     actions.Add(MessageBus.On("openSettingsMenu", o => OpenSettingsMenu()));
     actions.Add(MessageBus.On("backToMainMenu", o => OpenMainMenu()));
     actions.Add(MessageBus.On("settingsMenu.click", o => OnSettingsMenuClick(o)));
@@ -277,9 +292,11 @@ public class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("settingsMenu.select", o => OnSettingsMenuSelect()));
     actions.Add(MessageBus.On("settingsMenu.cancel", o => CloseSettingsMenu()));
 
-    actions.Add(MessageBus.On("closePauseMenu", o => OpenGameplay()));
+    actions.Add(MessageBus.On("closePauseMenu", o => ClosePauseMenu()));
     actions.Add(MessageBus.On("openPauseMenu", o => OpenPauseMenu()));
     actions.Add(MessageBus.On("LocationUpdated", o => OnLocationUpdated(o)));
+    actions.Add(MessageBus.On("dialog.started", o => OnDialogStarted(o)));
+    actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
   }
 
   void Update() {
@@ -296,24 +313,87 @@ public class SingleSceneManager : MonoBehaviour {
         init = true;
         return;
       }
-      PrepareLoadingScreenCarrier();
-      SetLoadingBlackscreenHold(false);
-      ForceBlackscreenVisible(true);
-      LogSectionTransitionState("startup_reveal_begin", Section.None, ResolveCurrentSection(), "MainMenuStartup", false);
-      if (blackscreen != null) {
-        PlayBlackscreen("alphaOut");
+      if (startupMainMenuRevealRoutine == null) {
+        startupMainMenuRevealRoutine = StartCoroutine(StartupMainMenuRevealRoutine());
       }
-      else {
-        // Startup must never remain black if animator wiring is missing.
-        SetLoadingBlackscreenHold(false);
-        ForceBlackscreenVisible(false);
-      }
-      if (startupFadeWatchdogRoutine != null) {
-        StopCoroutine(startupFadeWatchdogRoutine);
-      }
-      startupFadeWatchdogRoutine = StartCoroutine(StartupFadeWatchdogRoutine());
       init = true;
+      return;
     }
+
+    HandleDebugMainMenuShortcut();
+  }
+
+  IEnumerator StartupMainMenuRevealRoutine() {
+    PrepareLoadingScreenCarrier();
+    SetLoadingBlackscreenHold(true);
+    ForceBlackscreenVisible(true);
+    yield return PrewarmLoadMenuForStartupRoutine();
+    BeginStartupMainMenuReveal();
+    startupMainMenuRevealRoutine = null;
+  }
+
+  IEnumerator PrewarmLoadMenuForStartupRoutine() {
+    if (loadMenuStartupPrewarmed) yield break;
+
+    if (LoadMenu == null) {
+      loadMenuStartupPrewarmed = true;
+      yield break;
+    }
+
+    var restoreSection = ResolveCurrentSection();
+    if (restoreSection == Section.None) {
+      restoreSection = Section.MainMenu;
+    }
+
+    var startedAt = Time.realtimeSinceStartup;
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][LoadMenuPrewarm] stage=begin" +
+        " restore_section=" + restoreSection +
+        " saves=" + (saveSlotView != null ? saveSlotView.SavesCount : -1) +
+        " active_input_map=" + activeInputMap
+      );
+    }
+
+    _SwitchMap("none");
+    ApplySectionActivation(Section.LoadMenu);
+
+    for (var i = 0; i < startupLoadMenuPrewarmFrames; i++) {
+      yield return null;
+    }
+
+    ApplySectionActivation(restoreSection);
+    ApplyInputForSection(restoreSection);
+    loadMenuStartupPrewarmed = true;
+
+    if (!ShouldLogLoadFlowDebug()) yield break;
+
+    Debug.Log(
+      "[SingleSceneManager][LoadMenuPrewarm] stage=complete" +
+      " restore_section=" + restoreSection +
+      " saves=" + (saveSlotView != null ? saveSlotView.SavesCount : -1) +
+      " warm_frames=" + startupLoadMenuPrewarmFrames +
+      " elapsed_ms=" + ((Time.realtimeSinceStartup - startedAt) * 1000f).ToString("0.0")
+    );
+  }
+
+  void BeginStartupMainMenuReveal() {
+    PrepareLoadingScreenCarrier();
+    SetLoadingBlackscreenHold(false);
+    ForceBlackscreenVisible(true);
+    LogSectionTransitionState("startup_reveal_begin", Section.None, ResolveCurrentSection(), "MainMenuStartup", false);
+    if (blackscreen != null) {
+      PlayBlackscreen("alphaOut");
+    }
+    else {
+      // Startup must never remain black if animator wiring is missing.
+      SetLoadingBlackscreenHold(false);
+      ForceBlackscreenVisible(false);
+    }
+    if (startupFadeWatchdogRoutine != null) {
+      StopCoroutine(startupFadeWatchdogRoutine);
+    }
+    startupFadeWatchdogRoutine = StartCoroutine(StartupFadeWatchdogRoutine());
   }
 
   void InitializeLoadingScreenReferences() {
@@ -584,7 +664,7 @@ public class SingleSceneManager : MonoBehaviour {
       out var blockingCriticalReady,
       out var blockingHardBypassUsed
     );
-    var locationActivationPending = LocationManager.HasPendingActivationWork;
+    var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
     if (hasBlockingProgress && (blockingTotalCount > 0 || blockingProgress > 0f)) {
       loadingProgressObservedWork = true;
     }
@@ -862,6 +942,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   static bool ShouldLogLoadFlowWarnings() {
+    if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
     return Application.isEditor || Debug.isDebugBuild;
   }
 
@@ -957,7 +1038,7 @@ public class SingleSceneManager : MonoBehaviour {
       out var blockingCriticalReady,
       out var blockingHardBypassUsed
     );
-    var locationActivationPending = LocationManager.HasPendingActivationWork;
+    var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
 
     var infoBuilder = BeginLoadFlowLog("[SingleSceneManager][LoadingHeartbeat]");
     AppendLoadFlowFloat(infoBuilder, "elapsed_s", now - loadingHeartbeatStartedAt);
@@ -1276,7 +1357,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   static bool ShouldLogSectionTransitionDebug() {
-    return Application.isEditor || Debug.isDebugBuild;
+    return ShouldLogLoadFlowDebug();
   }
 
   void LogSectionTransitionState(string stage, Section fromSection, Section toSection, string overlayTag, bool showProgressUi) {
@@ -1339,7 +1420,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   GearController ResolveBestAvailablePlayerController() {
-    var activeControllers = FindObjectsByType<GearController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+    var activeControllers = FindObjectsByType<GearController>(FindObjectsInactive.Exclude);
     for (var i = 0; i < activeControllers.Length; i++) {
       var candidate = activeControllers[i];
       if (IsPreferredGameplayPlayerController(candidate)) {
@@ -1448,7 +1529,7 @@ public class SingleSceneManager : MonoBehaviour {
   CharacterState ResolvePlayerCharacterState() {
     var player = ResolvePlayerGearController();
     var characterState = player != null ? player.GetComponent<CharacterState>() : null;
-    return characterState ?? FindFirstObjectByType<CharacterState>();
+    return characterState ?? FindAnyObjectByType<CharacterState>();
   }
 
   void ApplyGameplayPlayerReferences(GameObject playerRoot, string source, bool instantiated) {
@@ -1460,7 +1541,7 @@ public class SingleSceneManager : MonoBehaviour {
       cachedPlayerGearController = gear;
     }
 
-    var gameplayInput = FindFirstObjectByType<GameplayInput>();
+    var gameplayInput = FindAnyObjectByType<GameplayInput>();
     if (gameplayInput != null) {
       gameplayInput.EsperanzaParent = playerRoot;
       if (gear != null) {
@@ -1596,14 +1677,12 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void OpenLoadMenu() {
-    StartSectionTransition(new SectionTransitionRequest(
-      Section.LoadMenu,
-      BuildSectionOverlayTag(Section.LoadMenu),
-      requestMainMenuLocation: false,
-      waitForStreamingIdle: false,
-      showProgressUi: false,
-      switchInputMapToNone: true
-    ));
+    SwitchSectionInstantly(Section.LoadMenu, "open_load_menu");
+  }
+
+  void CloseLoadMenu() {
+    if (ResolveCurrentSection() != Section.LoadMenu) return;
+    SwitchSectionInstantly(Section.MainMenu, "close_load_menu");
   }
 
   void OpenSettingsMenu() {
@@ -1719,7 +1798,7 @@ public class SingleSceneManager : MonoBehaviour {
       case Section.Gameplay:
         return new SectionDescriptor("gameplay", sceneActiveByDefault: true, restoreSceneLightsByDefault: true, resetPauseAppearanceRevision: true);
       case Section.Pause:
-        return new SectionDescriptor("pauseMenu", sceneActiveByDefault: true, restoreSceneLightsByDefault: true, resetPauseAppearanceRevision: false);
+        return new SectionDescriptor("pauseMenu", sceneActiveByDefault: true, restoreSceneLightsByDefault: false, resetPauseAppearanceRevision: false);
       default:
         return new SectionDescriptor("", sceneActiveByDefault: false, restoreSceneLightsByDefault: false, resetPauseAppearanceRevision: false);
     }
@@ -1771,6 +1850,7 @@ public class SingleSceneManager : MonoBehaviour {
   void ApplySectionActivation(Section section) {
     currentSection = section;
     pendingRevealSection = Section.None;
+    ApplySceneTimeForSection(section, "apply_section_activation");
     HideAllSectionsForTransition(section);
 
     switch (section) {
@@ -1797,10 +1877,38 @@ public class SingleSceneManager : MonoBehaviour {
     }
   }
 
+  void ApplySceneTimeForSection(Section section, string reason) {
+    var shouldFreezeSceneTime = ShouldFreezeSceneTimeForSection(section);
+    TimeScale.SetSceneMultiplier(shouldFreezeSceneTime ? 0f : 1f, reason + ":" + section);
+  }
+
+  bool ShouldFreezeSceneTimeForSection(Section section) {
+    return section == Section.Pause ||
+      (section == Section.SettingsMenu && settingsReturnTarget == Section.Pause) ||
+      (section == Section.Gameplay && dialogInputOverrideActive);
+  }
+
+  void RefreshSceneTimeForCurrentUiState(string reason) {
+    var section = ResolveCurrentSection();
+    if (section == Section.None) {
+      section = currentSection;
+    }
+
+    ApplySceneTimeForSection(section, reason);
+  }
+
   void ApplyInputForSection(Section section) {
-    var inputMap = GetSectionDescriptor(section).inputMap;
+    var inputMap = ResolveInputMapForSection(section);
     if (string.IsNullOrWhiteSpace(inputMap)) return;
     _SwitchMap(inputMap);
+  }
+
+  string ResolveInputMapForSection(Section section) {
+    var inputMap = GetSectionDescriptor(section).inputMap;
+    if (section == Section.Gameplay && dialogInputOverrideActive) {
+      return "dialog";
+    }
+    return inputMap;
   }
 
   GameObject ResolveSceneObjectLights() {
@@ -1872,14 +1980,34 @@ public class SingleSceneManager : MonoBehaviour {
   void OpenPauseMenu() {
     var gear = ResolvePlayerGearController();
     pauseMenuOpenAppearanceRevision = gear != null ? gear.AppearanceRevision : -1;
-    StartSectionTransition(new SectionTransitionRequest(
-      Section.Pause,
-      BuildSectionOverlayTag(Section.Pause),
-      requestMainMenuLocation: false,
-      waitForStreamingIdle: false,
-      showProgressUi: false,
-      switchInputMapToNone: true
-    ));
+    SwitchSectionInstantly(Section.Pause, "open_pause_menu");
+  }
+
+  void ClosePauseMenu() {
+    if (ResolveCurrentSection() != Section.Pause) return;
+    SwitchSectionInstantly(Section.Gameplay, "close_pause_menu");
+  }
+
+  void OnDialogStarted(object payload) {
+    dialogInputOverrideActive = true;
+    RefreshSceneTimeForCurrentUiState("dialog_started");
+    Debug.Log(
+      "[SingleSceneManager][DialogInput] active=1 source='" + (payload != null ? payload.ToString() : "") +
+      "' current_section=" + ResolveCurrentSection() +
+      " scene_multiplier=" + TimeScale.GetSceneMultiplier()
+    );
+    ApplyInputMapForCurrentUiState(preferGameplayWhenNoUi: false);
+  }
+
+  void OnDialogFinished(object payload) {
+    dialogInputOverrideActive = false;
+    RefreshSceneTimeForCurrentUiState("dialog_finished");
+    Debug.Log(
+      "[SingleSceneManager][DialogInput] active=0 source='" + (payload != null ? payload.ToString() : "") +
+      "' current_section=" + ResolveCurrentSection() +
+      " scene_multiplier=" + TimeScale.GetSceneMultiplier()
+    );
+    ApplyInputMapForCurrentUiState(preferGameplayWhenNoUi: false);
   }
 
   void StartSectionTransition(SectionTransitionRequest request) {
@@ -1925,8 +2053,48 @@ public class SingleSceneManager : MonoBehaviour {
     }
   }
 
+  void SwitchSectionInstantly(Section targetSection, string reason) {
+    if (targetSection == Section.None) return;
+    if (IsLoadingFlowActive()) {
+      LogSectionTransitionState("instant_switch_skipped", ResolveCurrentSection(), targetSection, reason, false);
+      return;
+    }
+
+    var previousSection = ResolveCurrentSection();
+    StopSectionTransition(clearLoadingOverlay: false, restoreVisibleState: false);
+    ApplySectionActivation(targetSection);
+    ApplyInputForSection(targetSection);
+    LogSectionTransitionState("instant_switch_complete", previousSection, targetSection, reason, false);
+  }
+
   string BuildSectionOverlayTag(Section section) {
     return "Section_" + section;
+  }
+
+  void HandleDebugMainMenuShortcut() {
+    if (!IsDebugMainMenuShortcutPressed()) return;
+    var current = ResolveCurrentSection();
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][DebugShortcut] action=return_to_main_menu" +
+        " section=" + current +
+        " scene_active=" + (Scene != null && Scene.activeInHierarchy ? 1 : 0) +
+        " shift_pressed=1 escape_pressed=1"
+      );
+    }
+    OpenMainMenu();
+  }
+
+  bool IsDebugMainMenuShortcutPressed() {
+    if (IsLoadingFlowActive()) return false;
+    var current = ResolveCurrentSection();
+    if (current != Section.Gameplay && current != Section.Pause) return false;
+    if (Scene == null || !Scene.activeInHierarchy) return false;
+
+    var keyboard = Keyboard.current;
+    if (keyboard == null) return false;
+    if (!keyboard.escapeKey.wasPressedThisFrame) return false;
+    return keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
   }
 
   IEnumerator SwitchSectionRoutine(SectionTransitionRequest request) {
@@ -2031,7 +2199,7 @@ public class SingleSceneManager : MonoBehaviour {
       applyGameplayStateBeforeWarmGate: true,
       sendReadyForSpawns: true,
       switchInputMapToNone: true,
-      resolveLocationForStart: false
+      resolveLocationForStart: startupInDebugGameplay
     );
     startupGameplayRoutine = null;
   }
@@ -2049,6 +2217,8 @@ public class SingleSceneManager : MonoBehaviour {
     SaveData loadedSlot = null
   ) {
     var previousSection = ResolveCurrentSection();
+    var gameplayStateAppliedUnderBlack = false;
+    StopDeferredPostRevealWarmup("begin_gameplay_flow");
     pendingRevealSection = Section.Gameplay;
     LogSectionTransitionState("begin", previousSection, Section.Gameplay, overlayTag, true);
     SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
@@ -2071,6 +2241,10 @@ public class SingleSceneManager : MonoBehaviour {
     EnsureGameplayPlayerBootstrap(overlayTag);
 
     if (!isNewGame) {
+      if (applyGameplayStateBeforeWarmGate && !gameplayStateAppliedUnderBlack) {
+        ApplyGameplayStateUnderBlack();
+        gameplayStateAppliedUnderBlack = true;
+      }
       LogLoadStateDispatch("before_load_game_message");
       ApplySavedGameplayStateUnderLoadingOverlay();
       LogLoadStateDispatch("after_load_game_message");
@@ -2079,7 +2253,10 @@ public class SingleSceneManager : MonoBehaviour {
     }
 
     if (applyGameplayStateBeforeWarmGate) {
-      ApplyGameplayStateUnderBlack();
+      if (!gameplayStateAppliedUnderBlack) {
+        ApplyGameplayStateUnderBlack();
+        gameplayStateAppliedUnderBlack = true;
+      }
       if (isNewGame) {
         PrepareNewGameRuntimeStateUnderLoadingOverlay();
       }
@@ -2117,6 +2294,24 @@ public class SingleSceneManager : MonoBehaviour {
 
   void ApplySavedGameplayStateUnderLoadingOverlay() {
     EnsureGameplayPlayerBootstrap("load_game");
+    var player = ResolvePlayerGearController();
+    var sceneActive = Scene != null && Scene.activeInHierarchy;
+    var playerActive = player != null && player.gameObject.activeInHierarchy;
+    if (!sceneActive || !playerActive) {
+      if (ShouldLogLoadFlowWarnings()) {
+        Debug.LogWarning(
+          "[SingleSceneManager][LoadState] gameplay hierarchy inactive before save-state apply" +
+          " scene_active=" + (sceneActive ? 1 : 0) +
+          " player_active=" + (playerActive ? 1 : 0) +
+          " player=" + (player != null ? player.gameObject.name : "-") +
+          " current_section=" + ResolveCurrentSection() +
+          " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason)
+        );
+      }
+      ApplyGameplayStateUnderBlack();
+      EnsureGameplayPlayerBootstrap("load_game_after_activate");
+    }
+
     var characterState = ResolvePlayerCharacterState();
     if (characterState != null) {
       LogLoadStateDispatch("direct_load_game");
@@ -2141,7 +2336,7 @@ public class SingleSceneManager : MonoBehaviour {
     var characterState = player != null
       ? player.GetComponent<CharacterState>()
       : null;
-    characterState ??= FindFirstObjectByType<CharacterState>();
+    characterState ??= FindAnyObjectByType<CharacterState>();
 
     if (ShouldLogLoadFlowDebug()) {
       Debug.Log(
@@ -2450,14 +2645,20 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void AccumulatePreUnlockResidentPins(List<string> addresses) {
+    AccumulatePreUnlockResidentPins(addresses, 0, addresses != null ? addresses.Count : 0);
+  }
+
+  void AccumulatePreUnlockResidentPins(List<string> addresses, int startInclusive, int count) {
     if (!enablePreUnlockResidentPinning) return;
-    if (addresses == null || addresses.Count <= 0) return;
+    if (addresses == null || addresses.Count <= 0 || count <= 0) return;
 
     var maxAddresses = ResolvePreUnlockResidentPinAddressCap();
     var target = preUnlockResidentPinAddressScratch;
     var seen = preUnlockResidentPinSeenAddressScratch;
+    var start = Mathf.Clamp(startInclusive, 0, addresses.Count);
+    var endExclusive = Mathf.Clamp(start + Mathf.Max(count, 0), start, addresses.Count);
 
-    for (var i = 0; i < addresses.Count; i++) {
+    for (var i = start; i < endExclusive; i++) {
       if (target.Count >= maxAddresses) break;
       var normalized = string.IsNullOrWhiteSpace(addresses[i]) ? "" : addresses[i].Trim();
       if (string.IsNullOrWhiteSpace(normalized)) continue;
@@ -2522,6 +2723,105 @@ public class SingleSceneManager : MonoBehaviour {
     TextureResidencyCache.ReleaseOwnerPins(PreUnlockResidentPinOwnerId);
     if (!hadTrackedAddresses || !ShouldLogLoadingProgressDebug()) return;
     Debug.Log("[SingleSceneManager][PreUnlockPin] release reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
+  }
+
+  void StopDeferredPostRevealWarmup(string reason) {
+    var hadQueuedAddresses = deferredPostRevealWarmupAddressScratch.Count > 0;
+    deferredPostRevealWarmupAddressScratch.Clear();
+    deferredPostRevealWarmupSeenAddressScratch.Clear();
+    if (deferredPostRevealWarmupRoutine == null) {
+      if (!hadQueuedAddresses || !ShouldLogLoadingProgressDebug()) return;
+      Debug.Log("[SingleSceneManager][DeferredWarmup] stage=clear reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
+      return;
+    }
+
+    StopCoroutine(deferredPostRevealWarmupRoutine);
+    deferredPostRevealWarmupRoutine = null;
+    if (!ShouldLogLoadingProgressDebug()) return;
+    Debug.Log("[SingleSceneManager][DeferredWarmup] stage=stop reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
+  }
+
+  void QueueDeferredPostRevealWarmupAddresses(List<string> addresses, int startInclusive, int count, string stage) {
+    if (!Application.isPlaying || addresses == null || addresses.Count <= 0 || count <= 0) return;
+    var start = Mathf.Clamp(startInclusive, 0, addresses.Count);
+    var endExclusive = Mathf.Clamp(start + Mathf.Max(count, 0), start, addresses.Count);
+    var added = 0;
+    for (var i = start; i < endExclusive; i++) {
+      var normalized = string.IsNullOrWhiteSpace(addresses[i]) ? "" : addresses[i].Trim();
+      if (string.IsNullOrWhiteSpace(normalized)) continue;
+      if (!deferredPostRevealWarmupSeenAddressScratch.Add(normalized)) continue;
+      deferredPostRevealWarmupAddressScratch.Add(normalized);
+      added++;
+    }
+    if (added <= 0 || !ShouldLogLoadingProgressDebug()) return;
+    Debug.Log(
+      "[SingleSceneManager][DeferredWarmup] stage=queue" +
+      " source=" + (string.IsNullOrWhiteSpace(stage) ? "-" : stage.Trim()) +
+      " added=" + added +
+      " pending=" + deferredPostRevealWarmupAddressScratch.Count
+    );
+  }
+
+  void StartDeferredPostRevealWarmupIfNeeded(string reason) {
+    if (!Application.isPlaying) return;
+    if (deferredPostRevealWarmupRoutine != null) return;
+    if (deferredPostRevealWarmupAddressScratch.Count <= 0) return;
+    deferredPostRevealWarmupRoutine = StartCoroutine(RunDeferredPostRevealWarmupRoutine(reason));
+  }
+
+  IEnumerator RunDeferredPostRevealWarmupRoutine(string reason) {
+    while (Application.isPlaying && SpriteStreamingLoadingState.IsLoadingOverlayActive) {
+      yield return null;
+    }
+    if (!Application.isPlaying) {
+      deferredPostRevealWarmupRoutine = null;
+      yield break;
+    }
+
+    var processedAddressCount = deferredPostRevealWarmupAddressScratch.Count;
+
+    if (ShouldLogLoadingProgressDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][DeferredWarmup] stage=begin" +
+        " reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()) +
+        " pending=" + processedAddressCount
+      );
+    }
+
+    if (processedAddressCount > 0) {
+      yield return PreloadAnimationAddressBatch(
+        deferredPostRevealWarmupAddressScratch,
+        0,
+        processedAddressCount,
+        resetLoadingProgress: false,
+        trackResidentPins: false,
+        settleAfterEnqueue: false
+      );
+    }
+
+    if (ShouldLogLoadingProgressDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][DeferredWarmup] stage=complete" +
+        " processed=" + processedAddressCount
+      );
+    }
+
+    deferredPostRevealWarmupAddressScratch.Clear();
+    deferredPostRevealWarmupSeenAddressScratch.Clear();
+    deferredPostRevealWarmupRoutine = null;
+  }
+
+  int ResolvePreUnlockBlockingPrefixCount(List<string> addresses, int playerAddressCount = -1) {
+    if (addresses == null || addresses.Count <= 0) return 0;
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var clampedPlayerAddressCount = playerAddressCount >= 0
+      ? Mathf.Clamp(playerAddressCount, 0, addresses.Count)
+      : Mathf.Clamp(preUnlockLastPlayerAddressCount, 0, addresses.Count);
+    return Mathf.Clamp(
+      ResolveWarmupPriorityPrefixCount(addresses.Count, queue, clampedPlayerAddressCount),
+      0,
+      addresses.Count
+    );
   }
 
   IEnumerator WaitForStreamingIdleBeforeUnlock(
@@ -2593,7 +2893,7 @@ public class SingleSceneManager : MonoBehaviour {
         out var blockingCriticalReady,
         out var blockingHardBypassUsed
       );
-      var locationActivationPending = LocationManager.HasPendingActivationWork;
+      var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
       var blockingReady = hasBlockingProgress
         ? IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue) && !locationActivationPending
         : (queueIdle && resolverIdle && playerReady && !locationActivationPending);
@@ -2695,12 +2995,30 @@ public class SingleSceneManager : MonoBehaviour {
     );
 
     if (preUnlockAddressScratch.Count > 0) {
+      var blockingPrefixCount = ResolvePreUnlockBlockingPrefixCount(preUnlockAddressScratch);
+      if (blockingPrefixCount < preUnlockAddressScratch.Count) {
+        QueueDeferredPostRevealWarmupAddresses(
+          preUnlockAddressScratch,
+          blockingPrefixCount,
+          preUnlockAddressScratch.Count - blockingPrefixCount,
+          "animation_frame_tail"
+        );
+      }
       var preloadPasses = Mathf.Max(preUnlockAnimationFramePreloadPasses, 1);
-      for (var pass = 0; pass < preloadPasses; pass++) {
-        yield return PreloadAnimationAddressBatch(preUnlockAddressScratch, resetLoadingProgress: pass == 0);
-        yield return WaitForPreUnlockWarmupQueueSettle();
-        if (pass + 1 < preloadPasses) {
-          yield return null;
+      if (blockingPrefixCount > 0) {
+        for (var pass = 0; pass < preloadPasses; pass++) {
+          yield return PreloadAnimationAddressBatch(
+            preUnlockAddressScratch,
+            0,
+            blockingPrefixCount,
+            resetLoadingProgress: pass == 0,
+            trackResidentPins: true,
+            settleAfterEnqueue: false
+          );
+          yield return WaitForPreUnlockWarmupQueueSettle();
+          if (pass + 1 < preloadPasses) {
+            yield return null;
+          }
         }
       }
     }
@@ -2931,6 +3249,7 @@ public class SingleSceneManager : MonoBehaviour {
         yield return null;
       }
     }
+    var playerWarmPlaybackAddressCount = addresses.Count;
 
     if (preUnlockWarmEnemyAnimationPlayback) {
       if (enemyControllers == null || enemyControllers.Count <= 0) {
@@ -2963,8 +3282,26 @@ public class SingleSceneManager : MonoBehaviour {
     }
 
     if (addresses.Count > 0) {
-      yield return PreloadAnimationAddressBatch(addresses, resetLoadingProgress: true);
-      yield return WaitForPreUnlockWarmupQueueSettle();
+      var blockingPrefixCount = ResolvePreUnlockBlockingPrefixCount(addresses, playerWarmPlaybackAddressCount);
+      if (blockingPrefixCount < addresses.Count) {
+        QueueDeferredPostRevealWarmupAddresses(
+          addresses,
+          blockingPrefixCount,
+          addresses.Count - blockingPrefixCount,
+          "animation_playback_tail"
+        );
+      }
+      if (blockingPrefixCount > 0) {
+        yield return PreloadAnimationAddressBatch(
+          addresses,
+          0,
+          blockingPrefixCount,
+          resetLoadingProgress: true,
+          trackResidentPins: true,
+          settleAfterEnqueue: false
+        );
+        yield return WaitForPreUnlockWarmupQueueSettle();
+      }
     }
   }
 
@@ -3097,7 +3434,32 @@ public class SingleSceneManager : MonoBehaviour {
 
   IEnumerator PreloadAnimationAddressBatch(List<string> addresses, bool resetLoadingProgress) {
     if (addresses == null || addresses.Count <= 0) yield break;
-    AccumulatePreUnlockResidentPins(addresses);
+    yield return PreloadAnimationAddressBatch(
+      addresses,
+      0,
+      addresses.Count,
+      resetLoadingProgress,
+      trackResidentPins: true,
+      settleAfterEnqueue: true
+    );
+  }
+
+  IEnumerator PreloadAnimationAddressBatch(
+    List<string> addresses,
+    int startInclusive,
+    int entryCount,
+    bool resetLoadingProgress,
+    bool trackResidentPins,
+    bool settleAfterEnqueue
+  ) {
+    if (addresses == null || addresses.Count <= 0 || entryCount <= 0) yield break;
+    var start = Mathf.Clamp(startInclusive, 0, addresses.Count);
+    var endExclusive = Mathf.Clamp(start + Mathf.Max(entryCount, 0), start, addresses.Count);
+    var requestedCount = endExclusive - start;
+    if (requestedCount <= 0) yield break;
+    if (trackResidentPins) {
+      AccumulatePreUnlockResidentPins(addresses, start, requestedCount);
+    }
 
     if (resetLoadingProgress) {
       ResetLoadingProgressForPhase();
@@ -3112,23 +3474,25 @@ public class SingleSceneManager : MonoBehaviour {
     const int BatchSize = 100;
     var processedCount = 0;
 
-    while (processedCount < addresses.Count) {
-      var remaining = addresses.Count - processedCount;
-      var count = Mathf.Min(BatchSize, remaining);
-      var chunkStart = processedCount;
-      QueuePreUnlockTrimmedMetadataWarmup(addresses, chunkStart, count);
+    while (processedCount < requestedCount) {
+      var remaining = requestedCount - processedCount;
+      var chunkCount = Mathf.Min(BatchSize, remaining);
+      var chunkStart = start + processedCount;
+      QueuePreUnlockTrimmedMetadataWarmup(addresses, chunkStart, chunkCount);
       yield return TextureResidencyCache.RequestLoadBatchThrottled(
         addresses,
         chunkStart,
-        count,
+        chunkCount,
         TextureResidencyCache.LoadPriority.Warmup,
         // Atlas-first preload: ensure sibling slices from the same atlas are resident before gameplay unlock.
         allowAtlasExpansion: true,
         enqueueBudgetPerFrame: enqueueBudget
       );
 
-      processedCount += count;
-      yield return WaitForPreUnlockWarmupQueueSettle();
+      processedCount += chunkCount;
+      if (settleAfterEnqueue) {
+        yield return WaitForPreUnlockWarmupQueueSettle();
+      }
 
       queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
       enqueueBudget = ResolvePreUnlockEnqueueBudget(queue);
@@ -3161,7 +3525,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
 
     preUnlockVisibleSpriteTargetsCache =
-      FindObjectsByType<SpriteWithNormals>(FindObjectsInactive.Exclude, FindObjectsSortMode.None) ??
+      FindObjectsByType<SpriteWithNormals>(FindObjectsInactive.Exclude) ??
       Array.Empty<SpriteWithNormals>();
     preUnlockVisibleSpriteTargetsCacheRefreshedAt = now;
     return preUnlockVisibleSpriteTargetsCache;
@@ -3336,7 +3700,7 @@ public class SingleSceneManager : MonoBehaviour {
     var warmAddresses = warmRequestWarmAddressesScratch;
     var criticalLabels = warmRequestCriticalLabelsScratch;
     var warmLabels = warmRequestWarmLabelsScratch;
-    var archetypes = ResolveLocationArchetypePrefabs(profile);
+    var archetypes = ResolveLocationArchetypePrefabs();
     var combatPopulationTypes = ResolveCombatPopulationWarmTypes(activeEnemies, archetypes, combatPopulationTypesScratch);
     if (profile != null) {
       profile.CollectGameplayWarmLists(
@@ -3533,17 +3897,25 @@ public class SingleSceneManager : MonoBehaviour {
     return keys.Count > 0 ? keys : null;
   }
 
-  Dictionary<string, GameObject> ResolveLocationArchetypePrefabs(LocationWarmProfile profile) {
-    var map = profile != null ? profile.BuildEnemyArchetypePrefabMap() : new Dictionary<string, GameObject>(StringComparer.OrdinalIgnoreCase);
-    if (map.Count > 0) return map;
-
-    var spawner = FindFirstObjectByType<Spawner>();
+  Dictionary<string, GameObject> ResolveLocationArchetypePrefabs() {
+    var spawner = FindAnyObjectByType<Spawner>();
     if (spawner != null) {
-      var fallback = spawner.BuildCurrentLocationArchetypeMapForWarmup();
-      if (fallback != null && fallback.Count > 0) return fallback;
+      var map = spawner.BuildCurrentLocationArchetypeMapForWarmup();
+      if (map != null && map.Count > 0) {
+        Debug.Log(
+          "[SingleSceneManager] Using active location prefab enemy archetypes for warmup" +
+          " location='" + LocationManager.currentLocation + "'" +
+          " archetypes=" + map.Count
+        );
+        return map;
+      }
     }
 
-    return map;
+    Debug.LogWarning(
+      "[SingleSceneManager] No location prefab enemy archetypes available for warmup" +
+      " location='" + LocationManager.currentLocation + "'."
+    );
+    return new Dictionary<string, GameObject>(StringComparer.OrdinalIgnoreCase);
   }
 
   GearController ResolvePlayerGearController() {
@@ -3595,7 +3967,7 @@ public class SingleSceneManager : MonoBehaviour {
       return activeEnemyControllersCache;
     }
 
-    var enemies = FindObjectsByType<EnemyController>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+    var enemies = FindObjectsByType<EnemyController>(FindObjectsInactive.Exclude);
     activeEnemyControllersCache = enemies != null && enemies.Length > 0 ? enemies : Array.Empty<EnemyController>();
     activeEnemyControllersCacheRefreshedAt = now;
     return activeEnemyControllersCache;
@@ -3697,6 +4069,7 @@ public class SingleSceneManager : MonoBehaviour {
     StopCoroutine(startupGameplayRoutine);
     startupGameplayRoutine = null;
     pendingRevealSection = Section.None;
+    StopDeferredPostRevealWarmup("stop_startup_gameplay_flow");
     ResumePlayerAnimationAfterLoadingOverlay("stop_startup_gameplay_flow");
     SpriteStreamingLoadingState.ForceClearLoadingOverlay();
   }
@@ -3714,15 +4087,88 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   bool ShouldRunStartupGameplayWarmFlow() {
-    return false;
+    return startupInDebugGameplay;
   }
 
   void ApplyConfiguredStartupMode() {
+    ResolveStartupMode();
+    if (startupInDebugGameplay) {
+      ApplyConfiguredDebugStartupMode();
+      return;
+    }
+
+    ApplyConfiguredMainMenuStartupMode();
+  }
+
+  void ResolveStartupMode() {
+    startupInDebugGameplay = false;
+    startupDebugLocationId = "";
+
+    if (!debugMode) {
+      if (ShouldLogLoadFlowDebug()) {
+        Debug.Log("[SingleSceneManager][StartupMode] mode=main_menu debug_mode=0 debug_prefab=-");
+      }
+      return;
+    }
+
+    if (debugLocationPrefab == null) {
+      if (ShouldLogLoadFlowWarnings()) {
+        Debug.LogWarning(
+          "[SingleSceneManager][StartupMode] mode=main_menu debug_mode=1 debug_prefab=- reason=missing_debug_location"
+        );
+      }
+      return;
+    }
+
+    if (!LocationEnemyData.TryGetLocationByPrefab(debugLocationPrefab, out var locationInfo) || locationInfo == null) {
+      if (ShouldLogLoadFlowWarnings()) {
+        Debug.LogWarning(
+          "[SingleSceneManager][StartupMode] mode=main_menu debug_mode=1 debug_prefab=" + debugLocationPrefab.name +
+          " reason=unmapped_debug_location_prefab"
+        );
+      }
+      return;
+    }
+
+    startupInDebugGameplay = true;
+    startupDebugLocationId = LocationEnemyData.NormalizeLocationId(locationInfo.id);
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][StartupMode] mode=debug_gameplay debug_mode=1" +
+        " debug_prefab=" + debugLocationPrefab.name +
+        " location=" + startupDebugLocationId +
+        " enemies=" + (locationInfo.enemies != null ? locationInfo.enemies.Count : 0) +
+        " max_enemies=" + locationInfo.maxEnemies +
+        " spawn_interval=" + locationInfo.spawnInterval.ToString("0.###")
+      );
+    }
+  }
+
+  void ApplyConfiguredDebugStartupMode() {
+    ReleasePreUnlockResidentPins("startup_mode_debug_gameplay");
+    StopDeferredPostRevealWarmup("startup_mode_debug_gameplay");
+    pendingRevealSection = Section.None;
+    currentSection = Section.None;
+    if (autoSaver != null) {
+      autoSaver.enableTimeTracking = true;
+    }
+    HideAllSectionsForTransition(Section.Gameplay);
+    _SwitchMap("none");
+    SetSceneObjectLightsActive(false);
+    pauseMenuOpenAppearanceRevision = -1;
+    SpriteStreamingLoadingState.EndLoadingOverlay("MainMenuStartup");
+  }
+
+  void ApplyConfiguredMainMenuStartupMode() {
     ReleasePreUnlockResidentPins("startup_mode_main_menu");
+    StopDeferredPostRevealWarmup("startup_mode_main_menu");
     pendingRevealSection = Section.None;
     RequestLocationLoadForMainMenu();
     ApplySectionActivation(Section.MainMenu);
     ApplyInputForSection(Section.MainMenu);
+    if (autoSaver != null) {
+      autoSaver.enableTimeTracking = false;
+    }
     SetSceneObjectLightsActive(false);
     pauseMenuOpenAppearanceRevision = -1;
     SpriteStreamingLoadingState.EndLoadingOverlay("MainMenuStartup");
@@ -3746,11 +4192,11 @@ public class SingleSceneManager : MonoBehaviour {
       return;
     }
     if (GameplayInterface != null && GameplayInterface.activeInHierarchy) {
-      _SwitchMap("gameplay");
+      _SwitchMap(dialogInputOverrideActive ? "dialog" : "gameplay");
       return;
     }
     if (preferGameplayWhenNoUi && HasLiveGameplayInput()) {
-      _SwitchMap("gameplay");
+      _SwitchMap(dialogInputOverrideActive ? "dialog" : "gameplay");
       return;
     }
     if (preferGameplayWhenNoUi) {
@@ -3768,7 +4214,7 @@ public class SingleSceneManager : MonoBehaviour {
     }
 
     gameplayInputCacheRefreshedAt = now;
-    cachedGameplayInput = FindFirstObjectByType<GameplayInput>();
+    cachedGameplayInput = FindAnyObjectByType<GameplayInput>();
     return IsGameplayInputLive(cachedGameplayInput);
   }
 
@@ -3779,18 +4225,22 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void ResolveAndApplyLocationForStart(bool isNewGame, SaveData loadedSlot) {
-    var resolved = ResolveDefaultLocation();
+    var resolved = ResolveLocationForStart(isNewGame, loadedSlot);
+    var previousLocation = LocationManager.currentLocation;
 
-    if (!isNewGame && loadedSlot != null && loadedSlot.ContainsKey("location")) {
-      var loadedLocation = Convert.ToString(loadedSlot["location"]);
-      if (IsKnownLocation(loadedLocation)) {
-        resolved = loadedLocation.Trim();
-      }
-    }
-
-    if (!string.Equals(LocationManager.currentLocation, resolved, StringComparison.OrdinalIgnoreCase)) {
+    if (!string.Equals(previousLocation, resolved, StringComparison.OrdinalIgnoreCase)) {
       LocationManager.UpdateLocation(resolved);
     }
+
+    if (!ShouldLogLoadFlowDebug()) return;
+
+    Debug.Log(
+      "[SingleSceneManager][StartLocation] resolved=" + resolved +
+      " previous=" + previousLocation +
+      " is_new_game=" + (isNewGame ? 1 : 0) +
+      " debug_mode=" + (startupInDebugGameplay ? 1 : 0) +
+      " debug_prefab=" + (debugLocationPrefab != null ? debugLocationPrefab.name : "-")
+    );
   }
 
   bool IsKnownLocation(string location) {
@@ -3803,8 +4253,40 @@ public class SingleSceneManager : MonoBehaviour {
     return LocationEnemyData.GetDefaultLocation();
   }
 
+  string ResolveLocationForStart(bool isNewGame, SaveData loadedSlot) {
+    if (startupInDebugGameplay && IsKnownLocation(startupDebugLocationId)) {
+      return startupDebugLocationId;
+    }
+
+    var resolved = ResolveDefaultLocation();
+    if (!isNewGame && loadedSlot != null && loadedSlot.ContainsKey("location")) {
+      var loadedLocation = Convert.ToString(loadedSlot["location"]);
+      if (IsKnownLocation(loadedLocation)) {
+        resolved = loadedLocation.Trim();
+      }
+    }
+
+    return resolved;
+  }
+
   void RequestLocationLoadForMainMenu() {
+    if (!ShouldLoadMainMenuLocation()) {
+      if (ShouldLogLoadFlowDebug()) {
+        Debug.Log("[SingleSceneManager][MainMenuLocation] skip_request reason=no_prefab");
+      }
+      return;
+    }
     RequestLocationLoad(mainMenuFlowLocationId);
+  }
+
+  bool ShouldLoadMainMenuLocation() {
+    if (!LocationEnemyData.TryGetLocation(mainMenuFlowLocationId, out var locationInfo) || locationInfo == null) {
+      return false;
+    }
+
+    var prefabData = locationInfo.locationPrefabData;
+    return prefabData != null &&
+           (prefabData.prefab != null || !string.IsNullOrWhiteSpace(prefabData.AssetPath));
   }
 
   void RequestLocationLoadForGameplay(string preferredLocationId) {
@@ -3913,6 +4395,7 @@ public class SingleSceneManager : MonoBehaviour {
     if (!string.IsNullOrWhiteSpace(overlayTag)) {
       SpriteStreamingLoadingState.EndLoadingOverlay(overlayTag);
     }
+    StartDeferredPostRevealWarmupIfNeeded("reveal_complete");
     DisableLoadingUiFeedback(clearText: true, includeLoadingLight: true);
     ReleaseLoadingScreenIfIdle();
     LogSectionTransitionState("reveal_complete", currentSection, sectionToReveal, overlayTag, false);
@@ -4009,6 +4492,7 @@ public class SingleSceneManager : MonoBehaviour {
     FinalizeLoadingProgressForRelease();
     DisableLoadingUiFeedback(clearText: true, includeLoadingLight: true);
     ReleasePreUnlockResidentPins("force_release");
+    StopDeferredPostRevealWarmup("force_release");
     SetLoadingBlackscreenHold(false);
     ForceBlackscreenVisible(false);
     ResumePlayerAnimationAfterLoadingOverlay("force_release");

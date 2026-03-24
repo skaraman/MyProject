@@ -18,7 +18,7 @@ public static class SpriteStreamingConfig {
 }
 
 public static class GeneratedAtlasBuildSurrogateUtility {
-  static readonly string[] MetadataExcludedFolderNames = { "_Bounces", "Effects", "Expressions" };
+  static readonly string[] MetadataExcludedFolderNames = Array.Empty<string>();
   static readonly HashSet<string> MetadataExcludedFolderNameSet = new(MetadataExcludedFolderNames, StringComparer.OrdinalIgnoreCase);
 
   public static string MetadataExcludedFolderSummary => string.Join(", ", MetadataExcludedFolderNames);
@@ -29,6 +29,7 @@ public static class GeneratedAtlasBuildSurrogateUtility {
   }
 
   public static bool HasMetadataExcludedFolderInPath(string assetPathOrFolderPath) {
+    if (MetadataExcludedFolderNameSet.Count <= 0) return false;
     var normalizedFolderPath = NormalizeFolderPath(assetPathOrFolderPath);
     if (string.IsNullOrWhiteSpace(normalizedFolderPath)) return false;
 

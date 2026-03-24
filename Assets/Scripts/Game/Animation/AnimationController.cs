@@ -44,6 +44,7 @@ public class AnimationController {
   private GameObject[] hBoxObjects = Array.Empty<GameObject>();
   private readonly List<SpriteWithNormals> spriteTargets = new();
   private readonly List<SpriteWithNormals> criticalSpriteTargets = new();
+  private readonly List<SpriteWithNormals> spriteTargetScanBuffer = new(32);
   private readonly Dictionary<SpriteWithNormals, SpriteRenderer> spriteTargetRenderers = new();
   private readonly Dictionary<string, string> animationKeyLookup = new(StringComparer.OrdinalIgnoreCase);
   private readonly Dictionary<string, GameObject> bounceObjectByName = new(StringComparer.Ordinal);
@@ -145,7 +146,7 @@ public class AnimationController {
     playOnStart = autoPlay;
     this.appearanceOwnerId = string.IsNullOrWhiteSpace(appearanceOwnerId) ? "" : appearanceOwnerId.Trim();
     this.appearancePinClass = appearancePinClass;
-    appearancePinRefreshOffset = root != null ? Mathf.Abs(root.GetInstanceID()) : 0;
+    appearancePinRefreshOffset = root != null ? ObjectEntityId.GetModulo(root, int.MaxValue) : 0;
     appearancePinAddressBuffer.Clear();
     appearancePinAddressSet.Clear();
     predictedAnimations.Clear();
@@ -1832,6 +1833,7 @@ public class AnimationController {
       if (!bounceObjectByName.TryGetValue(partKey, out var bounceParent)) continue;
       if (bounceParent == null) continue;
       LeanTween.cancel(bounceParent);
+      TimeScale.UnregisterTweens(bounceParent);
       StartBounceSequence(bounceParent, frameSequence, 0);
     }
     SetHBoxes();
@@ -1851,19 +1853,19 @@ public class AnimationController {
     Vector3 targetPos = new Vector3(frame.x, frame.y, bounceParent.transform.localPosition.z);
     float duration = frame.duration * fSlowDown;
 
-    var moveDescr = LeanTween.moveLocal(bounceParent, targetPos, duration).setEase(LeanTweenType.linear);
+    var moveDescr = TrackTween(LeanTween.moveLocal(bounceParent, targetPos, duration).setEase(LeanTweenType.linear), duration);
     AddTweenId(bounceParent, moveDescr.id);
     moveDescr.setOnComplete(() => RemoveTweenId(bounceParent, moveDescr.id));
 
-    var scaleDescr = LeanTween.scaleX(bounceParent, frame.offset, duration).setEase(LeanTweenType.linear);
+    var scaleDescr = TrackTween(LeanTween.scaleX(bounceParent, frame.offset, duration).setEase(LeanTweenType.linear), duration);
     AddTweenId(bounceParent, scaleDescr.id);
     scaleDescr.setOnComplete(() => RemoveTweenId(bounceParent, scaleDescr.id));
 
     LTDescr delayDescr = null;
-    delayDescr = LeanTween.delayedCall(bounceParent, duration, () => {
+    delayDescr = TrackTween(LeanTween.delayedCall(bounceParent, duration, () => {
       RemoveTweenId(bounceParent, delayDescr.id);
       StartBounceSequence(bounceParent, sequence, index + 1);
-    });
+    }), duration);
     AddTweenId(bounceParent, delayDescr.id);
   }
 
@@ -1881,6 +1883,7 @@ public class AnimationController {
         var poly = go.GetComponent<PolygonCollider2D>();
         if (poly == null) continue;
         LeanTween.cancel(go);
+        TimeScale.UnregisterTweens(go);
         StartHBoxSequence(go, poly, hboxList, 0);
       }
     }
@@ -1909,16 +1912,16 @@ public class AnimationController {
     int len = Mathf.Max(1, Mathf.Max(startLen, endLen));
     Vector2[] s = new Vector2[len];
     Vector2[] e = new Vector2[len];
+    Vector2[] lerped = new Vector2[len];
     for (int i = 0; i < len; i++) {
       s[i] = (startLen > 0) ? startPoints[i % startLen] : endPoints[i % endLen];
       e[i] = endPoints[i % endLen];
     }
     float duration = (targetPath.d > 0 ? targetPath.d : 0.2f) * fSlowDown;
 
-    var descr = LeanTween.value(go, 0f, 1f, duration).setEase(LeanTweenType.linear);
+    var descr = TrackTween(LeanTween.value(go, 0f, 1f, duration).setEase(LeanTweenType.linear), duration);
     AddTweenId(go, descr.id);
     descr.setOnUpdate((float v) => {
-      Vector2[] lerped = new Vector2[len];
       for (int i = 0; i < len; i++) {
         lerped[i] = Vector2.Lerp(s[i], e[i], v);
       }
@@ -1936,6 +1939,7 @@ public class AnimationController {
       var go = kvp.Key;
       if (go != null) {
         LeanTween.cancel(go);
+        TimeScale.UnregisterTweens(go);
       }
     }
     activeTweens.Clear();
@@ -1944,6 +1948,7 @@ public class AnimationController {
   private void ClearTweensFor(GameObject go) {
     if (go == null) return;
     LeanTween.cancel(go);
+    TimeScale.UnregisterTweens(go);
     if (activeTweens.ContainsKey(go)) {
       activeTweens[go].Clear();
       activeTweens.Remove(go);
@@ -1958,9 +1963,14 @@ public class AnimationController {
   }
 
   private void RemoveTweenId(GameObject go, int tweenId) {
+    TimeScale.UnregisterTween(tweenId);
     if (activeTweens.ContainsKey(go)) {
       activeTweens[go].Remove(tweenId);
     }
+  }
+
+  LTDescr TrackTween(LTDescr descr, float baseDuration) {
+    return TimeScale.RegisterTween(rootTransform, descr, baseDuration);
   }
 
   private void CacheSpriteTargets() {
@@ -1979,13 +1989,17 @@ public class AnimationController {
       }
     }
     if (spriteTargets.Count == 0 && rootTransform != null) {
-      foreach (var sprite in rootTransform.GetComponentsInChildren<SpriteWithNormals>()) {
+      spriteTargetScanBuffer.Clear();
+      rootTransform.GetComponentsInChildren(true, spriteTargetScanBuffer);
+      for (var i = 0; i < spriteTargetScanBuffer.Count; i++) {
+        var sprite = spriteTargetScanBuffer[i];
         if (sprite != null) {
           spriteTargets.Add(sprite);
           if (IsCriticalSpriteTarget(sprite)) criticalSpriteTargets.Add(sprite);
           spriteTargetRenderers[sprite] = sprite.GetComponent<SpriteRenderer>();
         }
       }
+      spriteTargetScanBuffer.Clear();
     }
   }
 

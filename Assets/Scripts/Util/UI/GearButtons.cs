@@ -1,11 +1,32 @@
-
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class GearButtons : ButtonGroup {
+  readonly List<Action> actions = new();
 
-  void Start() {
-    MessageBus.On("gearReady", o => OnGearReady());
+  void OnEnable() {
+    RegisterHandlers();
+    OnGearReady(EsperanzaForms.GetActive());
+  }
 
+  void OnDisable() {
+    UnregisterHandlers();
+  }
+
+  void RegisterHandlers() {
+    if (actions.Count > 0) {
+      return;
+    }
+
+    actions.Add(MessageBus.On("gearReady", o => OnGearReady(o as string)));
+  }
+
+  void UnregisterHandlers() {
+    for (var i = 0; i < actions.Count; i++) {
+      actions[i]?.Invoke();
+    }
+    actions.Clear();
   }
 
   protected override void HandleActiveState(GameObject button) {
@@ -21,24 +42,105 @@ public class GearButtons : ButtonGroup {
   }
 
   public void OnGearReady(string form = null) {
-    var use = form ?? EsperanzaForms.GetActive();
-    foreach (var slot in EquippedItems.AllGearForms[use]) {
-      var button = buttons.Find(b => b.name == slot.Key);
-      if (button == null) continue;
-      if (slot.Value == null) {
-        button.GetComponent<SpriteRenderer>().sprite = null;
+    var resolvedForm = EsperanzaForms.ResolveFormKey(form) ?? EsperanzaForms.GetActive();
+    EquippedItems.EnsureKnownForms();
+    EquippedItems.EnsureForm(resolvedForm);
+
+    var refreshedSlots = 0;
+    for (var i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) {
         continue;
       }
-      button.GetComponent<SpriteWithNormals>().labelPrefix = slot.Value.gearId;
-      var shaderAnimator = button.GetComponent<AllIn1AnimatorInspector>();
-      var newColor = ShaderColors.myColors[slot.Value.gearColor];
+
+      RefreshSlotButton(button, resolvedForm);
+      refreshedSlots++;
+    }
+
+    Debug.Log(
+      "[GearButtons] Refreshed gear slot icons" +
+      " form='" + resolvedForm + "'" +
+      " slots=" + refreshedSlots
+    );
+  }
+
+  void RefreshSlotButton(GameObject button, string formName) {
+    if (button == null || string.IsNullOrWhiteSpace(formName)) {
+      return;
+    }
+
+    var sprite = button.GetComponent<SpriteWithNormals>();
+    if (sprite == null) {
+      Debug.LogWarning(
+        "[GearButtons] Missing SpriteWithNormals" +
+        " button='" + button.name + "'" +
+        " form='" + formName + "'"
+      );
+      return;
+    }
+
+    var shaderAnimator = button.GetComponent<AllIn1AnimatorInspector>();
+    EquippedItems.AllGearForms[formName].TryGetValue(button.name, out var gearItem);
+
+    var nextLabelPrefix = gearItem != null ? gearItem.gearId ?? "" : "";
+    sprite.SetDoNotRender(false);
+    if (!string.Equals(sprite.labelPrefix ?? "", nextLabelPrefix, StringComparison.Ordinal)) {
+      sprite.SetLabelPrefix(nextLabelPrefix);
+    }
+    sprite.ForceUpdateSpriteAndNormal();
+
+    if (gearItem == null) {
+      ResetSlotShader(button, shaderAnimator, formName);
+      return;
+    }
+
+    ApplyGearColor(button, shaderAnimator, gearItem, formName);
+  }
+
+  static void ResetSlotShader(GameObject button, AllIn1AnimatorInspector shaderAnimator, string formName) {
+    if (shaderAnimator != null) {
+      shaderAnimator.ResetActive();
+      shaderAnimator.Reset();
+    }
+
+    var spriteRenderer = button.GetComponent<SpriteRenderer>();
+    if (spriteRenderer != null && spriteRenderer.color != Color.white) {
+      spriteRenderer.color = Color.white;
+    }
+
+    Debug.Log(
+      "[GearButtons] Reset empty gear slot" +
+      " form='" + formName + "'" +
+      " slot='" + button.name + "'"
+    );
+  }
+
+  static void ApplyGearColor(GameObject button, AllIn1AnimatorInspector shaderAnimator, GearItem gearItem, string formName) {
+    if (gearItem == null) {
+      return;
+    }
+
+    var spriteRenderer = button.GetComponent<SpriteRenderer>();
+    var newColor = ShaderColors.myColors[gearItem.gearColor];
+    if (shaderAnimator != null) {
       shaderAnimator.ResetActive();
       shaderAnimator.Reset();
       shaderAnimator.SetKeyword("GLOW_ON", true);
       shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f, replaceExisting: true);
       shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
       shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f, replaceExisting: true);
-      button.GetComponent<SpriteWithNormals>().ForceUpdateSpriteAndNormal();
     }
+
+    if (spriteRenderer != null && spriteRenderer.color != newColor) {
+      spriteRenderer.color = newColor;
+    }
+
+    Debug.Log(
+      "[GearButtons] Applied gear slot icon" +
+      " form='" + formName + "'" +
+      " slot='" + button.name + "'" +
+      " gear='" + (gearItem.gearId ?? "") + "'" +
+      " color='" + (gearItem.gearColor ?? "") + "'"
+    );
   }
 }

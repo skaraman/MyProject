@@ -4,6 +4,10 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class LoadMenuInput : ButtonGroup {
+  [SerializeField, Min(1f)] float dragScrollMultiplier = 45f;
+  [SerializeField, Min(0.01f)] float mouseWheelScrollUnitsPerTick = 3f;
+  [SerializeField, Min(0.01f)] float gamepadStickScrollUnitsPerSecond = 18f;
+  [SerializeField, Range(0f, 0.99f)] float gamepadStickDeadzone = 0.25f;
   int activeIndexLoadMenu = -1;
   List<Action> actions = new();
   public GameObject scrollWrap;
@@ -22,8 +26,10 @@ public class LoadMenuInput : ButtonGroup {
     actions.Add(MessageBus.On("loadMenu.cancel", o => BackOut()));
     actions.Add(MessageBus.On("loadMenu.delete", o => DeleteDir()));
     actions.Add(MessageBus.On("loadMenu.down", o => MenuDown()));
+    actions.Add(MessageBus.On("loadMenu.scrollDown", o => ScrollFromMouseWheel(o, direction: -1f)));
     actions.Add(MessageBus.On("loadMenu.select", o => Select()));
     actions.Add(MessageBus.On("loadMenu.up", o => MenuUp()));
+    actions.Add(MessageBus.On("loadMenu.scrollUp", o => ScrollFromMouseWheel(o, direction: 1f)));
     actions.Add(MessageBus.On("loadMenu.hover", o => MouseHover(o)));
     actions.Add(MessageBus.On("loadMenu.click", o => BeginClick()));
     ResetSaveSlotInteractionLock();
@@ -36,6 +42,7 @@ public class LoadMenuInput : ButtonGroup {
 
   void Update() {
     HandleMouseInput();
+    HandleGamepadScroll();
   }
 
   void HandleMouseInput() {
@@ -67,11 +74,7 @@ public class LoadMenuInput : ButtonGroup {
         var currentRatioY = worldY / yh;
         var delta = currentRatioY - lastRatioY;
         lastRatioY = currentRatioY;
-
-        for (int i = 0; i < scrollWrap.transform.childCount; i++) {
-          var child = scrollWrap.transform.GetChild(i);
-          child.localPosition = new Vector3(0, child.localPosition.y + delta * 25f, 0);
-        }
+        ScrollContent(delta * dragScrollMultiplier);
       }
     }
 
@@ -88,6 +91,30 @@ public class LoadMenuInput : ButtonGroup {
     }
   }
 
+  void ScrollFromMouseWheel(object payload, float direction) {
+    if (slotSelectionLocked || dragging) return;
+    var scrollValue = CoerceFloat(payload);
+    var wheelSteps = Mathf.Abs(scrollValue) > Mathf.Epsilon
+      ? Mathf.Max(1f, Mathf.Abs(scrollValue) / 120f)
+      : 1f;
+    ScrollContent(Mathf.Sign(direction) * wheelSteps * mouseWheelScrollUnitsPerTick);
+  }
+
+  void HandleGamepadScroll() {
+    if (slotSelectionLocked || pressed || dragging) return;
+
+    var gamepad = Gamepad.current;
+    if (gamepad == null) return;
+
+    var stickY = gamepad.rightStick.ReadValue().y;
+    var magnitude = Mathf.Abs(stickY);
+    if (magnitude <= gamepadStickDeadzone) return;
+
+    var normalizedMagnitude = Mathf.InverseLerp(gamepadStickDeadzone, 1f, magnitude);
+    var delta = Mathf.Sign(stickY) * normalizedMagnitude * gamepadStickScrollUnitsPerSecond * Time.unscaledDeltaTime;
+    ScrollContent(delta);
+  }
+
   void BeginClick() {
     if (slotSelectionLocked) return;
     var mouse = Mouse.current;
@@ -100,6 +127,25 @@ public class LoadMenuInput : ButtonGroup {
 
   float ScreenToWorldY(float screenY) {
     return Camera.main.ScreenToWorldPoint(new Vector3(0, screenY, Camera.main.nearClipPlane)).y;
+  }
+
+  void ScrollContent(float deltaY) {
+    if (Mathf.Abs(deltaY) <= Mathf.Epsilon) return;
+    if (scrollWrap == null) return;
+
+    var wrapTransform = scrollWrap.transform;
+    for (int i = 0; i < wrapTransform.childCount; i++) {
+      var child = wrapTransform.GetChild(i);
+      child.localPosition = new Vector3(child.localPosition.x, child.localPosition.y + deltaY, child.localPosition.z);
+    }
+  }
+
+  static float CoerceFloat(object value) {
+    if (value is float f) return f;
+    if (value is double d) return (float)d;
+    if (value is int i) return i;
+    if (value is bool b) return b ? 1f : 0f;
+    return 0f;
   }
 
   void DetectClickOnChild() {
@@ -150,7 +196,7 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void BackOut() {
-    MessageBus.Send("backToMainMenu");
+    MessageBus.Send("closeLoadMenu");
   }
 
   void DeleteDir() {
@@ -163,8 +209,9 @@ public class LoadMenuInput : ButtonGroup {
   void MouseHover(object target) {
     if (slotSelectionLocked) return;
     if (target is GameObject go) {
-      activeIndexLoadMenu = ResolveButtonIndex(go);
-      if (activeIndexLoadMenu >= 0) {
+      var resolvedIndex = ResolveButtonIndex(go);
+      if (resolvedIndex >= 0 && resolvedIndex != activeIndexLoadMenu) {
+        activeIndexLoadMenu = resolvedIndex;
         SetActiveIndex(activeIndexLoadMenu);
       }
     }

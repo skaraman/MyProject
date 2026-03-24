@@ -43,6 +43,10 @@ public class InputProcessor : MonoBehaviour {
   }
 
   void Process(InputAction.CallbackContext ctx) {
+    if (ShouldSuppressShiftEscapeDispatch(ctx)) {
+      return;
+    }
+
     if (!cachedNames.TryGetValue(ctx.action, out var name)) {
       name = ctx.action.actionMap.name + "." + ctx.action.name;
       cachedNames[ctx.action] = name;
@@ -94,6 +98,49 @@ public class InputProcessor : MonoBehaviour {
 
     //Debug.Log($"[InputProcessor] {name} = {value}");
     MessageBus.Send(name, value);
+  }
+
+  static bool ShouldSuppressShiftEscapeDispatch(InputAction.CallbackContext ctx) {
+    if (!IsKeyboardEscapeControl(ctx.control)) return false;
+    if (!IsShiftHeld()) return false;
+
+    var action = ctx.action;
+    if (action == null || action.actionMap == null) return false;
+
+    var mapName = action.actionMap.name;
+    var actionName = action.name;
+    var shouldSuppress =
+      (string.Equals(mapName, "gameplay", System.StringComparison.Ordinal) &&
+       string.Equals(actionName, "pause", System.StringComparison.Ordinal)) ||
+      (string.Equals(mapName, "loadMenu", System.StringComparison.Ordinal) &&
+       string.Equals(actionName, "cancel", System.StringComparison.Ordinal)) ||
+      (string.Equals(mapName, "pauseMenu", System.StringComparison.Ordinal) &&
+       string.Equals(actionName, "cancel", System.StringComparison.Ordinal));
+
+    if (!shouldSuppress) return false;
+
+    Debug.Log(
+      "[InputProcessor] Suppressed shifted escape dispatch map=" + mapName +
+      " action=" + actionName +
+      " control=" + ctx.control.path
+    );
+    return true;
+  }
+
+  static bool IsKeyboardEscapeControl(InputControl control) {
+    return control != null &&
+           control.device is Keyboard &&
+           (
+             string.Equals(control.name, "escape", System.StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(control.path, "/Keyboard/escape", System.StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(control.path, "<Keyboard>/escape", System.StringComparison.OrdinalIgnoreCase)
+           );
+  }
+
+  static bool IsShiftHeld() {
+    var keyboard = Keyboard.current;
+    if (keyboard == null) return false;
+    return keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
   }
 
   bool ShouldDispatchVectorValue(InputAction action, Vector2 currentValue) {

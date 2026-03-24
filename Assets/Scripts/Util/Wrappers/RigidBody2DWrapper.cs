@@ -17,12 +17,17 @@ public class Rigidbody2DWrapper : MonoBehaviour {
 
   [ForceUpdate]
   void Update() {
-    if (rb.linearVelocity.x != linearVelocityX || rb.linearVelocity.y != linearVelocityY || rb.angularVelocity != angularVelocity) {
-      holder.x = linearVelocityX;
-      holder.y = linearVelocityY;
-      rb.linearVelocity = holder;
-      rb.angularVelocity = angularVelocity;
+    if (rb == null) rb = GetComponent<Rigidbody2D>();
+    if (rb == null) return;
 
-    }
+    var factor = TimeScale.GetEffectiveFactor(this);
+    holder.x = linearVelocityX * factor;
+    holder.y = linearVelocityY * factor;
+    var targetAngularVelocity = angularVelocity * factor;
+
+    if (rb.linearVelocity == holder && Mathf.Approximately(rb.angularVelocity, targetAngularVelocity)) return;
+
+    rb.linearVelocity = holder;
+    rb.angularVelocity = targetAngularVelocity;
   }
 }

@@ -152,6 +152,7 @@ MonoBehaviour:
     m_Extent: {x: 0.5067948, y: 0.4531299, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2315038072934068531
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -192,6 +193,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -535,6 +538,7 @@ MonoBehaviour:
     m_Extent: {x: 0.40295482, y: 0.6879201, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6741664985693035027
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -575,6 +579,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -1058,6 +1064,7 @@ MonoBehaviour:
     m_Extent: {x: 0.44804013, y: 0.4325498, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &4309067871392424970
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1075,10 +1082,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 6
       to: 6
@@ -1118,7 +1125,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -1157,7 +1164,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -1335,6 +1342,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -1522,6 +1531,7 @@ MonoBehaviour:
     m_Extent: {x: 0.3919698, y: 0.601835, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2316155452832015551
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1562,6 +1572,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -1746,6 +1758,7 @@ MonoBehaviour:
     m_Extent: {x: 0.19971979, y: 0.62147, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &997943083751509546
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1786,6 +1799,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -2044,6 +2059,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.09, y: -0.22, z: 0}
@@ -2288,6 +2305,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.155, y: -0.46, z: 0}
@@ -2435,6 +2454,7 @@ MonoBehaviour:
     m_Extent: {x: 0.6281551, y: 0.37620986, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6318780730357879313
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2475,6 +2495,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -2587,12 +2609,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
-  libraryName: 
+  libraryName: Effects/Effects
   labelPrefix: 
   category: 
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -2803,6 +2827,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.01, y: -0.76, z: 0}
@@ -3200,6 +3226,7 @@ MonoBehaviour:
     m_Extent: {x: 0.12756503, y: 0.29999995, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &1721417510721375978
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3240,6 +3267,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -3560,6 +3589,7 @@ MonoBehaviour:
     m_Extent: {x: 0.7803149, y: 0.62146497, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &27918887021665754
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3600,6 +3630,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -3918,6 +3950,7 @@ MonoBehaviour:
     m_Extent: {x: 0.9778452, y: 0.953055, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5174940181060060568
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3958,6 +3991,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -4145,6 +4180,7 @@ MonoBehaviour:
     m_Extent: {x: 0.39796996, y: 0.49000013, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8544095962765383031
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4185,6 +4221,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -4459,6 +4497,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.115, y: -0.35, z: 0}
@@ -4598,6 +4638,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.05, y: -0.575, z: 0}
@@ -4776,6 +4818,7 @@ MonoBehaviour:
     m_Extent: {x: 0.34879518, y: 0.45241517, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &4093419754173362151
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4816,6 +4859,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -5090,6 +5135,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.2511, y: -3.1806, z: 0}
@@ -5113,10 +5160,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -5156,7 +5203,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -5195,7 +5242,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -5473,6 +5520,7 @@ MonoBehaviour:
     m_Extent: {x: 0.34313, y: 0.44736472, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2461768918014265872
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5513,6 +5561,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -5919,6 +5969,7 @@ MonoBehaviour:
     m_Extent: {x: 0.18998015, y: 0.335, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5493611707609327407
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5959,6 +6010,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -6245,6 +6298,7 @@ MonoBehaviour:
     m_Extent: {x: 1.4800003, y: 1.2150002, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &1119030527147179485
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6285,6 +6339,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -6465,6 +6521,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.1116, y: -3.2364, z: 0}
@@ -6488,10 +6546,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -6531,7 +6589,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -6570,7 +6628,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -6873,6 +6931,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -7113,6 +7173,7 @@ MonoBehaviour:
     m_Extent: {x: 0.34939492, y: 0.5182849, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5574384133959867428
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7153,6 +7214,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -7362,6 +7425,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -7513,6 +7578,7 @@ MonoBehaviour:
     m_Extent: {x: 0.55302, y: 1.2650002, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5626282663630125491
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7553,6 +7619,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -7774,6 +7842,7 @@ MonoBehaviour:
     m_Extent: {x: 0.222875, y: 1.1074849, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2831221444788931896
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7814,6 +7883,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -8191,6 +8262,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -8558,6 +8631,7 @@ MonoBehaviour:
     m_Extent: {x: 0.29500008, y: 0.32326007, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8403397473163235099
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8598,6 +8672,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -8871,6 +8947,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.4464, y: -1.0323, z: 0}
@@ -8894,10 +8972,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -8937,7 +9015,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -8976,7 +9054,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -9349,6 +9427,7 @@ MonoBehaviour:
     m_Extent: {x: 0.585, y: 1.1305751, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &724063337278965219
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9389,6 +9468,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -9599,6 +9680,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.05, y: -0.045, z: 0}
@@ -9838,6 +9921,7 @@ MonoBehaviour:
     m_Extent: {x: 0.20628512, y: 0.37588996, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &507821603455995319
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9878,6 +9962,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -10098,6 +10184,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -10307,6 +10395,7 @@ MonoBehaviour:
     m_Extent: {x: 0.3242401, y: 0.6049648, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6614644557620201232
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10347,6 +10436,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -10692,6 +10783,7 @@ MonoBehaviour:
     m_Extent: {x: 0.82894015, y: 0.5784348, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6367414796838049429
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10732,6 +10824,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -10910,6 +11004,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -11088,6 +11184,7 @@ MonoBehaviour:
     m_Extent: {x: 0.29499984, y: 0.47573495, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5301592714218211813
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11128,6 +11225,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -11337,6 +11436,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -11482,6 +11583,7 @@ MonoBehaviour:
     m_Extent: {x: 0.11413002, y: 0.114094794, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6392668164410307056
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11522,6 +11624,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -11738,6 +11842,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -11883,6 +11989,7 @@ MonoBehaviour:
     m_Extent: {x: 0.37540495, y: 0.61877984, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8313226827697000018
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11923,6 +12030,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -12108,6 +12217,7 @@ MonoBehaviour:
     m_Extent: {x: 0.4055599, y: 0.49752003, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8419673285842389073
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12148,6 +12258,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -12485,6 +12597,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.0279, y: -1.3671, z: 0}
@@ -12508,10 +12622,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -12551,7 +12665,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -12590,7 +12704,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -12868,6 +12982,7 @@ MonoBehaviour:
     m_Extent: {x: 0.3370998, y: 0.55269504, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8220531064851120618
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12908,6 +13023,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -13181,6 +13298,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.025, y: -0.58, z: 0}
@@ -13428,6 +13547,7 @@ MonoBehaviour:
     m_Extent: {x: 0.99037457, y: 1.3814701, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8810754718279034743
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13468,6 +13588,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -13719,6 +13841,7 @@ MonoBehaviour:
     m_Extent: {x: 0.63286996, y: 1.2996249, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &7629980815552383056
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13759,6 +13882,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -13974,6 +14099,7 @@ MonoBehaviour:
     m_Extent: {x: 0.24896002, y: 0.67986, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2163801391868606467
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14014,6 +14140,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -14328,6 +14456,7 @@ MonoBehaviour:
     m_Extent: {x: 0.12870479, y: 0.28238997, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2893630188761963811
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14368,6 +14497,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -14585,6 +14716,7 @@ MonoBehaviour:
     m_Extent: {x: 0.54278505, y: 0.55388993, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6829423453998486863
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14625,6 +14757,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -15030,6 +15164,7 @@ MonoBehaviour:
     m_Extent: {x: 0.19624484, y: 0.44458503, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &417968802587069079
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15070,6 +15205,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -15254,6 +15391,7 @@ MonoBehaviour:
     m_Extent: {x: 0.36441004, y: 0.64, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &3813259321511844231
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15294,6 +15432,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -15541,6 +15681,7 @@ MonoBehaviour:
     m_Extent: {x: 0.39815986, y: 0.5497999, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6436283197611116467
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15581,6 +15722,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -15796,6 +15939,7 @@ MonoBehaviour:
     m_Extent: {x: 0.22986007, y: 0.5450001, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6698020852606854037
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15836,6 +15980,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -16140,6 +16286,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.083699994, y: -4.1292, z: 0}
@@ -16163,10 +16311,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -16206,7 +16354,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -16245,7 +16393,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -16547,6 +16695,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.005, y: -0.24, z: 0}
@@ -16686,6 +16836,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -16825,6 +16977,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.16739999, y: -4.1292, z: 0}
@@ -16848,10 +17002,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -16891,7 +17045,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -16930,7 +17084,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -17233,6 +17387,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.005, y: -0.09, z: 0}
@@ -17372,6 +17528,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.083699994, y: -2.4273, z: 0}
@@ -17395,10 +17553,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -17438,7 +17596,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -17477,7 +17635,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -17818,6 +17976,7 @@ MonoBehaviour:
     m_Extent: {x: 0.19982505, y: 0.38388008, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &3791874914391981454
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17858,6 +18017,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -18047,6 +18208,7 @@ MonoBehaviour:
     m_Extent: {x: 1.1234754, y: 0.92713, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2976941878643030785
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -18087,6 +18249,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -18308,6 +18472,7 @@ MonoBehaviour:
     m_Extent: {x: 0.50029004, y: 0.48257983, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &845766498852709143
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -18348,6 +18513,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -18527,6 +18694,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.4743, y: -1.0323, z: 0}
@@ -18550,10 +18719,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -18593,7 +18762,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -18632,7 +18801,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -18903,6 +19072,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.05, y: -0.915, z: 0}
@@ -19173,6 +19344,7 @@ MonoBehaviour:
     m_Extent: {x: 0.32943022, y: 0.63275015, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5620391614954774453
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19213,6 +19385,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -19461,6 +19635,7 @@ MonoBehaviour:
     m_Extent: {x: 0.27499998, y: 0.6158349, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8062199401113298924
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19501,6 +19676,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -19810,6 +19987,7 @@ MonoBehaviour:
     m_Extent: {x: 0.42057502, y: 0.5299999, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8514496566078144618
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19850,6 +20028,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -20162,6 +20342,7 @@ MonoBehaviour:
     m_Extent: {x: 0.20943534, y: 0.38635504, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &1318750347603384451
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20202,6 +20383,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -20474,6 +20657,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.075, y: -0.205, z: 0}
@@ -20613,6 +20798,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.075, y: -0.485, z: 0}
@@ -21146,6 +21333,7 @@ MonoBehaviour:
     m_Extent: {x: 0.8569548, y: 0.7136799, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &6473344826470569965
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -21186,6 +21374,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -21366,6 +21556,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -21633,6 +21825,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.04, y: -0.77, z: 0}
@@ -21868,6 +22062,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.015, y: -0.005, z: 0}
@@ -22013,6 +22209,7 @@ MonoBehaviour:
     m_Extent: {x: 0.24284494, y: 0.558875, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &2964999999586577418
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -22053,6 +22250,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -22297,6 +22496,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 1
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -22473,6 +22674,7 @@ MonoBehaviour:
     m_Extent: {x: 0.28011513, y: 0.64796996, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8056325424094302959
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -22513,6 +22715,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -22668,6 +22872,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -22757,6 +22963,7 @@ MonoBehaviour:
     m_Extent: {x: 0.38812506, y: 0.42888007, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &8847692836202397020
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -22774,10 +22981,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 6
       to: 6
@@ -22817,7 +23024,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -22856,7 +23063,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -23092,6 +23299,7 @@ GameObject:
   - component: {fileID: 7837511971689069820}
   - component: {fileID: 374333830136589742}
   - component: {fileID: 6036161754494031290}
+  - component: {fileID: 3746392213840123356}
   m_Layer: 6
   m_Name: ESPER
   m_TagString: Untagged
@@ -23258,6 +23466,19 @@ SortingGroup:
   m_SortingOrder: 110
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
+--- !u!114 &3746392213840123356
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7876260987667983281}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1da59d9710634f6aa4187408332b4fcb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::SceneTimeScaleTarget
+  layerIndex: 3
 --- !u!1 &7930612902068901021
 GameObject:
   m_ObjectHideFlags: 0
@@ -23457,6 +23678,7 @@ MonoBehaviour:
     m_Extent: {x: 0.32800984, y: 0.497275, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5821301097465812763
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -23497,6 +23719,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -23737,6 +23961,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.2511, y: -5.022, z: 0}
@@ -23760,10 +23986,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -23803,7 +24029,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -23842,7 +24068,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -24113,6 +24339,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.2511, y: -4.9382997, z: 0}
@@ -24136,10 +24364,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1584
+    keywordHash: 1345
   floatAnimations:
   - prop: _Glow
-    propHash: 433
+    propHash: 434
     sequences:
     - from: 4
       to: 4
@@ -24179,7 +24407,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _GlowColor
-    propHash: 432
+    propHash: 433
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -24218,7 +24446,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.4, g: 0.2, b: 0.15, a: 1}
       to: {r: 0.4, g: 0.2, b: 0.15, a: 1}
@@ -24489,6 +24717,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.04, y: -0.895, z: 0}
@@ -24787,6 +25017,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: -0.1, y: -0.37, z: 0}
@@ -24926,6 +25158,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.02, y: -0.045, z: 0}
@@ -25263,6 +25497,8 @@ MonoBehaviour:
   isAnimation: 1
   doNotRender: 0
   useTrimmedAtlasOffset: 1
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0.005, y: -0.425, z: 0}
@@ -25537,6 +25773,7 @@ MonoBehaviour:
     m_Extent: {x: 0.3074298, y: 1.0165399, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &137834051904571844
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -25577,6 +25814,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -25794,6 +26033,7 @@ MonoBehaviour:
     m_Extent: {x: 0.42777026, y: 0.4612051, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &7176161766407969370
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -25834,6 +26074,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -26253,6 +26495,7 @@ MonoBehaviour:
     m_Extent: {x: 1.2777405, y: 2.0326848, z: 0}
   m_AlwaysUpdate: 1
   m_AutoRebind: 0
+  m_BoundsMode: 0
 --- !u!114 &5238091159600555022
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -26293,6 +26536,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}

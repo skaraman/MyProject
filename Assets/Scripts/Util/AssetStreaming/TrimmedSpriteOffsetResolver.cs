@@ -55,6 +55,7 @@ public static class TrimmedSpriteOffsetResolver {
   static readonly Dictionary<string, AsyncOperationHandle<TextAsset>> pendingLoads = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, List<Action>> pendingCallbacks = new(StringComparer.OrdinalIgnoreCase);
   static readonly Stack<List<Action>> pendingCallbackListPool = new();
+  static readonly HashSet<string> warmupEligibleAtlasPaths = new(StringComparer.OrdinalIgnoreCase);
   static readonly Queue<string> pendingOverlayWarmupLoadQueue = new();
   static readonly HashSet<string> pendingOverlayWarmupLoadSet = new(StringComparer.OrdinalIgnoreCase);
   static readonly Queue<string> pendingWarmGateRuntimeLoadQueue = new();
@@ -74,6 +75,7 @@ public static class TrimmedSpriteOffsetResolver {
     pendingLoads.Clear();
     pendingCallbacks.Clear();
     pendingCallbackListPool.Clear();
+    warmupEligibleAtlasPaths.Clear();
     pendingOverlayWarmupLoadQueue.Clear();
     pendingOverlayWarmupLoadSet.Clear();
     pendingWarmGateRuntimeLoadQueue.Clear();
@@ -157,9 +159,15 @@ public static class TrimmedSpriteOffsetResolver {
     var endExclusive = (int)Math.Min((long)atlasAddresses.Count, (long)start + requestedCount);
     var queued = 0;
     for (var i = start; i < endExclusive; i++) {
+      if (!IsWarmupCandidateRegistered(atlasAddresses[i])) continue;
       if (QueueOverlayWarmupRuntimeLoad(atlasAddresses[i])) queued++;
     }
     return queued;
+  }
+
+  public static void RegisterWarmupMetadataCandidate(string atlasOrSliceAddress) {
+    if (!TryNormalizeWarmupCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return;
+    warmupEligibleAtlasPaths.Add(atlasAssetPath);
   }
 
   public static bool TryGetExactOffset(string sliceAddress, out Vector2 offsetPx, Action onReady = null) {
@@ -456,6 +464,24 @@ public static class TrimmedSpriteOffsetResolver {
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
     if (TrySkipUnsupportedMetadataAtlas(atlasAssetPath, "warmup_queue")) return false;
     return CanWarmupAtlasMetadata(atlasAssetPath);
+  }
+
+  static bool TryNormalizeWarmupCandidateAtlasPath(string atlasOrSliceAddress, out string atlasAssetPath) {
+    atlasAssetPath = "";
+    if (string.IsNullOrWhiteSpace(atlasOrSliceAddress)) return false;
+    if (TryParseSliceAddress(atlasOrSliceAddress, out var parsedAtlasAssetPath, out _)) {
+      atlasAssetPath = parsedAtlasAssetPath;
+    }
+    else {
+      atlasAssetPath = NormalizeAtlasPath(atlasOrSliceAddress);
+    }
+    if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
+    return CanWarmupAtlasMetadata(atlasAssetPath);
+  }
+
+  static bool IsWarmupCandidateRegistered(string atlasOrSliceAddress) {
+    if (!TryNormalizeWarmupCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return false;
+    return warmupEligibleAtlasPaths.Contains(atlasAssetPath);
   }
 
   static bool CanWarmupAtlasMetadata(string atlasAssetPath) {

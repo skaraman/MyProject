@@ -13,6 +13,7 @@ public class SaveSlot : MonoBehaviour {
   public FontText PlaytimeText;
   public FontText LevelText;
   public FontText LocationText;
+  [SerializeField] bool enableDebugLogs;
 
   void Start() {
     UpdateSlotInfo();
@@ -45,6 +46,54 @@ public class SaveSlot : MonoBehaviour {
       LocationText.Generate();
     }
 
-    Debug.Log($"[SaveSlot] saveNumber: {saveNumber}, playtime: {playtime}, level: {level}, location: {location}");
+    if (!enableDebugLogs) return;
+    Debug.Log(
+      "[SaveSlot] saveNumber=" + saveNumber +
+      " playtime=" + playtime +
+      " level=" + level +
+      " location=" + location +
+      " saveNumberText={" + DescribeTextRendererState(SaveNumberText) + "}" +
+      " playtimeText={" + DescribeTextRendererState(PlaytimeText) + "}" +
+      " levelText={" + DescribeTextRendererState(LevelText) + "}" +
+      " locationText={" + DescribeTextRendererState(LocationText) + "}"
+    );
+  }
+
+  static string DescribeTextRendererState(FontText target) {
+    if (!target) return "missing";
+
+    var hostRenderer = target.GetComponent<SpriteRenderer>();
+    var glyphRenderer = FindFirstGeneratedGlyphRenderer(target.transform);
+    return "host(" + DescribeRendererState(hostRenderer) + ") glyph(" + DescribeRendererState(glyphRenderer) + ")";
+  }
+
+  static SpriteRenderer FindFirstGeneratedGlyphRenderer(Transform root) {
+    if (root == null) return null;
+
+    for (var i = 0; i < root.childCount; i++) {
+      var child = root.GetChild(i);
+      if (child == null || !child.gameObject.activeSelf) continue;
+
+      var glyphRenderer = child.GetComponent<SpriteRenderer>();
+      if (glyphRenderer != null) return glyphRenderer;
+    }
+
+    return null;
+  }
+
+  static string DescribeRendererState(SpriteRenderer renderer) {
+    if (renderer == null) return "missing";
+
+    var materialName = renderer.sharedMaterial != null ? renderer.sharedMaterial.name : "null";
+    var sortingLayerName = SortingLayer.IDToName(renderer.sortingLayerID);
+    if (string.IsNullOrWhiteSpace(sortingLayerName)) {
+      sortingLayerName = renderer.sortingLayerID.ToString();
+    }
+
+    return
+      "mat=" + materialName +
+      " layer=" + sortingLayerName +
+      " order=" + renderer.sortingOrder +
+      " mask=" + renderer.maskInteraction;
   }
 }

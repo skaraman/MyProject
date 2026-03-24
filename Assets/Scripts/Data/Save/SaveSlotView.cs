@@ -97,11 +97,6 @@ public class SaveSlotView : MonoBehaviour {
       }
 
       loadMenuGroup.buttons.Add(go);
-
-      var propagators = go.GetComponentsInChildren<ComponentPropagator>();
-      for (int j = 0; j < propagators.Length; j++) {
-        propagators[j].ForcePropagation();
-      }
     }
   }
 

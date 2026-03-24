@@ -55,9 +55,20 @@ Improve location prefab loading smoothness and dynamic smart loading:
 
 ### What to measure next
 
+Immediate regression follow-up from the latest `2026-03-19` load-save run:
+- Re-run `Load Game` from `LoadMenu` and confirm:
+  - no inactive-`ESPER` warmup error appears
+  - no speculative trimmed-metadata warmup error appears for non-opt-in environment atlases such as `ForestRuins/bg`
+  - `Gameplay` input works immediately after closing `PauseMenu`
+  - the previous `[SingleSceneManager][LoadingHeartbeatGap] gap_s=22.045` does not recur
+
 1. Re-run `Start New Game` and keep checking for any `[SingleSceneManager][LoadingHeartbeatGap] > 2.0s`.
-2. Watch whether location-prefab-driven warm content stays smooth when new locations or room-adjacent content enter scope.
-3. If a new hitch appears, correlate it first with:
+2. Validate the new instant `LoadMenu` / `PauseMenu` switching path:
+   - `Escape` closes `LoadMenu` without blackscreen or overlay work
+   - `Escape` opens and closes `PauseMenu` without blackscreen or overlay work
+   - `Shift+Escape` only returns to `MainMenu` from `Gameplay` or `Pause`
+3. Watch whether location-prefab-driven warm content stays smooth when new locations or room-adjacent content enter scope.
+4. If a new hitch appears, correlate it first with:
    - location prefab activation
    - atlas completion bursts
    - queue depth / deferred work

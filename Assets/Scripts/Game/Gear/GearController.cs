@@ -47,6 +47,7 @@ public class GearController : MonoBehaviour {
   private readonly List<string> equipWarmupAddressScratch = new();
   private readonly HashSet<string> equipWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly Dictionary<string, string> equipPartPrefixScratch = new(StringComparer.OrdinalIgnoreCase);
+  private Dictionary<string, string> pendingEquipWarmupPartPrefixes;
   private Coroutine equipWarmupRoutine;
   private bool effectControllerInitialized;
   private bool runtimeInitialized;
@@ -57,6 +58,11 @@ public class GearController : MonoBehaviour {
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
   public int AppearanceRevision => appearanceRevision;
 
+
+  void OnEnable() {
+    EnsureRuntimeInitialized("enable");
+    TryStartPendingEquipWarmup("enable");
+  }
 
   void Start() {
     EnsureRuntimeInitialized("start");
@@ -70,8 +76,8 @@ public class GearController : MonoBehaviour {
     if (runtimeInitialized) return;
     runtimeInitialized = true;
     ResetDebugPlaybackFlags();
-    appearanceOwnerId = "player:" + gameObject.GetInstanceID().ToString();
-    effectAppearanceOwnerId = effectNode != null ? "effect:" + effectNode.GetInstanceID().ToString() : "";
+    appearanceOwnerId = "player:" + ObjectEntityId.GetString(gameObject);
+    effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
     combinedBounces = (HairObjects ?? Array.Empty<GameObject>()).Concat(OtherBounceGearObjects ?? Array.Empty<GameObject>()).ToArray();
     NormalizeSkinSpriteDefaultsForRuntime();
     PrimeSpriteStreamingWarmup();
@@ -115,7 +121,7 @@ public class GearController : MonoBehaviour {
       needsFlip = false;
     }
 
-    TickControllers(Time.deltaTime);
+    TickControllers(TimeScale.GetDeltaTime(this));
   }
 
   void TickControllers(float deltaTime) {
@@ -203,6 +209,7 @@ public class GearController : MonoBehaviour {
 
   public void LoadGear() {
     EnsureRuntimeInitialized("load_gear");
+    EquippedItems.EnsureKnownForms();
     GetSavedGearState();
     RefreshGear();
     PrimeEquippedAnimationStartsIfLoading();
@@ -231,17 +238,22 @@ public class GearController : MonoBehaviour {
   }
 
   public void GetSavedGearState() {
+    EquippedItems.EnsureKnownForms();
     var loaded = SaveSlotManager.Load("equippedGear");
     if (loaded.Keys.Count == 0) return;
     foreach (var form in loaded.GetComplex<Dictionary<string, Dictionary<string, GearItem>>>("allGear")) {
+      EquippedItems.EnsureForm(form.Key);
       foreach (var slot in form.Value) {
-        if (slot.Value == null) { continue; }
-        EquippedItems.AllGearForms[EsperanzaForms.GetActive()][slot.Key] = slot.Value;
+        if (!EquippedItems.AllGearForms[form.Key].ContainsKey(slot.Key)) {
+          EquippedItems.AllGearForms[form.Key][slot.Key] = null;
+        }
+        EquippedItems.AllGearForms[form.Key][slot.Key] = EquippedItems.CloneGearItem(slot.Value);
       }
     }
   }
 
   public void SetGearIntoSlot(string slot, GearItem gearItem) {
+    EquippedItems.EnsureForm(EsperanzaForms.GetActive());
     EquippedItems.AllGearForms[EsperanzaForms.GetActive()][slot] = gearItem;
     gameData.SetComplex("allGear", EquippedItems.AllGearForms);
     SaveSlotManager.Save("equippedGear", gameData);
@@ -295,6 +307,7 @@ public class GearController : MonoBehaviour {
 
   public void EquipGear() {
     var activeForm = EsperanzaForms.GetActive();
+    EquippedItems.EnsureForm(activeForm);
     var equippedItems = EquippedItems.AllGearForms;
     equipPartPrefixScratch.Clear();
     foreach (KeyValuePair<string, GearItem> equip in equippedItems[activeForm]) {
@@ -381,8 +394,29 @@ public class GearController : MonoBehaviour {
 
   void QueueWarmupForEquippedCharacter(Dictionary<string, string> equippedPartPrefixes) {
     if (!Application.isPlaying || !queueEquippedAnimationWarmup) return;
+    pendingEquipWarmupPartPrefixes = equippedPartPrefixes != null
+      ? new Dictionary<string, string>(equippedPartPrefixes, StringComparer.OrdinalIgnoreCase)
+      : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    TryStartPendingEquipWarmup("queue_request");
+  }
+
+  void TryStartPendingEquipWarmup(string source) {
+    if (!Application.isPlaying || !queueEquippedAnimationWarmup) return;
+    if (pendingEquipWarmupPartPrefixes == null) return;
+    if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+      Debug.Log(
+        "[GearController] DeferredEquipWarmup" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " object=" + gameObject.name +
+        " enabled=" + (isActiveAndEnabled ? 1 : 0) +
+        " active_self=" + (gameObject.activeSelf ? 1 : 0) +
+        " active_hierarchy=" + (gameObject.activeInHierarchy ? 1 : 0)
+      );
+      return;
+    }
+
     StopEquipWarmupQueue();
-    equipWarmupRoutine = StartCoroutine(WarmEquippedCharacterRoutine(equippedPartPrefixes));
+    equipWarmupRoutine = StartCoroutine(WarmEquippedCharacterRoutine(pendingEquipWarmupPartPrefixes));
   }
 
   void StopEquipWarmupQueue() {
@@ -431,6 +465,9 @@ public class GearController : MonoBehaviour {
 
     equipWarmupAddressScratch.Clear();
     equipWarmupSeenAddressScratch.Clear();
+    if (ReferenceEquals(pendingEquipWarmupPartPrefixes, equippedPartPrefixes)) {
+      pendingEquipWarmupPartPrefixes = null;
+    }
     equipWarmupRoutine = null;
   }
 

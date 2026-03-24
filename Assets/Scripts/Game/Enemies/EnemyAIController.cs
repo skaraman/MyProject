@@ -60,14 +60,15 @@ public class EnemyAIController : MonoBehaviour {
   }
 
   private IEnumerator AttackSequence() {
-    if (Time.time < nextAttackTime) yield break;
-    nextAttackTime = Time.time + attackCooldown;
+    var now = TimeScale.GetNow(this);
+    if (now < nextAttackTime) yield break;
+    nextAttackTime = now + attackCooldown;
 
     StopMovement();
     if (enemyController.PlayAnimation("Attack")) {
       float wait = enemyController.GetAnimationDurationSeconds("Attack");
       if (wait <= 0f) wait = 0.5f;
-      yield return new WaitForSeconds(wait);
+      yield return TimeScale.WaitForSecondsScaled(wait, this);
     }
     enemyController.PlayAnimation(enemyController.defaultAnimation);
   }
@@ -79,7 +80,7 @@ public class EnemyAIController : MonoBehaviour {
     if (roll < 0.25f) {
       StopMovement();
       enemyController.PauseAnimation();
-      yield return new WaitForSeconds(Random.Range(waitRange.x, waitRange.y));
+      yield return TimeScale.WaitForSecondsScaled(Random.Range(waitRange.x, waitRange.y), this);
       enemyController.ResumeAnimation();
       yield break;
     }
@@ -116,7 +117,7 @@ public class EnemyAIController : MonoBehaviour {
     float elapsed = 0f;
     while (elapsed < duration) {
       ApplyMovement(direction, speedMultiplier);
-      elapsed += Time.deltaTime;
+      elapsed += TimeScale.GetDeltaTime(this);
       yield return null;
     }
     StopMovement();
@@ -125,10 +126,10 @@ public class EnemyAIController : MonoBehaviour {
   private void ApplyMovement(Vector2 dir, float speedMultiplier) {
     Vector2 velocity = dir * moveSpeed * speedMultiplier;
     if (rb != null) {
-      rb.linearVelocity = velocity;
+      rb.linearVelocity = velocity * TimeScale.GetEffectiveFactor(this);
     }
     else {
-      transform.position += (Vector3)(velocity * Time.deltaTime);
+      transform.position += (Vector3)(velocity * TimeScale.GetDeltaTime(this));
     }
   }
 

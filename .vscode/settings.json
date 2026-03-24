@@ -46,6 +46,52 @@
         "temp/": true,
         "Temp/": true
     },
+    "files.watcherExclude": {
+        "**/.git/**": true,
+        "**/.vs/**": true,
+        "**/Library/**": true,
+        "**/library/**": true,
+        "**/Temp/**": true,
+        "**/temp/**": true,
+        "**/Obj/**": true,
+        "**/obj/**": true,
+        "**/Build/**": true,
+        "**/build/**": true,
+        "**/Builds/**": true,
+        "**/Logs/**": true,
+        "**/logs/**": true,
+        "**/MemoryCaptures/**": true,
+        "**/Recordings/**": true,
+        "**/ProfilerCaptures/**": true,
+        "**/ServerData/**": true,
+        "**/Assets/Addressables_Temp/**": true,
+        "**/Assets/Generated/**": true,
+        "**/Assets/_Recovery/**": true,
+        "**/UserSettings/**": true
+    },
+    "search.exclude": {
+        "**/.git": true,
+        "**/.vs": true,
+        "**/Library": true,
+        "**/library": true,
+        "**/Temp": true,
+        "**/temp": true,
+        "**/Obj": true,
+        "**/obj": true,
+        "**/Build": true,
+        "**/build": true,
+        "**/Builds": true,
+        "**/Logs": true,
+        "**/logs": true,
+        "**/MemoryCaptures": true,
+        "**/Recordings": true,
+        "**/ProfilerCaptures": true,
+        "**/ServerData": true,
+        "**/Assets/Addressables_Temp": true,
+        "**/Assets/Generated": true,
+        "**/Assets/_Recovery": true,
+        "**/UserSettings": true
+    },
     "files.associations": {
         "*.asset": "yaml",
         "*.meta": "yaml",
@@ -91,5 +137,13 @@
         "yinput",
         "Zemi"
     ],
-    "dotnet.defaultSolution": "MyProject.slnx"
+    "dotnet.defaultSolution": "MyProject.slnx",
+    "chatgpt.openOnStartup": false,
+    "git.ignoreLimitWarning": true,
+    "git.decorations.enabled": false,
+    "git.autorefresh": false,
+    "scm.diffDecorations": "none",
+    "terminal.integrated.env.windows": {
+        "MSBUILDDISABLENODEREUSE": "1"
+    }
 }

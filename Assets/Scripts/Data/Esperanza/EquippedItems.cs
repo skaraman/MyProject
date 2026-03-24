@@ -1,67 +1,165 @@
+using System;
 using System.Collections.Generic;
 
 public static class EquippedItems {
-  public static Dictionary<string, GearItem> Base { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Regular Top", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Regular Bottoms", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },
-    { "Feet", new GearItem { type = "Normal", name = "Regular Boots", gearId = "Base_aa", gearColor = "Brown", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
-    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
-    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
-    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
-  };
+  static readonly Dictionary<string, Dictionary<string, GearItem>> DefaultGearForms = CreateDefaultGearForms();
 
-  public static Dictionary<string, GearItem> Aqua { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Wetsuit Top", gearId = "Aqua_aa", gearColor = "LightBlue", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Wetsuit Bottoms", gearId = "Aqua_aa", gearColor = "LightBlue", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Feet", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
-    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
-    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
-    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
-  };
+  public static Dictionary<string, Dictionary<string, GearItem>> AllGearForms { get; private set; } = CloneGearForms(DefaultGearForms);
 
-  public static Dictionary<string, GearItem> Bolt { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Anti-Static Top", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Anti-Static Pants", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
-    { "Feet", new GearItem { type = "Normal", name = "Anti-static Boots", gearId = "Bolt_aa", gearColor = "Grey", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
-    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
-    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
-    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
-  };
+  public static void ResetToDefaults() {
+    AllGearForms = CloneGearForms(DefaultGearForms);
+    EnsureKnownForms();
+  }
 
-  public static Dictionary<string, GearItem> Cold { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Warm Top", gearId = "Cold_aa", gearColor = "DarkBlue", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Warm Bottoms", gearId = "Cold_aa", gearColor = "DarkBlue", boosts  = new List<BoostEntry>() } },
-    { "Feet", new GearItem { type = "Normal", name = "Warm Footies", gearId = "Cold_aa", gearColor = "DarkBlue", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
-    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
-    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
-    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
-  };
+  public static void EnsureKnownForms() {
+    foreach (var form in EsperanzaForms.KnownForms) {
+      EnsureForm(form);
+    }
+  }
 
-  public static Dictionary<string, GearItem> Fire { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Sheer Top", gearId = "Fire_aa", gearColor = "Yellow", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Skimmies", gearId = "Fire_aa", gearColor = "Yellow", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Feet", null }, { "Shoulders", null }, { "Arms", null }, { "Belt", null }, { "Zemi", null },
-    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
-    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
-    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
-  };
+  public static void EnsureForm(string formName) {
+    if (string.IsNullOrWhiteSpace(formName)) {
+      return;
+    }
 
-  public static Dictionary<string, GearItem> Dark { set; get; } = new Dictionary<string, GearItem> {
-    { "Chest", new GearItem { type = "Normal", name = "Void Shirt", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
-    { "Legs", new GearItem { type = "Normal", name = "Void Pants", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
-    { "Feet", new GearItem { type = "Normal", name = "Void Footies", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
-    { "Arms", new GearItem { type = "Normal", name = "Void Gloves", gearId = "Dark_aa", gearColor = "DarkPurple", boosts = new List<BoostEntry>() } },
-    { "Head", null }, { "Shoulders", null }, { "Belt", null }, { "Zemi", null },
-    { "Ring1", null }, { "Ring2", null }, { "Ring3", null }, { "Ring4", null }, { "Ring5", null },
-    { "Ring6", null }, { "Ring7", null }, { "Ring8", null }, { "Ring9", null },
-    { "Ring10", null }, { "Ring11", null }, { "Ring12", null }
-  };
+    if (!AllGearForms.TryGetValue(formName, out var slots) || slots == null) {
+      slots = DefaultGearForms.TryGetValue(formName, out var defaults)
+        ? CloneGearSlots(defaults)
+        : CreateEmptyGearSlots();
+      AllGearForms[formName] = slots;
+    }
 
-  public static Dictionary<string, Dictionary<string, GearItem>> AllGearForms { get; } = new Dictionary<string, Dictionary<string, GearItem>> {
-    { "Base", Base }, { "Aqua", Aqua }, { "Bolt", Bolt }, { "Cold", Cold }, { "Fire", Fire }, { "Dark", Dark }
-  };
+    var defaultSlots = DefaultGearForms.TryGetValue(formName, out var formDefaults)
+      ? formDefaults
+      : CreateEmptyGearSlots();
 
+    foreach (var slot in defaultSlots) {
+      if (!slots.ContainsKey(slot.Key)) {
+        slots[slot.Key] = CloneGearItem(slot.Value);
+      }
+    }
+  }
+
+  public static GearItem CloneGearItem(GearItem gearItem) {
+    if (gearItem == null) {
+      return null;
+    }
+
+    var boosts = new List<BoostEntry>();
+    if (gearItem.boosts != null) {
+      for (var i = 0; i < gearItem.boosts.Count; i++) {
+        var boost = gearItem.boosts[i];
+        if (boost == null) {
+          continue;
+        }
+
+        boosts.Add(new BoostEntry {
+          statName = boost.statName,
+          value = boost.value
+        });
+      }
+    }
+
+    return new GearItem {
+      type = gearItem.type,
+      name = gearItem.name,
+      slot = gearItem.slot,
+      gearId = gearItem.gearId,
+      gearColor = gearItem.gearColor,
+      boosts = boosts
+    };
+  }
+
+  static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearForms() {
+    return new Dictionary<string, Dictionary<string, GearItem>>(StringComparer.Ordinal) {
+      ["Base"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
+        ["Chest"] = CreateGearItem("Normal", "Regular Top", "Chest", "Base_aa", "Brown"),
+        ["Legs"] = CreateGearItem("Normal", "Regular Bottoms", "Legs", "Base_aa", "Brown"),
+        ["Feet"] = CreateGearItem("Normal", "Regular Boots", "Feet", "Base_aa", "Brown"),
+        ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
+        ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
+        ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
+        ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
+      },
+      ["Aqua"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
+        ["Chest"] = CreateGearItem("Normal", "Wetsuit Top", "Chest", "Aqua_aa", "LightBlue"),
+        ["Legs"] = CreateGearItem("Normal", "Wetsuit Bottoms", "Legs", "Aqua_aa", "LightBlue"),
+        ["Head"] = null, ["Feet"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
+        ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
+        ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
+        ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
+      },
+      ["Bolt"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
+        ["Chest"] = CreateGearItem("Normal", "Anti-Static Top", "Chest", "Bolt_aa", "Grey"),
+        ["Legs"] = CreateGearItem("Normal", "Anti-Static Pants", "Legs", "Bolt_aa", "Grey"),
+        ["Feet"] = CreateGearItem("Normal", "Anti-static Boots", "Feet", "Bolt_aa", "Grey"),
+        ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
+        ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
+        ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
+        ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
+      },
+      ["Cold"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
+        ["Chest"] = CreateGearItem("Normal", "Warm Top", "Chest", "Cold_aa", "DarkBlue"),
+        ["Legs"] = CreateGearItem("Normal", "Warm Bottoms", "Legs", "Cold_aa", "DarkBlue"),
+        ["Feet"] = CreateGearItem("Normal", "Warm Footies", "Feet", "Cold_aa", "DarkBlue"),
+        ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
+        ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
+        ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
+        ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
+      },
+      ["Fire"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
+        ["Chest"] = CreateGearItem("Normal", "Sheer Top", "Chest", "Fire_aa", "Yellow"),
+        ["Legs"] = CreateGearItem("Normal", "Skimmies", "Legs", "Fire_aa", "Yellow"),
+        ["Head"] = null, ["Feet"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
+        ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
+        ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
+        ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
+      },
+      ["Dark"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
+        ["Chest"] = CreateGearItem("Normal", "Void Shirt", "Chest", "Dark_aa", "DarkPurple"),
+        ["Legs"] = CreateGearItem("Normal", "Void Pants", "Legs", "Dark_aa", "DarkPurple"),
+        ["Feet"] = CreateGearItem("Normal", "Void Footies", "Feet", "Dark_aa", "DarkPurple"),
+        ["Arms"] = CreateGearItem("Normal", "Void Gloves", "Arms", "Dark_aa", "DarkPurple"),
+        ["Head"] = null, ["Shoulders"] = null, ["Belt"] = null, ["Zemi"] = null,
+        ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
+        ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
+        ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
+      }
+    };
+  }
+
+  static Dictionary<string, Dictionary<string, GearItem>> CloneGearForms(Dictionary<string, Dictionary<string, GearItem>> source) {
+    var clone = new Dictionary<string, Dictionary<string, GearItem>>(StringComparer.Ordinal);
+    foreach (var form in source) {
+      clone[form.Key] = CloneGearSlots(form.Value);
+    }
+    return clone;
+  }
+
+  static Dictionary<string, GearItem> CloneGearSlots(Dictionary<string, GearItem> source) {
+    var clone = new Dictionary<string, GearItem>(StringComparer.Ordinal);
+    foreach (var slot in source) {
+      clone[slot.Key] = CloneGearItem(slot.Value);
+    }
+    return clone;
+  }
+
+  static Dictionary<string, GearItem> CreateEmptyGearSlots() {
+    var emptySlots = new Dictionary<string, GearItem>(StringComparer.Ordinal);
+    foreach (var slot in DefaultGearForms["Base"].Keys) {
+      emptySlots[slot] = null;
+    }
+    return emptySlots;
+  }
+
+  static GearItem CreateGearItem(string type, string name, string slot, string gearId, string gearColor) {
+    return new GearItem {
+      type = type,
+      name = name,
+      slot = slot,
+      gearId = gearId,
+      gearColor = gearColor,
+      boosts = new List<BoostEntry>()
+    };
+  }
 }

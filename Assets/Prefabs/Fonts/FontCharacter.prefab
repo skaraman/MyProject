@@ -11,10 +11,10 @@ GameObject:
   - component: {fileID: 3628096719918338701}
   - component: {fileID: 3007967617590036580}
   - component: {fileID: 56169060346633625}
-  - component: {fileID: 2532336623339999381}
   - component: {fileID: 5292889968104270592}
   - component: {fileID: 3329734672887557030}
   - component: {fileID: 8783335750567749052}
+  - component: {fileID: 4508088259885696811}
   m_Layer: 8
   m_Name: FontCharacter
   m_TagString: Untagged
@@ -66,21 +66,6 @@ MonoBehaviour:
   m_labelHash: 2.0399594e-14
   m_SpriteKey: 0
   m_SpriteHash: 623543494
---- !u!114 &2532336623339999381
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5741502041329546140}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c29cff538c195c249b69c6f2236de67b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Library: []
-  m_SpriteLibraryAsset: {fileID: 7108339969198208228, guid: 24b94f728e99c074abe13e3c3582d102,
-    type: 3}
 --- !u!212 &5292889968104270592
 SpriteRenderer:
   serializedVersion: 2
@@ -127,11 +112,10 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1075466241
-  m_SortingLayer: 3
+  m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -997972493423046422, guid: 1ee3db7f6075b1b4580e44db200004b6,
-    type: 3}
+  m_Sprite: {fileID: -997972493423046422, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -154,6 +138,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _bool: 0
+  animateWhenNotVisible: 0
   keywordToggles: []
   floatAnimations: []
   colorAnimations: []
@@ -175,3 +160,29 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cam: {fileID: 0}
+--- !u!114 &4508088259885696811
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5741502041329546140}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
+  libraryName: UI/Fonts
+  labelPrefix: A
+  category: Hand
+  isAnimation: 0
+  doNotRender: 0
+  useTrimmedAtlasOffset: 0
+  shaderMarginPixelsX: 0
+  shaderMarginPixelsY: 0
+  enableDebugSpriteFetchLogs: 0
+  enableDebugSpriteApplyLogs: 0
+  serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
+  serializedHasAppliedTrimmedOffset: 0
+  serializedTrimmedOffsetBaseLocalPosition: {x: 0, y: 0, z: 0}
+  serializedHasTrimmedOffsetBaseLocalPosition: 0
