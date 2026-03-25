@@ -131,6 +131,9 @@ public class GameplayDialogController : MonoBehaviour {
   string pendingLocationSource = "";
   int visibleCharacterCount;
   float typewriterCharacterProgress;
+  int pauseDialogSuspendToken;
+  bool debugSeenOverrideInitialized;
+  bool appliedDebugSeenOverride;
   readonly List<GameplayDialogNode> pendingLocationSequence = new();
 
   public bool IsDialogActive => dialogueActive;
@@ -139,16 +142,80 @@ public class GameplayDialogController : MonoBehaviour {
     return Application.isEditor || Debug.isDebugBuild;
   }
 
+  bool ShouldSuspendDialogueForPause() {
+    if (!dialogueActive) {
+      return false;
+    }
+
+    pauseDialogSuspendToken = SingleSceneManager.CurrentPauseDialogSuspendToken;
+    return pauseDialogSuspendToken > 0;
+  }
+
+  bool TryResumeDialogueAfterPause(string source) {
+    if (!dialogueActive || pauseDialogSuspendToken <= 0) {
+      return false;
+    }
+
+    var resumeToken = pauseDialogSuspendToken;
+    pauseDialogSuspendToken = 0;
+    if (!SingleSceneManager.TryConsumePauseDialogResumeToken(resumeToken)) {
+      if (ShouldLogDialogDebug()) {
+        Debug.Log(
+          "[GameplayDialogController] Dropped suspended dialog because pause resume token was not available" +
+          " token=" + resumeToken +
+          " source='" + (source ?? "") + "'"
+        );
+      }
+      ResetDialogueWithoutNotification("pause_resume_missed");
+      return false;
+    }
+
+    if (currentNodeIndex < 0 || currentNodeIndex >= sequenceNodes.Count) {
+      if (ShouldLogDialogDebug()) {
+        Debug.LogWarning(
+          "[GameplayDialogController] Suspended dialog had an invalid node index" +
+          " token=" + resumeToken +
+          " node_index=" + currentNodeIndex +
+          " node_count=" + sequenceNodes.Count
+        );
+      }
+      ResetDialogueWithoutNotification("pause_resume_invalid_index");
+      return false;
+    }
+
+    SetDialogVisible(true, source + "_pause_resume");
+    RefreshCurrentNode(source + "_pause_resume");
+    ApplyVisibleText();
+
+    if (ShouldLogDialogDebug()) {
+      Debug.Log(
+        "[GameplayDialogController] Resumed active dialog after pause" +
+        " token=" + resumeToken +
+        " node_index=" + currentNodeIndex +
+        " visible_chars=" + visibleCharacterCount +
+        " total_chars=" + currentFullText.Length
+      );
+    }
+
+    return true;
+  }
+
+  void ResetPauseDialogueResumeState() {
+    pauseDialogSuspendToken = 0;
+  }
+
   void Awake() {
-    ApplyDebugSeenOverride("awake");
+    SyncDebugSeenOverride("awake", force: true);
   }
 
   void OnEnable() {
-    ApplyDebugSeenOverride("enable");
     EnsureResolved();
     RegisterHandlers();
     dialogStateReady = DialogController.IsStateReadyForCurrentSlot;
     pendingLocationId = ResolveLocationId(LocationManager.currentLocation);
+    if (TryResumeDialogueAfterPause("enable")) {
+      return;
+    }
     SetDialogVisible(false, "enable");
     if (dialogStateReady) {
       QueueLocationDialogIfNeeded(pendingLocationId, "enable");
@@ -165,14 +232,27 @@ public class GameplayDialogController : MonoBehaviour {
   }
 
   void OnDisable() {
+    var suspendForPause = ShouldSuspendDialogueForPause();
     UnregisterHandlers();
+    if (suspendForPause) {
+      SetDialogVisible(false, "pause_suspend");
+      if (ShouldLogDialogDebug()) {
+        Debug.Log(
+          "[GameplayDialogController] Suspended active dialog for pause" +
+          " token=" + pauseDialogSuspendToken +
+          " node_index=" + currentNodeIndex +
+          " visible_chars=" + visibleCharacterCount +
+          " total_chars=" + currentFullText.Length
+        );
+      }
+      return;
+    }
+
+    ResetPauseDialogueResumeState();
     pendingLocationSequence.Clear();
     pendingLocationSource = "";
     pendingLocationId = "";
     dialogStateReady = false;
-    if (debugTreatAllDialogAsUnseen) {
-      DialogController.SetDebugTreatAllDialogAsUnseen(false, "disable");
-    }
     if (dialogueActive) {
       StopDialogue("disable");
       return;
@@ -197,11 +277,19 @@ public class GameplayDialogController : MonoBehaviour {
       return;
     }
 
-    ApplyDebugSeenOverride("validate");
+    SyncDebugSeenOverride("validate");
   }
 
-  void ApplyDebugSeenOverride(string source) {
+  void SyncDebugSeenOverride(string source, bool force = false) {
+    if (!force &&
+        debugSeenOverrideInitialized &&
+        appliedDebugSeenOverride == debugTreatAllDialogAsUnseen) {
+      return;
+    }
+
     DialogController.SetDebugTreatAllDialogAsUnseen(debugTreatAllDialogAsUnseen, source);
+    appliedDebugSeenOverride = debugTreatAllDialogAsUnseen;
+    debugSeenOverrideInitialized = true;
     if (!ShouldLogDialogDebug()) {
       return;
     }
@@ -236,6 +324,7 @@ public class GameplayDialogController : MonoBehaviour {
   public void StopDialogue(string reason = "runtime") {
     var wasActive = dialogueActive;
     dialogueActive = false;
+    ResetPauseDialogueResumeState();
     currentNodeIndex = -1;
     currentFullText = "";
     visibleCharacterCount = 0;
@@ -253,6 +342,22 @@ public class GameplayDialogController : MonoBehaviour {
     }
     MessageBus.Send("dialog.finished", reason);
     TryPlayPendingLocationSequence("dialog_finished");
+  }
+
+  void ResetDialogueWithoutNotification(string source) {
+    ResetPauseDialogueResumeState();
+    dialogueActive = false;
+    currentNodeIndex = -1;
+    currentFullText = "";
+    visibleCharacterCount = 0;
+    typewriterCharacterProgress = 0f;
+    sequenceNodes.Clear();
+    pendingLocationSequence.Clear();
+    pendingLocationSource = "";
+    pendingLocationId = "";
+    ApplyText(dialogText, "");
+    ClearSpeakerState();
+    SetDialogVisible(false, source);
   }
 
   void RegisterHandlers() {
@@ -561,6 +666,7 @@ public class GameplayDialogController : MonoBehaviour {
       return;
     }
 
+    DialogController.BeginLocationDialogSession(pendingLocationId, "location_loaded");
     if (!dialogStateReady) {
       if (ShouldLogDialogDebug()) {
         Debug.Log(

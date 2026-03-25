@@ -85,22 +85,29 @@ public class FormButtons : ButtonGroup {
 
   protected override void HandleHoverState(GameObject button) {
     if (IsLocked(button)) return;
-    var shaders = button.GetComponent<ReferenceListAllIn1AnimatorInspector>();
-    if (shaders == null) return;
-    shaders.Get(0)?.SetKeyword("OUTBASE_ON", true);
-    shaders.Get(1)?.SetKeyword("OUTBASE_ON", true);
+    ApplyHoverState(button, isHovered: true);
   }
 
   protected override void HandleUnhoverState(GameObject button) {
     if (IsLocked(button)) return;
-    var shaders = button.GetComponent<ReferenceListAllIn1AnimatorInspector>();
-    if (shaders == null) return;
-    shaders.Get(1)?.SetKeyword("OUTBASE_ON", false);
-    shaders.Get(0)?.SetKeyword("OUTBASE_ON", false);
+    ApplyHoverState(button, isHovered: false);
   }
 
   bool IsLocked(GameObject button) {
     if (button == null) return true;
     return !EsperanzaForms.IsUnlocked(button.name);
+  }
+
+  static void ApplyHoverState(GameObject button, bool isHovered) {
+    if (button == null) {
+      return;
+    }
+
+    var resolvedAnimators = ButtonShaderKeywords.ApplyToButton(button, "OUTBASE_ON", isHovered);
+    if (resolvedAnimators > 0) {
+      return;
+    }
+
+    Debug.LogWarning("[FormButtons] No hover animators resolved for button='" + button.name + "'");
   }
 }

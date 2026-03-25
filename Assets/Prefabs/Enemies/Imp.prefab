@@ -3157,8 +3157,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 047c8d4891fa54d41b1059a44c3d03cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::EnemyController
-  slowDown: 1
-  forceLoop: 1
+  slowDown: 0
+  forceLoop: 0
+  awardPlaceholderXp: 0
   spriteObjects:
   - {fileID: 5485371309744147019}
   hBoxObjects:
@@ -3172,6 +3173,7 @@ MonoBehaviour:
   enemyType: Imp
   defaultAnimation: Run
   playOnStart: 1
+  placeholderKillXpReward: 100
   prewarmEnemyAnimationStarts: 1
   prewarmFramesPerAnimation: 4
 --- !u!114 &1009002839782859216

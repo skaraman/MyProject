@@ -10,6 +10,8 @@ public struct WarmPackContent {
   public List<string> spriteLibraries;
   public List<string> directAddresses;
   public List<string> addressableLabels;
+  public List<string> assetAddresses;
+  public List<string> assetLabels;
 }
 
 [Serializable]
@@ -18,6 +20,8 @@ public struct CombatPopulationWarmPackEntry {
   public List<string> spriteLibraries;
   public List<string> directAddresses;
   public List<string> addressableLabels;
+  public List<string> assetAddresses;
+  public List<string> assetLabels;
 }
 
 [CreateAssetMenu(fileName = "LocationWarmProfile", menuName = "Sprite Streaming/Location Warm Profile")]
@@ -33,11 +37,17 @@ public class LocationWarmProfile : ScriptableObject {
   [SerializeField] List<string> criticalSpriteLibraries = new();
   [SerializeField] List<string> criticalDirectAddresses = new();
   [SerializeField] List<string> criticalAddressableLabels = new();
+  [SerializeField] List<string> criticalAssetAddresses = new();
+  [SerializeField] List<string> criticalAssetLabels = new();
   [SerializeField] List<string> warmSpriteLibraries = new();
   [SerializeField] List<string> warmDirectAddresses = new();
   [SerializeField] List<string> warmAddressableLabels = new();
+  [SerializeField] List<string> warmAssetAddresses = new();
+  [SerializeField] List<string> warmAssetLabels = new();
   [SerializeField] List<string> warmUiDirectAddresses = new();
   [SerializeField] List<string> warmUiAddressableLabels = new();
+  [SerializeField] List<string> warmUiAssetAddresses = new();
+  [SerializeField] List<string> warmUiAssetLabels = new();
   [Header("Area Packs")]
   [SerializeField] WarmPackContent currentRoomPack;
   [SerializeField] WarmPackContent adjacentRoomPack;
@@ -48,11 +58,17 @@ public class LocationWarmProfile : ScriptableObject {
   public IReadOnlyList<string> CriticalSpriteLibraries => criticalSpriteLibraries;
   public IReadOnlyList<string> CriticalDirectAddresses => criticalDirectAddresses;
   public IReadOnlyList<string> CriticalAddressableLabels => criticalAddressableLabels;
+  public IReadOnlyList<string> CriticalAssetAddresses => criticalAssetAddresses;
+  public IReadOnlyList<string> CriticalAssetLabels => criticalAssetLabels;
   public IReadOnlyList<string> WarmSpriteLibraries => warmSpriteLibraries;
   public IReadOnlyList<string> WarmDirectAddresses => warmDirectAddresses;
   public IReadOnlyList<string> WarmAddressableLabels => warmAddressableLabels;
+  public IReadOnlyList<string> WarmAssetAddresses => warmAssetAddresses;
+  public IReadOnlyList<string> WarmAssetLabels => warmAssetLabels;
   public IReadOnlyList<string> WarmUiDirectAddresses => warmUiDirectAddresses;
   public IReadOnlyList<string> WarmUiAddressableLabels => warmUiAddressableLabels;
+  public IReadOnlyList<string> WarmUiAssetAddresses => warmUiAssetAddresses;
+  public IReadOnlyList<string> WarmUiAssetLabels => warmUiAssetLabels;
 
   public void CollectGameplayWarmLists(
     IEnumerable<string> combatEnemyTypes,
@@ -61,22 +77,51 @@ public class LocationWarmProfile : ScriptableObject {
     List<string> outWarmLibraries,
     List<string> outWarmAddresses,
     List<string> outCriticalLabels = null,
-    List<string> outWarmLabels = null
+    List<string> outWarmLabels = null,
+    List<string> outCriticalAssetAddresses = null,
+    List<string> outWarmAssetAddresses = null,
+    List<string> outCriticalAssetLabels = null,
+    List<string> outWarmAssetLabels = null
   ) {
     AddAutoDerivedLocationStageWarmLists(outCriticalLibraries, outCriticalAddresses, outWarmLibraries, outWarmAddresses);
     // Explicit area packs come first so their room/combat ordering survives duplicate
     // elimination. Legacy extra lists remain as a compatibility tail until profiles are
     // fully migrated onto current-room / adjacent-room / combat declarations.
-    AddPackUnique(outCriticalLibraries, outCriticalAddresses, outCriticalLabels, currentRoomPack);
-    AddCombatPopulationPacks(combatEnemyTypes, outCriticalLibraries, outCriticalAddresses, outCriticalLabels);
-    AddPackUnique(outWarmLibraries, outWarmAddresses, outWarmLabels, adjacentRoomPack);
+    AddPackUnique(
+      outCriticalLibraries,
+      outCriticalAddresses,
+      outCriticalLabels,
+      outCriticalAssetAddresses,
+      outCriticalAssetLabels,
+      currentRoomPack
+    );
+    AddCombatPopulationPacks(
+      combatEnemyTypes,
+      outCriticalLibraries,
+      outCriticalAddresses,
+      outCriticalLabels,
+      outCriticalAssetAddresses,
+      outCriticalAssetLabels
+    );
+    AddPackUnique(
+      outWarmLibraries,
+      outWarmAddresses,
+      outWarmLabels,
+      outWarmAssetAddresses,
+      outWarmAssetLabels,
+      adjacentRoomPack
+    );
     CollectExtraWarmLists(
       outCriticalLibraries,
       outCriticalAddresses,
       outWarmLibraries,
       outWarmAddresses,
       outCriticalLabels,
-      outWarmLabels
+      outWarmLabels,
+      outCriticalAssetAddresses,
+      outWarmAssetAddresses,
+      outCriticalAssetLabels,
+      outWarmAssetLabels
     );
   }
 
@@ -86,7 +131,11 @@ public class LocationWarmProfile : ScriptableObject {
     List<string> outWarmLibraries,
     List<string> outWarmAddresses,
     List<string> outCriticalLabels = null,
-    List<string> outWarmLabels = null
+    List<string> outWarmLabels = null,
+    List<string> outCriticalAssetAddresses = null,
+    List<string> outWarmAssetAddresses = null,
+    List<string> outCriticalAssetLabels = null,
+    List<string> outWarmAssetLabels = null
   ) {
     // priority order is intentionally explicit: critical entries must come before warm
     // entries, which come before UI warm.  AddRangeUnique respects that order because
@@ -95,11 +144,17 @@ public class LocationWarmProfile : ScriptableObject {
     AddRangeUnique(outCriticalLibraries, criticalSpriteLibraries);
     AddRangeUnique(outCriticalAddresses, criticalDirectAddresses);
     AddRangeUnique(outCriticalLabels, criticalAddressableLabels);
+    AddRangeUnique(outCriticalAssetAddresses, criticalAssetAddresses);
+    AddRangeUnique(outCriticalAssetLabels, criticalAssetLabels);
     AddRangeUnique(outWarmLibraries, warmSpriteLibraries);
     AddRangeUnique(outWarmAddresses, warmDirectAddresses);
     AddRangeUnique(outWarmLabels, warmAddressableLabels);
+    AddRangeUnique(outWarmAssetAddresses, warmAssetAddresses);
+    AddRangeUnique(outWarmAssetLabels, warmAssetLabels);
     AddRangeUnique(outWarmAddresses, warmUiDirectAddresses);
     AddRangeUnique(outWarmLabels, warmUiAddressableLabels);
+    AddRangeUnique(outWarmAssetAddresses, warmUiAssetAddresses);
+    AddRangeUnique(outWarmAssetLabels, warmUiAssetLabels);
   }
 
   GameObject ResolveLocationPrefab() {
@@ -249,7 +304,9 @@ public class LocationWarmProfile : ScriptableObject {
     IEnumerable<string> combatEnemyTypes,
     List<string> outLibraries,
     List<string> outAddresses,
-    List<string> outLabels
+    List<string> outLabels,
+    List<string> outAssetAddresses,
+    List<string> outAssetLabels
   ) {
     if (combatPopulationPacks == null || combatPopulationPacks.Count <= 0) return;
     var normalizedEnemyTypes = BuildNormalizedEnemyTypeSet(combatEnemyTypes);
@@ -263,6 +320,8 @@ public class LocationWarmProfile : ScriptableObject {
       AddRangeUnique(outLibraries, pack.spriteLibraries);
       AddRangeUnique(outAddresses, pack.directAddresses);
       AddRangeUnique(outLabels, pack.addressableLabels);
+      AddRangeUnique(outAssetAddresses, pack.assetAddresses);
+      AddRangeUnique(outAssetLabels, pack.assetLabels);
     }
   }
 
@@ -281,11 +340,15 @@ public class LocationWarmProfile : ScriptableObject {
     List<string> outLibraries,
     List<string> outAddresses,
     List<string> outLabels,
+    List<string> outAssetAddresses,
+    List<string> outAssetLabels,
     WarmPackContent pack
   ) {
     AddRangeUnique(outLibraries, pack.spriteLibraries);
     AddRangeUnique(outAddresses, pack.directAddresses);
     AddRangeUnique(outLabels, pack.addressableLabels);
+    AddRangeUnique(outAssetAddresses, pack.assetAddresses);
+    AddRangeUnique(outAssetLabels, pack.assetLabels);
   }
 
   static void AddRangeUnique(List<string> output, List<string> input) {
@@ -333,11 +396,17 @@ public class LocationWarmProfile : ScriptableObject {
     CheckList(nameof(criticalSpriteLibraries), criticalSpriteLibraries);
     CheckList(nameof(criticalDirectAddresses), criticalDirectAddresses);
     CheckList(nameof(criticalAddressableLabels), criticalAddressableLabels);
+    CheckList(nameof(criticalAssetAddresses), criticalAssetAddresses);
+    CheckList(nameof(criticalAssetLabels), criticalAssetLabels);
     CheckList(nameof(warmSpriteLibraries), warmSpriteLibraries);
     CheckList(nameof(warmDirectAddresses), warmDirectAddresses);
     CheckList(nameof(warmAddressableLabels), warmAddressableLabels);
+    CheckList(nameof(warmAssetAddresses), warmAssetAddresses);
+    CheckList(nameof(warmAssetLabels), warmAssetLabels);
     CheckList(nameof(warmUiDirectAddresses), warmUiDirectAddresses);
     CheckList(nameof(warmUiAddressableLabels), warmUiAddressableLabels);
+    CheckList(nameof(warmUiAssetAddresses), warmUiAssetAddresses);
+    CheckList(nameof(warmUiAssetLabels), warmUiAssetLabels);
   }
 
   void AutoAssignLocationPrefabByName() {

@@ -517,18 +517,44 @@ public class PauseMenuFormStatsView : MonoBehaviour {
       return -1;
     }
     if (statsButtons != null && statsButtons.buttons.Count > 0) {
-      return statsButtons.buttons.IndexOf(target);
+      var directIndex = statsButtons.buttons.IndexOf(target);
+      if (directIndex >= 0) {
+        return directIndex;
+      }
+
+      var targetTransform = target.transform;
+      for (var i = 0; i < statsButtons.buttons.Count; i++) {
+        var button = statsButtons.buttons[i];
+        if (button == null) {
+          continue;
+        }
+        if (targetTransform.IsChildOf(button.transform)) {
+          return i;
+        }
+      }
     }
-    if (target == statsLeftButton) {
+    if (MatchesButtonTarget(target, statsLeftButton)) {
       return 0;
     }
-    if (target == statsRightButton) {
+    if (MatchesButtonTarget(target, statsRightButton)) {
       return 1;
     }
-    if (target == statsPlusButton) {
+    if (MatchesButtonTarget(target, statsPlusButton)) {
       return 2;
     }
     return -1;
+  }
+
+  static bool MatchesButtonTarget(GameObject target, GameObject button) {
+    if (target == null || button == null) {
+      return false;
+    }
+
+    if (target == button) {
+      return true;
+    }
+
+    return target.transform.IsChildOf(button.transform);
   }
 
   void ApplyText(FontText fontText, string value) {

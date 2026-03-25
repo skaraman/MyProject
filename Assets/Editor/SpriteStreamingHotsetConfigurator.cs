@@ -169,16 +169,11 @@ public static class SpriteStreamingHotsetConfigurator {
   ) {
     if (target == null) return;
 
-    var profileGuids = AssetDatabase.FindAssets("t:LocationWarmProfile", new[] { "Assets/Resources" });
-    for (var i = 0; i < profileGuids.Length; i++) {
-      var assetPath = NormalizePath(AssetDatabase.GUIDToAssetPath(profileGuids[i]));
-      if (string.IsNullOrWhiteSpace(assetPath)) continue;
-
-      var profile = AssetDatabase.LoadAssetAtPath<LocationWarmProfile>(assetPath);
-      if (profile == null || profile.LocationPrefab == null) continue;
-
-      var prefabPath = NormalizePath(AssetDatabase.GetAssetPath(profile.LocationPrefab));
-      if (string.IsNullOrWhiteSpace(prefabPath) || !File.Exists(prefabPath)) continue;
+    var knownPrefabPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var pair in LocationEnemyData.locations) {
+      var prefabPath = ResolveKnownLocationPrefabPath(pair.Value);
+      if (string.IsNullOrWhiteSpace(prefabPath) || !knownPrefabPaths.Add(prefabPath)) continue;
+      if (!File.Exists(prefabPath)) continue;
 
       var countBefore = target.Count;
       CollectLibraryNamesFromSerializedFile(prefabPath, spriteWithNormalsGuid, guidToNamepart, target);
@@ -189,6 +184,18 @@ public static class SpriteStreamingHotsetConfigurator {
         );
       }
     }
+  }
+
+  static string ResolveKnownLocationPrefabPath(LocationInfo locationInfo) {
+    if (locationInfo?.locationPrefabData == null) return "";
+
+    var configuredAssetPath = NormalizePath(locationInfo.locationPrefabData.AssetPath);
+    if (!string.IsNullOrWhiteSpace(configuredAssetPath)) {
+      return configuredAssetPath;
+    }
+
+    var prefab = locationInfo.locationPrefabData.ResolvePrefab();
+    return prefab != null ? NormalizePath(AssetDatabase.GetAssetPath(prefab)) : "";
   }
 
   static void IncludeOptionalNameparts(HashSet<string> target) {

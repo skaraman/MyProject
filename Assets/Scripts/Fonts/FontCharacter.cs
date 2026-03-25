@@ -42,23 +42,37 @@ public class FontCharacter : MonoBehaviour {
   public Component spriteResolver;
   SpriteWithNormals spriteWithNormals;
   SpriteRenderer spriteRenderer;
+  FontText parentFontText;
   public char character { set; get; } = 'T';
   public string font { set; get; } = "Hand";
   private MethodInfo setCategoryAndLabelMethod;
+  bool canRenderCurrentGlyph = true;
+  bool waitingForGlyphReadyRetry;
+  public bool CanRenderCurrentGlyph => canRenderCurrentGlyph;
 
   void Reset() {
     CacheDependencies();
   }
 
+  void OnDisable() {
+    CancelInvoke(nameof(RetryUpdateSprite));
+    waitingForGlyphReadyRetry = false;
+    canRenderCurrentGlyph = true;
+  }
+
   [ForceUpdate]
   public void UpdateSprite() {
     CacheDependencies();
-    if (!TryGetGlyphLabel(out var label)) return;
+    if (!TryGetGlyphLabel(out var label)) {
+      UpdateRenderReadiness(false);
+      return;
+    }
 
     var rendererState = CaptureRendererState();
     ApplySpriteWithNormals(label);
     ApplySpriteResolver(label);
     RestoreRendererState(rendererState);
+    UpdateRenderReadiness(IsGlyphReadyForDisplay());
   }
 
   bool TryGetGlyphLabel(out string label) {
@@ -79,6 +93,10 @@ public class FontCharacter : MonoBehaviour {
 
     if (spriteRenderer == null) {
       spriteRenderer = GetComponent<SpriteRenderer>();
+    }
+
+    if (parentFontText == null) {
+      parentFontText = GetComponentInParent<FontText>();
     }
 
     if (spriteResolver != null && setCategoryAndLabelMethod == null) {
@@ -150,6 +168,56 @@ public class FontCharacter : MonoBehaviour {
   void ApplySpriteResolver(string label) {
     if (spriteResolver == null || setCategoryAndLabelMethod == null) return;
     setCategoryAndLabelMethod.Invoke(spriteResolver, new object[] { font, label });
+  }
+
+  bool IsGlyphReadyForDisplay() {
+    if (spriteRenderer == null || spriteRenderer.sprite == null) {
+      return false;
+    }
+
+    if (!Application.isPlaying || spriteWithNormals == null) {
+      return true;
+    }
+
+    return spriteWithNormals.IsFrameReady(0, out _);
+  }
+
+  void UpdateRenderReadiness(bool glyphReady) {
+    var readinessChanged = canRenderCurrentGlyph != glyphReady;
+    canRenderCurrentGlyph = glyphReady;
+
+    if (glyphReady) {
+      CancelInvoke(nameof(RetryUpdateSprite));
+      waitingForGlyphReadyRetry = false;
+    }
+    else {
+      QueueGlyphReadyRetry();
+    }
+
+    if (!readinessChanged) {
+      return;
+    }
+
+    if (parentFontText != null) {
+      parentFontText.RefreshGlyphVisibility();
+    }
+  }
+
+  void QueueGlyphReadyRetry() {
+    if (!Application.isPlaying || !enabled || !gameObject.activeInHierarchy) {
+      return;
+    }
+    if (waitingForGlyphReadyRetry) {
+      return;
+    }
+
+    waitingForGlyphReadyRetry = true;
+    Invoke(nameof(RetryUpdateSprite), 0.05f);
+  }
+
+  void RetryUpdateSprite() {
+    waitingForGlyphReadyRetry = false;
+    UpdateSprite();
   }
 }
 

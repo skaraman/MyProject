@@ -333,13 +333,20 @@ public class FontText : MonoBehaviour {
     ApplyVisibleCharacterCountToGlyphs();
   }
 
+  public void RefreshGlyphVisibility() {
+    ApplyVisibleCharacterCountToGlyphs();
+  }
+
   void ApplyVisibleCharacterCountToGlyphs() {
     var revealAll = visibleContentCharacterCount < 0;
     for (var i = 0; i < activeCharRenderers.Count; i++) {
       var glyphRenderer = activeCharRenderers[i];
       if (glyphRenderer == null) continue;
-      var shouldBeVisible = revealAll ||
-        (i < activeCharSourceIndices.Count && activeCharSourceIndices[i] < visibleContentCharacterCount);
+      var glyphCharacter = glyphRenderer.GetComponent<FontCharacter>();
+      var canRenderGlyph = glyphCharacter == null || glyphCharacter.CanRenderCurrentGlyph;
+      var shouldBeVisible = (revealAll ||
+        (i < activeCharSourceIndices.Count && activeCharSourceIndices[i] < visibleContentCharacterCount)) &&
+        canRenderGlyph;
       if (glyphRenderer.enabled != shouldBeVisible) {
         glyphRenderer.enabled = shouldBeVisible;
       }

@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 public class MouseManager : MonoBehaviour {
   public string defaultMap;
   public static MouseManager Instance;
+  readonly List<Collider2D> overlapResults = new();
   GameObject lastHovered;
   GameObject lastClickedTarget;
   float clickCacheTimer;
@@ -21,12 +22,20 @@ public class MouseManager : MonoBehaviour {
   string scrollUpKey;
   string scrollDownKey;
   Vector3 lastScreenPos;
+  string currentMap;
 
   private Camera mainCamera;
   private Mouse mouse;
+  ContactFilter2D overlapFilter;
 
   void Awake() {
     Instance = this;
+    overlapFilter.useLayerMask = false;
+    overlapFilter.useDepth = false;
+    overlapFilter.useOutsideDepth = false;
+    overlapFilter.useNormalAngle = false;
+    overlapFilter.useOutsideNormalAngle = false;
+    overlapFilter.useTriggers = true;
     SwitchMap(defaultMap != "" ? defaultMap : "mainMenu");
   }
 
@@ -43,8 +52,7 @@ public class MouseManager : MonoBehaviour {
 
     var screenPos = mouse.position.ReadValue();
     var worldPos = mainCamera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 1f));
-    var hit = Physics2D.OverlapPoint(worldPos);
-    var target = hit ? hit.gameObject : null;
+    var target = ResolvePointTarget(worldPos);
 
     if (target != lastHovered) {
       UpdateHoverTarget(target);
@@ -107,7 +115,92 @@ public class MouseManager : MonoBehaviour {
     middleReleaseKey = $"{newMap}.middleRelease";
     scrollUpKey = $"{newMap}.scrollUp";
     scrollDownKey = $"{newMap}.scrollDown";
+    currentMap = string.IsNullOrWhiteSpace(newMap) ? "" : newMap.Trim();
     Debug.Log($"[MouseManager] Swapped to: {newMap}");
+  }
+
+  GameObject ResolvePointTarget(Vector3 worldPos) {
+    overlapResults.Clear();
+    Physics2D.OverlapPoint((Vector2)worldPos, overlapFilter, overlapResults);
+    if (overlapResults.Count <= 0) {
+      return null;
+    }
+
+    if (overlapResults.Count == 1) {
+      var collider = overlapResults[0];
+      return collider != null ? collider.gameObject : null;
+    }
+
+    var bestTarget = overlapResults[0] != null ? overlapResults[0].gameObject : null;
+    var bestPriority = ResolveTargetPriority(bestTarget);
+    for (var i = 1; i < overlapResults.Count; i++) {
+      var candidateCollider = overlapResults[i];
+      var candidateTarget = candidateCollider != null ? candidateCollider.gameObject : null;
+      var candidatePriority = ResolveTargetPriority(candidateTarget);
+      if (candidatePriority <= bestPriority) {
+        continue;
+      }
+
+      bestPriority = candidatePriority;
+      bestTarget = candidateTarget;
+    }
+
+    return bestTarget;
+  }
+
+  int ResolveTargetPriority(GameObject target) {
+    if (target == null) {
+      return int.MinValue;
+    }
+
+    var priority = 0;
+    if (IsTargetInCurrentUiRoot(target)) {
+      priority += 1000;
+    }
+
+    if (target.layer == 6) {
+      priority += 100;
+    }
+    else if (target.layer == 8) {
+      priority += 90;
+    }
+
+    return priority;
+  }
+
+  bool IsTargetInCurrentUiRoot(GameObject target) {
+    if (target == null) {
+      return false;
+    }
+
+    switch (currentMap) {
+      case "mainMenu":
+        return HasAncestorNamed(target.transform, "MainMenu");
+      case "loadMenu":
+        return HasAncestorNamed(target.transform, "LoadMenu");
+      case "settingsMenu":
+        return HasAncestorNamed(target.transform, "SettingsMenu");
+      case "pauseMenu":
+        return HasAncestorNamed(target.transform, "PauseMenu");
+      default:
+        return false;
+    }
+  }
+
+  static bool HasAncestorNamed(Transform target, string rootName) {
+    if (target == null || string.IsNullOrWhiteSpace(rootName)) {
+      return false;
+    }
+
+    var current = target;
+    while (current != null) {
+      if (string.Equals(current.name, rootName, System.StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+      current = current.parent;
+    }
+
+    return false;
   }
 
   void UpdateHoverTarget(GameObject target) {

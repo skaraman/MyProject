@@ -237,7 +237,7 @@ public class PauseMenuInput : MonoBehaviour {
   void hover(object target) {
     var targetObject = target as GameObject;
 
-    activeHoverIndex = targetObject != null && menuButtons != null ? menuButtons.buttons.IndexOf(targetObject) : -1;
+    activeHoverIndex = ResolveButtonIndex(menuButtons, targetObject);
     if (activeHoverIndex >= 0) {
       if (menuButtons.hoverIndex != activeHoverIndex) {
         menuButtons.SetHoverIndex(activeHoverIndex);
@@ -255,7 +255,7 @@ public class PauseMenuInput : MonoBehaviour {
       return;
     }
 
-    formHoverIndex = targetObject != null ? formButtons.buttons.IndexOf(targetObject) : -1;
+    formHoverIndex = ResolveButtonIndex(formButtons, targetObject);
     if (formHoverIndex >= 0) {
       if (formButtons.hoverIndex != formHoverIndex) {
         formButtons.SetHoverIndex(formHoverIndex);
@@ -281,7 +281,7 @@ public class PauseMenuInput : MonoBehaviour {
     var targetObject = target as GameObject;
     if (targetObject == null) return;
 
-    activeHoverIndex = menuButtons != null ? menuButtons.buttons.IndexOf(targetObject) : -1;
+    activeHoverIndex = ResolveButtonIndex(menuButtons, targetObject);
     if (activeHoverIndex >= 0) {
       select();
       return;
@@ -289,7 +289,7 @@ public class PauseMenuInput : MonoBehaviour {
 
     if (!CanInteractWithFormsList()) return;
 
-    formHoverIndex = formButtons.buttons.IndexOf(targetObject);
+    formHoverIndex = ResolveButtonIndex(formButtons, targetObject);
     if (formHoverIndex >= 0) {
       select();
     }
@@ -466,6 +466,30 @@ public class PauseMenuInput : MonoBehaviour {
     if (animator == null) return;
 
     animator.AddColorSequence("_Color", color, color, 1f, replaceExisting: true);
+  }
+
+  static int ResolveButtonIndex(ButtonGroup buttonGroup, GameObject target) {
+    if (buttonGroup == null || target == null) {
+      return -1;
+    }
+
+    var directIndex = buttonGroup.buttons.IndexOf(target);
+    if (directIndex >= 0) {
+      return directIndex;
+    }
+
+    var targetTransform = target.transform;
+    for (var i = 0; i < buttonGroup.buttons.Count; i++) {
+      var button = buttonGroup.buttons[i];
+      if (button == null) {
+        continue;
+      }
+      if (targetTransform.IsChildOf(button.transform)) {
+        return i;
+      }
+    }
+
+    return -1;
   }
 
   void cancel() {

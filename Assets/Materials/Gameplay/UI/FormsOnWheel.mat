@@ -8,19 +8,19 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: FormsOnWheel
-  m_Shader: {fileID: 4800000, guid: a36b7719ff0465b42ab1407d67672c5f, type: 3}
+  m_Shader: {fileID: 4800000, guid: 202ffec9202f22e478034613d6beb49c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - GLOWLIGHT_ON
   - OUTBASEPIXELPERF_ON
   - OUTDIST_ON
   m_InvalidKeywords:
-  - GLOWLIGHT_ON
   - _GLOWAFFECTLIGHT_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: 3000
+  m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
   m_LockedProperties: 
@@ -244,7 +244,10 @@ Material:
     - _ColorSwapBlue: {r: 1, g: 1, b: 1, a: 1}
     - _ColorSwapGreen: {r: 1, g: 1, b: 1, a: 1}
     - _ColorSwapRed: {r: 1, g: 1, b: 1, a: 1}
+    - _DistortTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _FadeBurnColor: {r: 1, g: 1, b: 0, a: 1}
+    - _FadeBurnTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _FadeTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _GlowColor: {r: 1, g: 1, b: 1, a: 1}
     - _GradBotLeftCol: {r: 1, g: 0.76862746, b: 0, a: 1}
     - _GradBotRightCol: {r: 0.60784316, g: 1, b: 0, a: 1}
@@ -254,8 +257,12 @@ Material:
     - _HitEffectColor: {r: 1, g: 1, b: 1, a: 1}
     - _HologramStripeColor: {r: 0, g: 1, b: 1, a: 1}
     - _InnerOutlineColor: {r: 1, g: 0, b: 0, a: 1}
+    - _MainTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _OutlineColor: {r: 1, g: 0.95, b: 0, a: 1}
+    - _OutlineDistortTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _OutlineTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _OverlayColor: {r: 1, g: 1, b: 1, a: 1}
+    - _OverlayTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _ShadowColor: {r: 0, g: 0, b: 0, a: 1}
     - _ShineColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []

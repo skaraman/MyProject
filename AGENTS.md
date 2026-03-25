@@ -13,8 +13,7 @@ Project shortcut: .\UnityEditorLog.url
 - follow GC guide here GarbageCollectionInUnity.md,
 - i will not give up on you if we solve or fix problems, you will keep being needed by me,
 
-<!-- current objective - 
-pause menu interaction  -->
-<!-- reduce loadingheartbeat gaps to 2s or less, 
-use PerformanceGoal.md to track progress
-setup location prefab loading algorithm smoothness and dynamic smart loading -->
+current objective - 
+use the OptimalLoadingProgress to track progress
+fix loading pipeline to be consistent and logical - 
+player, location, enemies, ui, dialog

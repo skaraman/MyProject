@@ -1,4 +1,7 @@
 #if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Settings;
@@ -8,8 +11,19 @@ using UnityEngine;
 public static class LocationWarmProfileBootstrap {
   const string ResourcesFolder = "Assets/Resources";
   const string RegistryAssetPath = "Assets/Resources/LocationWarmRegistry.asset";
-  const string DomeCityProfilePath = "Assets/Resources/LocationWarmProfile_DomeCity.asset";
-  const string DomeCityPrefabPath = "Assets/Prefabs/Locations/DomeCity.prefab";
+  const string ProfileAssetPrefix = "LocationWarmProfile_";
+
+  readonly struct LocationProfileBinding {
+    public readonly string locationId;
+    public readonly GameObject prefab;
+    public readonly string assetPath;
+
+    public LocationProfileBinding(string locationId, GameObject prefab, string assetPath) {
+      this.locationId = locationId;
+      this.prefab = prefab;
+      this.assetPath = assetPath;
+    }
+  }
 
   static bool initialized;
 
@@ -32,31 +46,16 @@ public static class LocationWarmProfileBootstrap {
     EnsureFolderExists(ResourcesFolder);
 
     var changed = false;
-    var profile = AssetDatabase.LoadAssetAtPath<LocationWarmProfile>(DomeCityProfilePath);
-    if (profile == null) {
-      profile = ScriptableObject.CreateInstance<LocationWarmProfile>();
-      AssetDatabase.CreateAsset(profile, DomeCityProfilePath);
-      changed = true;
-    }
-
-    var profileSo = new SerializedObject(profile);
-    var locationIdProperty = profileSo.FindProperty("locationId");
-    if (locationIdProperty.stringValue != "DomeCity") {
-      locationIdProperty.stringValue = "DomeCity";
-      changed = true;
-    }
-
-    var domeCityPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DomeCityPrefabPath);
-    if (domeCityPrefab != null) {
-      var locationPrefabProperty = profileSo.FindProperty("locationPrefab");
-      if (locationPrefabProperty.objectReferenceValue != domeCityPrefab) {
-        locationPrefabProperty.objectReferenceValue = domeCityPrefab;
-        changed = true;
+    var bindings = CollectLocationProfileBindings();
+    var profilesByLocationId = new Dictionary<string, LocationWarmProfile>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < bindings.Count; i++) {
+      var binding = bindings[i];
+      if (!EnsureLocationWarmProfile(binding, out var profile, out var profileChanged) || profile == null) {
+        continue;
       }
-    }
-    if (profileSo.ApplyModifiedPropertiesWithoutUndo()) {
-      changed = true;
-      EditorUtility.SetDirty(profile);
+
+      profilesByLocationId[binding.locationId] = profile;
+      changed |= profileChanged;
     }
 
     var registry = AssetDatabase.LoadAssetAtPath<LocationWarmRegistry>(RegistryAssetPath);
@@ -66,40 +65,7 @@ public static class LocationWarmProfileBootstrap {
       changed = true;
     }
 
-    var registrySo = new SerializedObject(registry);
-    var defaultProfileProperty = registrySo.FindProperty("defaultProfile");
-    if (defaultProfileProperty.objectReferenceValue != profile) {
-      defaultProfileProperty.objectReferenceValue = profile;
-      changed = true;
-    }
-
-    var locationsProperty = registrySo.FindProperty("locations");
-    var hasDomeCity = false;
-    for (var i = 0; i < locationsProperty.arraySize; i++) {
-      var entry = locationsProperty.GetArrayElementAtIndex(i);
-      var entryLocationIdProperty = entry.FindPropertyRelative("locationId");
-      var profileProperty = entry.FindPropertyRelative("profile");
-      if (!string.Equals(entryLocationIdProperty.stringValue, "DomeCity", System.StringComparison.OrdinalIgnoreCase)) continue;
-      if (profileProperty.objectReferenceValue != profile) {
-        profileProperty.objectReferenceValue = profile;
-        changed = true;
-      }
-      hasDomeCity = true;
-      break;
-    }
-
-    if (!hasDomeCity) {
-      locationsProperty.arraySize++;
-      var entry = locationsProperty.GetArrayElementAtIndex(locationsProperty.arraySize - 1);
-      entry.FindPropertyRelative("locationId").stringValue = "DomeCity";
-      entry.FindPropertyRelative("profile").objectReferenceValue = profile;
-      changed = true;
-    }
-
-    if (registrySo.ApplyModifiedPropertiesWithoutUndo()) {
-      changed = true;
-      EditorUtility.SetDirty(registry);
-    }
+    changed |= EnsureLocationWarmRegistryEntries(registry, profilesByLocationId);
 
     if (EnsureLocationPrefabAddressables(logResult)) {
       changed = true;
@@ -113,12 +79,172 @@ public static class LocationWarmProfileBootstrap {
     if (logResult) {
       Debug.Log(
         "[LocationWarmProfileBootstrap] Synced location warm assets from prefab bindings: " +
-        "profile='" + DomeCityProfilePath + "', registry='" + RegistryAssetPath + "'" +
-        ", changed=" + changed + "."
+        "profile_count=" + profilesByLocationId.Count +
+        " default_profile='" + ResolveDefaultProfileLabel(profilesByLocationId) + "'" +
+        " registry='" + RegistryAssetPath + "'" +
+        " changed=" + changed + "."
       );
     }
 
     return changed;
+  }
+
+  static List<LocationProfileBinding> CollectLocationProfileBindings() {
+    var bindings = new List<LocationProfileBinding>();
+    foreach (var pair in LocationEnemyData.locations) {
+      var locationId = LocationEnemyData.NormalizeLocationId(pair.Key);
+      if (string.IsNullOrWhiteSpace(locationId)) continue;
+
+      var prefab = ResolveLocationPrefab(pair.Value);
+      if (prefab == null) continue;
+
+      var assetPath = BuildLocationWarmProfileAssetPath(locationId);
+      bindings.Add(new LocationProfileBinding(locationId, prefab, assetPath));
+    }
+
+    bindings.Sort((left, right) => string.Compare(left.locationId, right.locationId, StringComparison.OrdinalIgnoreCase));
+    return bindings;
+  }
+
+  static GameObject ResolveLocationPrefab(LocationInfo locationInfo) {
+    if (locationInfo?.locationPrefabData == null) return null;
+    if (locationInfo.locationPrefabData.prefab != null) {
+      return locationInfo.locationPrefabData.prefab;
+    }
+
+    var assetPath = NormalizeAssetPath(locationInfo.locationPrefabData.AssetPath);
+    if (string.IsNullOrWhiteSpace(assetPath)) return null;
+    return AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+  }
+
+  static bool EnsureLocationWarmProfile(
+    LocationProfileBinding binding,
+    out LocationWarmProfile profile,
+    out bool changed
+  ) {
+    profile = null;
+    changed = false;
+    if (string.IsNullOrWhiteSpace(binding.locationId) || string.IsNullOrWhiteSpace(binding.assetPath)) {
+      return false;
+    }
+
+    profile = AssetDatabase.LoadAssetAtPath<LocationWarmProfile>(binding.assetPath);
+    if (profile == null) {
+      profile = ScriptableObject.CreateInstance<LocationWarmProfile>();
+      AssetDatabase.CreateAsset(profile, binding.assetPath);
+      changed = true;
+    }
+
+    if (profile == null) return false;
+
+    var profileSo = new SerializedObject(profile);
+    var locationIdProperty = profileSo.FindProperty("locationId");
+    if (!string.Equals(locationIdProperty.stringValue, binding.locationId, StringComparison.Ordinal)) {
+      locationIdProperty.stringValue = binding.locationId;
+      changed = true;
+    }
+
+    var locationPrefabProperty = profileSo.FindProperty("locationPrefab");
+    if (locationPrefabProperty.objectReferenceValue != binding.prefab) {
+      locationPrefabProperty.objectReferenceValue = binding.prefab;
+      changed = true;
+    }
+
+    if (profileSo.ApplyModifiedPropertiesWithoutUndo()) {
+      changed = true;
+      EditorUtility.SetDirty(profile);
+    }
+
+    return true;
+  }
+
+  static bool EnsureLocationWarmRegistryEntries(
+    LocationWarmRegistry registry,
+    Dictionary<string, LocationWarmProfile> profilesByLocationId
+  ) {
+    if (registry == null) return false;
+
+    var changed = false;
+    var registrySo = new SerializedObject(registry);
+    var defaultProfileProperty = registrySo.FindProperty("defaultProfile");
+    var defaultProfile = ResolveDefaultProfile(profilesByLocationId);
+    if (defaultProfileProperty.objectReferenceValue != defaultProfile) {
+      defaultProfileProperty.objectReferenceValue = defaultProfile;
+      changed = true;
+    }
+
+    var locationsProperty = registrySo.FindProperty("locations");
+    var orderedLocationIds = new List<string>(profilesByLocationId.Keys);
+    orderedLocationIds.Sort(StringComparer.OrdinalIgnoreCase);
+    if (locationsProperty.arraySize != orderedLocationIds.Count) {
+      locationsProperty.arraySize = orderedLocationIds.Count;
+      changed = true;
+    }
+
+    for (var i = 0; i < orderedLocationIds.Count; i++) {
+      var locationId = orderedLocationIds[i];
+      var entry = locationsProperty.GetArrayElementAtIndex(i);
+      var entryLocationIdProperty = entry.FindPropertyRelative("locationId");
+      var profileProperty = entry.FindPropertyRelative("profile");
+      var profile = profilesByLocationId[locationId];
+
+      if (!string.Equals(entryLocationIdProperty.stringValue, locationId, StringComparison.Ordinal)) {
+        entryLocationIdProperty.stringValue = locationId;
+        changed = true;
+      }
+      if (profileProperty.objectReferenceValue != profile) {
+        profileProperty.objectReferenceValue = profile;
+        changed = true;
+      }
+    }
+
+    if (registrySo.ApplyModifiedPropertiesWithoutUndo()) {
+      changed = true;
+      EditorUtility.SetDirty(registry);
+    }
+
+    return changed;
+  }
+
+  static LocationWarmProfile ResolveDefaultProfile(Dictionary<string, LocationWarmProfile> profilesByLocationId) {
+    if (profilesByLocationId == null || profilesByLocationId.Count <= 0) return null;
+
+    var defaultLocationId = LocationEnemyData.GetDefaultLocation();
+    if (!string.IsNullOrWhiteSpace(defaultLocationId) &&
+        profilesByLocationId.TryGetValue(defaultLocationId, out var defaultProfile) &&
+        defaultProfile != null) {
+      return defaultProfile;
+    }
+
+    foreach (var pair in profilesByLocationId) {
+      if (pair.Value != null) return pair.Value;
+    }
+
+    return null;
+  }
+
+  static string ResolveDefaultProfileLabel(Dictionary<string, LocationWarmProfile> profilesByLocationId) {
+    var profile = ResolveDefaultProfile(profilesByLocationId);
+    return profile != null ? profile.name : "-";
+  }
+
+  static string BuildLocationWarmProfileAssetPath(string locationId) {
+    var sanitizedId = SanitizeFileToken(locationId);
+    return ResourcesFolder + "/" + ProfileAssetPrefix + sanitizedId + ".asset";
+  }
+
+  static string SanitizeFileToken(string value) {
+    var normalized = string.IsNullOrWhiteSpace(value) ? "Location" : value.Trim();
+    var invalidChars = Path.GetInvalidFileNameChars();
+    var chars = normalized.ToCharArray();
+    for (var i = 0; i < chars.Length; i++) {
+      if (Array.IndexOf(invalidChars, chars[i]) >= 0 || char.IsWhiteSpace(chars[i])) {
+        chars[i] = '_';
+      }
+    }
+
+    var sanitized = new string(chars).Trim('_');
+    return string.IsNullOrWhiteSpace(sanitized) ? "Location" : sanitized;
   }
 
   static void EnsureFolderExists(string folderPath) {

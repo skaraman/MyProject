@@ -14,6 +14,10 @@ public class SpriteStreamingSettings : ScriptableObject {
   public List<string> criticalAddressableLabels = new();
   public List<string> warmAddressableLabels = new();
   public List<string> warmUiAddressableLabels = new();
+  [Header("Runtime Asset Warm Labels")]
+  public List<string> criticalRuntimeAssetLabels = new();
+  public List<string> warmRuntimeAssetLabels = new();
+  public List<string> warmUiRuntimeAssetLabels = new();
 
   [Header("Shard Cache")]
   [Min(1)] public int maxLoadedShards = 48;
@@ -26,7 +30,7 @@ public class SpriteStreamingSettings : ScriptableObject {
   // these values should ideally be driven by first-frame latency telemetry.  telemetry
   // hooks exist below; in their absence hardcoded defaults are used.
   // Gameplay remains conservative; the loading overlay gets its own more aggressive budget.
-  [Min(1)] public int maxAddressableStartsPerFrame = 8;
+  [Min(1)] public int maxAddressableStartsPerFrame = 16;
   [Min(1)] public int animationWarmupFrames = 24;
   [Min(0)] public int animationSwitchGateMs = 150;
   public bool keepLoadedSpritesForSession = true;
@@ -43,11 +47,9 @@ public class SpriteStreamingSettings : ScriptableObject {
   [Min(1)] public int loadingOverlayMaxAddressableStartsPerFrame = 24;
   [Header("Platform Start Presets")]
   public bool usePlatformAddressableStartPresets = true;
-  // TODO: default is 8 but the runtime comment on this field says "~16 for smoother desktop play"
-  // and the non-preset fallback is also 16. When usePlatformAddressableStartPresets = true (the default),
-  // desktop gameplay gets 8 starts/frame — half the intended rate. Raise to 16 to match intent,
-  // or remove the platform-preset path and rely on maxAddressableStartsPerFrame directly.
-  [Min(1)] public int desktopMaxAddressableStartsPerFrame = 8;
+  // Desktop gameplay should keep enough parallel starts to clear first-contact warm work
+  // without relying on the more aggressive overlay-only budget.
+  [Min(1)] public int desktopMaxAddressableStartsPerFrame = 16;
   [Min(1)] public int desktopLoadingOverlayMaxAddressableStartsPerFrame = 24;
   [Min(1)] public int mobileMaxAddressableStartsPerFrame = 6;
   [Min(1)] public int mobileLoadingOverlayMaxAddressableStartsPerFrame = 12;
@@ -118,10 +120,10 @@ public static class SpriteStreamingRuntimeSettings {
         var configured = useMobilePreset
           ? Asset.mobileMaxAddressableStartsPerFrame
           : Asset.desktopMaxAddressableStartsPerFrame; // Gameplay stays conservative; overlay uses a separate higher cap.
-        var fallback = useMobilePreset ? 6 : 8;
+        var fallback = useMobilePreset ? 6 : 16;
         return GetIntSetting(configured, fallback, 1);
       }
-      return GetIntSetting(Asset != null ? Asset.maxAddressableStartsPerFrame : 8, 8, 1);
+      return GetIntSetting(Asset != null ? Asset.maxAddressableStartsPerFrame : 16, 16, 1);
     }
   }
 
@@ -191,6 +193,18 @@ public static class SpriteStreamingRuntimeSettings {
 
   public static IReadOnlyList<string> WarmUiAddressableLabels {
     get { return Asset != null && Asset.warmUiAddressableLabels != null ? Asset.warmUiAddressableLabels : Array.Empty<string>(); }
+  }
+
+  public static IReadOnlyList<string> CriticalRuntimeAssetLabels {
+    get { return Asset != null && Asset.criticalRuntimeAssetLabels != null ? Asset.criticalRuntimeAssetLabels : Array.Empty<string>(); }
+  }
+
+  public static IReadOnlyList<string> WarmRuntimeAssetLabels {
+    get { return Asset != null && Asset.warmRuntimeAssetLabels != null ? Asset.warmRuntimeAssetLabels : Array.Empty<string>(); }
+  }
+
+  public static IReadOnlyList<string> WarmUiRuntimeAssetLabels {
+    get { return Asset != null && Asset.warmUiRuntimeAssetLabels != null ? Asset.warmUiRuntimeAssetLabels : Array.Empty<string>(); }
   }
 
   public static bool EnableAtlasExpansionOnSliceRequest {

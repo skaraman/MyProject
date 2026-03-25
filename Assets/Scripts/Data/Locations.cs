@@ -84,6 +84,13 @@ public class LocationPrefabData {
       return null;
     }
 
+    if (RuntimeAssetCache.TryGetLoaded<GameObject>(address, out var prewarmedPrefab)) {
+      prefab = prewarmedPrefab;
+      prefabCache[address] = prewarmedPrefab;
+      Debug.Log("[LocationPrefabData] Using runtime asset cache prefab address='" + address + "'.");
+      return prefab;
+    }
+
     if (TryGetCachedPrefab(address, out var cachedPrefab)) {
       prefab = cachedPrefab;
       Debug.Log("[LocationPrefabData] Using cached addressable prefab address='" + address + "'.");

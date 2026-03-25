@@ -35,7 +35,7 @@ public class StatsButtons : ButtonGroup {
       return;
     }
 
-    ApplyActiveKeyword(button.GetComponent<AllIn1AnimatorInspector>(), isActive);
+    ApplyActiveKeyword(button, button.GetComponent<AllIn1AnimatorInspector>(), isActive);
   }
 
   static void ApplyHoverState(GameObject button, bool isHovered) {
@@ -43,29 +43,19 @@ public class StatsButtons : ButtonGroup {
       return;
     }
 
-    var shaderList = button.GetComponent<ReferenceListAllIn1AnimatorInspector>();
-    if (shaderList != null) {
-      ApplyHoverKeyword(shaderList.Get(0), isHovered);
-      ApplyHoverKeyword(shaderList.Get(1), isHovered);
+    var resolvedAnimators = ButtonShaderKeywords.ApplyToButton(button, "OUTBASE_ON", isHovered);
+    if (resolvedAnimators > 0) {
       return;
     }
 
-    ApplyHoverKeyword(button.GetComponent<AllIn1AnimatorInspector>(), isHovered);
+    Debug.LogWarning("[StatsButtons] No hover animators resolved for button='" + button.name + "'");
   }
 
-  static void ApplyHoverKeyword(AllIn1AnimatorInspector shader, bool isHovered) {
+  static void ApplyActiveKeyword(GameObject button, AllIn1AnimatorInspector shader, bool isActive) {
     if (shader == null) {
       return;
     }
 
-    shader.SetKeyword("OUTBASE_ON", isHovered);
-  }
-
-  static void ApplyActiveKeyword(AllIn1AnimatorInspector shader, bool isActive) {
-    if (shader == null) {
-      return;
-    }
-
-    shader.SetKeyword("SHINE_ON", isActive);
+    ButtonShaderKeywords.ApplyToAnimator(button, shader, "SHINE_ON", isActive);
   }
 }

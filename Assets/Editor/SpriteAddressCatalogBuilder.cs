@@ -1010,14 +1010,58 @@ public static class SpriteIndexBuilder {
   }
 
   static SpriteStreamingSettings EnsureStreamingSettingsAsset() {
+    EnsureFolderExists(Path.GetDirectoryName(BuilderConfig.SettingsAssetPath));
     var asset = AssetDatabase.LoadAssetAtPath<SpriteStreamingSettings>(BuilderConfig.SettingsAssetPath);
-    if (asset != null) return asset;
+    if (asset == null) {
+      asset = ScriptableObject.CreateInstance<SpriteStreamingSettings>();
+      if (asset == null) return null;
+      AssetDatabase.CreateAsset(asset, BuilderConfig.SettingsAssetPath);
+    }
 
-    asset = ScriptableObject.CreateInstance<SpriteStreamingSettings>();
-    if (asset == null) return null;
-    AssetDatabase.CreateAsset(asset, BuilderConfig.SettingsAssetPath);
+    var settingsChanged = UpgradeLegacyStreamingSettings(asset);
+    if (settingsChanged) {
+      EditorUtility.SetDirty(asset);
+    }
     AssetDatabase.SaveAssets();
     return asset;
+  }
+
+  static bool UpgradeLegacyStreamingSettings(SpriteStreamingSettings asset) {
+    if (asset == null) return false;
+
+    var changed = false;
+    var upgradedDesktopStarts = false;
+    if (asset.usePlatformAddressableStartPresets &&
+        asset.maxAddressableStartsPerFrame == 8 &&
+        asset.desktopMaxAddressableStartsPerFrame == 8) {
+      asset.maxAddressableStartsPerFrame = 16;
+      asset.desktopMaxAddressableStartsPerFrame = 16;
+      changed = true;
+      upgradedDesktopStarts = true;
+    }
+
+    if (asset.loadingOverlayMaxAddressableStartsPerFrame < asset.maxAddressableStartsPerFrame) {
+      asset.loadingOverlayMaxAddressableStartsPerFrame = asset.maxAddressableStartsPerFrame;
+      changed = true;
+    }
+    if (asset.desktopLoadingOverlayMaxAddressableStartsPerFrame < asset.desktopMaxAddressableStartsPerFrame) {
+      asset.desktopLoadingOverlayMaxAddressableStartsPerFrame = asset.desktopMaxAddressableStartsPerFrame;
+      changed = true;
+    }
+    if (asset.mobileLoadingOverlayMaxAddressableStartsPerFrame < asset.mobileMaxAddressableStartsPerFrame) {
+      asset.mobileLoadingOverlayMaxAddressableStartsPerFrame = asset.mobileMaxAddressableStartsPerFrame;
+      changed = true;
+    }
+
+    if (upgradedDesktopStarts) {
+      Debug.Log(
+        "[SpriteIndexBuilder] Upgraded legacy desktop addressable start budget." +
+        " gameplay_starts=" + asset.desktopMaxAddressableStartsPerFrame +
+        " overlay_starts=" + asset.desktopLoadingOverlayMaxAddressableStartsPerFrame
+      );
+    }
+
+    return changed;
   }
 
   static SpriteStreamingInclude EnsureIncludeAsset() {

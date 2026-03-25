@@ -16,6 +16,9 @@ public class LocationManager : MonoBehaviour {
   const int OverlayActivationMaxInFlightMobile = 0;
   const int RuntimeActivationMaxOutstanding = 2;
   const int RuntimeActivationMaxInFlight = 1;
+  const int ProtectedOverlayActivationBurstPerFrame = 4;
+  const int OverlayActivationBurstPerFrame = 2;
+  const int RuntimeActivationBurstPerFrame = 1;
 
   enum ActivationStageRole {
     Blocking = 0,
@@ -63,6 +66,8 @@ public class LocationManager : MonoBehaviour {
      runtimeInstance.pendingDeferredLocationActivationRoutine != null);
   public static bool HasPendingBlockingActivationWork =>
     runtimeInstance != null && runtimeInstance.pendingBlockingLocationActivationRoutine != null;
+  public static bool HasPendingDeferredActivationWork =>
+    runtimeInstance != null && runtimeInstance.pendingDeferredLocationActivationRoutine != null;
   public string CurrentLocationId => currentLocationId;
   public LocationInfo CurrentLocation => activeLocation;
   public IReadOnlyList<LocationObjective> CurrentObjectives =>
@@ -130,19 +135,34 @@ public class LocationManager : MonoBehaviour {
     currentLocationId = resolvedId;
     activeLocation = info;
     var logVerbose = ShouldLogVerboseLoadDebug();
+    var pendingBlockingActivation = HasPendingBlockingActivationWork;
+    var pendingDeferredActivation = HasPendingDeferredActivationWork;
+    var refreshPendingLocationUnderOverlay = ShouldRefreshPendingLocationUnderOverlay(changedLocation);
 
-    if (!changedLocation && HasPendingActivationWork) {
+    if (!changedLocation && (pendingBlockingActivation || pendingDeferredActivation) && !refreshPendingLocationUnderOverlay) {
       if (logVerbose) {
         Debug.Log(
           "[LocationManager] Skipping duplicate pending location load id='" + resolvedId +
-          "' overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
+          "' pending_blocking=" + (pendingBlockingActivation ? 1 : 0) +
+          " pending_deferred=" + (pendingDeferredActivation ? 1 : 0) +
+          " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
           " overlay_protected=" + (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive ? 1 : 0)
         );
       }
       return true;
     }
 
-    ApplyLocationPrefab(activeLocation, changedLocation);
+    if (refreshPendingLocationUnderOverlay && logVerbose) {
+      Debug.Log(
+        "[LocationManager] Refreshing active location under overlay id='" + resolvedId +
+        "' pending_blocking=" + (pendingBlockingActivation ? 1 : 0) +
+        " pending_deferred=" + (pendingDeferredActivation ? 1 : 0) +
+        " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
+        " overlay_protected=" + (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive ? 1 : 0)
+      );
+    }
+
+    ApplyLocationPrefab(activeLocation, changedLocation || refreshPendingLocationUnderOverlay);
     MessageBus.Send("LocationLoaded", activeLocation);
 
     if (logVerbose) {
@@ -155,6 +175,12 @@ public class LocationManager : MonoBehaviour {
       );
     }
     return true;
+  }
+
+  static bool ShouldRefreshPendingLocationUnderOverlay(bool changedLocation) {
+    if (changedLocation) return false;
+    if (!SpriteStreamingLoadingState.IsLoadingOverlayActive) return false;
+    return HasPendingBlockingActivationWork || HasPendingDeferredActivationWork;
   }
 
   void ApplyLocationPrefab(LocationInfo info, bool forceRefresh) {
@@ -287,17 +313,21 @@ public class LocationManager : MonoBehaviour {
     List<string> blockingLibraries,
     List<string> deferredLibraries
   ) {
-    var shouldWaitForBarrier = ShouldWaitForResolverBarrier(blockingLibraries);
+    var promoteDeferredStages = ShouldPromoteDeferredStagesDuringOverlay();
+    var barrierLibraries = promoteDeferredStages
+      ? MergeLibraryLists(blockingLibraries, deferredLibraries)
+      : blockingLibraries;
+    var shouldWaitForBarrier = ShouldWaitForResolverBarrier(barrierLibraries);
     var logVerbose = ShouldLogVerboseLoadDebug();
-    if (blockingLibraries != null && blockingLibraries.Count > 0) {
-      SpriteRuntimeResolver.WarmupLibraries(blockingLibraries);
+    if (barrierLibraries != null && barrierLibraries.Count > 0) {
+      SpriteRuntimeResolver.WarmupLibraries(barrierLibraries);
     }
 
     var startedAt = Time.realtimeSinceStartup;
     if (shouldWaitForBarrier && logVerbose) {
       Debug.Log(
         "[LocationManager] Deferring location activation id='" + locationId +
-        "' libraries=" + blockingLibraries.Count +
+        "' libraries=" + barrierLibraries.Count +
         " overlay_active=1"
       );
     }
@@ -305,7 +335,7 @@ public class LocationManager : MonoBehaviour {
     while (shouldWaitForBarrier &&
            activationGeneration == pendingLocationActivationGeneration &&
            SpriteStreamingLoadingState.IsLoadingOverlayActive &&
-           !SpriteRuntimeResolver.AreShardsReady(blockingLibraries)) {
+           !SpriteRuntimeResolver.AreShardsReady(barrierLibraries)) {
       var waitedSeconds = Time.realtimeSinceStartup - startedAt;
       if (waitedSeconds >= OverlayLocationResolverBarrierTimeoutSeconds) {
         break;
@@ -325,7 +355,7 @@ public class LocationManager : MonoBehaviour {
 
     if (shouldWaitForBarrier && logVerbose) {
       var totalWaitSeconds = Time.realtimeSinceStartup - startedAt;
-      var shardsReady = SpriteRuntimeResolver.AreShardsReady(blockingLibraries);
+      var shardsReady = SpriteRuntimeResolver.AreShardsReady(barrierLibraries);
       Debug.Log(
         "[LocationManager] Activating deferred location id='" + locationId +
         "' waited_s=" + totalWaitSeconds.ToString("0.000") +
@@ -338,11 +368,15 @@ public class LocationManager : MonoBehaviour {
       activeLocationInstance = stagedInstance;
       MessageBus.Send("LocationLocationChanged", activeLocationInstance);
       SplitActivationStagePlans(stagePlans, out var blockingPlans, out var deferredPlans);
+      if (promoteDeferredStages && deferredPlans.Count > 0) {
+        PromoteDeferredStagePlansToBlocking(blockingPlans, deferredPlans);
+      }
       if (logVerbose) {
         Debug.Log(
           "[LocationManager] Stage split id='" + locationId +
           "' blocking_stages=" + blockingPlans.Count +
-          " deferred_stages=" + deferredPlans.Count
+          " deferred_stages=" + deferredPlans.Count +
+          " promoted_deferred=" + (promoteDeferredStages ? 1 : 0)
         );
       }
       if (blockingPlans.Count > 0) {
@@ -462,6 +496,47 @@ public class LocationManager : MonoBehaviour {
     }
   }
 
+  static bool ShouldPromoteDeferredStagesDuringOverlay() {
+    return Application.isPlaying && SpriteStreamingLoadingState.IsLoadingOverlayActive;
+  }
+
+  static List<string> MergeLibraryLists(List<string> primary, List<string> secondary) {
+    if (primary == null || primary.Count <= 0) {
+      return secondary != null && secondary.Count > 0 ? new List<string>(secondary) : primary;
+    }
+    if (secondary == null || secondary.Count <= 0) return primary;
+
+    var merged = new List<string>(primary.Count + secondary.Count);
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    AppendLibraries(primary, merged, seen);
+    AppendLibraries(secondary, merged, seen);
+    return merged;
+  }
+
+  static void AppendLibraries(List<string> source, List<string> destination, HashSet<string> seen) {
+    if (source == null || destination == null || seen == null) return;
+    for (var i = 0; i < source.Count; i++) {
+      var library = source[i];
+      if (string.IsNullOrWhiteSpace(library)) continue;
+      var normalized = library.Trim();
+      if (!seen.Add(normalized)) continue;
+      destination.Add(normalized);
+    }
+  }
+
+  static void PromoteDeferredStagePlansToBlocking(
+    List<ActivationStagePlan> blockingPlans,
+    List<ActivationStagePlan> deferredPlans
+  ) {
+    if (blockingPlans == null || deferredPlans == null || deferredPlans.Count <= 0) return;
+    for (var i = 0; i < deferredPlans.Count; i++) {
+      var plan = deferredPlans[i];
+      if (plan == null || plan.root == null) continue;
+      blockingPlans.Add(plan);
+    }
+    deferredPlans.Clear();
+  }
+
   static Transform FindDirectChild(Transform parent, string childName) {
     if (parent == null || string.IsNullOrWhiteSpace(childName)) return null;
     for (var i = 0; i < parent.childCount; i++) {
@@ -505,6 +580,7 @@ public class LocationManager : MonoBehaviour {
   IEnumerator ActivateLocationStageChildren(int activationGeneration, string locationId, List<ActivationStagePlan> stagePlans) {
     if (stagePlans == null || stagePlans.Count <= 0) yield break;
     var logVerbose = ShouldLogVerboseLoadDebug();
+    var activationsThisFrame = 0;
 
     for (var stageIndex = 0; stageIndex < stagePlans.Count; stageIndex++) {
       if (activationGeneration != pendingLocationActivationGeneration) yield break;
@@ -524,7 +600,9 @@ public class LocationManager : MonoBehaviour {
           "' node_count=" + stagePlan.nodes.Count
         );
       }
-      yield return null;
+      if (ShouldYieldAfterActivationStep(ref activationsThisFrame)) {
+        yield return null;
+      }
 
       for (var nodeIndex = 0; nodeIndex < stagePlan.nodes.Count; nodeIndex++) {
         if (activationGeneration != pendingLocationActivationGeneration) yield break;
@@ -551,7 +629,9 @@ public class LocationManager : MonoBehaviour {
             " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0)
           );
         }
-        yield return null;
+        if (ShouldYieldAfterActivationStep(ref activationsThisFrame)) {
+          yield return null;
+        }
       }
     }
 
@@ -659,6 +739,16 @@ public class LocationManager : MonoBehaviour {
     return true;
   }
 
+  static bool ShouldYieldAfterActivationStep(ref int activationsThisFrame) {
+    activationsThisFrame++;
+    if (activationsThisFrame < ResolveActivationBurstPerFrame()) {
+      return false;
+    }
+
+    activationsThisFrame = 0;
+    return true;
+  }
+
   static void ResolveActivationQueueThresholds(out int maxOutstanding, out int maxInFlight) {
     if (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive) {
       maxOutstanding = Application.isMobilePlatform
@@ -682,6 +772,16 @@ public class LocationManager : MonoBehaviour {
 
     maxOutstanding = RuntimeActivationMaxOutstanding;
     maxInFlight = RuntimeActivationMaxInFlight;
+  }
+
+  static int ResolveActivationBurstPerFrame() {
+    if (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive) {
+      return ProtectedOverlayActivationBurstPerFrame;
+    }
+    if (SpriteStreamingLoadingState.IsLoadingOverlayActive) {
+      return OverlayActivationBurstPerFrame;
+    }
+    return RuntimeActivationBurstPerFrame;
   }
 
   static string ResolveActivationCapacityMode() {

@@ -30,12 +30,16 @@ public readonly struct WarmRequest {
   public readonly List<string> extraCriticalAddresses;
   public readonly List<string> extraWarmLibraries;
   public readonly List<string> extraWarmAddresses;
+  public readonly List<string> extraCriticalAssetAddresses;
+  public readonly List<string> extraWarmAssetAddresses;
   public readonly float hardTimeoutSeconds;
   public readonly bool allowHardTimeoutBypass;
   public readonly string idempotencyToken;
   public readonly bool skipIfTokenAlreadyWarm;
   public readonly List<string> extraCriticalLabels;
   public readonly List<string> extraWarmLabels;
+  public readonly List<string> extraCriticalAssetLabels;
+  public readonly List<string> extraWarmAssetLabels;
   public readonly List<string> criticalPlayerEffectKeys;
   public readonly bool allowCriticalReadySoftTimeout;
 
@@ -56,12 +60,16 @@ public readonly struct WarmRequest {
     List<string> extraCriticalAddresses = null,
     List<string> extraWarmLibraries = null,
     List<string> extraWarmAddresses = null,
+    List<string> extraCriticalAssetAddresses = null,
+    List<string> extraWarmAssetAddresses = null,
     float hardTimeoutSeconds = 6.0f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
     bool skipIfTokenAlreadyWarm = false,
     List<string> extraCriticalLabels = null,
     List<string> extraWarmLabels = null,
+    List<string> extraCriticalAssetLabels = null,
+    List<string> extraWarmAssetLabels = null,
     List<string> criticalPlayerEffectKeys = null,
     bool allowCriticalReadySoftTimeout = true
   ) {
@@ -81,12 +89,16 @@ public readonly struct WarmRequest {
     this.extraCriticalAddresses = extraCriticalAddresses;
     this.extraWarmLibraries = extraWarmLibraries;
     this.extraWarmAddresses = extraWarmAddresses;
+    this.extraCriticalAssetAddresses = extraCriticalAssetAddresses;
+    this.extraWarmAssetAddresses = extraWarmAssetAddresses;
     this.hardTimeoutSeconds = hardTimeoutSeconds;
     this.allowHardTimeoutBypass = allowHardTimeoutBypass;
     this.idempotencyToken = idempotencyToken;
     this.skipIfTokenAlreadyWarm = skipIfTokenAlreadyWarm;
     this.extraCriticalLabels = extraCriticalLabels;
     this.extraWarmLabels = extraWarmLabels;
+    this.extraCriticalAssetLabels = extraCriticalAssetLabels;
+    this.extraWarmAssetLabels = extraWarmAssetLabels;
     this.criticalPlayerEffectKeys = criticalPlayerEffectKeys;
     this.allowCriticalReadySoftTimeout = allowCriticalReadySoftTimeout;
   }
@@ -102,12 +114,16 @@ public readonly struct WarmRequest {
     List<string> extraCriticalAddresses = null,
     List<string> extraWarmLibraries = null,
     List<string> extraWarmAddresses = null,
+    List<string> extraCriticalAssetAddresses = null,
+    List<string> extraWarmAssetAddresses = null,
     float hardTimeoutSeconds = 6.0f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
     bool skipIfTokenAlreadyWarm = false,
     List<string> extraCriticalLabels = null,
     List<string> extraWarmLabels = null,
+    List<string> extraCriticalAssetLabels = null,
+    List<string> extraWarmAssetLabels = null,
     List<string> criticalPlayerEffectKeys = null,
     bool allowCriticalReadySoftTimeout = false
   ) {
@@ -128,12 +144,16 @@ public readonly struct WarmRequest {
       extraCriticalAddresses: extraCriticalAddresses,
       extraWarmLibraries: extraWarmLibraries,
       extraWarmAddresses: extraWarmAddresses,
+      extraCriticalAssetAddresses: extraCriticalAssetAddresses,
+      extraWarmAssetAddresses: extraWarmAssetAddresses,
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
       skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
       extraCriticalLabels: extraCriticalLabels,
       extraWarmLabels: extraWarmLabels,
+      extraCriticalAssetLabels: extraCriticalAssetLabels,
+      extraWarmAssetLabels: extraWarmAssetLabels,
       criticalPlayerEffectKeys: criticalPlayerEffectKeys,
       allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
@@ -150,12 +170,16 @@ public readonly struct WarmRequest {
     List<string> extraCriticalAddresses = null,
     List<string> extraWarmLibraries = null,
     List<string> extraWarmAddresses = null,
+    List<string> extraCriticalAssetAddresses = null,
+    List<string> extraWarmAssetAddresses = null,
     float hardTimeoutSeconds = 6.5f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
     bool skipIfTokenAlreadyWarm = false,
     List<string> extraCriticalLabels = null,
     List<string> extraWarmLabels = null,
+    List<string> extraCriticalAssetLabels = null,
+    List<string> extraWarmAssetLabels = null,
     List<string> criticalPlayerEffectKeys = null,
     bool allowCriticalReadySoftTimeout = false
   ) {
@@ -176,12 +200,16 @@ public readonly struct WarmRequest {
       extraCriticalAddresses: extraCriticalAddresses,
       extraWarmLibraries: extraWarmLibraries,
       extraWarmAddresses: extraWarmAddresses,
+      extraCriticalAssetAddresses: extraCriticalAssetAddresses,
+      extraWarmAssetAddresses: extraWarmAssetAddresses,
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
       skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
       extraCriticalLabels: extraCriticalLabels,
       extraWarmLabels: extraWarmLabels,
+      extraCriticalAssetLabels: extraCriticalAssetLabels,
+      extraWarmAssetLabels: extraWarmAssetLabels,
       criticalPlayerEffectKeys: criticalPlayerEffectKeys,
       allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
@@ -195,12 +223,16 @@ public readonly struct WarmRequest {
     List<string> extraCriticalAddresses = null,
     List<string> extraWarmLibraries = null,
     List<string> extraWarmAddresses = null,
+    List<string> extraCriticalAssetAddresses = null,
+    List<string> extraWarmAssetAddresses = null,
     float hardTimeoutSeconds = 4.5f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
     bool skipIfTokenAlreadyWarm = false,
     List<string> extraCriticalLabels = null,
     List<string> extraWarmLabels = null,
+    List<string> extraCriticalAssetLabels = null,
+    List<string> extraWarmAssetLabels = null,
     List<string> criticalPlayerEffectKeys = null,
     bool allowCriticalReadySoftTimeout = false
   ) {
@@ -221,12 +253,16 @@ public readonly struct WarmRequest {
       extraCriticalAddresses: extraCriticalAddresses,
       extraWarmLibraries: extraWarmLibraries,
       extraWarmAddresses: extraWarmAddresses,
+      extraCriticalAssetAddresses: extraCriticalAssetAddresses,
+      extraWarmAssetAddresses: extraWarmAssetAddresses,
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
       skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
       extraCriticalLabels: extraCriticalLabels,
       extraWarmLabels: extraWarmLabels,
+      extraCriticalAssetLabels: extraCriticalAssetLabels,
+      extraWarmAssetLabels: extraWarmAssetLabels,
       criticalPlayerEffectKeys: criticalPlayerEffectKeys,
       allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
@@ -241,12 +277,16 @@ public readonly struct WarmRequest {
     List<string> extraCriticalAddresses = null,
     List<string> extraWarmLibraries = null,
     List<string> extraWarmAddresses = null,
+    List<string> extraCriticalAssetAddresses = null,
+    List<string> extraWarmAssetAddresses = null,
     float hardTimeoutSeconds = 4.5f,
     bool allowHardTimeoutBypass = true,
     string idempotencyToken = "",
     bool skipIfTokenAlreadyWarm = true,
     List<string> extraCriticalLabels = null,
     List<string> extraWarmLabels = null,
+    List<string> extraCriticalAssetLabels = null,
+    List<string> extraWarmAssetLabels = null,
     List<string> criticalPlayerEffectKeys = null,
     bool allowCriticalReadySoftTimeout = true
   ) {
@@ -267,12 +307,16 @@ public readonly struct WarmRequest {
       extraCriticalAddresses: extraCriticalAddresses,
       extraWarmLibraries: extraWarmLibraries,
       extraWarmAddresses: extraWarmAddresses,
+      extraCriticalAssetAddresses: extraCriticalAssetAddresses,
+      extraWarmAssetAddresses: extraWarmAssetAddresses,
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: allowHardTimeoutBypass,
       idempotencyToken: idempotencyToken,
       skipIfTokenAlreadyWarm: skipIfTokenAlreadyWarm,
       extraCriticalLabels: extraCriticalLabels,
       extraWarmLabels: extraWarmLabels,
+      extraCriticalAssetLabels: extraCriticalAssetLabels,
+      extraWarmAssetLabels: extraWarmAssetLabels,
       criticalPlayerEffectKeys: criticalPlayerEffectKeys,
       allowCriticalReadySoftTimeout: allowCriticalReadySoftTimeout
     );
@@ -388,6 +432,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   Coroutine activeRoutine;
   Action<WarmResult> activeCallback;
   int activeMaxRequestedAddresses;
+  int activeRuntimeTrackedWarmId;
   int activeCriticalReadyAddressCap;
   int activeHighPriorityAddressCap;
   int activeFrameAddressProbeBudget;
@@ -525,6 +570,106 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     return "location:" + normalizedLocation + "|enemies:" + keyCsv;
   }
 
+  int StartRuntimeAssetWarmup(WarmRequest request, WarmContext context, bool debugLogs) {
+    var criticalAssetLabels = BuildMergedSourceList(
+      request.extraCriticalAssetLabels,
+      SpriteStreamingRuntimeSettings.CriticalRuntimeAssetLabels
+    );
+    var warmAssetLabels = BuildMergedSourceList(
+      request.extraWarmAssetLabels,
+      SpriteStreamingRuntimeSettings.WarmRuntimeAssetLabels
+    );
+    var hasRuntimeSources =
+      HasAnyNormalizedSource(request.extraCriticalAssetAddresses) ||
+      HasAnyNormalizedSource(request.extraWarmAssetAddresses) ||
+      HasAnyNormalizedSource(criticalAssetLabels) ||
+      HasAnyNormalizedSource(warmAssetLabels);
+    if (!hasRuntimeSources) return 0;
+
+    var trackedWarmId = RuntimeAssetCache.BeginTrackedWarmup(
+      request.extraCriticalAssetAddresses,
+      criticalAssetLabels,
+      request.extraWarmAssetAddresses,
+      warmAssetLabels,
+      RuntimeAssetResidencyScope.Session,
+      "warm_gate:" + context
+    );
+
+    if (debugLogs) {
+      Debug.Log(
+        "[StreamingWarmOrchestrator] Runtime asset warm started" +
+        " context=" + context +
+        " tracked_id=" + trackedWarmId +
+        " critical_addresses=" + CountNormalizedSources(request.extraCriticalAssetAddresses) +
+        " critical_labels=" + CountNormalizedSources(criticalAssetLabels) +
+        " warm_addresses=" + CountNormalizedSources(request.extraWarmAssetAddresses) +
+        " warm_labels=" + CountNormalizedSources(warmAssetLabels)
+      );
+    }
+
+    return trackedWarmId;
+  }
+
+  static RuntimeAssetWarmSnapshot GetRuntimeWarmSnapshot(int trackedWarmId) {
+    if (trackedWarmId <= 0) {
+      return new RuntimeAssetWarmSnapshot(
+        prepared: true,
+        readyCount: 0,
+        totalCount: 0,
+        criticalReadyCount: 0,
+        criticalTotalCount: 0,
+        criticalReady: true,
+        queue: RuntimeAssetCache.GetQueueSnapshot()
+      );
+    }
+
+    if (RuntimeAssetCache.TryGetTrackedWarmSnapshot(trackedWarmId, out var snapshot)) {
+      return snapshot;
+    }
+
+    return new RuntimeAssetWarmSnapshot(
+      prepared: false,
+      readyCount: 0,
+      totalCount: 0,
+      criticalReadyCount: 0,
+      criticalTotalCount: 0,
+      criticalReady: false,
+      queue: RuntimeAssetCache.GetQueueSnapshot()
+    );
+  }
+
+  static List<string> BuildMergedSourceList(IEnumerable<string> first, IEnumerable<string> second) {
+    List<string> merged = null;
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    AppendMergedSources(ref merged, seen, first);
+    AppendMergedSources(ref merged, seen, second);
+    return merged;
+  }
+
+  static void AppendMergedSources(ref List<string> output, HashSet<string> seen, IEnumerable<string> values) {
+    if (values == null) return;
+    foreach (var value in values) {
+      var normalized = NormalizeToken(value);
+      if (string.IsNullOrWhiteSpace(normalized)) continue;
+      if (seen != null && !seen.Add(normalized)) continue;
+      output ??= new List<string>();
+      output.Add(normalized);
+    }
+  }
+
+  static bool HasAnyNormalizedSource(IEnumerable<string> values) {
+    return CountNormalizedSources(values) > 0;
+  }
+
+  static int CountNormalizedSources(IEnumerable<string> values) {
+    if (values == null) return 0;
+    var count = 0;
+    foreach (var value in values) {
+      if (!string.IsNullOrWhiteSpace(NormalizeToken(value))) count++;
+    }
+    return count;
+  }
+
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
     instance = null;
@@ -603,6 +748,10 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       StopCoroutine(rescueDispatchRoutine);
       rescueDispatchRoutine = null;
     }
+    if (activeRuntimeTrackedWarmId > 0) {
+      RuntimeAssetCache.ReleaseTrackedWarmup(activeRuntimeTrackedWarmId);
+      activeRuntimeTrackedWarmId = 0;
+    }
     activeCallback = null;
     hasActiveProgress = false;
     activeProgress = default;
@@ -621,6 +770,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     activeFrameAddressProbeBudget = Mathf.Clamp(activeMaxRequestedAddresses * 4, MinWarmPlanFrameAddressProbeBudget, MaxWarmPlanFrameAddressProbeBudget);
     var debugLogs = ShouldLogLoadingDebug();
     var logIntervalSeconds = Mathf.Max(SpriteStreamingRuntimeSettings.LoadingProgressLogIntervalMs, 100) / 1000f;
+    activeRuntimeTrackedWarmId = StartRuntimeAssetWarmup(request, context, debugLogs);
 
     warmPlanFrameAddressProbeCount = 0;
     warmPlanDroppedAddresses = 0;
@@ -753,11 +903,11 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var softTimedOut = false;
     var hardTimedOut = false;
     var readyCount = 0;
-    var totalCount = scheduledReadyAddressSet.Count;
+    var totalCount = 0;
     var criticalReadyCount = 0;
-    var criticalTotalCount = scheduledCriticalReadyAddressSet.Count;
-    var ratio = totalCount > 0 ? 0f : 1f;
-    var criticalReady = criticalTotalCount <= 0;
+    var criticalTotalCount = 0;
+    var ratio = 0f;
+    var criticalReady = activeRuntimeTrackedWarmId <= 0;
     var nextProgressLogAt = startedAt + logIntervalSeconds;
     var progressSampleInterval = totalCount > 4096 ? 3 : (totalCount > 2048 ? 2 : 1);
     var nextProgressSampleFrame = Time.frameCount;
@@ -768,11 +918,20 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       var frame = Time.frameCount;
       var shouldSampleProgress = frame >= nextProgressSampleFrame;
       if (shouldSampleProgress) {
-        readyCount = CountReadyAddresses(scheduledReadyAddressSet, pumpEntries: false);
-        criticalReadyCount = CountReadyAddresses(scheduledCriticalReadyAddressSet, pumpEntries: false);
+        var runtimeSnapshot = GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId);
+        var spriteReadyCount = CountReadyAddresses(scheduledReadyAddressSet, pumpEntries: false);
+        var spriteCriticalReadyCount = CountReadyAddresses(scheduledCriticalReadyAddressSet, pumpEntries: false);
+        var spriteTotalCount = scheduledReadyAddressSet.Count;
+        var spriteCriticalTotalCount = scheduledCriticalReadyAddressSet.Count;
+        readyCount = spriteReadyCount + runtimeSnapshot.readyCount;
+        totalCount = spriteTotalCount + runtimeSnapshot.totalCount;
+        criticalReadyCount = spriteCriticalReadyCount + runtimeSnapshot.criticalReadyCount;
+        criticalTotalCount = spriteCriticalTotalCount + runtimeSnapshot.criticalTotalCount;
         ratio = totalCount > 0 ? ((float)readyCount / totalCount) : 1f;
-        criticalReady = criticalTotalCount <= 0 || criticalReadyCount >= criticalTotalCount;
+        var spriteCriticalReady = spriteCriticalTotalCount <= 0 || spriteCriticalReadyCount >= spriteCriticalTotalCount;
+        criticalReady = spriteCriticalReady && runtimeSnapshot.criticalReady;
         reachedThreshold = criticalReady && ratio >= requiredReadyRatio;
+        progressSampleInterval = totalCount > 4096 ? 3 : (totalCount > 2048 ? 2 : 1);
         nextProgressSampleFrame = frame + progressSampleInterval;
 
         hasActiveProgress = true;
@@ -791,12 +950,17 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       var now = Time.realtimeSinceStartup;
       if (shouldSampleProgress && debugLogs && now >= nextProgressLogAt && !reachedThreshold) {
         var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
+        var runtimeSnapshot = GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId);
         Debug.Log(
           "[StreamingWarmOrchestrator] Progress context=" + context +
           " ready=" + readyCount + "/" + totalCount +
           " critical=" + criticalReadyCount + "/" + criticalTotalCount +
           " ratio=" + ratio.ToString("0.000") +
           " soft_timeout=" + (softTimedOut ? 1 : 0) +
+          " runtime_prepared=" + (runtimeSnapshot.prepared ? 1 : 0) +
+          " runtime_queue=" + runtimeSnapshot.queue.queuedCount +
+          " runtime_in_flight=" + runtimeSnapshot.queue.inFlightCount +
+          " runtime_preparing=" + runtimeSnapshot.queue.preparingCount +
           " deferred_pending=" + deferredSnapshot.pendingCount +
           " deferred_flushed_frame=" + deferredSnapshot.flushedThisFrame +
           " deferred_total=" + deferredSnapshot.totalDeferredCount +
@@ -851,7 +1015,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       totalCount: totalCount,
       criticalReadyCount: criticalReadyCount,
       criticalTotalCount: criticalTotalCount,
-      requestedAddressCount: scheduledAddressSet.Count,
+      requestedAddressCount: scheduledAddressSet.Count + GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId).totalCount,
       elapsedMs: elapsedMs,
       hardTimeoutBypassUsed: hardTimeoutBypassUsed,
       failureReason: failureReason
@@ -874,6 +1038,7 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
         " hard_bypass=" + (result.hardTimeoutBypassUsed ? 1 : 0) +
         " failure_reason='" + result.failureReason + "'" +
         " elapsed_ms=" + result.elapsedMs.ToString("0.0") +
+        " runtime_loaded=" + GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId).readyCount +
         " deferred_pending=" + deferredSnapshot.pendingCount +
         " deferred_flushed_frame=" + deferredSnapshot.flushedThisFrame +
         " deferred_total=" + deferredSnapshot.totalDeferredCount +
@@ -885,6 +1050,10 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
     var callback = activeCallback;
     activeRoutine = null;
     activeCallback = null;
+    if (activeRuntimeTrackedWarmId > 0) {
+      RuntimeAssetCache.ReleaseTrackedWarmup(activeRuntimeTrackedWarmId);
+      activeRuntimeTrackedWarmId = 0;
+    }
     hasActiveProgress = false;
     activeProgress = default;
     ClearScratch();
@@ -1704,12 +1873,16 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       extraCriticalAddresses: request.extraCriticalAddresses,
       extraWarmLibraries: request.extraWarmLibraries,
       extraWarmAddresses: request.extraWarmAddresses,
+      extraCriticalAssetAddresses: request.extraCriticalAssetAddresses,
+      extraWarmAssetAddresses: request.extraWarmAssetAddresses,
       hardTimeoutSeconds: hardTimeoutSeconds,
       allowHardTimeoutBypass: request.allowHardTimeoutBypass,
       idempotencyToken: request.idempotencyToken,
       skipIfTokenAlreadyWarm: request.skipIfTokenAlreadyWarm,
       extraCriticalLabels: request.extraCriticalLabels,
       extraWarmLabels: request.extraWarmLabels,
+      extraCriticalAssetLabels: request.extraCriticalAssetLabels,
+      extraWarmAssetLabels: request.extraWarmAssetLabels,
       criticalPlayerEffectKeys: request.criticalPlayerEffectKeys,
       allowCriticalReadySoftTimeout: request.allowCriticalReadySoftTimeout
     );

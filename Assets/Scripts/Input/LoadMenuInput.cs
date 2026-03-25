@@ -252,7 +252,6 @@ public class LoadMenuInput : ButtonGroup {
     if (TryResolveSelectedSlotNumber(out var slotNumber)) {
       LockSaveSlotInteraction();
       SaveSlotManager.SetSlot(slotNumber);
-      ApplyLocationFromSelectedSlot();
       Debug.Log($"Slot set {SaveSlotManager.slot}");
       MessageBus.Send("startGame");
     }
@@ -282,20 +281,6 @@ public class LoadMenuInput : ButtonGroup {
         collider.enabled = enabled;
       }
     }
-  }
-
-  void ApplyLocationFromSelectedSlot() {
-    var loadedSlot = SaveSlotManager.Load("slot");
-    if (loadedSlot == null || !loadedSlot.TryGetValue("location", out var locationValue)) return;
-
-    var requestedLocation = Convert.ToString(locationValue);
-    if (string.IsNullOrWhiteSpace(requestedLocation)) return;
-
-    var resolvedLocation = LocationEnemyData.ResolveRequestedOrDefault(requestedLocation);
-    if (string.IsNullOrWhiteSpace(resolvedLocation)) return;
-
-    LocationManager.UpdateLocation(resolvedLocation);
-    MessageBus.Send("RequestLocationLoad", resolvedLocation);
   }
 
   int ResolveButtonIndex(GameObject hitObject) {

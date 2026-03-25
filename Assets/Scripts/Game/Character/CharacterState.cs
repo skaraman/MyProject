@@ -112,6 +112,14 @@ public class CharacterState : MonoBehaviour {
     }
 
     var previousForm = EsperanzaForms.GetActive();
+    if (string.Equals(previousForm, resolvedForm, StringComparison.OrdinalIgnoreCase)) {
+      Debug.Log(
+        "[CharacterState][SetActiveForm] Ignored no-op request current='" + previousForm +
+        "' source='" + (source ?? "") + "'"
+      );
+      return false;
+    }
+
     EsperanzaForms.SetActive(resolvedForm);
     var saved = SaveFormsState();
 

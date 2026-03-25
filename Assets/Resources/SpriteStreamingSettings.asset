@@ -16,10 +16,13 @@ MonoBehaviour:
   criticalAddressableLabels: []
   warmAddressableLabels: []
   warmUiAddressableLabels: []
+  criticalRuntimeAssetLabels: []
+  warmRuntimeAssetLabels: []
+  warmUiRuntimeAssetLabels: []
   maxLoadedShards: 48
   softTextureBudgetMb: 1024
   hardTextureBudgetMb: 1536
-  maxAddressableStartsPerFrame: 8
+  maxAddressableStartsPerFrame: 16
   animationWarmupFrames: 24
   animationSwitchGateMs: 0
   keepLoadedSpritesForSession: 1
@@ -30,7 +33,7 @@ MonoBehaviour:
   loadingProgressLogIntervalMs: 500
   loadingOverlayMaxAddressableStartsPerFrame: 24
   usePlatformAddressableStartPresets: 1
-  desktopMaxAddressableStartsPerFrame: 8
+  desktopMaxAddressableStartsPerFrame: 16
   desktopLoadingOverlayMaxAddressableStartsPerFrame: 24
   mobileMaxAddressableStartsPerFrame: 6
   mobileLoadingOverlayMaxAddressableStartsPerFrame: 12

@@ -7,10 +7,12 @@ public static class DialogController {
   const string SeenLinesPrefix = "seenLines";
 
   static readonly HashSet<string> seenLineKeys = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> debugSessionSeenLineKeys = new(StringComparer.OrdinalIgnoreCase);
   static readonly SaveData saveBuffer = new();
   static readonly Dictionary<string, int> seenSnapshotBuffer = new(StringComparer.OrdinalIgnoreCase);
 
   static bool debugTreatAllDialogAsUnseen;
+  static string debugSessionLocationId = "";
   static int loadedSlot = -1;
   static bool runtimeStateReady;
 
@@ -26,10 +28,8 @@ public static class DialogController {
     }
 
     debugTreatAllDialogAsUnseen = enabled;
-    if (debugTreatAllDialogAsUnseen) {
-      seenLineKeys.Clear();
-    }
-    else if (runtimeStateReady) {
+    ClearDebugLocationSession();
+    if (!debugTreatAllDialogAsUnseen && runtimeStateReady) {
       LoadState("debug_disabled:" + (source ?? ""));
       return;
     }
@@ -39,13 +39,33 @@ public static class DialogController {
         "[DialogController][SetDebugTreatAllDialogAsUnseen] source='" + (source ?? "") +
         "' enabled=" + (debugTreatAllDialogAsUnseen ? 1 : 0) +
         " seen_count=" + seenLineKeys.Count +
+        " debug_session_seen_count=" + debugSessionSeenLineKeys.Count +
         " runtime_ready=" + (runtimeStateReady ? 1 : 0)
       );
     }
   }
 
+  public static void BeginLocationDialogSession(string locationId, string source = "runtime") {
+    if (!debugTreatAllDialogAsUnseen) {
+      return;
+    }
+
+    debugSessionLocationId = NormalizeToken(locationId);
+    debugSessionSeenLineKeys.Clear();
+    if (!ShouldLogDialogDebug()) {
+      return;
+    }
+
+    Debug.Log(
+      "[DialogController][BeginLocationDialogSession] source='" + (source ?? "") +
+      "' location='" + debugSessionLocationId + "'" +
+      " debug_session_seen_count=" + debugSessionSeenLineKeys.Count
+    );
+  }
+
   public static void ResetRuntimeState(string source = "runtime") {
     seenLineKeys.Clear();
+    ClearDebugLocationSession();
     loadedSlot = SaveSlotManager.slot;
     runtimeStateReady = true;
 
@@ -60,6 +80,7 @@ public static class DialogController {
 
   public static void LoadState(string source = "runtime") {
     seenLineKeys.Clear();
+    ClearDebugLocationSession();
 
     SaveData loaded = null;
     if (debugTreatAllDialogAsUnseen) {
@@ -173,24 +194,28 @@ public static class DialogController {
   }
 
   public static bool MarkSeen(string locationId, string speakerId, int lineNumber, string source = "runtime") {
-    if (debugTreatAllDialogAsUnseen) {
-      if (ShouldLogDialogDebug()) {
-        Debug.Log(
-          "[DialogController][MarkSeen] Ignored while debug is enabled" +
-          " location='" + (locationId ?? "") +
-          "' speaker='" + (speakerId ?? "") +
-          "' line=" + Mathf.Max(lineNumber, 0) +
-          " source='" + (source ?? "") + "'"
-        );
-      }
-      return false;
-    }
-
     if (!TryNormalizeSeenKey(locationId, speakerId, lineNumber, out var normalizedLocationId, out var normalizedSpeakerId, out var normalizedLineNumber)) {
       return false;
     }
 
     var seenKey = BuildSeenKey(normalizedLocationId, normalizedSpeakerId, normalizedLineNumber);
+    if (debugTreatAllDialogAsUnseen) {
+      var addedDebugSeen = debugSessionSeenLineKeys.Add(seenKey);
+      if (ShouldLogDialogDebug()) {
+        Debug.Log(
+          "[DialogController][MarkSeen] Runtime-only while debug is enabled" +
+          " location='" + normalizedLocationId +
+          "' speaker='" + normalizedSpeakerId +
+          "' line=" + normalizedLineNumber +
+          " source='" + (source ?? "") + "'" +
+          " added=" + (addedDebugSeen ? 1 : 0) +
+          " session_location='" + debugSessionLocationId + "'" +
+          " debug_session_seen_count=" + debugSessionSeenLineKeys.Count
+        );
+      }
+      return addedDebugSeen;
+    }
+
     if (!seenLineKeys.Add(seenKey)) {
       return false;
     }
@@ -210,15 +235,21 @@ public static class DialogController {
   }
 
   public static bool WasSeen(string locationId, string speakerId, int lineNumber) {
-    if (debugTreatAllDialogAsUnseen) {
-      return false;
-    }
-
     if (!TryNormalizeSeenKey(locationId, speakerId, lineNumber, out var normalizedLocationId, out var normalizedSpeakerId, out var normalizedLineNumber)) {
       return false;
     }
 
-    return seenLineKeys.Contains(BuildSeenKey(normalizedLocationId, normalizedSpeakerId, normalizedLineNumber));
+    var seenKey = BuildSeenKey(normalizedLocationId, normalizedSpeakerId, normalizedLineNumber);
+    if (debugTreatAllDialogAsUnseen) {
+      return debugSessionSeenLineKeys.Contains(seenKey);
+    }
+
+    return seenLineKeys.Contains(seenKey);
+  }
+
+  static void ClearDebugLocationSession() {
+    debugSessionLocationId = "";
+    debugSessionSeenLineKeys.Clear();
   }
 
   static void LoadSeenKeys(SaveData loaded) {
