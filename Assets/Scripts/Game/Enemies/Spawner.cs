@@ -464,8 +464,7 @@ public class Spawner : MonoBehaviour {
   }
 
   GameObject ResolveActiveLocationInstance() {
-    var locationManager = FindAnyObjectByType<LocationManager>();
-    return locationManager != null ? locationManager.ActiveLocationInstance : null;
+    return LocationManager.ResolveActiveLocationInstance();
   }
 
   void ClearEnemyPools() {

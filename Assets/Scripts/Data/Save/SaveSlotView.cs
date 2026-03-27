@@ -6,6 +6,7 @@ using UnityEngine;
 
 public class SaveSlotView : MonoBehaviour {
   const string SaveFileName = "slot.sav";
+  const int SortingOrderBandSize = 128;
 
   public GameObject saveSlotPrefab;
   public GameObject saveSlotWrap;
@@ -82,6 +83,7 @@ public class SaveSlotView : MonoBehaviour {
       var transformRef = go.transform;
       transformRef.localPosition = new Vector3(-0.11f, initialY, -0.01f * i);
       transformRef.localScale = new Vector3(1.85f, 1.85f, 1.85f);
+      ApplySlotSortingBand(go, i);
 
       var slot = go.GetComponent<SaveSlot>();
       if (slot != null) {
@@ -97,6 +99,43 @@ public class SaveSlotView : MonoBehaviour {
       }
 
       loadMenuGroup.buttons.Add(go);
+    }
+  }
+
+  void ApplySlotSortingBand(GameObject slotObject, int slotIndex) {
+    if (slotObject == null) return;
+
+    var sortingOffset = ResolveSlotSortingOffset(slotIndex);
+    OffsetChildRendererSorting(slotObject, sortingOffset);
+    OffsetChildMaskSorting(slotObject, sortingOffset);
+  }
+
+  static int ResolveSlotSortingOffset(int slotIndex) {
+    if (slotIndex <= 0) return 0;
+    return slotIndex * SortingOrderBandSize;
+  }
+
+  static void OffsetChildRendererSorting(GameObject root, int sortingOffset) {
+    if (root == null || sortingOffset == 0) return;
+
+    var renderers = root.GetComponentsInChildren<SpriteRenderer>(true);
+    for (var i = 0; i < renderers.Length; i++) {
+      var renderer = renderers[i];
+      if (renderer == null) continue;
+      renderer.sortingOrder += sortingOffset;
+    }
+  }
+
+  static void OffsetChildMaskSorting(GameObject root, int sortingOffset) {
+    if (root == null || sortingOffset == 0) return;
+
+    var masks = root.GetComponentsInChildren<SpriteMask>(true);
+    for (var i = 0; i < masks.Length; i++) {
+      var mask = masks[i];
+      if (mask == null) continue;
+      mask.sortingOrder += sortingOffset;
+      mask.frontSortingOrder += sortingOffset;
+      mask.backSortingOrder += sortingOffset;
     }
   }
 

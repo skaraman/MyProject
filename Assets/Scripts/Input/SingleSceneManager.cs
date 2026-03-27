@@ -12,6 +12,7 @@ public class SingleSceneManager : MonoBehaviour {
   static int nextPauseDialogResumeToken = 1;
   static int activePauseDialogResumeToken;
   static int pendingPauseDialogResumeToken;
+  static SingleSceneManager instance;
 
   enum WarmGateMode {
     StartGame = 0,
@@ -137,8 +138,8 @@ public class SingleSceneManager : MonoBehaviour {
   const float GameplayWarmGateEnemyArchetypeWaitSeconds = 0.5f;
   const float GameplayWarmGatePrereqLogIntervalSeconds = 1.0f;
   const int RevealOpaqueSettleFrames = 2;
-  const float RevealOpaqueSettleTimeoutSeconds = 2.0f;
-  const float RevealOpaqueSettleMinimumStableSeconds = 0.25f;
+  const float RevealOpaqueSettleTimeoutSeconds = 3.0f;
+  const float RevealOpaqueSettleMinimumStableSeconds = 0.5f;
 
   public static int CurrentPauseDialogSuspendToken => activePauseDialogResumeToken;
 
@@ -149,6 +150,8 @@ public class SingleSceneManager : MonoBehaviour {
   public GameObject PauseMenu;
   public GameObject Scene;
   [SerializeField] GameObject sceneObjectLights;
+  [SerializeField] GameObject damageEntitiesRoot;
+  [SerializeField] ProjectileManager gameplayProjectileManager;
 
   public AutoSaver autoSaver;
   public SaveSlotView saveSlotView;
@@ -280,6 +283,9 @@ public class SingleSceneManager : MonoBehaviour {
   private Coroutine sectionTransitionRoutine;
   private Coroutine deferredPostRevealWarmupRoutine;
   private GearController cachedPlayerGearController;
+  private CharacterState cachedPlayerCharacterState;
+  private Spawner cachedSpawner;
+  private GameplayDialogController cachedGameplayDialogController;
   private int pauseMenuOpenAppearanceRevision = -1;
   private bool holdBlackscreenOpaqueDuringLoad;
   private bool playerAnimationHeldForLoadingOverlay;
@@ -298,6 +304,9 @@ public class SingleSceneManager : MonoBehaviour {
   private GameObject settingsHoveredTarget;
   private string activeInputMap = "";
   private string pendingGameplayLocationId = "";
+  private string lastKnownGameplayLocationId = "";
+  private string currentEnvironmentCacheLocationId = "";
+  private string previousEnvironmentCacheLocationId = "";
   private bool gameplayReadyForSpawnsSentForLoad;
   private bool gameplayWarmGateStartedForLoad;
   private bool gameplayWarmGateCompletedForLoad;
@@ -312,6 +321,13 @@ public class SingleSceneManager : MonoBehaviour {
   readonly HashSet<string> preUnlockResidentPinSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> deferredPostRevealWarmupAddressScratch = new(4096);
   readonly HashSet<string> deferredPostRevealWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  readonly List<string> loadingTextRuntimeAddressScratch = new(4);
+  readonly List<string> persistentAtlasAddressScratch = new(512);
+  readonly HashSet<string> persistentAtlasSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  readonly List<string> environmentCacheLibraryScratch = new(256);
+  readonly List<string> environmentCacheAddressScratch = new(4096);
+  readonly List<string> environmentCacheAssetAddressScratch = new(64);
+  readonly List<string> environmentCacheAssetLabelScratch = new(64);
   readonly Stack<Transform> findChildScratch = new(64);
   readonly Stack<IEnumerator> preUnlockEnumeratorStack = new(32);
   readonly List<string> warmRequestCriticalLibrariesScratch = new(64);
@@ -339,12 +355,77 @@ public class SingleSceneManager : MonoBehaviour {
   const float GameplayInputCacheRefreshSeconds = 0.2f;
   const long LocationPurgeAllThresholdBytes = 2L * 1024L * 1024L * 1024L;
   const string PreUnlockResidentPinOwnerId = "single_scene_manager.pre_unlock";
+  const string LoadingTextFontPinOwnerId = "single_scene_manager.loading_text_font";
+  const string PersistentFontAtlasPinOwnerId = "single_scene_manager.persistent_font_atlases";
+  const string PersistentPlayerSkinAtlasPinOwnerId = "single_scene_manager.persistent_player_skin_atlases";
+  const string PersistentPlayerEffectAtlasPinOwnerId = "single_scene_manager.persistent_player_effect_atlases";
+  const string CurrentEnvironmentPinOwnerId = "single_scene_manager.environment_hot.current";
+  const string PreviousEnvironmentPinOwnerId = "single_scene_manager.environment_hot.previous";
+  const int EnvironmentHotCacheSlotCount = 2;
   const int PreUnlockResidentPinHardCapDesktop = 2048;
   const int PreUnlockResidentPinHardCapMobile = 1024;
   static readonly string[] CorePlayerEffectWarmKeys = { "Blast", "BlastBall" };
+  static readonly string[] PersistentFontAtlasNames = { "Hand", "Plate", "Walkway", "Vamp" };
+
+  void Awake() {
+    instance = this;
+  }
+
+  void OnDestroy() {
+    if (ReferenceEquals(instance, this)) {
+      instance = null;
+    }
+  }
+
+  public static ProjectileManager ResolveGameplayProjectileManager() {
+    if (instance == null) {
+      instance = FindAnyObjectByType<SingleSceneManager>();
+    }
+
+    if (instance != null) {
+      var resolved = instance.ResolveGameplayProjectileManagerInternal();
+      if (resolved != null) {
+        return resolved;
+      }
+    }
+
+    return FindAnyObjectByType<ProjectileManager>();
+  }
+
+  public static GearController ResolveGameplayPlayerController() {
+    if (instance == null) {
+      instance = FindAnyObjectByType<SingleSceneManager>();
+    }
+
+    if (instance != null) {
+      var resolved = instance.ResolvePlayerGearController();
+      if (resolved != null) {
+        return resolved;
+      }
+    }
+
+    return FindAnyObjectByType<GearController>();
+  }
+
+  public static CharacterState ResolveGameplayCharacterState() {
+    if (instance == null) {
+      instance = FindAnyObjectByType<SingleSceneManager>();
+    }
+
+    if (instance != null) {
+      var resolved = instance.ResolvePlayerCharacterState();
+      if (resolved != null) {
+        return resolved;
+      }
+    }
+
+    return FindAnyObjectByType<CharacterState>();
+  }
+
   void Start() {
     RegisterMessageBusHandlers();
     InitializeLoadingScreenReferences();
+    PrimePersistentFontAtlasPins("start");
     ForceBlackscreenVisible(true);
     loadingOverlayChildrenReady = false;
     SetLoadingLightActive(false);
@@ -371,6 +452,7 @@ public class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("LocationUpdated", o => OnLocationUpdated(o)));
     actions.Add(MessageBus.On("dialog.started", o => OnDialogStarted(o)));
     actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
+    actions.Add(MessageBus.On("gearReady", o => RefreshPersistentPlayerBaselineAtlasPins("gear_ready")));
   }
 
   void Update() {
@@ -507,6 +589,328 @@ public class SingleSceneManager : MonoBehaviour {
     return count;
   }
 
+  void AddPersistentAtlasAddress(string address) {
+    var normalized = string.IsNullOrWhiteSpace(address) ? "" : address.Trim();
+    if (string.IsNullOrWhiteSpace(normalized)) {
+      return;
+    }
+
+    if (!persistentAtlasSeenAddressScratch.Add(normalized)) {
+      return;
+    }
+
+    persistentAtlasAddressScratch.Add(normalized);
+  }
+
+  void QueuePersistentAtlasMetadataWarmup(IList<string> addresses) {
+    if (addresses == null || addresses.Count <= 0) {
+      return;
+    }
+
+    for (var i = 0; i < addresses.Count; i++) {
+      TrimmedSpriteOffsetResolver.RegisterWarmupMetadataCandidate(addresses[i]);
+    }
+
+    TrimmedSpriteOffsetResolver.QueueWarmupAtlasMetadataBatch(addresses, 0, addresses.Count);
+  }
+
+  void PrimePersistentFontAtlasPins(string source) {
+    persistentAtlasAddressScratch.Clear();
+    persistentAtlasSeenAddressScratch.Clear();
+
+    for (var i = 0; i < PersistentFontAtlasNames.Length; i++) {
+      var fontName = PersistentFontAtlasNames[i];
+      if (string.IsNullOrWhiteSpace(fontName)) continue;
+      AddPersistentAtlasAddress("Assets/Sprites/Fonts/" + fontName.Trim() + "/atlas.png");
+    }
+
+    if (persistentAtlasAddressScratch.Count <= 0) {
+      persistentAtlasSeenAddressScratch.Clear();
+      return;
+    }
+
+    TextureResidencyCache.UpdateOwnerPins(
+      PersistentFontAtlasPinOwnerId,
+      TextureResidencyCache.PinClass.UI,
+      persistentAtlasAddressScratch,
+      TextureResidencyCache.LoadPriority.Warmup
+    );
+    QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
+
+    if (ShouldLogLoadingProgressDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
+        " class=ui_fonts" +
+        " addresses=" + persistentAtlasAddressScratch.Count
+      );
+    }
+
+    persistentAtlasAddressScratch.Clear();
+    persistentAtlasSeenAddressScratch.Clear();
+  }
+
+  void RefreshPersistentPlayerSkinAtlasPins(string source) {
+    var player = ResolvePlayerGearController();
+    if (player == null) {
+      return;
+    }
+
+    persistentAtlasAddressScratch.Clear();
+    persistentAtlasSeenAddressScratch.Clear();
+    var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
+    var collectedCount = player.CollectPersistentSkinStartupAddresses(
+      persistentAtlasAddressScratch,
+      persistentAtlasSeenAddressScratch,
+      maxPinnedAddresses
+    );
+    if (collectedCount <= 0 || persistentAtlasAddressScratch.Count <= 0) {
+      persistentAtlasAddressScratch.Clear();
+      persistentAtlasSeenAddressScratch.Clear();
+      return;
+    }
+
+    TextureResidencyCache.UpdateOwnerPins(
+      PersistentPlayerSkinAtlasPinOwnerId,
+      TextureResidencyCache.PinClass.Player,
+      persistentAtlasAddressScratch,
+      TextureResidencyCache.LoadPriority.Warmup
+    );
+    QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
+
+    if (ShouldLogLoadingProgressDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
+        " class=player_skin" +
+        " addresses=" + persistentAtlasAddressScratch.Count +
+        " active_form='" + EsperanzaForms.GetActive() + "'" +
+        " player='" + player.gameObject.name + "'"
+      );
+    }
+
+    persistentAtlasAddressScratch.Clear();
+    persistentAtlasSeenAddressScratch.Clear();
+  }
+
+  void RefreshPersistentPlayerEffectAtlasPins(string source) {
+    var player = ResolvePlayerGearController();
+    if (player == null) {
+      return;
+    }
+
+    persistentAtlasAddressScratch.Clear();
+    persistentAtlasSeenAddressScratch.Clear();
+    var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
+    var collectedCount = player.CollectPersistentEffectStartupAddresses(
+      persistentAtlasAddressScratch,
+      CorePlayerEffectWarmKeys,
+      persistentAtlasSeenAddressScratch,
+      maxPinnedAddresses
+    );
+    if (collectedCount <= 0 || persistentAtlasAddressScratch.Count <= 0) {
+      persistentAtlasAddressScratch.Clear();
+      persistentAtlasSeenAddressScratch.Clear();
+      return;
+    }
+
+    TextureResidencyCache.UpdateOwnerPins(
+      PersistentPlayerEffectAtlasPinOwnerId,
+      TextureResidencyCache.PinClass.Effect,
+      persistentAtlasAddressScratch,
+      TextureResidencyCache.LoadPriority.Warmup
+    );
+    QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
+
+      if (ShouldLogLoadingProgressDebug()) {
+        Debug.Log(
+          "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
+          " class=player_effects" +
+          " addresses=" + persistentAtlasAddressScratch.Count +
+          " warm_keys=" + CorePlayerEffectWarmKeys.Length +
+          " projectile_manager=" + (player.projectileManager != null ? 1 : 0) +
+          " player='" + player.gameObject.name + "'"
+        );
+      }
+
+    persistentAtlasAddressScratch.Clear();
+    persistentAtlasSeenAddressScratch.Clear();
+  }
+
+  void RefreshPersistentPlayerBaselineAtlasPins(string source) {
+    RefreshPersistentPlayerSkinAtlasPins(source);
+    RefreshPersistentPlayerEffectAtlasPins(source);
+  }
+
+  int ResolveEnvironmentHotCacheAddressBudget() {
+    var ownerCap = Math.Max(SpriteStreamingRuntimeSettings.MaxPinnedAddressesPerOwner, 128);
+    return Math.Max(Math.Min(ownerCap, 4096), 128);
+  }
+
+  void CollectEnvironmentHotCacheSources(string locationId) {
+    environmentCacheLibraryScratch.Clear();
+    environmentCacheAddressScratch.Clear();
+    environmentCacheAssetAddressScratch.Clear();
+    environmentCacheAssetLabelScratch.Clear();
+
+    if (!IsGameplayLocation(locationId)) {
+      return;
+    }
+
+    var profile = LocationWarmRegistryRuntime.ResolveForLocation(locationId);
+    if (profile == null) {
+      return;
+    }
+
+    profile.CollectEnvironmentCacheLists(
+      environmentCacheLibraryScratch,
+      environmentCacheAddressScratch,
+      environmentCacheAssetAddressScratch,
+      environmentCacheAssetLabelScratch
+    );
+
+    var addressBudget = ResolveEnvironmentHotCacheAddressBudget();
+    if (environmentCacheAddressScratch.Count > addressBudget) {
+      environmentCacheAddressScratch.RemoveRange(
+        addressBudget,
+        environmentCacheAddressScratch.Count - addressBudget
+      );
+    }
+  }
+
+  void ApplyEnvironmentHotCacheSlot(string ownerId, string slotName, string locationId, string source) {
+    if (!IsGameplayLocation(locationId)) {
+      TextureResidencyCache.ReleaseOwnerPins(ownerId);
+      return;
+    }
+
+    CollectEnvironmentHotCacheSources(locationId);
+    if (environmentCacheLibraryScratch.Count > 0) {
+      SpriteRuntimeResolver.WarmupLibraries(environmentCacheLibraryScratch);
+    }
+
+    if (environmentCacheAddressScratch.Count > 0) {
+      TextureResidencyCache.UpdateOwnerPins(
+        ownerId,
+        TextureResidencyCache.PinClass.WarmGate,
+        environmentCacheAddressScratch,
+        TextureResidencyCache.LoadPriority.Warmup
+      );
+      QueuePersistentAtlasMetadataWarmup(environmentCacheAddressScratch);
+    }
+    else {
+      TextureResidencyCache.ReleaseOwnerPins(ownerId);
+    }
+
+    if (!ShouldLogLoadingProgressDebug()) return;
+
+    Debug.Log(
+      "[SingleSceneManager][EnvironmentCache] stage=apply_slot" +
+      " source='" + (source ?? "") + "'" +
+      " slot=" + ResolveLoadFlowValue(slotName) +
+      " location=" + ResolveLoadFlowValue(locationId) +
+      " libraries=" + environmentCacheLibraryScratch.Count +
+      " addresses=" + environmentCacheAddressScratch.Count +
+      " asset_addresses=" + environmentCacheAssetAddressScratch.Count +
+      " asset_labels=" + environmentCacheAssetLabelScratch.Count +
+      " slot_budget=" + ResolveEnvironmentHotCacheAddressBudget()
+    );
+  }
+
+  void RefreshEnvironmentHotCacheSlots(string source) {
+    ApplyEnvironmentHotCacheSlot(
+      CurrentEnvironmentPinOwnerId,
+      "current",
+      currentEnvironmentCacheLocationId,
+      source
+    );
+    ApplyEnvironmentHotCacheSlot(
+      PreviousEnvironmentPinOwnerId,
+      "previous",
+      previousEnvironmentCacheLocationId,
+      source
+    );
+
+    if (!ShouldLogLoadingProgressDebug()) return;
+
+    Debug.Log(
+      "[SingleSceneManager][EnvironmentCache] stage=refresh_slots" +
+      " source='" + (source ?? "") + "'" +
+      " current=" + ResolveLoadFlowValue(currentEnvironmentCacheLocationId) +
+      " previous=" + ResolveLoadFlowValue(previousEnvironmentCacheLocationId) +
+      " slots=" + EnvironmentHotCacheSlotCount
+    );
+  }
+
+  void TrackEnvironmentHotCacheLocation(string locationId, string source) {
+    var normalized = LocationEnemyData.NormalizeLocationId(locationId);
+    if (!IsGameplayLocation(normalized)) {
+      return;
+    }
+
+    if (string.Equals(currentEnvironmentCacheLocationId, normalized, StringComparison.OrdinalIgnoreCase)) {
+      RefreshEnvironmentHotCacheSlots(source + "_refresh");
+      return;
+    }
+
+    if (string.Equals(previousEnvironmentCacheLocationId, normalized, StringComparison.OrdinalIgnoreCase)) {
+      var displacedCurrent = currentEnvironmentCacheLocationId;
+      currentEnvironmentCacheLocationId = normalized;
+      previousEnvironmentCacheLocationId = displacedCurrent;
+      RefreshEnvironmentHotCacheSlots(source + "_promote_previous");
+      return;
+    }
+
+    previousEnvironmentCacheLocationId = currentEnvironmentCacheLocationId;
+    currentEnvironmentCacheLocationId = normalized;
+    RefreshEnvironmentHotCacheSlots(source + "_rotate");
+  }
+
+  string ResolveLoadingTextFontAtlasAddress() {
+    if (loadingText == null) {
+      return "";
+    }
+
+    var fontName = string.IsNullOrWhiteSpace(loadingText.font)
+      ? ""
+      : loadingText.font.Trim();
+    if (string.IsNullOrWhiteSpace(fontName)) {
+      return "";
+    }
+
+    return "Assets/Sprites/Fonts/" + fontName + "/atlas.png";
+  }
+
+  void PrimeLoadingTextRuntimeAssets(string source) {
+    var atlasAddress = ResolveLoadingTextFontAtlasAddress();
+    if (string.IsNullOrWhiteSpace(atlasAddress)) {
+      return;
+    }
+
+    loadingTextRuntimeAddressScratch.Clear();
+    loadingTextRuntimeAddressScratch.Add(atlasAddress);
+    TextureResidencyCache.UpdateOwnerPins(
+      LoadingTextFontPinOwnerId,
+      TextureResidencyCache.PinClass.UI,
+      loadingTextRuntimeAddressScratch,
+      TextureResidencyCache.LoadPriority.Warmup
+    );
+    TrimmedSpriteOffsetResolver.RegisterWarmupMetadataCandidate(atlasAddress);
+    TrimmedSpriteOffsetResolver.QueueWarmupAtlasMetadataBatch(
+      loadingTextRuntimeAddressScratch,
+      0,
+      loadingTextRuntimeAddressScratch.Count
+    );
+
+    if (ShouldLogLoadingProgressDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][LoadingTextWarmup] source='" + (source ?? "") + "'" +
+        " font='" + (loadingText != null ? loadingText.font : "") + "'" +
+        " atlas='" + atlasAddress + "'"
+      );
+    }
+
+    loadingTextRuntimeAddressScratch.Clear();
+  }
+
   void BeginStartupMainMenuReveal() {
     PrepareLoadingScreenCarrier();
     SetLoadingBlackscreenHold(false);
@@ -581,6 +985,8 @@ public class SingleSceneManager : MonoBehaviour {
       loadingTextObject = textTransform.gameObject;
       loadingText = textTransform.GetComponent<FontText>();
     }
+
+    PrimeLoadingTextRuntimeAssets("initialize_loading_screen_references");
   }
 
   void UpdateLoadingScreenFeedback() {
@@ -595,7 +1001,18 @@ public class SingleSceneManager : MonoBehaviour {
   bool PrepareLoadingScreenFeedbackState() {
     var loadingActive = holdBlackscreenOpaqueDuringLoad || IsLoadingFlowActive();
     if (!loadingActive) {
-      if (!loadingUiFeedbackActive && !loadingOverlayChildrenReady) return false;
+      if (!loadingUiFeedbackActive &&
+          !loadingOverlayChildrenReady &&
+          loadingPercent < 0 &&
+          !loadingPercentDisplayInitialized &&
+          loadingHeartbeatStartedAt < 0f &&
+          !loadingProgressObservedWork &&
+          loadingProgressGoalTotal < 0 &&
+          loadingProgressPeakOutstanding < 0 &&
+          loadingProgressNextDebugLogAt < 0f &&
+          !loadingBlockingStateKnown) {
+        return false;
+      }
       loadingUiFeedbackActive = false;
       loadingOverlayChildrenReady = false;
       loadingPercent = -1;
@@ -641,12 +1058,23 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   bool IsGameplayLoadPipelineTrackingActive() {
-    return startGameRoutine != null ||
-           resumeGameplayRoutine != null ||
-           startupGameplayRoutine != null ||
-           pendingRevealSection == Section.Gameplay ||
-           gameplayWarmGateStartedForLoad ||
-           gameplayWarmGateCompletedForLoad;
+    if (startGameRoutine != null ||
+        resumeGameplayRoutine != null ||
+        startupGameplayRoutine != null ||
+        pendingRevealSection == Section.Gameplay) {
+      return true;
+    }
+
+    if (!gameplayWarmGateStartedForLoad && !gameplayWarmGateCompletedForLoad) {
+      return false;
+    }
+
+    var overlayReason = SpriteStreamingLoadingState.ActiveReason;
+    return string.Equals(overlayReason, "StartGameFlow", StringComparison.Ordinal) ||
+           string.Equals(overlayReason, "LoadGameFlow", StringComparison.Ordinal) ||
+           string.Equals(overlayReason, "ResumeGameplayFlow", StringComparison.Ordinal) ||
+           string.Equals(overlayReason, "StartupGameplayFlow", StringComparison.Ordinal) ||
+           string.Equals(overlayReason, BuildSectionOverlayTag(Section.Gameplay), StringComparison.Ordinal);
   }
 
   bool IsGameplayPlayerBootstrapReady() {
@@ -657,6 +1085,22 @@ public class SingleSceneManager : MonoBehaviour {
            player.gameObject.activeInHierarchy;
   }
 
+  GameplayDialogController ResolveGameplayDialogController() {
+    if (cachedGameplayDialogController != null) {
+      if (cachedGameplayDialogController.gameObject != null) {
+        return cachedGameplayDialogController;
+      }
+      cachedGameplayDialogController = null;
+    }
+
+    if (GameplayInterface == null) {
+      return null;
+    }
+
+    cachedGameplayDialogController = GameplayInterface.GetComponentInChildren<GameplayDialogController>(true);
+    return cachedGameplayDialogController;
+  }
+
   static bool ShouldExpectEnemyWarmStageForCurrentLocation() {
     return LocationEnemyData.TryGetLocation(LocationManager.currentLocation, out var locationInfo) &&
            locationInfo != null &&
@@ -665,16 +1109,38 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   int ResolveCurrentLocationWarmupArchetypeCount() {
-    var spawner = FindAnyObjectByType<Spawner>();
+    var spawner = ResolveGameplaySpawner();
     return spawner != null ? spawner.GetCurrentLocationArchetypeWarmupCount() : 0;
   }
 
   bool IsGameplayUiReadyForLoadingProgress() {
-    return GameplayInterface != null && GameplayInterface.activeInHierarchy;
+    if (GameplayInterface == null || !GameplayInterface.activeInHierarchy) {
+      return false;
+    }
+
+    var dialogController = ResolveGameplayDialogController();
+    return dialogController != null && dialogController.HasResolvedUiReferencesForLoadingProgress;
   }
 
-  static bool IsGameplayDialogReadyForLoadingProgress() {
-    return DialogController.IsStateReadyForCurrentSlot;
+  bool IsGameplayDialogReadyForLoadingProgress() {
+    var dialogController = ResolveGameplayDialogController();
+    return dialogController != null && dialogController.IsReadyForLoadingProgress;
+  }
+
+  void AppendGameplayLoadPipelineFields(StringBuilder builder) {
+    if (builder == null) {
+      return;
+    }
+
+    var shouldExpectEnemyWarmStage = ShouldExpectEnemyWarmStageForCurrentLocation();
+    var archetypeCount = shouldExpectEnemyWarmStage ? ResolveCurrentLocationWarmupArchetypeCount() : 0;
+    AppendLoadFlowBool(builder, "pipeline_player_ready", IsGameplayPlayerBootstrapReady());
+    AppendLoadFlowBool(builder, "pipeline_location_ready", !LocationManager.HasPendingBlockingActivationWork);
+    AppendLoadFlowBool(builder, "pipeline_enemies_ready", gameplayWarmGateCompletedForLoad);
+    AppendLoadFlowBool(builder, "pipeline_ui_ready", IsGameplayUiReadyForLoadingProgress());
+    AppendLoadFlowBool(builder, "pipeline_dialog_ready", IsGameplayDialogReadyForLoadingProgress());
+    AppendLoadFlowBool(builder, "pipeline_expect_enemy_stage", shouldExpectEnemyWarmStage);
+    AppendLoadFlowInt(builder, "pipeline_enemy_archetypes", archetypeCount);
   }
 
   static string ResolveGameplayWarmStageDetail(bool shouldExpectEnemyWarmStage) {
@@ -1034,6 +1500,9 @@ public class SingleSceneManager : MonoBehaviour {
     if (!resolverIdle) {
       return "Resolving assets";
     }
+    if (ShouldKeepFinalizingRevealStatus(outstanding, hasOutstandingWork)) {
+      return "Finalizing reveal";
+    }
     if (outstanding > 0 || hasOutstandingWork) {
       return "Draining queue";
     }
@@ -1041,6 +1510,10 @@ public class SingleSceneManager : MonoBehaviour {
       return "Settling";
     }
     return "Finalizing reveal";
+  }
+
+  static bool ShouldKeepFinalizingRevealStatus(int outstanding, bool hasOutstandingWork) {
+    return hasOutstandingWork && outstanding <= 1;
   }
 
   void SetLoadingStatusOverride(string detail) {
@@ -1249,6 +1722,8 @@ public class SingleSceneManager : MonoBehaviour {
     if (!anomaly && now < loadingProgressNextDebugLogAt) return;
     loadingProgressNextDebugLogAt = now + logIntervalSeconds;
     var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
+    var gameplayUiReady = IsGameplayUiReadyForLoadingProgress();
+    var gameplayDialogReady = IsGameplayDialogReadyForLoadingProgress();
 
     Debug.Log(
       "[SingleSceneManager][LoadingProgress] expected=" + expectedPercent +
@@ -1277,6 +1752,11 @@ public class SingleSceneManager : MonoBehaviour {
       " blocking_hard_bypass=" + (blockingHardBypassUsed ? 1 : 0) +
       " blocking_ready=" + (blockingReady ? 1 : 0) +
       " observed_work=" + (loadingProgressObservedWork ? 1 : 0) +
+      " pipeline_player_ready=" + (IsGameplayPlayerBootstrapReady() ? 1 : 0) +
+      " pipeline_location_ready=" + (!LocationManager.HasPendingBlockingActivationWork ? 1 : 0) +
+      " pipeline_enemies_ready=" + (gameplayWarmGateCompletedForLoad ? 1 : 0) +
+      " pipeline_ui_ready=" + (gameplayUiReady ? 1 : 0) +
+      " pipeline_dialog_ready=" + (gameplayDialogReady ? 1 : 0) +
       " resolver_idle=" + (resolverIdle ? 1 : 0) +
       " player_ready=" + (playerReady ? 1 : 0) +
       " has_work=" + (hasOutstandingWork ? 1 : 0) +
@@ -1422,6 +1902,7 @@ public class SingleSceneManager : MonoBehaviour {
     AppendLoadFlowBool(infoBuilder, "blocking_critical_ready", blockingCriticalReady);
     AppendLoadFlowBool(infoBuilder, "blocking_hard_bypass", blockingHardBypassUsed);
     AppendLoadFlowBool(infoBuilder, "location_activation_pending", locationActivationPending);
+    AppendGameplayLoadPipelineFields(infoBuilder);
     Debug.Log(infoBuilder.ToString());
   }
 
@@ -1552,6 +2033,7 @@ public class SingleSceneManager : MonoBehaviour {
     AppendLoadFlowField(warningBuilder, "player_blocker", playerReady ? "-" : ResolveLoadFlowValue(blockerSummary));
     AppendLoadFlowBool(warningBuilder, "progress_ui", IsLoadingProgressUiVisible());
     AppendLoadFlowBool(warningBuilder, "loading_light", loadingLightObject != null && loadingLightObject.activeSelf);
+    AppendGameplayLoadPipelineFields(warningBuilder);
     Debug.LogWarning(warningBuilder.ToString());
   }
 
@@ -1654,6 +2136,15 @@ public class SingleSceneManager : MonoBehaviour {
     var textValue = value ?? "";
     if (string.Equals(loadingText.content, textValue, StringComparison.Ordinal)) return;
     loadingText.content = textValue;
+    loadingText.Generate();
+    if (ShouldLogLoadingProgressDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][LoadingText] value='" + textValue +
+        "' visible=" + (loadingTextObject != null && loadingTextObject.activeSelf ? 1 : 0) +
+        " overlay_reason=" + ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason) +
+        " current_section=" + ResolveCurrentSection()
+      );
+    }
   }
 
   void SetLoadingRootActive(bool active) {
@@ -1699,6 +2190,8 @@ public class SingleSceneManager : MonoBehaviour {
     loadingOverlayChildrenReady = false;
     loadingProgressUiArmCheckFrame = -1;
     SetLoadingRootActive(true);
+    PrimePersistentFontAtlasPins("prepare_loading_screen_carrier");
+    PrimeLoadingTextRuntimeAssets("prepare_loading_screen_carrier");
     SetLoadingLightActive(false);
     SetLoadingProgressUiActive(false);
     if (clearText) {
@@ -1748,6 +2241,7 @@ public class SingleSceneManager : MonoBehaviour {
       );
     }
     cachedPlayerGearController = null;
+    cachedPlayerCharacterState = null;
   }
 
   string DescribeGearController(GearController controller) {
@@ -1882,9 +2376,22 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   CharacterState ResolvePlayerCharacterState() {
+    if (IsLiveSceneComponent(cachedPlayerCharacterState)) {
+      return cachedPlayerCharacterState;
+    }
+
+    cachedPlayerCharacterState = null;
     var player = ResolvePlayerGearController();
-    var characterState = player != null ? player.GetComponent<CharacterState>() : null;
-    return characterState ?? FindAnyObjectByType<CharacterState>();
+    if (player != null) {
+      cachedPlayerCharacterState = player.GetComponent<CharacterState>();
+      if (IsLiveSceneComponent(cachedPlayerCharacterState)) {
+        return cachedPlayerCharacterState;
+      }
+      cachedPlayerCharacterState = null;
+    }
+
+    cachedPlayerCharacterState = FindAnyObjectByType<CharacterState>();
+    return cachedPlayerCharacterState;
   }
 
   void ApplyGameplayPlayerReferences(GameObject playerRoot, string source, bool instantiated) {
@@ -1892,9 +2399,14 @@ public class SingleSceneManager : MonoBehaviour {
 
     var gear = playerRoot.GetComponent<GearController>();
     var characterState = playerRoot.GetComponent<CharacterState>();
+    var sharedProjectileManager = ResolveGameplayProjectileManagerInternal();
     if (gear != null) {
+      if (sharedProjectileManager != null) {
+        gear.projectileManager = sharedProjectileManager;
+      }
       cachedPlayerGearController = gear;
     }
+    cachedPlayerCharacterState = characterState;
 
     var gameplayInput = FindAnyObjectByType<GameplayInput>();
     if (gameplayInput != null) {
@@ -1913,6 +2425,7 @@ public class SingleSceneManager : MonoBehaviour {
 
     cachedGameplayInput = gameplayInput;
     gameplayInputCacheRefreshedAt = -1f;
+    RefreshPersistentPlayerBaselineAtlasPins(string.IsNullOrWhiteSpace(source) ? "player_bootstrap_ready" : source + "_player_bootstrap_ready");
 
     if (!ShouldLogLoadFlowDebug()) return;
     Debug.Log(
@@ -1922,6 +2435,7 @@ public class SingleSceneManager : MonoBehaviour {
       " player=" + playerRoot.name +
       " gameplay_input=" + (gameplayInput != null ? 1 : 0) +
       " character_state=" + (characterState != null ? 1 : 0) +
+      " projectile_manager=" + (sharedProjectileManager != null ? 1 : 0) +
       " parent=" + (playerRoot.transform.parent != null ? playerRoot.transform.parent.name : "-")
     );
   }
@@ -2049,30 +2563,25 @@ public class SingleSceneManager : MonoBehaviour {
       ClearPauseDialogResumeState("open_settings_menu");
     }
     QueueMenuRuntimeAssetWarmup("open_settings_menu");
-    settingsReturnTarget = openedFromPause ? Section.Pause : Section.MainMenu;
-    settingsHoveredTarget = null;
-    settingsCloseButton = null;
-    StartSectionTransition(new SectionTransitionRequest(
-      Section.SettingsMenu,
-      BuildSectionOverlayTag(Section.SettingsMenu),
-      requestMainMenuLocation: false,
-      waitForStreamingIdle: false,
-      showProgressUi: false,
-      switchInputMapToNone: true
-    ));
+    PrepareSettingsMenuState(openedFromPause ? Section.Pause : Section.MainMenu);
+    Debug.Log(
+      "[SingleSceneManager][SettingsMenu] action=open" +
+      " from=" + ResolveCurrentSection() +
+      " return_target=" + settingsReturnTarget +
+      " instant_switch=1"
+    );
+    SwitchSectionInstantly(Section.SettingsMenu, "open_settings_menu");
   }
 
   void CloseSettingsMenu() {
     if (SettingsMenu != null && !SettingsMenu.activeInHierarchy) return;
     var targetSection = settingsReturnTarget == Section.Pause ? Section.Pause : Section.MainMenu;
-    StartSectionTransition(new SectionTransitionRequest(
-      targetSection,
-      BuildSectionOverlayTag(targetSection),
-      requestMainMenuLocation: false,
-      waitForStreamingIdle: false,
-      showProgressUi: false,
-      switchInputMapToNone: true
-    ));
+    Debug.Log(
+      "[SingleSceneManager][SettingsMenu] action=close" +
+      " to=" + targetSection +
+      " instant_switch=1"
+    );
+    SwitchSectionInstantly(targetSection, "close_settings_menu");
   }
 
   void OnSettingsMenuClick(object payload) {
@@ -2126,6 +2635,12 @@ public class SingleSceneManager : MonoBehaviour {
       settingsCloseButton = found.gameObject;
     }
     return settingsCloseButton;
+  }
+
+  void PrepareSettingsMenuState(Section returnTarget) {
+    settingsReturnTarget = returnTarget == Section.Pause ? Section.Pause : Section.MainMenu;
+    settingsHoveredTarget = null;
+    settingsCloseButton = null;
   }
 
   Transform FindChildByName(Transform root, string name) {
@@ -2267,10 +2782,23 @@ public class SingleSceneManager : MonoBehaviour {
 
   string ResolveInputMapForSection(Section section) {
     var inputMap = GetSectionDescriptor(section).inputMap;
-    if (section == Section.Gameplay && dialogInputOverrideActive) {
-      return "dialog";
+    if (section == Section.Gameplay) {
+      return ResolveGameplayInputMap();
     }
     return inputMap;
+  }
+
+  string ResolveGameplayInputMap() {
+    if (dialogInputOverrideActive) {
+      return "dialog";
+    }
+
+    var dialogController = ResolveGameplayDialogController();
+    if (dialogController != null && dialogController.HasPendingLocationDialog) {
+      return "none";
+    }
+
+    return GetSectionDescriptor(Section.Gameplay).inputMap;
   }
 
   GameObject ResolveSceneObjectLights() {
@@ -2280,6 +2808,85 @@ public class SingleSceneManager : MonoBehaviour {
     if (lights == null) return null;
     sceneObjectLights = lights.gameObject;
     return sceneObjectLights;
+  }
+
+  GameObject ResolveDamageEntitiesRoot() {
+    if (IsLiveSceneObject(damageEntitiesRoot)) {
+      return damageEntitiesRoot;
+    }
+
+    damageEntitiesRoot = null;
+    if (Scene == null) {
+      return null;
+    }
+
+    var sceneObjectsRoot = FindChildByName(Scene.transform, "SCENEOBJECTS");
+    var damageEntities = sceneObjectsRoot != null
+      ? FindChildByName(sceneObjectsRoot, "DAMAGEENTITIES")
+      : FindChildByName(Scene.transform, "DAMAGEENTITIES");
+    if (damageEntities == null) {
+      return null;
+    }
+
+    damageEntitiesRoot = damageEntities.gameObject;
+    return damageEntitiesRoot;
+  }
+
+  ProjectileManager ResolveGameplayProjectileManagerInternal() {
+    if (IsLiveSceneComponent(gameplayProjectileManager)) {
+      return gameplayProjectileManager;
+    }
+
+    var previousManager = gameplayProjectileManager;
+    gameplayProjectileManager = null;
+    var damageRoot = ResolveDamageEntitiesRoot();
+    if (damageRoot != null) {
+      gameplayProjectileManager = damageRoot.GetComponent<ProjectileManager>();
+      if (gameplayProjectileManager == null) {
+        gameplayProjectileManager = damageRoot.GetComponentInChildren<ProjectileManager>(true);
+      }
+    }
+
+    if (gameplayProjectileManager == null && Scene != null) {
+      gameplayProjectileManager = Scene.GetComponentInChildren<ProjectileManager>(true);
+    }
+
+    if (gameplayProjectileManager != null &&
+        !ReferenceEquals(previousManager, gameplayProjectileManager) &&
+        ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][ProjectileManager] stage=resolved" +
+        " manager=" + gameplayProjectileManager.gameObject.name +
+        " root=" + (damageRoot != null ? damageRoot.name : "-")
+      );
+    }
+
+    return gameplayProjectileManager;
+  }
+
+  static bool IsLiveSceneObject(GameObject candidate) {
+    return candidate != null &&
+           candidate.scene.IsValid() &&
+           (candidate.hideFlags & HideFlags.HideAndDontSave) == 0;
+  }
+
+  static bool IsLiveSceneComponent(Component candidate) {
+    return candidate != null && IsLiveSceneObject(candidate.gameObject);
+  }
+
+  Spawner ResolveGameplaySpawner() {
+    if (IsLiveSceneComponent(cachedSpawner)) {
+      return cachedSpawner;
+    }
+
+    cachedSpawner = null;
+    if (Scene != null) {
+      cachedSpawner = Scene.GetComponentInChildren<Spawner>(true);
+    }
+    if (cachedSpawner == null) {
+      cachedSpawner = FindAnyObjectByType<Spawner>();
+    }
+    return cachedSpawner;
   }
 
   void SetSceneObjectLightsActive(bool active) {
@@ -2399,6 +3006,9 @@ public class SingleSceneManager : MonoBehaviour {
     StopStartupFadeWatchdog();
     StopStartupGameplayFlow();
     StopSectionTransition(clearLoadingOverlay: true, restoreVisibleState: true);
+    if (request.targetSection != Section.Gameplay) {
+      ResetGameplayLoadStageTracking();
+    }
 
     var current = ResolveCurrentSection();
     if (current == request.targetSection && !request.requestMainMenuLocation) {
@@ -2446,6 +3056,9 @@ public class SingleSceneManager : MonoBehaviour {
 
     var previousSection = ResolveCurrentSection();
     StopSectionTransition(clearLoadingOverlay: false, restoreVisibleState: false);
+    if (targetSection != Section.Gameplay) {
+      ResetGameplayLoadStageTracking();
+    }
     ApplySectionActivation(targetSection);
     ApplyInputForSection(targetSection);
     LogSectionTransitionState("instant_switch_complete", previousSection, targetSection, reason, false);
@@ -2722,10 +3335,7 @@ public class SingleSceneManager : MonoBehaviour {
   void PrepareNewGameRuntimeStateUnderLoadingOverlay() {
     EnsureGameplayPlayerBootstrap("new_game");
     var player = ResolvePlayerGearController();
-    var characterState = player != null
-      ? player.GetComponent<CharacterState>()
-      : null;
-    characterState ??= FindAnyObjectByType<CharacterState>();
+    var characterState = ResolvePlayerCharacterState();
 
     if (ShouldLogLoadFlowDebug()) {
       Debug.Log(
@@ -3562,10 +4172,19 @@ public class SingleSceneManager : MonoBehaviour {
     if (!resolverIdle) {
       return "Resolving assets";
     }
+    if (ShouldKeepFinalizingRevealStatus(queue, deferredPending)) {
+      return "Finalizing reveal";
+    }
     if (queue.queuedCount > 0 || queue.inFlightCount > 0 || deferredPending > 0) {
       return "Draining queue";
     }
     return "Finalizing reveal";
+  }
+
+  static bool ShouldKeepFinalizingRevealStatus(TextureResidencyCache.QueueSnapshot queue, int deferredPending) {
+    return queue.queuedCount <= 0 &&
+           deferredPending <= 0 &&
+           queue.inFlightCount <= 1;
   }
 
   void MaybeLogRevealSettleState(
@@ -4664,7 +5283,7 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   Dictionary<string, GameObject> ResolveLocationArchetypePrefabs() {
-    var spawner = FindAnyObjectByType<Spawner>();
+    var spawner = ResolveGameplaySpawner();
     if (spawner != null) {
       var map = spawner.BuildCurrentLocationArchetypeMapForWarmup();
       if (map != null && map.Count > 0) {
@@ -4752,7 +5371,7 @@ public class SingleSceneManager : MonoBehaviour {
     pendingRevealSection = Section.Gameplay;
     SetLoadingRootActive(true);
     InvalidateCachedPlayerGearController("apply_gameplay_state_under_black");
-    RequestLocationLoadForGameplay(ConsumePendingGameplayLocationId());
+    RequestLocationLoadForGameplay(ConsumePendingGameplayLocationId("apply_gameplay_state_under_black"));
     SetLoadingBlackscreenHold(true);
     _SwitchMap("none");
     HideAllSectionsForTransition(Section.Gameplay);
@@ -4966,11 +5585,11 @@ public class SingleSceneManager : MonoBehaviour {
       return;
     }
     if (GameplayInterface != null && GameplayInterface.activeInHierarchy) {
-      _SwitchMap(dialogInputOverrideActive ? "dialog" : "gameplay");
+      _SwitchMap(ResolveGameplayInputMap());
       return;
     }
     if (preferGameplayWhenNoUi && HasLiveGameplayInput()) {
-      _SwitchMap(dialogInputOverrideActive ? "dialog" : "gameplay");
+      _SwitchMap(ResolveGameplayInputMap());
       return;
     }
     if (preferGameplayWhenNoUi) {
@@ -4998,9 +5617,18 @@ public class SingleSceneManager : MonoBehaviour {
            gameplayInput.gameObject.activeInHierarchy;
   }
 
-  string ConsumePendingGameplayLocationId() {
+  string ConsumePendingGameplayLocationId(string source) {
     var locationId = pendingGameplayLocationId;
     pendingGameplayLocationId = "";
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][GameplayLocation] stage=consume_pending" +
+        " source=" + ResolveLoadFlowValue(source) +
+        " pending=" + ResolveLoadFlowValue(locationId) +
+        " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
+        " last_known_gameplay=" + ResolveLoadFlowValue(lastKnownGameplayLocationId)
+      );
+    }
     return locationId;
   }
 
@@ -5008,6 +5636,7 @@ public class SingleSceneManager : MonoBehaviour {
     var resolved = ResolveLocationForStart(isNewGame, loadedSlot);
     var previousLocation = LocationManager.currentLocation;
     pendingGameplayLocationId = resolved;
+    RememberGameplayLocation(resolved, "resolve_start");
 
     if (!ShouldLogLoadFlowDebug()) return;
 
@@ -5023,6 +5652,61 @@ public class SingleSceneManager : MonoBehaviour {
 
   bool IsKnownLocation(string location) {
     return LocationEnemyData.ContainsLocation(location);
+  }
+
+  static bool IsMainMenuLocation(string locationId) {
+    return string.Equals(
+      LocationEnemyData.NormalizeLocationId(locationId),
+      mainMenuFlowLocationId,
+      StringComparison.OrdinalIgnoreCase
+    );
+  }
+
+  bool IsGameplayLocation(string locationId) {
+    var normalized = LocationEnemyData.NormalizeLocationId(locationId);
+    return !string.IsNullOrWhiteSpace(normalized) &&
+           !IsMainMenuLocation(normalized) &&
+           IsKnownLocation(normalized);
+  }
+
+  void RememberGameplayLocation(string locationId, string source) {
+    var normalized = LocationEnemyData.NormalizeLocationId(locationId);
+    if (!IsGameplayLocation(normalized)) return;
+    TrackEnvironmentHotCacheLocation(normalized, source);
+    if (string.Equals(lastKnownGameplayLocationId, normalized, StringComparison.OrdinalIgnoreCase)) return;
+
+    lastKnownGameplayLocationId = normalized;
+    if (!ShouldLogLoadFlowDebug()) return;
+
+    Debug.Log(
+      "[SingleSceneManager][GameplayLocation] stage=remember" +
+      " source=" + ResolveLoadFlowValue(source) +
+      " location=" + ResolveLoadFlowValue(normalized) +
+      " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation)
+    );
+  }
+
+  string ResolveGameplayLocationRequest(string preferredLocationId, out string source) {
+    var preferred = LocationEnemyData.NormalizeLocationId(preferredLocationId);
+    if (IsGameplayLocation(preferred)) {
+      source = "preferred";
+      return preferred;
+    }
+
+    var current = LocationEnemyData.NormalizeLocationId(LocationManager.currentLocation);
+    if (IsGameplayLocation(current)) {
+      source = "current";
+      return current;
+    }
+
+    var lastKnown = LocationEnemyData.NormalizeLocationId(lastKnownGameplayLocationId);
+    if (IsGameplayLocation(lastKnown)) {
+      source = "last_known";
+      return lastKnown;
+    }
+
+    source = "default";
+    return ResolveDefaultLocation();
   }
 
   string ResolveDefaultLocation() {
@@ -5048,32 +5732,41 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   void RequestLocationLoadForMainMenu() {
-    if (!ShouldLoadMainMenuLocation()) {
+    if (!LocationEnemyData.TryGetLocation(mainMenuFlowLocationId, out var locationInfo) || locationInfo == null) {
       if (ShouldLogLoadFlowDebug()) {
-        Debug.Log("[SingleSceneManager][MainMenuLocation] skip_request reason=no_prefab");
+        Debug.Log("[SingleSceneManager][MainMenuLocation] skip_request reason=missing_location");
       }
       return;
+    }
+
+    if (ShouldLogLoadFlowDebug()) {
+      var prefabData = locationInfo.locationPrefabData;
+      var clearsActiveLocation = prefabData == null ||
+                                 (prefabData.prefab == null && string.IsNullOrWhiteSpace(prefabData.AssetPath));
+      Debug.Log(
+        "[SingleSceneManager][MainMenuLocation] request" +
+        " location=" + mainMenuFlowLocationId +
+        " clears_active_location=" + (clearsActiveLocation ? 1 : 0)
+      );
     }
     RequestLocationLoad(mainMenuFlowLocationId);
   }
 
-  bool ShouldLoadMainMenuLocation() {
-    if (!LocationEnemyData.TryGetLocation(mainMenuFlowLocationId, out var locationInfo) || locationInfo == null) {
-      return false;
-    }
-
-    var prefabData = locationInfo.locationPrefabData;
-    return prefabData != null &&
-           (prefabData.prefab != null || !string.IsNullOrWhiteSpace(prefabData.AssetPath));
-  }
-
   void RequestLocationLoadForGameplay(string preferredLocationId) {
-    var locationId = string.IsNullOrWhiteSpace(preferredLocationId)
-      ? (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? gameplayFlowFallbackLocationId : LocationManager.currentLocation.Trim())
-      : preferredLocationId.Trim();
-    if (!IsKnownLocation(locationId)) {
-      locationId = ResolveDefaultLocation();
+    var locationId = ResolveGameplayLocationRequest(preferredLocationId, out var source);
+    RememberGameplayLocation(locationId, "request:" + source);
+
+    if (ShouldLogLoadFlowDebug()) {
+      Debug.Log(
+        "[SingleSceneManager][GameplayLocation] stage=request" +
+        " source=" + ResolveLoadFlowValue(source) +
+        " preferred=" + ResolveLoadFlowValue(LocationEnemyData.NormalizeLocationId(preferredLocationId)) +
+        " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
+        " last_known_gameplay=" + ResolveLoadFlowValue(lastKnownGameplayLocationId) +
+        " resolved=" + ResolveLoadFlowValue(locationId)
+      );
     }
+
     RequestLocationLoad(locationId);
   }
 
@@ -5102,6 +5795,7 @@ public class SingleSceneManager : MonoBehaviour {
       locationId = LocationManager.currentLocation;
     }
     locationId = string.IsNullOrWhiteSpace(locationId) ? "" : locationId.Trim();
+    RememberGameplayLocation(locationId, "location_updated");
     if (string.Equals(lastPurgedLocationId, locationId, StringComparison.OrdinalIgnoreCase)) return;
     var previousLocationId = lastPurgedLocationId;
     lastPurgedLocationId = locationId;

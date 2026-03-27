@@ -203,22 +203,23 @@ public class ComponentPropagator : MonoBehaviour {
     if (s == null || t == null) return;
     t.keywordToggles = new List<AllIn1AnimatorInspector.KeywordToggle>();
     foreach (var item in s.keywordToggles)    {
-      t.keywordToggles.Add(new AllIn1AnimatorInspector.KeywordToggle {
+      var copy = new AllIn1AnimatorInspector.KeywordToggle {
         keyword = item.keyword,
-        enabled = item.enabled,
-        keywordHash = item.keywordHash
-      });
+        enabled = item.enabled
+      };
+      copy.CacheHash();
+      t.keywordToggles.Add(copy);
     }
     t.floatAnimations = new List<AllIn1AnimatorInspector.FloatAnimation>();
     foreach (var item in s.floatAnimations) {
       var copy = new AllIn1AnimatorInspector.FloatAnimation {
         prop = item.prop,
-        propHash = item.propHash,
         loop = item.loop,
         currentSequenceIndex = 0,
         timer = 0f,
         isDone = false
       };
+      copy.CacheHash();
       copy.sequences = new List<AllIn1AnimatorInspector.Sequence<float>>(item.sequences);
       t.floatAnimations.Add(copy);
     }
@@ -226,12 +227,12 @@ public class ComponentPropagator : MonoBehaviour {
     foreach (var item in s.colorAnimations) {
       var copy = new AllIn1AnimatorInspector.ColorAnimation  {
         prop = item.prop,
-        propHash = item.propHash,
         loop = item.loop,
         currentSequenceIndex = 0,
         timer = 0f,
         isDone = false
       };
+      copy.CacheHash();
       copy.sequences = new List<AllIn1AnimatorInspector.Sequence<Color>>(item.sequences);
       t.colorAnimations.Add(copy);
     }
@@ -239,23 +240,24 @@ public class ComponentPropagator : MonoBehaviour {
     foreach (var item in s.vectorAnimations)  {
       var copy = new AllIn1AnimatorInspector.VectorAnimation {
         prop = item.prop,
-        propHash = item.propHash,
         loop = item.loop,
         currentSequenceIndex = 0,
         timer = 0f,
         isDone = false
       };
+      copy.CacheHash();
       copy.sequences = new List<AllIn1AnimatorInspector.Sequence<Vector4>>(item.sequences);
       t.vectorAnimations.Add(copy);
     }
     t.textureAssignments = new List<AllIn1AnimatorInspector.TextureAssignment>();
     foreach (var item in s.textureAssignments) {
-      t.textureAssignments.Add(new AllIn1AnimatorInspector.TextureAssignment  {
+      var copy = new AllIn1AnimatorInspector.TextureAssignment  {
         prop = item.prop,
-        propHash = item.propHash,
         texture = item.texture,
         isAssigned = item.isAssigned
-      });
+      };
+      copy.CacheHash();
+      t.textureAssignments.Add(copy);
     }
   }
 

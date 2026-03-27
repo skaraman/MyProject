@@ -10,6 +10,8 @@ using UnityEditor;
 
 public class GearController : MonoBehaviour {
   const int MinimumPlayerWarmFramesAtStartup = 8;
+  const int MinimumCoreEffectWarmFramesAtStartup = 24;
+  static readonly string[] CoreCombatEffectWarmKeys = { "Blast", "BlastBall" };
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
   [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)] public bool _bool;
@@ -46,13 +48,17 @@ public class GearController : MonoBehaviour {
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private readonly List<string> equipWarmupAddressScratch = new();
   private readonly HashSet<string> equipWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> coreEffectWarmupAddressScratch = new();
+  private readonly HashSet<string> coreEffectWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly Dictionary<string, string> equipPartPrefixScratch = new(StringComparer.OrdinalIgnoreCase);
   private Dictionary<string, string> pendingEquipWarmupPartPrefixes;
   private Coroutine equipWarmupRoutine;
   private bool effectControllerInitialized;
+  private bool effectResetToEmptyPending;
   private bool runtimeInitialized;
   private string appearanceOwnerId;
   private string effectAppearanceOwnerId;
+  private string coreEffectWarmOwnerId;
   private int appearanceRevision = 1;
 
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
@@ -78,12 +84,15 @@ public class GearController : MonoBehaviour {
     ResetDebugPlaybackFlags();
     appearanceOwnerId = "player:" + ObjectEntityId.GetString(gameObject);
     effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
+    coreEffectWarmOwnerId = "player_core_effects:" + ObjectEntityId.GetString(gameObject);
     combinedBounces = (HairObjects ?? Array.Empty<GameObject>()).Concat(OtherBounceGearObjects ?? Array.Empty<GameObject>()).ToArray();
     NormalizeSkinSpriteDefaultsForRuntime();
+    ResolveProjectileManagerReference(source);
     PrimeSpriteStreamingWarmup();
     ConfigureAnimationController();
     ConfigureEffectController();
     PrimeControllerAnimationWarmup();
+    PrimeCoreCombatEffectWarmup(source);
     HookAnimationEvents();
     if (Application.isPlaying) {
       LeanTween.reset();
@@ -129,6 +138,7 @@ public class GearController : MonoBehaviour {
     animationController?.Tick(deltaTime);
     if (effectControllerInitialized) {
       effectAnimationController.Tick(deltaTime);
+      TryFinalizeCompletedEffectAnimation();
     }
   }
 
@@ -207,12 +217,191 @@ public class GearController : MonoBehaviour {
     }
   }
 
+  public int CollectPersistentSkinStartupAddresses(
+    List<string> outAddresses,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    if (!runtimeInitialized) {
+      return 0;
+    }
+
+    var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
+    var startingCount = outAddresses.Count;
+    CollectPersistentSkinStartupAddresses(
+      SkinObjects,
+      startupWarmFrames,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
+    return Mathf.Max(outAddresses.Count - startingCount, 0);
+  }
+
+  public int CollectPersistentEffectStartupAddresses(
+    List<string> outAddresses,
+    IReadOnlyList<string> effectKeys,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null || effectKeys == null || effectKeys.Count <= 0 || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    if (!runtimeInitialized || effectNode == null) {
+      return 0;
+    }
+
+    var startingCount = outAddresses.Count;
+    var warmFrames = ResolveCoreEffectWarmFramesAtStartup();
+    CollectPersistentEffectStartupAddresses(Effects.Esperanza, effectKeys, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Things, effectKeys, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Imp, effectKeys, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    if (projectileManager != null && outAddresses.Count < maxUniqueAddresses) {
+      projectileManager.EnsurePoolsReady(effectKeys);
+      projectileManager.CollectPersistentStartupAddresses(
+        effectKeys,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses,
+        warmFrames
+      );
+    }
+    return Mathf.Max(outAddresses.Count - startingCount, 0);
+  }
+
+  int ResolveCoreEffectWarmFramesAtStartup() {
+    var configuredFrames = Mathf.Max(SpriteStreamingRuntimeSettings.AnimationWarmupFrames, 1);
+    return Mathf.Max(configuredFrames, MinimumCoreEffectWarmFramesAtStartup);
+  }
+
+  void CollectPersistentSkinStartupAddresses(
+    GameObject[] skinObjects,
+    int startupWarmFrames,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses
+  ) {
+    if (skinObjects == null || skinObjects.Length == 0 || outAddresses == null) {
+      return;
+    }
+
+    for (var i = 0; i < skinObjects.Length; i++) {
+      if (outAddresses.Count >= maxUniqueAddresses) {
+        return;
+      }
+
+      var go = skinObjects[i];
+      if (go == null) continue;
+      var target = go.GetComponent<SpriteWithNormals>();
+      CollectPersistentSkinStartupAddresses(
+        target,
+        startupWarmFrames,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses
+      );
+    }
+  }
+
+  void CollectPersistentSkinStartupAddresses(
+    SpriteWithNormals target,
+    int startupWarmFrames,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses
+  ) {
+    if (target == null || outAddresses == null || maxUniqueAddresses <= 0) {
+      return;
+    }
+
+    if (!target.IsAnimation) {
+      target.CollectAnimationWindowAddresses(
+        target.category,
+        0,
+        0,
+        0,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses
+      );
+      return;
+    }
+
+    var warmFrames = Mathf.Max(startupWarmFrames, 1);
+    foreach (var animationPair in Animations.Esperanza) {
+      if (outAddresses.Count >= maxUniqueAddresses) {
+        return;
+      }
+
+      var animationName = animationPair.Key;
+      var animationData = animationPair.Value;
+      if (animationData == null || string.IsNullOrWhiteSpace(animationName)) {
+        continue;
+      }
+
+      var category = ResolveEsperanzaAnimationCategory(animationName, animationData);
+      var clipStart = Mathf.Max(animationData.start, 1);
+      var clipEnd = Mathf.Min(Mathf.Max(animationData.end, clipStart), clipStart + warmFrames - 1);
+      target.CollectAnimationWindowAddresses(
+        category,
+        clipStart,
+        clipEnd,
+        0,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses
+      );
+    }
+  }
+
+  void CollectPersistentEffectStartupAddresses(
+    Dictionary<string, EffectData> effects,
+    IReadOnlyList<string> effectKeys,
+    int warmFrames,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses
+  ) {
+    if (effects == null || effectNode == null || outAddresses == null || maxUniqueAddresses <= 0) {
+      return;
+    }
+
+    for (var i = 0; i < effectKeys.Count; i++) {
+      if (outAddresses.Count >= maxUniqueAddresses) {
+        return;
+      }
+
+      var effectKey = string.IsNullOrWhiteSpace(effectKeys[i]) ? "" : effectKeys[i].Trim();
+      if (string.IsNullOrWhiteSpace(effectKey) || !effects.TryGetValue(effectKey, out var effectData) || effectData == null) {
+        continue;
+      }
+
+      var startFrame = Mathf.Max(effectData.start, 1);
+      var endFrame = Mathf.Max(startFrame, Mathf.Min(Mathf.Max(effectData.end, startFrame), startFrame + Mathf.Max(warmFrames, 1) - 1));
+      effectNode.CollectAnimationWindowAddresses(
+        effectKey,
+        startFrame,
+        endFrame,
+        0,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses
+      );
+    }
+  }
+
   public void LoadGear() {
     EnsureRuntimeInitialized("load_gear");
     EquippedItems.EnsureKnownForms();
     GetSavedGearState();
     RefreshGear();
     PrimeEquippedAnimationStartsIfLoading();
+    PrimeCoreCombatEffectWarmup("load_gear");
     MessageBus.Send("gearReady");
   }
 
@@ -223,6 +412,7 @@ public class GearController : MonoBehaviour {
     }
 #endif
     StopEquipWarmupQueue();
+    ReleaseCoreCombatEffectWarmupPins();
     animationController?.Cleanup(!Application.isPlaying);
     if (effectControllerInitialized) {
       effectAnimationController.Cleanup(!Application.isPlaying);
@@ -231,10 +421,72 @@ public class GearController : MonoBehaviour {
 
   void OnDisable() {
     StopEquipWarmupQueue();
+    effectResetToEmptyPending = false;
     animationController?.Cleanup(false);
     if (effectControllerInitialized) {
       effectAnimationController.Cleanup(false);
     }
+    ResetEffectVisualToEmpty();
+  }
+
+  void PrimeCoreCombatEffectWarmup(string source) {
+    if (!Application.isPlaying) return;
+    if (string.IsNullOrWhiteSpace(coreEffectWarmOwnerId)) return;
+
+    coreEffectWarmupAddressScratch.Clear();
+    coreEffectWarmupSeenAddressScratch.Clear();
+    var maxAddresses = Mathf.Max(SpriteStreamingRuntimeSettings.PinBudgetEffectAddresses, 1);
+    var collectedCount = CollectPersistentEffectStartupAddresses(
+      coreEffectWarmupAddressScratch,
+      CoreCombatEffectWarmKeys,
+      coreEffectWarmupSeenAddressScratch,
+      maxAddresses
+    );
+    if (collectedCount <= 0 || coreEffectWarmupAddressScratch.Count <= 0) {
+      if (ShouldLogRuntimeInitDebug()) {
+        Debug.LogWarning(
+          "[GearController] CoreCombatEffectWarmupSkipped" +
+          " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+          " object=" + gameObject.name +
+          " effect_library='" + (effectNode != null ? effectNode.libraryName : "") + "'" +
+          " addresses=" + coreEffectWarmupAddressScratch.Count
+        );
+      }
+      coreEffectWarmupAddressScratch.Clear();
+      coreEffectWarmupSeenAddressScratch.Clear();
+      return;
+    }
+
+    TextureResidencyCache.UpdateOwnerPins(
+      coreEffectWarmOwnerId,
+      TextureResidencyCache.PinClass.Effect,
+      coreEffectWarmupAddressScratch,
+      TextureResidencyCache.LoadPriority.Warmup
+    );
+    TextureResidencyCache.RequestLoadBatch(
+      coreEffectWarmupAddressScratch,
+      TextureResidencyCache.LoadPriority.Warmup,
+      allowAtlasExpansion: true
+    );
+
+    if (ShouldLogRuntimeInitDebug()) {
+      Debug.Log(
+        "[GearController] CoreCombatEffectWarmup" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " object=" + gameObject.name +
+        " addresses=" + coreEffectWarmupAddressScratch.Count +
+        " keys=" + CoreCombatEffectWarmKeys.Length +
+        " owner=" + coreEffectWarmOwnerId
+      );
+    }
+
+    coreEffectWarmupAddressScratch.Clear();
+    coreEffectWarmupSeenAddressScratch.Clear();
+  }
+
+  void ReleaseCoreCombatEffectWarmupPins() {
+    if (string.IsNullOrWhiteSpace(coreEffectWarmOwnerId)) return;
+    TextureResidencyCache.ReleaseOwnerPins(coreEffectWarmOwnerId);
   }
 
   public void GetSavedGearState() {
@@ -615,6 +867,7 @@ public class GearController : MonoBehaviour {
       TextureResidencyCache.PinClass.Effect
     );
     effectControllerInitialized = true;
+    ResetEffectVisualToEmpty();
   }
 
   private void BuildEffectAnimations() {
@@ -642,15 +895,68 @@ public class GearController : MonoBehaviour {
       ConfigureEffectController();
       if (!effectControllerInitialized) return;
     }
+    PrepareEffectVisualForPlayback();
+    effectResetToEmptyPending = true;
     effectAnimationController.ForceLoop = false;
     effectAnimationController.PlayAnimation(effectKey, true, resolveInterrupts: false);
   }
 
   private void HandleProjectileTriggered(string projectileKey) {
-    if (string.IsNullOrEmpty(projectileKey) || projectileManager == null) return;
+    if (string.IsNullOrEmpty(projectileKey)) return;
+    ResolveProjectileManagerReference("projectile_event");
+    if (projectileManager == null) {
+      Debug.LogWarning(
+        "[GearController] MissingProjectileManager" +
+        " object=" + gameObject.name +
+        " projectile='" + projectileKey + "'"
+      );
+      return;
+    }
     var spawnPosition = ResolveProjectileSpawnPosition();
     var direction = ResolveProjectileDirection();
     projectileManager.SpawnProjectile(projectileKey, spawnPosition, direction);
+  }
+
+  void PrepareEffectVisualForPlayback() {
+    if (effectNode == null) return;
+    effectNode.SetDoNotRender(false);
+    if (!string.IsNullOrWhiteSpace(effectNode.labelPrefix)) {
+      effectNode.SetLabelPrefix("");
+    }
+  }
+
+  void TryFinalizeCompletedEffectAnimation() {
+    if (!effectControllerInitialized || !effectResetToEmptyPending) return;
+    if (effectAnimationController.IsPlaying) return;
+    ResetEffectVisualToEmpty();
+  }
+
+  void ResetEffectVisualToEmpty() {
+    if (effectNode == null) return;
+    effectNode.SetDoNotRender(false);
+    effectNode.SetLabelPrefix("Empty");
+    effectNode.ForceUpdateSpriteAndNormal(0);
+    effectNode.SetLabelPrefix("");
+    effectResetToEmptyPending = false;
+  }
+
+  void ResolveProjectileManagerReference(string source) {
+    if (projectileManager != null || !Application.isPlaying) return;
+    projectileManager = SingleSceneManager.ResolveGameplayProjectileManager();
+    if (projectileManager == null || !ShouldLogRuntimeInitDebug()) return;
+    Debug.Log(
+      "[GearController] ResolvedProjectileManager" +
+      " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+      " object=" + gameObject.name +
+      " manager='" + projectileManager.gameObject.name + "'" +
+      " path='" + GetTransformPath(projectileManager.transform) + "'"
+    );
+  }
+
+  static string GetTransformPath(Transform current) {
+    if (current == null) return "";
+    if (current.parent == null) return current.name;
+    return GetTransformPath(current.parent) + "/" + current.name;
   }
 
   private Vector3 ResolveProjectileSpawnPosition() {

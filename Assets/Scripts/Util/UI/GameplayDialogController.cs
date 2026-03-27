@@ -137,6 +137,18 @@ public class GameplayDialogController : MonoBehaviour {
   readonly List<GameplayDialogNode> pendingLocationSequence = new();
 
   public bool IsDialogActive => dialogueActive;
+  public bool HasResolvedUiReferencesForLoadingProgress {
+    get {
+      EnsureResolved();
+      return dialogRoot != null && dialogText != null;
+    }
+  }
+  public bool IsReadyForLoadingProgress =>
+    isActiveAndEnabled &&
+    HasResolvedUiReferencesForLoadingProgress &&
+    dialogStateReady;
+  public bool HasPendingLocationDialog => pendingLocationSequence.Count > 0;
+  public bool IsBlockingGameplayInput => dialogueActive || HasPendingLocationDialog;
 
   static bool ShouldLogDialogDebug() {
     return Application.isEditor || Debug.isDebugBuild;

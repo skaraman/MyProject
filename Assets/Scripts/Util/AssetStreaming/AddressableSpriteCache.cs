@@ -246,6 +246,7 @@ public static class TextureResidencyCache {
     public readonly List<Sprite> generatedSprites = new();
     public readonly HashSet<ulong> registeredTextureIds = new();
     public Sprite primarySprite;
+    public bool generatedSpriteSetComplete;
     public int pinCount;
     public bool isDone;
     public bool isSuccess;
@@ -1463,6 +1464,7 @@ public static class TextureResidencyCache {
     entry.spritesByName.Clear();
     entry.spriteMapMaterialized = false;
     entry.deferredSpriteMapMaterialization = false;
+    entry.generatedSpriteSetComplete = false;
     GeneratedAtlasSpriteSynthesisUtility.DestroySprites(entry.generatedSprites);
     entry.pendingExactSliceSupplementAddresses.Clear();
     entry.failedExactSliceSupplementAddresses.Clear();
@@ -1981,6 +1983,7 @@ public static class TextureResidencyCache {
     entry.spritesByName.Clear();
     entry.spriteMapMaterialized = false;
     entry.deferredSpriteMapMaterialization = false;
+    entry.generatedSpriteSetComplete = false;
     entry.requestedSpriteNameHint = "";
     entry.requestedSpriteNameConflict = false;
     GeneratedAtlasSpriteSynthesisUtility.DestroySprites(entry.generatedSprites);
@@ -2710,6 +2713,7 @@ public static class TextureResidencyCache {
     entry.spritesByName.Clear();
     entry.spriteMapMaterialized = false;
     entry.deferredSpriteMapMaterialization = false;
+    entry.generatedSpriteSetComplete = false;
     entry.isDone = false;
     entry.isSuccess = false;
     entry.hasTextureRegistration = false;
@@ -2927,7 +2931,29 @@ public static class TextureResidencyCache {
 
   static bool ShouldUseProtectedPrimarySpriteOnly(CacheEntry entry, int loadedSpriteCount) {
     if (entry == null || loadedSpriteCount <= 1) return false;
-    return IsProtectedLoadingScreenStreamingContextActive();
+    if (!IsProtectedLoadingScreenStreamingContextActive()) return false;
+    return !ShouldForceProtectedSpriteMapMaterialization(entry);
+  }
+
+  static bool ShouldForceProtectedSpriteMapMaterialization(CacheEntry entry) {
+    return IsEntryPinnedByClass(entry, PinClass.Player) ||
+      IsEntryPinnedByClass(entry, PinClass.Effect);
+  }
+
+  static bool IsEntryPinnedByClass(CacheEntry entry, PinClass pinClass) {
+    if (entry == null || string.IsNullOrWhiteSpace(entry.address)) return false;
+    var normalizedAddress = NormalizeAddress(entry.address);
+    if (string.IsNullOrWhiteSpace(normalizedAddress)) return false;
+
+    foreach (var pair in ownerPins) {
+      var state = pair.Value;
+      if (state == null) continue;
+      if (state.pinClass != pinClass) continue;
+      if (state.leases == null || state.leases.Count <= 0) continue;
+      if (state.leases.ContainsKey(normalizedAddress)) return true;
+    }
+
+    return false;
   }
 
   static bool CanMaterializeEntrySpriteMapOnDemand(CacheEntry entry) {
@@ -3022,6 +3048,9 @@ public static class TextureResidencyCache {
 
   static bool TryMaterializeDeferredGeneratedSpriteMap(CacheEntry entry) {
     if (entry == null) return false;
+    if (entry.generatedSpriteSetComplete && entry.generatedSprites.Count > 0) {
+      return true;
+    }
 
     if (entry.groupedAtlasTextureHandle.IsValid() && entry.groupedMetadataHandle.IsValid()) {
       var atlasTexture = entry.groupedAtlasTextureHandle.Result;
@@ -3031,7 +3060,8 @@ public static class TextureResidencyCache {
         return false;
       }
       MergeMaterializedGeneratedSprites(entry, groupedSprites);
-      return entry.generatedSprites.Count > 0;
+      entry.generatedSpriteSetComplete = entry.generatedSprites.Count > 0;
+      return entry.generatedSpriteSetComplete;
     }
 
     if (entry.metadataAtlasTextureHandle.IsValid() && entry.metadataAtlasMetadataHandle.IsValid()) {
@@ -3048,10 +3078,11 @@ public static class TextureResidencyCache {
         return false;
       }
       MergeMaterializedGeneratedSprites(entry, generatedSprites);
-      return entry.generatedSprites.Count > 0;
+      entry.generatedSpriteSetComplete = entry.generatedSprites.Count > 0;
+      return entry.generatedSpriteSetComplete;
     }
 
-    return entry.generatedSprites.Count > 0;
+    return entry.generatedSpriteSetComplete && entry.generatedSprites.Count > 0;
   }
 
   static bool TryEnsureEntrySpriteMapMaterialized(CacheEntry entry) {
@@ -3446,6 +3477,7 @@ public static class TextureResidencyCache {
             out var requestedGroupedSprite)) {
         entry.generatedSprites.Clear();
         entry.generatedSprites.Add(requestedGroupedSprite);
+        entry.generatedSpriteSetComplete = false;
         loadSucceeded = true;
         return entry.generatedSprites;
       }
@@ -3462,6 +3494,7 @@ public static class TextureResidencyCache {
 
       entry.generatedSprites.Clear();
       entry.generatedSprites.AddRange(generatedSprites);
+      entry.generatedSpriteSetComplete = entry.generatedSprites.Count > 0;
       loadSucceeded = entry.generatedSprites.Count > 0;
       return entry.generatedSprites;
     }
@@ -3500,6 +3533,7 @@ public static class TextureResidencyCache {
             out _)) {
         entry.generatedSprites.Clear();
         entry.generatedSprites.Add(requestedMetadataSprite);
+        entry.generatedSpriteSetComplete = false;
         loadSucceeded = true;
         return entry.generatedSprites;
       }
@@ -3522,6 +3556,7 @@ public static class TextureResidencyCache {
 
       entry.generatedSprites.Clear();
       entry.generatedSprites.AddRange(generatedSprites);
+      entry.generatedSpriteSetComplete = entry.generatedSprites.Count > 0;
       loadSucceeded = entry.generatedSprites.Count > 0;
       return entry.generatedSprites;
     }
@@ -3530,6 +3565,7 @@ public static class TextureResidencyCache {
     if (!entry.handle.IsValid()) return null;
     var loadedSprites = entry.handle.Result;
     if (loadedSprites == null || loadedSprites.Count <= 0) return null;
+    entry.generatedSpriteSetComplete = false;
     loadSucceeded = true;
     return loadedSprites;
   }

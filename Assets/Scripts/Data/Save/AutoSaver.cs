@@ -72,7 +72,7 @@ public class AutoSaver : MonoBehaviour {
   }
 
   void SaveAll() {
-    characterState ??= FindAnyObjectByType<CharacterState>();
+    characterState ??= SingleSceneManager.ResolveGameplayCharacterState();
     gameData["playtimeHours"] = playtimeHours;
     gameData["playtimeMinutes"] = playtimeMinutes;
     gameData["playtimeSeconds"] = playtimeSeconds;

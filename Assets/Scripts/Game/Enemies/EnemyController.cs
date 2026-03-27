@@ -41,6 +41,7 @@ public class EnemyController : MonoBehaviour {
   private AnimationController effectAnimationController = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private bool effectControllerInitialized;
+  private bool effectResetToEmptyPending;
   private Dictionary<string, AnimData> animationData;
   private Dictionary<string, Dictionary<string, string>> interruptData;
   private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData;
@@ -61,6 +62,7 @@ public class EnemyController : MonoBehaviour {
     appearanceOwnerId = "enemy:" + ObjectEntityId.GetString(gameObject);
     effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
     ResetDebugPlaybackFlags();
+    ResolveProjectileManagerReference("awake");
     ResolveEnemyTypeFromComponent();
     ConfigureEffectController();
     HookAnimationEvents();
@@ -96,10 +98,12 @@ public class EnemyController : MonoBehaviour {
       effectAnimationController.SlowDown = slowDown;
       effectAnimationController.ForceLoop = forceLoop;
       effectAnimationController.Tick(scaledDeltaTime);
+      TryFinalizeCompletedEffectAnimation();
     }
   }
 
   void OnDisable() {
+    effectResetToEmptyPending = false;
     hasPinnedRuntimeResidency = false;
     animationController?.SetAppearancePinOwner("", TextureResidencyCache.PinClass.Enemy);
     if (effectControllerInitialized) {
@@ -109,6 +113,7 @@ public class EnemyController : MonoBehaviour {
     if (effectControllerInitialized) {
       effectAnimationController.Cleanup(!Application.isPlaying);
     }
+    ResetEffectVisualToEmpty();
   }
 
   public bool SetEnemyType(string value, bool playDefaultImmediately = false) {
@@ -234,6 +239,7 @@ public class EnemyController : MonoBehaviour {
     animationController?.StopAnimation(resetToDefault);
     if (effectControllerInitialized) {
       effectAnimationController.StopAnimation(false);
+      ResetEffectVisualToEmpty();
     }
   }
 
@@ -263,7 +269,7 @@ public class EnemyController : MonoBehaviour {
   public AnimationController Controller => animationController;
 
   public void AwardPlaceholderKillXp() {
-    var characterState = FindAnyObjectByType<CharacterState>();
+    var characterState = SingleSceneManager.ResolveGameplayCharacterState();
     var activeForm = EsperanzaForms.GetActive();
     if (characterState == null) {
       Debug.LogWarning(
@@ -311,6 +317,7 @@ public class EnemyController : MonoBehaviour {
       TextureResidencyCache.PinClass.Effect
     );
     effectControllerInitialized = true;
+    ResetEffectVisualToEmpty();
     RefreshRuntimeResidency(force: true);
   }
 
@@ -339,12 +346,23 @@ public class EnemyController : MonoBehaviour {
       ConfigureEffectController();
       if (!effectControllerInitialized) return;
     }
+    PrepareEffectVisualForPlayback();
+    effectResetToEmptyPending = true;
     effectAnimationController.ForceLoop = false;
     effectAnimationController.PlayAnimation(effectKey, true, resolveInterrupts: false);
   }
 
   private void HandleProjectileTriggered(string projectileKey) {
-    if (string.IsNullOrEmpty(projectileKey) || projectileManager == null) return;
+    if (string.IsNullOrEmpty(projectileKey)) return;
+    ResolveProjectileManagerReference("projectile_event");
+    if (projectileManager == null) {
+      Debug.LogWarning(
+        "[EnemyController] MissingProjectileManager" +
+        " object=" + gameObject.name +
+        " projectile='" + projectileKey + "'"
+      );
+      return;
+    }
     var spawnPosition = ResolveProjectileSpawnPosition();
     var direction = ResolveProjectileDirection();
     projectileManager.SpawnProjectile(projectileKey, spawnPosition, direction);
@@ -363,6 +381,41 @@ public class EnemyController : MonoBehaviour {
     if (projectileDirection.sqrMagnitude <= 0.0001f) return Vector3.right;
     var dir = projectileDirection.normalized;
     return new Vector3(dir.x, dir.y, 0f);
+  }
+
+  void PrepareEffectVisualForPlayback() {
+    if (effectNode == null) return;
+    effectNode.SetDoNotRender(false);
+    if (!string.IsNullOrWhiteSpace(effectNode.labelPrefix)) {
+      effectNode.SetLabelPrefix("");
+    }
+  }
+
+  void TryFinalizeCompletedEffectAnimation() {
+    if (!effectControllerInitialized || !effectResetToEmptyPending) return;
+    if (effectAnimationController.IsPlaying) return;
+    ResetEffectVisualToEmpty();
+  }
+
+  void ResetEffectVisualToEmpty() {
+    if (effectNode == null) return;
+    effectNode.SetDoNotRender(false);
+    effectNode.SetLabelPrefix("Empty");
+    effectNode.ForceUpdateSpriteAndNormal(0);
+    effectNode.SetLabelPrefix("");
+    effectResetToEmptyPending = false;
+  }
+
+  void ResolveProjectileManagerReference(string source) {
+    if (projectileManager != null || !Application.isPlaying) return;
+    projectileManager = SingleSceneManager.ResolveGameplayProjectileManager();
+    if (projectileManager == null || !(Application.isEditor || Debug.isDebugBuild)) return;
+    Debug.Log(
+      "[EnemyController] ResolvedProjectileManager" +
+      " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+      " object=" + gameObject.name +
+      " manager='" + projectileManager.gameObject.name + "'"
+    );
   }
 
   static string NormalizeEnemyType(string value) {
@@ -464,7 +517,7 @@ public class EnemyController : MonoBehaviour {
     }
 
     cachedPlayerTransformRefreshedAt = now;
-    var playerGear = FindAnyObjectByType<GearController>();
+    var playerGear = SingleSceneManager.ResolveGameplayPlayerController();
     cachedPlayerTransform = playerGear != null ? playerGear.transform : null;
     return cachedPlayerTransform;
   }

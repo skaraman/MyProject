@@ -68,6 +68,8 @@ public class LocationManager : MonoBehaviour {
     runtimeInstance != null && runtimeInstance.pendingBlockingLocationActivationRoutine != null;
   public static bool HasPendingDeferredActivationWork =>
     runtimeInstance != null && runtimeInstance.pendingDeferredLocationActivationRoutine != null;
+  public static GameObject ResolveActiveLocationInstance() =>
+    runtimeInstance != null ? runtimeInstance.activeLocationInstance : null;
   public string CurrentLocationId => currentLocationId;
   public LocationInfo CurrentLocation => activeLocation;
   public IReadOnlyList<LocationObjective> CurrentObjectives =>
@@ -183,19 +185,44 @@ public class LocationManager : MonoBehaviour {
     return HasPendingBlockingActivationWork || HasPendingDeferredActivationWork;
   }
 
+  static bool IsIntentionalPrefablessMainMenu(LocationInfo info, LocationPrefabData prefabData) {
+    if (info == null) return false;
+    if (!string.Equals(info.id, LocationEnemyData.MainMenuLocationId, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+    return prefabData == null || !prefabData.HasConfiguredPrefab();
+  }
+
+  void ClearLocationAndNotify() {
+    ClearLocationInstance();
+    MessageBus.Send("LocationLocationChanged", null);
+  }
+
+  void LogMainMenuPrefablessLocation(LocationInfo info) {
+    Debug.Log(
+      "[LocationManager] Main menu location intentionally uses no prefab." +
+      " location_id='" + (info != null ? info.id : "") + "'" +
+      " clearing_active_location=1"
+    );
+  }
+
   void ApplyLocationPrefab(LocationInfo info, bool forceRefresh) {
     if (info == null) {
-      ClearLocationInstance();
-      MessageBus.Send("LocationLocationChanged", null);
+      ClearLocationAndNotify();
       return;
     }
 
     var prefabData = info.locationPrefabData;
+    if (IsIntentionalPrefablessMainMenu(info, prefabData)) {
+      LogMainMenuPrefablessLocation(info);
+      ClearLocationAndNotify();
+      return;
+    }
+
     var prefab = prefabData != null ? prefabData.ResolvePrefab() : null;
 
     if (prefab == null) {
-      ClearLocationInstance();
-      MessageBus.Send("LocationLocationChanged", null);
+      ClearLocationAndNotify();
       return;
     }
 

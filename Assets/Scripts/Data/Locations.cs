@@ -55,9 +55,11 @@ public class LocationPrefabData {
   public Vector3 localEulerAngles;
   public Vector3 localScale = Vector3.one;
 
-  bool addressablesLoadAttempted;
-
+  bool addressablesLoadFailed;
+  const int MaxCachedGameplayPrefabs = 2;
   static readonly Dictionary<string, GameObject> prefabCache = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, AsyncOperationHandle<GameObject>> prefabHandleCache = new(StringComparer.OrdinalIgnoreCase);
+  static readonly List<string> prefabCacheLru = new(MaxCachedGameplayPrefabs + 1);
 
   public LocationPrefabData(
     GameObject prefab = null,
@@ -75,38 +77,87 @@ public class LocationPrefabData {
 
   public string AssetPath => string.IsNullOrWhiteSpace(assetPath) ? "" : assetPath.Trim();
 
-  public GameObject ResolvePrefab() {
-    if (prefab != null) return prefab;
+  public bool HasConfiguredPrefab() {
+    return prefab != null || !string.IsNullOrWhiteSpace(AssetPath);
+  }
 
+  public GameObject ResolvePrefab() {
     var address = AssetPath;
     if (string.IsNullOrWhiteSpace(address)) {
-      Debug.LogWarning("[LocationPrefabData] Addressable prefab address is empty.");
-      return null;
+      return prefab;
     }
 
     if (RuntimeAssetCache.TryGetLoaded<GameObject>(address, out var prewarmedPrefab)) {
-      prefab = prewarmedPrefab;
-      prefabCache[address] = prewarmedPrefab;
       Debug.Log("[LocationPrefabData] Using runtime asset cache prefab address='" + address + "'.");
-      return prefab;
+      addressablesLoadFailed = false;
+      return prewarmedPrefab;
     }
 
     if (TryGetCachedPrefab(address, out var cachedPrefab)) {
-      prefab = cachedPrefab;
       Debug.Log("[LocationPrefabData] Using cached addressable prefab address='" + address + "'.");
-      return prefab;
+      addressablesLoadFailed = false;
+      return cachedPrefab;
     }
 
-    if (addressablesLoadAttempted) return null;
-    addressablesLoadAttempted = true;
-    prefab = LoadPrefabFromAddressables(address);
-    return prefab;
+    if (addressablesLoadFailed) return null;
+    var loadedPrefab = LoadPrefabFromAddressables(address);
+    addressablesLoadFailed = loadedPrefab == null;
+    return loadedPrefab;
   }
 
   static bool TryGetCachedPrefab(string address, out GameObject cachedPrefab) {
     cachedPrefab = null;
     if (string.IsNullOrWhiteSpace(address)) return false;
-    return prefabCache.TryGetValue(address, out cachedPrefab) && cachedPrefab != null;
+    if (!prefabCache.TryGetValue(address, out cachedPrefab) || cachedPrefab == null) {
+      return false;
+    }
+
+    TouchCachedPrefab(address);
+    return true;
+  }
+
+  static void TouchCachedPrefab(string address) {
+    if (string.IsNullOrWhiteSpace(address)) return;
+
+    for (var i = prefabCacheLru.Count - 1; i >= 0; i--) {
+      if (!string.Equals(prefabCacheLru[i], address, StringComparison.OrdinalIgnoreCase)) continue;
+      prefabCacheLru.RemoveAt(i);
+      break;
+    }
+
+    prefabCacheLru.Insert(0, address);
+  }
+
+  static void RememberCachedPrefab(string address, AsyncOperationHandle<GameObject> handle, GameObject loadedPrefab) {
+    if (string.IsNullOrWhiteSpace(address) || loadedPrefab == null) {
+      if (handle.IsValid()) {
+        Addressables.Release(handle);
+      }
+      return;
+    }
+
+    if (prefabHandleCache.TryGetValue(address, out var previousHandle) && previousHandle.IsValid()) {
+      Addressables.Release(previousHandle);
+    }
+
+    prefabCache[address] = loadedPrefab;
+    prefabHandleCache[address] = handle;
+    TouchCachedPrefab(address);
+
+    while (prefabCacheLru.Count > MaxCachedGameplayPrefabs) {
+      var evictIndex = prefabCacheLru.Count - 1;
+      var evictAddress = prefabCacheLru[evictIndex];
+      prefabCacheLru.RemoveAt(evictIndex);
+      if (string.IsNullOrWhiteSpace(evictAddress)) continue;
+      if (string.Equals(evictAddress, address, StringComparison.OrdinalIgnoreCase)) continue;
+
+      prefabCache.Remove(evictAddress);
+      if (prefabHandleCache.TryGetValue(evictAddress, out var evictHandle) && evictHandle.IsValid()) {
+        Addressables.Release(evictHandle);
+      }
+      prefabHandleCache.Remove(evictAddress);
+      Debug.Log("[LocationPrefabData] Evicted cached addressable prefab address='" + evictAddress + "'.");
+    }
   }
 
   GameObject LoadPrefabFromAddressables(string address) {
@@ -117,7 +168,7 @@ public class LocationPrefabData {
     var loadedPrefab = loadHandle.WaitForCompletion();
 
     if (loadHandle.Status == AsyncOperationStatus.Succeeded && loadedPrefab != null) {
-      prefabCache[address] = loadedPrefab;
+      RememberCachedPrefab(address, loadHandle, loadedPrefab);
       var loadSeconds = Time.realtimeSinceStartup - startedAt;
       Debug.Log(
         "[LocationPrefabData] Loaded addressable prefab address='" + address +
@@ -149,12 +200,8 @@ public class LocationInfo {
   public List<string> enemies;
   public int maxEnemies;
   public float spawnInterval;
-  public int finalKillCount;
   public List<LocationObjective> objectives;
   public LocationPrefabData locationPrefabData;
-
-  // Compatibility alias for older call sites that used "locationPrefab" directly.
-  public LocationPrefabData locationPrefab => locationPrefabData;
 
   public LocationInfo(
     string id,
@@ -171,41 +218,7 @@ public class LocationInfo {
     this.maxEnemies = Mathf.Max(0, maxEnemies);
     this.spawnInterval = Mathf.Max(0f, spawnInterval);
     this.objectives = objectives != null ? new List<LocationObjective>(objectives) : new List<LocationObjective>();
-    this.finalKillCount = ResolveFinalKillObjectiveCount(this.objectives);
     this.locationPrefabData = locationPrefabData ?? new LocationPrefabData();
-  }
-
-  // Legacy signature retained so existing code compiles while objectives migrate.
-  public LocationInfo(
-    string name,
-    List<string> enemies,
-    int maxEnemies,
-    float spawnInterval,
-    int finalKillCount,
-    GameObject locationPrefab
-  ) : this(
-    id: name,
-    name: name,
-    enemies: enemies,
-    maxEnemies: maxEnemies,
-    spawnInterval: spawnInterval,
-    objectives: new List<LocationObjective> {
-      LocationObjective.FinalKillCount(finalKillCount, "Defeat target enemies")
-    },
-    locationPrefabData: new LocationPrefabData(prefab: locationPrefab)
-  ) {
-    this.finalKillCount = Mathf.Max(0, finalKillCount);
-  }
-
-  static int ResolveFinalKillObjectiveCount(List<LocationObjective> source) {
-    if (source == null || source.Count <= 0) return 0;
-    for (var i = 0; i < source.Count; i++) {
-      var objective = source[i];
-      if (objective == null) continue;
-      if (objective.type != LocationObjectiveType.FinalKillCount) continue;
-      return Mathf.Max(0, objective.targetCount);
-    }
-    return 0;
   }
 
   static string NormalizeId(string locationId) {
@@ -252,10 +265,6 @@ public static class LocationEnemyData {
     }
   };
 
-  public static Dictionary<string, int> totalKills { get; } = new(StringComparer.OrdinalIgnoreCase) {
-    { "Imp", 0 },
-  };
-
   public static string NormalizeLocationId(string locationId) {
     return string.IsNullOrWhiteSpace(locationId) ? "" : locationId.Trim();
   }
@@ -288,12 +297,6 @@ public static class LocationEnemyData {
     }
 
     return false;
-  }
-
-  public static LocationInfo GetLocationOrDefault(string locationId) {
-    if (TryGetLocation(locationId, out var location)) return location;
-    if (TryGetLocation(GetDefaultLocation(), out var fallback)) return fallback;
-    return null;
   }
 
   public static string ResolveRequestedOrDefault(string locationId) {

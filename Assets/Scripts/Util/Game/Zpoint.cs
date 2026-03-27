@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 public class Zpoint : MonoBehaviour {
-  public SortingGroup sortingGroup;
+  private SortingGroup sortingGroup;
   private Camera mainCamera;
   private Transform cachedTransform;
 
@@ -12,6 +12,7 @@ public class Zpoint : MonoBehaviour {
 
   void Start() {
     mainCamera = Camera.main;
+    sortingGroup = cachedTransform.parent.GetComponent<SortingGroup>();
   }
 
   void Update() {

@@ -80,7 +80,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
 
   void EnsureResolved(bool force = false) {
     if (force || characterState == null) {
-      characterState = FindAnyObjectByType<CharacterState>();
+      characterState = SingleSceneManager.ResolveGameplayCharacterState();
     }
     if (force || statsButtons == null) {
       statsButtons = GetComponent<StatsButtons>();

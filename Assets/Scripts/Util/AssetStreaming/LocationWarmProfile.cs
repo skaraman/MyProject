@@ -70,6 +70,44 @@ public class LocationWarmProfile : ScriptableObject {
   public IReadOnlyList<string> WarmUiAssetAddresses => warmUiAssetAddresses;
   public IReadOnlyList<string> WarmUiAssetLabels => warmUiAssetLabels;
 
+  public void CollectEnvironmentCacheLists(
+    List<string> outLibraries,
+    List<string> outAddresses,
+    List<string> outAssetAddresses = null,
+    List<string> outAssetLabels = null
+  ) {
+    AddAutoDerivedLocationStageWarmLists(
+      outLibraries,
+      outAddresses,
+      outLibraries,
+      outAddresses
+    );
+    AddPackUnique(
+      outLibraries,
+      outAddresses,
+      null,
+      outAssetAddresses,
+      outAssetLabels,
+      currentRoomPack
+    );
+    AddPackUnique(
+      outLibraries,
+      outAddresses,
+      null,
+      outAssetAddresses,
+      outAssetLabels,
+      adjacentRoomPack
+    );
+    AddRangeUnique(outLibraries, criticalSpriteLibraries);
+    AddRangeUnique(outAddresses, criticalDirectAddresses);
+    AddRangeUnique(outAssetAddresses, criticalAssetAddresses);
+    AddRangeUnique(outAssetLabels, criticalAssetLabels);
+    AddRangeUnique(outLibraries, warmSpriteLibraries);
+    AddRangeUnique(outAddresses, warmDirectAddresses);
+    AddRangeUnique(outAssetAddresses, warmAssetAddresses);
+    AddRangeUnique(outAssetLabels, warmAssetLabels);
+  }
+
   public void CollectGameplayWarmLists(
     IEnumerable<string> combatEnemyTypes,
     List<string> outCriticalLibraries,

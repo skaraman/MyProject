@@ -54,6 +54,49 @@ public class ProjectileManager : MonoBehaviour {
     }
   }
 
+  public int EnsurePoolsReady(IReadOnlyList<string> projectileKeys) {
+    if (projectileKeys == null || projectileKeys.Count <= 0) {
+      return 0;
+    }
+
+    var preparedCount = 0;
+    for (var i = 0; i < projectileKeys.Count; i++) {
+      var key = NormalizeProjectileKey(projectileKeys[i]);
+      if (string.IsNullOrWhiteSpace(key)) continue;
+      if (!TryGetPool(key, out _)) continue;
+      preparedCount++;
+    }
+
+    return preparedCount;
+  }
+
+  public int CollectPersistentStartupAddresses(
+    IReadOnlyList<string> projectileKeys,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue,
+    int framesPerProjectile = 1
+  ) {
+    if (projectileKeys == null || projectileKeys.Count <= 0 || outAddresses == null || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    var beforeCount = outAddresses.Count;
+    var warmFrames = Mathf.Max(framesPerProjectile, 1);
+    for (var i = 0; i < projectileKeys.Count; i++) {
+      if (outAddresses.Count >= maxUniqueAddresses) {
+        break;
+      }
+
+      var key = NormalizeProjectileKey(projectileKeys[i]);
+      if (string.IsNullOrWhiteSpace(key)) continue;
+      if (!projectilePrefabs.TryGetValue(key, out var prefab) || prefab == null) continue;
+      CollectProjectileStartupAddresses(prefab, key, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    }
+
+    return Mathf.Max(outAddresses.Count - beforeCount, 0);
+  }
+
   public GameObject SpawnProjectile(string key, Vector3 position, Vector3 direction, Transform target = null, float? speedOverride = null) {
     if (string.IsNullOrEmpty(key)) {
       Debug.LogWarning("[ProjectileManager] SpawnProjectile called with null or empty key.");
@@ -132,6 +175,41 @@ public class ProjectileManager : MonoBehaviour {
 
   private void OnDestroy() {
     ClearAllPools();
+  }
+
+  static string NormalizeProjectileKey(string key) {
+    return string.IsNullOrWhiteSpace(key) ? "" : key.Trim();
+  }
+
+  static void CollectProjectileStartupAddresses(
+    GameObject prefab,
+    string key,
+    int warmFrames,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses
+  ) {
+    if (prefab == null || outAddresses == null || maxUniqueAddresses <= 0) {
+      return;
+    }
+
+    var spriteTarget = prefab.GetComponentInChildren<SpriteWithNormals>(true);
+    if (spriteTarget == null) {
+      return;
+    }
+
+    var startFrame = spriteTarget.IsAnimation ? 1 : 0;
+    var endFrame = spriteTarget.IsAnimation ? Mathf.Max(startFrame, startFrame + warmFrames - 1) : 0;
+    var category = spriteTarget.IsAnimation ? key : spriteTarget.category;
+    spriteTarget.CollectAnimationWindowAddresses(
+      category,
+      startFrame,
+      endFrame,
+      0,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
   }
 
   public Transform FindNearestEnemyTarget(Vector3 origin) {

@@ -218,7 +218,7 @@ public class GameplayInput : MonoBehaviour {
     if (gearController == null && EsperanzaParent != null) {
       gearController = EsperanzaParent.GetComponent<GearController>();
     }
-    gearController ??= FindAnyObjectByType<GearController>();
+    gearController ??= SingleSceneManager.ResolveGameplayPlayerController();
 
     if (characterState == null && EsperanzaParent != null) {
       characterState = EsperanzaParent.GetComponent<CharacterState>();
@@ -226,7 +226,7 @@ public class GameplayInput : MonoBehaviour {
     if (characterState == null && gearController != null) {
       characterState = gearController.GetComponent<CharacterState>();
     }
-    characterState ??= FindAnyObjectByType<CharacterState>();
+    characterState ??= SingleSceneManager.ResolveGameplayCharacterState();
 
     if (EsperanzaParent == null && gearController != null) {
       EsperanzaParent = gearController.gameObject;

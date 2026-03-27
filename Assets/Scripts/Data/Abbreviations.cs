@@ -31,7 +31,7 @@ public static class Abbreviations {
   public static Dictionary<string, Dictionary<string, List<string>>> FormMajorMinor { get; } = new Dictionary<string, Dictionary<string, List<string>>> {
     ["Base"] = new Dictionary<string, List<string>> {
       ["STR"] = new List<string> { "HP", "DMG", "DCHC", },
-      ["DEX"] = new List<string> { "AS", "NRGRG", "CDMG", },
+      ["DEX"] = new List<string> { "AKSP", "NRGRG", "CDMG", },
       ["END"] = new List<string> { "NRG", "HPRG", "ARM", },
       ["INT"] = new List<string> { "HEAL", "CCHC", "LDMG", },
       ["LCK"] = new List<string> { "LCHC", "DDMG", "BONUS", }

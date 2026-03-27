@@ -204,6 +204,10 @@ public class SpriteWithNormals : MonoBehaviour {
   readonly List<Sprite> _generatedPaddedSpriteAssets = new();
   readonly List<Texture2D> _generatedPaddedTextures = new();
   readonly HashSet<PaddedSpriteCacheKey> _paddingCreationWarnings = new();
+  static int cachedUiLayer = int.MinValue;
+  static bool uiSortingLayerCacheInitialized;
+  static int cachedMyUiSortingLayerId = int.MinValue;
+  static int cachedMyUi2SortingLayerId = int.MinValue;
 
   void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
@@ -532,7 +536,78 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
   public bool IsUiTarget() {
-    return GetComponentInParent<Canvas>(true) != null;
+    if (GetComponentInParent<Canvas>(true) != null) return true;
+    if (IsUnderUiLayer()) return true;
+    return HasUiSortingLayerInHierarchy();
+  }
+
+  bool IsUnderUiLayer() {
+    var uiLayer = ResolveUiLayer();
+    if (uiLayer < 0) return false;
+
+    for (var current = transform; current != null; current = current.parent) {
+      if (current.gameObject.layer == uiLayer) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool HasUiSortingLayerInHierarchy() {
+    CacheUiSortingLayerIds();
+    if (_renderer == null) {
+      _renderer = GetComponent<SpriteRenderer>();
+    }
+
+    if (IsUiSortingLayerId(ResolveSortingLayerId(_renderer))) {
+      return true;
+    }
+
+    for (var current = transform.parent; current != null; current = current.parent) {
+      if (!current.TryGetComponent<SpriteRenderer>(out var parentRenderer)) continue;
+      if (IsUiSortingLayerId(ResolveSortingLayerId(parentRenderer))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static int ResolveUiLayer() {
+    if (cachedUiLayer != int.MinValue) return cachedUiLayer;
+    cachedUiLayer = LayerMask.NameToLayer("UI");
+    return cachedUiLayer;
+  }
+
+  static void CacheUiSortingLayerIds() {
+    if (uiSortingLayerCacheInitialized) return;
+
+    cachedMyUiSortingLayerId = int.MinValue;
+    cachedMyUi2SortingLayerId = int.MinValue;
+
+    var sortingLayers = SortingLayer.layers;
+    for (var i = 0; i < sortingLayers.Length; i++) {
+      var sortingLayer = sortingLayers[i];
+      if (string.Equals(sortingLayer.name, "MyUI", StringComparison.Ordinal)) {
+        cachedMyUiSortingLayerId = sortingLayer.id;
+        continue;
+      }
+
+      if (string.Equals(sortingLayer.name, "MyUI2", StringComparison.Ordinal)) {
+        cachedMyUi2SortingLayerId = sortingLayer.id;
+      }
+    }
+
+    uiSortingLayerCacheInitialized = true;
+  }
+
+  static bool IsUiSortingLayerId(int sortingLayerId) {
+    return sortingLayerId == cachedMyUiSortingLayerId || sortingLayerId == cachedMyUi2SortingLayerId;
+  }
+
+  static int ResolveSortingLayerId(SpriteRenderer renderer) {
+    return renderer != null ? renderer.sortingLayerID : int.MinValue;
   }
 
   public void UpdateSpriteAndNormal(int frame) {

@@ -26,25 +26,10 @@ public class SaveSlot : MonoBehaviour {
       bool shouldBeActive = forms.Contains(child.name);
       child.gameObject.SetActive(shouldBeActive);
     }
-    if (SaveNumberText) {
-      SaveNumberText.content = "No ." + saveNumber;
-      SaveNumberText.Generate();
-    }
-
-    if (PlaytimeText) {
-      PlaytimeText.content = "Playtime - " + playtime;
-      PlaytimeText.Generate();
-    }
-
-    if (LevelText) {
-      LevelText.content = "Level - " + level;
-      LevelText.Generate();
-    }
-
-    if (LocationText) {
-      LocationText.content = "Location - " + location;
-      LocationText.Generate();
-    }
+    UpdateFontText(SaveNumberText, "No ." + saveNumber);
+    UpdateFontText(PlaytimeText, "Playtime - " + playtime);
+    UpdateFontText(LevelText, "Level - " + level);
+    UpdateFontText(LocationText, "Location - " + location);
 
     if (!enableDebugLogs) return;
     Debug.Log(
@@ -59,12 +44,22 @@ public class SaveSlot : MonoBehaviour {
     );
   }
 
+  static void UpdateFontText(FontText target, string value) {
+    if (!target) return;
+    target.content = value;
+    target.Generate();
+  }
+
   static string DescribeTextRendererState(FontText target) {
     if (!target) return "missing";
 
     var hostRenderer = target.GetComponent<SpriteRenderer>();
+    var hostSprite = target.GetComponent<SpriteWithNormals>();
     var glyphRenderer = FindFirstGeneratedGlyphRenderer(target.transform);
-    return "host(" + DescribeRendererState(hostRenderer) + ") glyph(" + DescribeRendererState(glyphRenderer) + ")";
+    var glyphSprite = glyphRenderer != null ? glyphRenderer.GetComponent<SpriteWithNormals>() : null;
+    return
+      "host(" + DescribeRendererState(hostRenderer, hostSprite) + ")" +
+      " glyph(" + DescribeRendererState(glyphRenderer, glyphSprite) + ")";
   }
 
   static SpriteRenderer FindFirstGeneratedGlyphRenderer(Transform root) {
@@ -81,7 +76,7 @@ public class SaveSlot : MonoBehaviour {
     return null;
   }
 
-  static string DescribeRendererState(SpriteRenderer renderer) {
+  static string DescribeRendererState(SpriteRenderer renderer, SpriteWithNormals sprite) {
     if (renderer == null) return "missing";
 
     var materialName = renderer.sharedMaterial != null ? renderer.sharedMaterial.name : "null";
@@ -90,10 +85,15 @@ public class SaveSlot : MonoBehaviour {
       sortingLayerName = renderer.sortingLayerID.ToString();
     }
 
+    var uiTarget = sprite != null && sprite.IsUiTarget();
+    var ready = sprite == null || sprite.IsFrameReady(0, out _);
+
     return
       "mat=" + materialName +
       " layer=" + sortingLayerName +
       " order=" + renderer.sortingOrder +
-      " mask=" + renderer.maskInteraction;
+      " mask=" + renderer.maskInteraction +
+      " ui=" + (uiTarget ? 1 : 0) +
+      " ready=" + (ready ? 1 : 0);
   }
 }

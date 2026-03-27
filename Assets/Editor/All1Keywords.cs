@@ -71,6 +71,7 @@ public static class AllIn1ShaderKeywords {
     "MANUALWIND_ON",
     "ATLAS_ON",
     "PREMULTIPLYALPHA_ON",
+    "FOG_ON",
     "BILBOARD_ON",
     "BILBOARDY_ON"
   };

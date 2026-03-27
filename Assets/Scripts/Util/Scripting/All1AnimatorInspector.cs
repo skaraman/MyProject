@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using CustomInspector;
 using UnityEngine;
 
-[RequireComponent(typeof(Renderer))]
+
 public class AllIn1AnimatorInspector : MonoBehaviour {
   const sbyte StaticEvalUnknown = 0;
   const sbyte StaticEvalDynamic = -1;
@@ -21,16 +21,16 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   public class KeywordToggle {
     public string keyword;
     public bool enabled;
-    public int keywordHash;
+    [HideInInspector] public int keywordHash;
     public void CacheHash() {
-      keywordHash = Shader.PropertyToID(keyword);
+      keywordHash = string.IsNullOrWhiteSpace(keyword) ? 0 : Shader.PropertyToID(keyword);
     }
   }
 
   [System.Serializable]
   public class FloatAnimation {
     public string prop;
-    public int propHash;
+    [HideInInspector] public int propHash;
     public List<Sequence<float>> sequences = new();
     public bool loop;
     public bool autoPlay = true;
@@ -41,14 +41,14 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     [HideInInspector] public float staticValue;
     public bool isDone;
     public void CacheHash() {
-      propHash = Shader.PropertyToID(prop);
+      propHash = string.IsNullOrWhiteSpace(prop) ? 0 : Shader.PropertyToID(prop);
     }
   }
 
   [System.Serializable]
   public class ColorAnimation {
     public string prop;
-    public int propHash;
+    [HideInInspector] public int propHash;
     public List<Sequence<Color>> sequences = new();
     public bool loop;
     public bool autoPlay = true;
@@ -59,14 +59,14 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     [HideInInspector] public Color staticValue;
     public bool isDone;
     public void CacheHash() {
-      propHash = Shader.PropertyToID(prop);
+      propHash = string.IsNullOrWhiteSpace(prop) ? 0 : Shader.PropertyToID(prop);
     }
   }
 
   [System.Serializable]
   public class VectorAnimation {
     public string prop;
-    public int propHash;
+    [HideInInspector] public int propHash;
     public List<Sequence<Vector4>> sequences = new();
     public bool loop;
     public bool autoPlay = true;
@@ -77,18 +77,18 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     [HideInInspector] public Vector4 staticValue;
     public bool isDone;
     public void CacheHash() {
-      propHash = Shader.PropertyToID(prop);
+      propHash = string.IsNullOrWhiteSpace(prop) ? 0 : Shader.PropertyToID(prop);
     }
   }
 
   [System.Serializable]
   public class TextureAssignment {
     public string prop;
-    public int propHash;
+    [HideInInspector] public int propHash;
     public Sprite texture;
     public bool isAssigned = false;
     public void CacheHash() {
-      propHash = Shader.PropertyToID(prop);
+      propHash = string.IsNullOrWhiteSpace(prop) ? 0 : Shader.PropertyToID(prop);
     }
   }
 
@@ -107,6 +107,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   private bool changed;
   private float deltaTime;
   private bool _hasStarted;
+  private bool _missingRendererLogged;
 
   public List<FloatAnimation> activeFloatAnimations = new();
   public List<ColorAnimation> activeColorAnimations = new();
@@ -127,9 +128,9 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void Awake() {
-    _renderer = GetComponent<Renderer>();
     _propBlock = new MaterialPropertyBlock();
-    _material = Application.isPlaying ? _renderer.material : _renderer.sharedMaterial;
+    TryResolveRenderer();
+    TryResolveMaterial();
     ResetActive();
     CacheAllHashes();
     BuildDictionaries();
@@ -234,8 +235,10 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void Update() {
-    if (_renderer == null) _renderer = GetComponent<Renderer>();
-    if (_renderer == null) return;
+    if (!TryResolveRenderer()) {
+      SetUpdateActiveState();
+      return;
+    }
     if (!HasPotentialActiveAnimations()) {
       SetUpdateActiveState();
       return;
@@ -249,7 +252,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
 
     for (int i = activeFloatAnimations.Count - 1; i >= 0; i--) {
       var anim = activeFloatAnimations[i];
-      if (anim == null || anim.sequences == null || anim.sequences.Count == 0) {
+      if (anim == null || anim.sequences == null || anim.sequences.Count == 0 || anim.propHash == 0) {
         activeFloatAnimations.RemoveAt(i);
         continue;
       }
@@ -266,7 +269,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
 
     for (int i = activeColorAnimations.Count - 1; i >= 0; i--) {
       var anim = activeColorAnimations[i];
-      if (anim == null || anim.sequences == null || anim.sequences.Count == 0) {
+      if (anim == null || anim.sequences == null || anim.sequences.Count == 0 || anim.propHash == 0) {
         activeColorAnimations.RemoveAt(i);
         continue;
       }
@@ -283,7 +286,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
 
     for (int i = activeVectorAnimations.Count - 1; i >= 0; i--) {
       var anim = activeVectorAnimations[i];
-      if (anim == null || anim.sequences == null || anim.sequences.Count == 0) {
+      if (anim == null || anim.sequences == null || anim.sequences.Count == 0 || anim.propHash == 0) {
         activeVectorAnimations.RemoveAt(i);
         continue;
       }
@@ -313,7 +316,33 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   void SetUpdateActiveState() {
-    enabled = HasPotentialActiveAnimations();
+    enabled = HasPotentialActiveAnimations() && HasLocalRenderer();
+  }
+
+  bool HasLocalRenderer() {
+    return TryResolveRenderer();
+  }
+
+  bool HasComponentPropagator() {
+    return TryGetComponent<ComponentPropagator>(out _);
+  }
+
+  bool TryResolveRenderer() {
+    if (_renderer != null) return true;
+    _renderer = GetComponent<Renderer>();
+    if (_renderer != null) return true;
+    if (HasComponentPropagator()) return false;
+    if (_missingRendererLogged) return false;
+    _missingRendererLogged = true;
+    Debug.LogWarning($"[AllIn1AnimatorInspector] Missing Renderer on '{name}'. Local material application is disabled until a Renderer is added.", this);
+    return false;
+  }
+
+  bool TryResolveMaterial() {
+    if (_material != null) return true;
+    if (!TryResolveRenderer()) return false;
+    _material = Application.isPlaying ? _renderer.material : _renderer.sharedMaterial;
+    return _material != null;
   }
 
   static bool TryGetStaticFloatValue(FloatAnimation anim, out float value) {
@@ -486,10 +515,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void ToggleKeywords() {
-    if (_material == null) {
-      _renderer = GetComponent<Renderer>();
-      _material = Application.isPlaying ? _renderer.material : _renderer.sharedMaterial;
-    }
+    if (!TryResolveMaterial()) return;
     foreach (var kw in keywordToggles) {
       if (string.IsNullOrEmpty(kw.keyword)) continue;
       if (kw.enabled) _material.EnableKeyword(kw.keyword);
@@ -500,12 +526,12 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   [ForceUpdate]
   public void ApplyAllProperties(bool force) {
     if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
-    if (_renderer == null) _renderer = GetComponent<Renderer>();
+    if (!TryResolveRenderer()) return;
     _renderer.GetPropertyBlock(_propBlock);
     ToggleKeywords();
-    foreach (var anim in floatAnimations) if (anim.sequences.Count > 0) _propBlock.SetFloat(anim.propHash, anim.sequences[0].from);
-    foreach (var anim in colorAnimations) if (anim.sequences.Count > 0) _propBlock.SetColor(anim.propHash, anim.sequences[0].from);
-    foreach (var anim in vectorAnimations) if (anim.sequences.Count > 0) _propBlock.SetVector(anim.propHash, anim.sequences[0].from);
+    foreach (var anim in floatAnimations) if (anim.sequences.Count > 0 && anim.propHash != 0) _propBlock.SetFloat(anim.propHash, anim.sequences[0].from);
+    foreach (var anim in colorAnimations) if (anim.sequences.Count > 0 && anim.propHash != 0) _propBlock.SetColor(anim.propHash, anim.sequences[0].from);
+    foreach (var anim in vectorAnimations) if (anim.sequences.Count > 0 && anim.propHash != 0) _propBlock.SetVector(anim.propHash, anim.sequences[0].from);
     foreach (var assign in textureAssignments) {
       if ((!assign.isAssigned || force) && !string.IsNullOrEmpty(assign.prop) && assign.texture != null) {
         _propBlock.SetTexture(assign.propHash, assign.texture.texture);
@@ -597,10 +623,17 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void AddTextureAssignment(string prop, Sprite texture) {
+    textureAssignments.RemoveAll(a => a.prop == prop);
     var assign = new TextureAssignment { prop = prop, texture = texture };
     assign.CacheHash();
+    if (assign.propHash == 0 || assign.texture == null) return;
+    textureAssignments.Add(assign);
+    if (!TryResolveRenderer()) return;
+    if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
+    _renderer.GetPropertyBlock(_propBlock);
     _propBlock.SetTexture(assign.propHash, assign.texture.texture);
-    textureAssignments.RemoveAll(a => a.prop == prop);
+    _renderer.SetPropertyBlock(_propBlock);
+    assign.isAssigned = true;
   }
 
   public void RemoveFloat(string prop) {

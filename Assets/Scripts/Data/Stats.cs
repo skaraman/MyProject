@@ -4,7 +4,7 @@ public static class FormStatIncreases {
   public static Dictionary<string, Dictionary<string, Dictionary<string, float>>> increases { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, float>>> {
     ["Base"] = new Dictionary<string, Dictionary<string, float>> {
       ["STR"] = new Dictionary<string, float> { ["HP"] = 1000, ["DMG"] = 1, ["DCHC"] = 0.1f },
-      ["DEX"] = new Dictionary<string, float> { ["AS"] = 0.01f, ["NRGRG"] = 0.01f, ["CDMG"] = 1 },
+      ["DEX"] = new Dictionary<string, float> { ["AKSP"] = 0.01f, ["NRGRG"] = 0.01f, ["CDMG"] = 1 },
       ["END"] = new Dictionary<string, float> { ["NRG"] = 10, ["HPRG"] = 0.01f, ["ARM"] = 1 },
       ["INT"] = new Dictionary<string, float> { ["HEAL"] = 1, ["CCHC"] = 0.1f, ["LDMG"] = 1 },
       ["LCK"] = new Dictionary<string, float> { ["LCHC"] = 0.1f, ["DDMG"] = 1, ["BONUS"] = 1 }
@@ -203,13 +203,13 @@ public static class FormStatsValues {
 
 public static class AllStatValues {
   public static Dictionary<string, float> Esperanza { set; get; } = new Dictionary<string, float> {
-    { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "AS", 0 }, { "NRGRG", 0 }, { "CDMG", 0 }, { "NRG", 0 }, { "HPRG", 0 }, { "ARM", 0 }, { "HEAL", 0 },
+    { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "NRGRG", 0 }, { "CDMG", 0 }, { "NRG", 0 }, { "HPRG", 0 }, { "ARM", 0 }, { "HEAL", 0 },
     { "CCHC", 0 }, { "LDMG", 0 }, { "LCHC", 0 }, { "DDMG", 0 }, { "BONUS", 0 }, { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "LDSC", 0 }, { "FDMG", 0 },
     { "AREA", 0 }, { "DUR", 0 }, { "AFT", 0 }, { "EVD", 0 }, { "CLN", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
   };
 
   public static Dictionary<string, float> Imp { set; get; } = new Dictionary<string, float> {
-    { "DMG", 1 }, { "HP", 10 }, { "AS", 1 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 1 }, { "AKSP", 1 }, { "CDST", 1 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
+    { "DMG", 1 }, { "HP", 10 }, { "AKSP", 1 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 1 }, { "CDST", 1 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
   };
 
   public static Dictionary<string, Dictionary<string, float>> Enemies { get; } = new Dictionary<string, Dictionary<string, float>> {

@@ -119,7 +119,7 @@ public class PauseMenuInput : MonoBehaviour {
 
   CharacterState ResolveCharacterState() {
     if (characterState == null) {
-      characterState = FindAnyObjectByType<CharacterState>();
+      characterState = SingleSceneManager.ResolveGameplayCharacterState();
     }
     return characterState;
   }

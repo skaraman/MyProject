@@ -41,7 +41,7 @@ public class GameplayFormWheelController : MonoBehaviour {
 
   void EnsureResolved() {
     formButtons ??= GetComponent<FormButtons>();
-    characterState ??= FindAnyObjectByType<CharacterState>();
+    characterState ??= SingleSceneManager.ResolveGameplayCharacterState();
   }
 
   void SyncButtons(string source) {

@@ -67,7 +67,25 @@
         "**/Assets/Addressables_Temp/**": true,
         "**/Assets/Generated/**": true,
         "**/Assets/_Recovery/**": true,
-        "**/UserSettings/**": true
+        "**/UserSettings/**": true,
+        "**/*.meta": true,
+        "**/*.png": true,
+        "**/*.jpg": true,
+        "**/*.jpeg": true,
+        "**/*.bundle": true,
+        "**/*.dll": true,
+        "**/*.pdb": true,
+        "**/*.asset": true,
+        "**/*.prefab": true,
+        "**/*.unity": true,
+        "**/*.mat": true,
+        "**/*.anim": true,
+        "**/*.controller": true,
+        "**/*.shadergraph": true,
+        "**/*.apiupaterconfigs": true,
+        "**/*.wav": true,
+        "**/*.mp3": true,
+        "**/*.ogg": true
     },
     "search.exclude": {
         "**/.git": true,
@@ -100,7 +118,9 @@
     },
     "explorer.fileNesting.enabled": true,
     "explorer.fileNesting.patterns": {
-        "*.sln": "*.csproj"
+        "*.sln": "*.csproj",
+        "*.slnx": "*.csproj,*.slnf",
+        "*.slnf": "*.csproj"
     },
     "cSpell.words": [
         "AKSP",
@@ -138,6 +158,12 @@
         "Zemi"
     ],
     "dotnet.defaultSolution": "MyProject.slnx",
+    "dotnet.solution.autoOpen": "MyProject.Code.slnf",
+    "dotnet.automaticallyCreateSolutionInWorkspace": false,
+    "dotnet.preferVisualStudioCodeFileSystemWatcher": true,
+    "dotnet.testWindow.disableAutoDiscovery": true,
+    "dotnet.testWindow.disableBuildOnRefresh": true,
+    "dotnet.testWindow.disableBuildOnRun": true,
     "chatgpt.openOnStartup": false,
     "git.ignoreLimitWarning": true,
     "git.decorations.enabled": false,

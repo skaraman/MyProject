@@ -77,7 +77,7 @@ public class PauseMenuFormProgressView : MonoBehaviour {
       themedSprites = GetComponentsInChildren<SpriteWithNormals>(includeInactive: true);
     }
     if (force || characterState == null) {
-      characterState = FindAnyObjectByType<CharacterState>();
+      characterState = SingleSceneManager.ResolveGameplayCharacterState();
     }
   }
 
