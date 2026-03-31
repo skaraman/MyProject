@@ -799,6 +799,37 @@ public class AnimationController {
     }
   }
 
+  public void PrimeAnimationStarts(IReadOnlyList<string> animationKeys, int framesPerAnimation = 1, int maxAnimations = 0) {
+    if (!Application.isPlaying) return;
+    if (animationData == null || animationData.Count == 0 || spriteTargets.Count == 0) return;
+    if (animationKeys == null || animationKeys.Count <= 0) {
+      PrimeAllAnimationStarts(framesPerAnimation, maxAnimations);
+      return;
+    }
+
+    var warmFrames = Math.Max(framesPerAnimation, 1);
+    var primed = 0;
+    for (var i = 0; i < animationKeys.Count; i++) {
+      if (maxAnimations > 0 && primed >= maxAnimations) {
+        break;
+      }
+
+      if (!TryGetAnimationKey(animationKeys[i], out var animationName)) {
+        continue;
+      }
+
+      if (!animationData.TryGetValue(animationName, out var anim) || anim == null) {
+        continue;
+      }
+
+      var categoryName = ResolveAnimationCategory(animationName, anim);
+      var startFrame = Math.Max(anim.start, 1);
+      var endFrame = Math.Max(startFrame, startFrame + warmFrames - 1);
+      PrimeTargetsForAnimation(categoryName, startFrame, endFrame);
+      primed++;
+    }
+  }
+
   public int WarmAllAnimationPlayback(
     int passCount = 1,
     int maxAnimations = 12,

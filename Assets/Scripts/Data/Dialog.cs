@@ -38,6 +38,7 @@ public class DialogSpeakerDefinition {
           !string.IsNullOrWhiteSpace(this.portraitLibraryName)) {
         lines[i].portraitLibraryName = this.portraitLibraryName;
       }
+      lines[i].trigger = NormalizeToken(lines[i].trigger);
       this.lines.Add(lines[i]);
     }
   }
@@ -118,13 +119,34 @@ public static class DialogData {
       return false;
     }
 
+    if (ActiveContentRegistryRuntime.TryGetDialog(normalizedLocationId, out var externalDialog) && externalDialog != null) {
+      locationDialog = externalDialog;
+      return true;
+    }
+
     return locations.TryGetValue(normalizedLocationId, out locationDialog) && locationDialog != null;
+  }
+
+  public static bool TryGetBuiltInLocation(string locationId, out LocationDialogDefinition locationDialog) {
+    locationDialog = null;
+    var normalizedLocationId = NormalizeToken(locationId);
+    if (string.IsNullOrWhiteSpace(normalizedLocationId)) {
+      return false;
+    }
+
+    if (!locations.TryGetValue(normalizedLocationId, out var found) || found == null) {
+      return false;
+    }
+
+    locationDialog = ActiveContentRegistry.CloneDialog(found) ?? found;
+    return locationDialog != null;
   }
 
   static GameplayDialogController.GameplayDialogNode CreateNode(
     int lineNumber,
     string text,
     string emotion = "Normal",
+    string trigger = "",
     string speakerName = "",
     string avatarForm = "",
     GameplayDialogController.DialogOtherType otherType = GameplayDialogController.DialogOtherType.Auto,
@@ -134,6 +156,7 @@ public static class DialogData {
       lineNumber = Mathf.Max(lineNumber, 0),
       text = text ?? "",
       emotion = string.IsNullOrWhiteSpace(emotion) ? "Normal" : emotion.Trim(),
+      trigger = string.IsNullOrWhiteSpace(trigger) ? "" : trigger.Trim(),
       speakerName = speakerName ?? "",
       avatarForm = avatarForm ?? "",
       otherType = otherType,

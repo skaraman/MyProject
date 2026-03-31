@@ -1,11 +1,8 @@
+using System.Collections;
 using System.Collections.Generic;
-using CustomInspector;
 using UnityEngine;
 
 public class ProjectileManager : MonoBehaviour {
-  [Header("Prefabs")]
-  public SerializableSortedDictionary<string, GameObject> projectilePrefabs = new();
-
   [Header("Pooling")]
   public Transform poolContainer;
   public int defaultPoolSize = 10;
@@ -15,11 +12,16 @@ public class ProjectileManager : MonoBehaviour {
   [Header("Homing")]
   public Transform enemyRoot;
 
+  [Header("Debug")]
+  public bool pauseEditorAfterFirstProjectileSpawnFrame;
+
   private readonly Dictionary<string, Pool> pools = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
+  private bool hasQueuedEditorPauseAfterFirstProjectileSpawn;
 
   void Awake() {
     poolContainer = transform;
+    hasQueuedEditorPauseAfterFirstProjectileSpawn = false;
     BuildEffectAnimations();
     if (prewarmPools) {
       PrewarmPools();
@@ -27,10 +29,10 @@ public class ProjectileManager : MonoBehaviour {
   }
 
   private void PrewarmPools() {
-    if (projectilePrefabs == null || projectilePrefabs.Count == 0) return;
-    foreach (var (key, prefab) in projectilePrefabs) {
-      if (string.IsNullOrEmpty(key) || prefab == null) continue;
-      CreatePool(key, prefab);
+    foreach (var entry in Projectiles.EnumerateAll()) {
+      var key = NormalizeProjectileKey(entry.Key);
+      if (string.IsNullOrWhiteSpace(key) || entry.Value == null) continue;
+      TryGetPool(key, out _);
     }
   }
 
@@ -90,21 +92,47 @@ public class ProjectileManager : MonoBehaviour {
 
       var key = NormalizeProjectileKey(projectileKeys[i]);
       if (string.IsNullOrWhiteSpace(key)) continue;
-      if (!projectilePrefabs.TryGetValue(key, out var prefab) || prefab == null) continue;
+      if (!TryGetProjectilePrefab(key, out var prefab)) continue;
       CollectProjectileStartupAddresses(prefab, key, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
     }
 
     return Mathf.Max(outAddresses.Count - beforeCount, 0);
   }
 
+  public int CollectPersistentStartupAssetAddresses(
+    IReadOnlyList<string> projectileKeys,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (projectileKeys == null || projectileKeys.Count <= 0 || outAddresses == null || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    var beforeCount = outAddresses.Count;
+    for (var i = 0; i < projectileKeys.Count; i++) {
+      if (outAddresses.Count >= maxUniqueAddresses) {
+        break;
+      }
+
+      var key = NormalizeProjectileKey(projectileKeys[i]);
+      if (string.IsNullOrWhiteSpace(key)) continue;
+      TryAddAssetAddress(key, outAddresses, seenAddresses, maxUniqueAddresses);
+    }
+
+    return Mathf.Max(outAddresses.Count - beforeCount, 0);
+  }
+
   public GameObject SpawnProjectile(string key, Vector3 position, Vector3 direction, Transform target = null, float? speedOverride = null) {
-    if (string.IsNullOrEmpty(key)) {
+    key = NormalizeProjectileKey(key);
+    if (string.IsNullOrWhiteSpace(key)) {
       Debug.LogWarning("[ProjectileManager] SpawnProjectile called with null or empty key.");
       return null;
     }
     if (!TryGetPool(key, out var pool)) return null;
 
-    var obj = pool.Spawn(position, Quaternion.identity);
+    var spawnPosition = ResolveSpawnPosition(key, position, direction);
+    var obj = pool.Spawn(spawnPosition, Quaternion.identity);
     if (obj == null) {
       Debug.LogError($"[ProjectileManager] Failed to spawn projectile from pool '{key}'.");
       return null;
@@ -118,6 +146,8 @@ public class ProjectileManager : MonoBehaviour {
     else {
       Debug.LogWarning($"[ProjectileManager] Spawned prefab '{key}' without Projectile component.");
     }
+
+    TryQueueEditorPauseAfterFirstProjectileSpawn(key, spawnPosition, direction);
     return obj;
   }
 
@@ -143,10 +173,15 @@ public class ProjectileManager : MonoBehaviour {
   }
 
   private bool TryGetPool(string key, out Pool pool) {
+    key = NormalizeProjectileKey(key);
+    if (string.IsNullOrWhiteSpace(key)) {
+      pool = null;
+      return false;
+    }
+
     if (pools.TryGetValue(key, out pool)) return true;
 
-    if (projectilePrefabs == null || !projectilePrefabs.TryGetValue(key, out var prefab) || prefab == null) {
-      Debug.LogWarning($"[ProjectileManager] No prefab registered for key '{key}'.");
+    if (!TryGetProjectilePrefab(key, out var prefab)) {
       return false;
     }
 
@@ -175,10 +210,97 @@ public class ProjectileManager : MonoBehaviour {
 
   private void OnDestroy() {
     ClearAllPools();
+    Projectiles.ReleaseDirectLoads();
+  }
+
+  static bool ShouldLogSpawnOffsetDebug() {
+    return Application.isEditor || Debug.isDebugBuild;
   }
 
   static string NormalizeProjectileKey(string key) {
     return string.IsNullOrWhiteSpace(key) ? "" : key.Trim();
+  }
+
+  static bool TryGetProjectilePrefab(string key, out GameObject prefab) {
+    prefab = null;
+    if (Projectiles.TryGetPrefab(key, out prefab) && prefab != null) {
+      return true;
+    }
+
+    Debug.LogWarning("[ProjectileManager] No prefab available for key '" + key + "'.");
+    return false;
+  }
+
+  static Vector3 ResolveSpawnPosition(string key, Vector3 basePosition, Vector3 direction) {
+    if (!Projectiles.TryGet(key, out var data) || data == null) {
+      return basePosition;
+    }
+
+    var offset = ResolveSpawnOffset(data, direction);
+    if (offset.sqrMagnitude <= 0.0001f) {
+      return basePosition;
+    }
+
+    var resolvedPosition = basePosition + offset;
+    if (ShouldLogSpawnOffsetDebug()) {
+      Debug.Log(
+        "[ProjectileManager] AppliedSpawnOffset" +
+        " key='" + key + "'" +
+        " base=" + basePosition +
+        " offset=" + offset +
+        " direction=" + direction +
+        " resolved=" + resolvedPosition
+      );
+    }
+    return resolvedPosition;
+  }
+
+  static Vector3 ResolveSpawnOffset(ProjectileData data, Vector3 direction) {
+    if (data == null) {
+      return Vector3.zero;
+    }
+
+    var xSign = direction.x < 0f ? -1f : 1f;
+    return new Vector3(data.spawnOffsetX * xSign, data.spawnOffsetY, 0f);
+  }
+
+  static void TryAddAssetAddress(
+    string key,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses
+  ) {
+    if (outAddresses == null || maxUniqueAddresses <= 0 || outAddresses.Count >= maxUniqueAddresses) {
+      return;
+    }
+
+    if (!Projectiles.TryGetPrefabAddress(key, out var address) || string.IsNullOrWhiteSpace(address)) {
+      return;
+    }
+
+    if (seenAddresses != null && !seenAddresses.Add(address)) {
+      return;
+    }
+
+    if (seenAddresses == null && ContainsAddress(outAddresses, address)) {
+      return;
+    }
+
+    outAddresses.Add(address);
+  }
+
+  static bool ContainsAddress(List<string> addresses, string address) {
+    if (addresses == null || string.IsNullOrWhiteSpace(address)) {
+      return false;
+    }
+
+    for (var i = 0; i < addresses.Count; i++) {
+      if (string.Equals(addresses[i], address, System.StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static void CollectProjectileStartupAddresses(
@@ -231,4 +353,40 @@ public class ProjectileManager : MonoBehaviour {
     }
     return closest;
   }
+
+  void TryQueueEditorPauseAfterFirstProjectileSpawn(string key, Vector3 spawnPosition, Vector3 direction) {
+#if UNITY_EDITOR
+    if (!pauseEditorAfterFirstProjectileSpawnFrame || hasQueuedEditorPauseAfterFirstProjectileSpawn || !Application.isPlaying) {
+      return;
+    }
+
+    hasQueuedEditorPauseAfterFirstProjectileSpawn = true;
+    Debug.Log(
+      "[ProjectileManager] QueuePauseAfterFirstProjectileSpawnFrame" +
+      " key='" + key + "'" +
+      " frame=" + Time.frameCount +
+      " spawn=" + spawnPosition +
+      " direction=" + direction
+    );
+    StartCoroutine(PauseEditorAfterFirstProjectileSpawnFrameRoutine(key, spawnPosition, direction));
+#endif
+  }
+
+#if UNITY_EDITOR
+  IEnumerator PauseEditorAfterFirstProjectileSpawnFrameRoutine(string key, Vector3 spawnPosition, Vector3 direction) {
+    yield return new WaitForEndOfFrame();
+    if (!pauseEditorAfterFirstProjectileSpawnFrame) {
+      yield break;
+    }
+
+    Debug.Log(
+      "[ProjectileManager] PauseAfterFirstProjectileSpawnFrame" +
+      " key='" + key + "'" +
+      " frame=" + Time.frameCount +
+      " spawn=" + spawnPosition +
+      " direction=" + direction
+    );
+    Debug.Break();
+  }
+#endif
 }

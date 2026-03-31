@@ -18,7 +18,8 @@ public static class SpriteStreamingConfig {
 }
 
 public static class GeneratedAtlasBuildSurrogateUtility {
-  static readonly string[] MetadataExcludedFolderNames = Array.Empty<string>();
+  const string ContentStageRootFolder = "Assets/ContentStage";
+  static readonly string[] MetadataExcludedFolderNames = { "Fonts" };
   static readonly HashSet<string> MetadataExcludedFolderNameSet = new(MetadataExcludedFolderNames, StringComparer.OrdinalIgnoreCase);
 
   public static string MetadataExcludedFolderSummary => string.Join(", ", MetadataExcludedFolderNames);
@@ -58,6 +59,21 @@ public static class GeneratedAtlasBuildSurrogateUtility {
     if (string.IsNullOrWhiteSpace(normalizedAssetPath) || string.IsNullOrWhiteSpace(normalizedRoot)) return false;
     return string.Equals(normalizedAssetPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
            normalizedAssetPath.StartsWith(normalizedRoot + "/", StringComparison.OrdinalIgnoreCase);
+  }
+
+  public static bool IsContentStagePath(string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    var normalizedRoot = NormalizePath(ContentStageRootFolder);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath) || string.IsNullOrWhiteSpace(normalizedRoot)) return false;
+    return string.Equals(normalizedAssetPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+           normalizedAssetPath.StartsWith(normalizedRoot + "/", StringComparison.OrdinalIgnoreCase);
+  }
+
+  public static bool ShouldImportGroupedAtlasAsSingleSprite(string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
+    if (IsBuildSurrogatePath(normalizedAssetPath)) return true;
+    return IsGroupedGearAtlasPath(normalizedAssetPath) && IsContentStagePath(normalizedAssetPath);
   }
 
   public static bool TryBuildSurrogatePath(string sourceAtlasAssetPath, out string surrogateAtlasAssetPath) {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +11,8 @@ using UnityEditor;
 public class GearController : MonoBehaviour {
   const int MinimumPlayerWarmFramesAtStartup = 8;
   const int MinimumCoreEffectWarmFramesAtStartup = 24;
-  static readonly string[] CoreCombatEffectWarmKeys = { "Blast", "BlastBall" };
+  static readonly string[] CoreCombatWarmAnimationKeys = { "Blast" };
+
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
   [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)] public bool _bool;
@@ -50,6 +51,10 @@ public class GearController : MonoBehaviour {
   private readonly HashSet<string> equipWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> coreEffectWarmupAddressScratch = new();
   private readonly HashSet<string> coreEffectWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> linkedEffectWarmKeyScratch = new();
+  private readonly HashSet<string> linkedEffectWarmKeySeenScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> linkedProjectileWarmKeyScratch = new();
+  private readonly HashSet<string> linkedProjectileWarmKeySeenScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly Dictionary<string, string> equipPartPrefixScratch = new(StringComparer.OrdinalIgnoreCase);
   private Dictionary<string, string> pendingEquipWarmupPartPrefixes;
   private Coroutine equipWarmupRoutine;
@@ -201,9 +206,7 @@ public class GearController : MonoBehaviour {
     // Keep first action inputs smooth by warming a wider startup frame window.
     var warmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
     animationController?.PrimeAllAnimationStarts(warmFrames);
-    if (effectControllerInitialized) {
-      effectAnimationController?.PrimeAllAnimationStarts(1);
-    }
+    PrimeLinkedEffectAnimationWarmup(Animations.Esperanza, "controller_startup");
   }
 
   static void CollectLibraries(GameObject[] objects, HashSet<string> libraries) {
@@ -244,11 +247,11 @@ public class GearController : MonoBehaviour {
 
   public int CollectPersistentEffectStartupAddresses(
     List<string> outAddresses,
-    IReadOnlyList<string> effectKeys,
+    IReadOnlyList<string> animationKeys,
     HashSet<string> seenAddresses = null,
     int maxUniqueAddresses = int.MaxValue
   ) {
-    if (outAddresses == null || effectKeys == null || effectKeys.Count <= 0 || maxUniqueAddresses <= 0) {
+    if (outAddresses == null || animationKeys == null || animationKeys.Count <= 0 || maxUniqueAddresses <= 0) {
       return 0;
     }
 
@@ -258,19 +261,82 @@ public class GearController : MonoBehaviour {
 
     var startingCount = outAddresses.Count;
     var warmFrames = ResolveCoreEffectWarmFramesAtStartup();
-    CollectPersistentEffectStartupAddresses(Effects.Esperanza, effectKeys, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
-    CollectPersistentEffectStartupAddresses(Effects.Things, effectKeys, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
-    CollectPersistentEffectStartupAddresses(Effects.Imp, effectKeys, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
-    if (projectileManager != null && outAddresses.Count < maxUniqueAddresses) {
-      projectileManager.EnsurePoolsReady(effectKeys);
+    linkedEffectWarmKeyScratch.Clear();
+    linkedEffectWarmKeySeenScratch.Clear();
+    AnimationLinkUtility.CollectLinkedEffectKeys(
+      Animations.Esperanza,
+      animationKeys,
+      linkedEffectWarmKeyScratch,
+      linkedEffectWarmKeySeenScratch
+    );
+    CollectPersistentEffectStartupAddresses(Effects.Esperanza, linkedEffectWarmKeyScratch, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Things, linkedEffectWarmKeyScratch, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Imp, linkedEffectWarmKeyScratch, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    linkedProjectileWarmKeyScratch.Clear();
+    linkedProjectileWarmKeySeenScratch.Clear();
+    AnimationLinkUtility.CollectLinkedProjectileKeys(
+      Animations.Esperanza,
+      animationKeys,
+      linkedProjectileWarmKeyScratch,
+      linkedProjectileWarmKeySeenScratch
+    );
+    if (projectileManager != null &&
+        linkedProjectileWarmKeyScratch.Count > 0 &&
+        outAddresses.Count < maxUniqueAddresses) {
+      projectileManager.EnsurePoolsReady(linkedProjectileWarmKeyScratch);
       projectileManager.CollectPersistentStartupAddresses(
-        effectKeys,
+        linkedProjectileWarmKeyScratch,
         outAddresses,
         seenAddresses,
         maxUniqueAddresses,
         warmFrames
       );
     }
+    linkedEffectWarmKeyScratch.Clear();
+    linkedEffectWarmKeySeenScratch.Clear();
+    linkedProjectileWarmKeyScratch.Clear();
+    linkedProjectileWarmKeySeenScratch.Clear();
+    return Mathf.Max(outAddresses.Count - startingCount, 0);
+  }
+
+  public int CollectPersistentProjectileStartupAssetAddresses(
+    List<string> outAddresses,
+    IReadOnlyList<string> animationKeys,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null || animationKeys == null || animationKeys.Count <= 0 || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    if (!runtimeInitialized) {
+      return 0;
+    }
+
+    ResolveProjectileManagerReference("startup_asset_collection");
+    if (projectileManager == null) {
+      return 0;
+    }
+
+    var startingCount = outAddresses.Count;
+    linkedProjectileWarmKeyScratch.Clear();
+    linkedProjectileWarmKeySeenScratch.Clear();
+    AnimationLinkUtility.CollectLinkedProjectileKeys(
+      Animations.Esperanza,
+      animationKeys,
+      linkedProjectileWarmKeyScratch,
+      linkedProjectileWarmKeySeenScratch
+    );
+    if (linkedProjectileWarmKeyScratch.Count > 0) {
+      projectileManager.CollectPersistentStartupAssetAddresses(
+        linkedProjectileWarmKeyScratch,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses
+      );
+    }
+    linkedProjectileWarmKeyScratch.Clear();
+    linkedProjectileWarmKeySeenScratch.Clear();
     return Mathf.Max(outAddresses.Count - startingCount, 0);
   }
 
@@ -438,7 +504,7 @@ public class GearController : MonoBehaviour {
     var maxAddresses = Mathf.Max(SpriteStreamingRuntimeSettings.PinBudgetEffectAddresses, 1);
     var collectedCount = CollectPersistentEffectStartupAddresses(
       coreEffectWarmupAddressScratch,
-      CoreCombatEffectWarmKeys,
+      CoreCombatWarmAnimationKeys,
       coreEffectWarmupSeenAddressScratch,
       maxAddresses
     );
@@ -475,7 +541,7 @@ public class GearController : MonoBehaviour {
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " object=" + gameObject.name +
         " addresses=" + coreEffectWarmupAddressScratch.Count +
-        " keys=" + CoreCombatEffectWarmKeys.Length +
+        " animations=" + CoreCombatWarmAnimationKeys.Length +
         " owner=" + coreEffectWarmOwnerId
       );
     }
@@ -728,9 +794,7 @@ public class GearController : MonoBehaviour {
     if (!SpriteStreamingLoadingState.IsLoadingOverlayActive) return;
     var warmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
     animationController?.PrimeAllAnimationStarts(warmFrames);
-    if (effectControllerInitialized) {
-      effectAnimationController?.PrimeAllAnimationStarts(1);
-    }
+    PrimeLinkedEffectAnimationWarmup(Animations.Esperanza, "equip_loading");
   }
 
   IEnumerator CollectSkinWarmupAddresses(bool overlayWarmGateActive) {
@@ -946,11 +1010,48 @@ public class GearController : MonoBehaviour {
     if (projectileManager == null || !ShouldLogRuntimeInitDebug()) return;
     Debug.Log(
       "[GearController] ResolvedProjectileManager" +
-      " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+      " source=" + NormalizeDebugValue(source) +
       " object=" + gameObject.name +
       " manager='" + projectileManager.gameObject.name + "'" +
       " path='" + GetTransformPath(projectileManager.transform) + "'"
     );
+  }
+
+  void PrimeLinkedEffectAnimationWarmup(Dictionary<string, AnimData> animationManifest, string source) {
+    if (!Application.isPlaying || !effectControllerInitialized || animationManifest == null || animationManifest.Count <= 0) {
+      return;
+    }
+
+    linkedEffectWarmKeyScratch.Clear();
+    linkedEffectWarmKeySeenScratch.Clear();
+    AnimationLinkUtility.CollectLinkedEffectKeys(
+      animationManifest,
+      null,
+      linkedEffectWarmKeyScratch,
+      linkedEffectWarmKeySeenScratch
+    );
+    if (linkedEffectWarmKeyScratch.Count > 0) {
+      effectAnimationController.PrimeAnimationStarts(linkedEffectWarmKeyScratch, 1);
+    }
+
+    if (linkedEffectWarmKeyScratch.Count <= 0 || !ShouldLogRuntimeInitDebug()) {
+      linkedEffectWarmKeyScratch.Clear();
+      linkedEffectWarmKeySeenScratch.Clear();
+      return;
+    }
+
+    Debug.Log(
+      "[GearController] PrimedLinkedEffects" +
+      " source=" + NormalizeDebugValue(source) +
+      " object=" + gameObject.name +
+      " count=" + linkedEffectWarmKeyScratch.Count
+    );
+    linkedEffectWarmKeyScratch.Clear();
+    linkedEffectWarmKeySeenScratch.Clear();
+  }
+
+  static string NormalizeDebugValue(string value) {
+    return string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
   }
 
   static string GetTransformPath(Transform current) {

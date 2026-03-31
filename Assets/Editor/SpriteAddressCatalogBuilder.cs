@@ -57,6 +57,24 @@ public static class SpriteIndexBuilder {
 
   static readonly Dictionary<string, int> cachedSpriteSliceCountsByAssetPath = new(StringComparer.OrdinalIgnoreCase);
 
+  public static void ClearCachedSpriteSliceEstimates(string reason = "") {
+    var clearedCount = cachedSpriteSliceCountsByAssetPath.Count;
+    cachedSpriteSliceCountsByAssetPath.Clear();
+    if (clearedCount <= 0) return;
+
+    Debug.Log(
+      "[SpriteIndexBuilder] Cleared cached sprite slice estimates." +
+      " previous_entries=" + clearedCount +
+      (string.IsNullOrWhiteSpace(reason) ? "" : " reason='" + reason + "'")
+    );
+  }
+
+  public static void InvalidateCachedSpriteSliceEstimate(string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
+    cachedSpriteSliceCountsByAssetPath.Remove(normalizedAssetPath);
+  }
+
   readonly struct SpriteRef {
     public readonly string guid;
     public readonly long fileId;
@@ -176,6 +194,7 @@ public static class SpriteIndexBuilder {
     public int missingNormalAddressCount;
     public int skippedColorRowCount;
     public int skippedColorLibraryCount;
+    public readonly List<string> skippedColorLibrarySummaries = new();
     public int supplementedLocalIdAtlasCount;
     public int supplementedLocalIdCount;
     public int skippedHeavyLocalIdSupplementAtlasCount;
@@ -237,22 +256,32 @@ public static class SpriteIndexBuilder {
     public int entryCount;
   }
 
-  [MenuItem("Tools/Sprite Streaming/4) Rebuild Runtime Index")]
+  [MenuItem("Tools/Sprite Streaming/Build Active Content")]
+  public static void BuildActiveContentMenu() {
+    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
+  }
+
+  [MenuItem("Tools/Sprite Streaming/Build Active Content (Clean)")]
+  public static void BuildActiveContentCleanMenu() {
+    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
+  }
+
+  [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Runtime Index")]
   public static void RebuildRuntimeIndexMenu() {
     RebuildRuntimeIndex(logResult: true, failOnError: false);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Rebuild Index + Addressables")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Index + Addressables")]
   public static void RebuildRuntimeIndexAndBuildAddressablesMenu() {
     RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Rebuild Index + Addressables (Clean)")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Index + Addressables (Clean)")]
   public static void RebuildRuntimeIndexAndBuildAddressablesCleanMenu() {
     RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
   }
 
-  [MenuItem("Tools/Sprite Streaming/6) Configure Addressables Defaults")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Configure Addressables Defaults")]
   public static void ConfigureAddressablesDefaultsMenu() {
     var settings = AddressableAssetSettingsDefaultObject.GetSettings(true);
     if (settings == null) {
@@ -263,22 +292,34 @@ public static class SpriteIndexBuilder {
     ConfigureAddressablesBuilderDefaults(settings, logResult: true);
   }
 
-  [MenuItem("Tools/Sprite Streaming/7) Build Addressables Content")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Build Addressables Content")]
   public static void BuildAddressablesContentMenu() {
     BuildAddressablesContent(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Run Essential Pipeline (Steps 1-7)")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Run Full Prep Pipeline")]
   public static void RunEssentialPipelineSequentialMenu() {
-    const int stepCount = 7;
+    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
+  }
+
+  static bool RunFullBuildPipeline(bool logResult, bool cleanCachesBeforeBuild, bool useChunkedWarmup) {
+    var pipelineLabel = cleanCachesBeforeBuild ? "Build Active Content (Clean)" : "Build Active Content";
+    var stepCount = cleanCachesBeforeBuild ? 7 : 6;
     var startedAt = EditorApplication.timeSinceStartup;
     var aborted = false;
+    var stepIndex = 1;
 
-    Debug.Log("[SpriteIndexBuilder] [Essential Pipeline] Deferring intermediate asset refreshes until rebuild/build steps.");
+    if (logResult) {
+      Debug.Log(
+        "[SpriteIndexBuilder] [" + pipelineLabel + "] Deferring intermediate asset refreshes until rebuild/build steps."
+      );
+    }
 
     bool RunStep(int stepIndex, string stepName, Func<bool> action) {
-      var stepLabel = "[SpriteIndexBuilder] [Essential Pipeline] Step " + stepIndex + "/" + stepCount + " - " + stepName;
-      Debug.Log(stepLabel + " (start)");
+      var stepLabel = "[SpriteIndexBuilder] [" + pipelineLabel + "] Step " + stepIndex + "/" + stepCount + " - " + stepName;
+      if (logResult) {
+        Debug.Log(stepLabel + " (start)");
+      }
 
       try {
         EditorUtility.DisplayProgressBar("Sprite Streaming", stepName + "...", (float)(stepIndex - 1) / stepCount);
@@ -294,57 +335,65 @@ public static class SpriteIndexBuilder {
         return false;
       }
 
-      Debug.Log(stepLabel + " (done)");
+      if (logResult) {
+        Debug.Log(stepLabel + " (done)");
+      }
       return true;
     }
 
     try {
-      if (!RunStep(1, "Clean build caches", () => {
-        CleanAddressablesBuildCaches(logResult: true);
+      if (cleanCachesBeforeBuild) {
+        if (!RunStep(stepIndex++, "Clean build caches", () => {
+          CleanAddressablesBuildCaches(logResult: logResult);
+          return true;
+        })) return false;
+      }
+
+      if (!RunStep(stepIndex++, "Sync location profiles from prefabs", () => {
+        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: logResult, saveAndRefresh: false);
         return true;
-      })) return;
+      })) return false;
 
-      if (!RunStep(2, "Sync location profiles from prefabs", () => {
-        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: true, saveAndRefresh: false);
-        return true;
-      })) return;
+      if (!RunStep(stepIndex++, "Apply unified import flow", () => {
+        return SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: false, logResult: logResult);
+      })) return false;
 
-      if (!RunStep(3, "Apply unified import flow", () => {
-        return SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: false, logResult: true);
-      })) return;
+      if (!RunStep(stepIndex++, "Rebuild runtime index", () => {
+        return RebuildRuntimeIndex(logResult: logResult, failOnError: false);
+      })) return false;
 
-      if (!RunStep(4, "Rebuild runtime index", () => {
-        return RebuildRuntimeIndex(logResult: true, failOnError: false);
-      })) return;
-
-      if (!RunStep(5, "Apply gameplay + location hotset", () => {
+      if (!RunStep(stepIndex++, "Apply gameplay + location hotset", () => {
         return SpriteStreamingHotsetConfigurator.ApplyPerformanceHotset(
           rebuildRuntimeIndexFirst: false,
           saveAndRefreshAtEnd: false,
-          logResult: true
+          logResult: logResult
         );
-      })) return;
+      })) return false;
 
-      if (!RunStep(6, "Configure Addressables defaults", () => {
+      if (!RunStep(stepIndex++, "Configure Addressables defaults", () => {
         var settings = AddressableAssetSettingsDefaultObject.GetSettings(true);
         if (settings == null) {
-          Debug.LogError("[SpriteIndexBuilder] [Essential Pipeline] Addressables settings were not found.");
+          Debug.LogError("[SpriteIndexBuilder] [" + pipelineLabel + "] Addressables settings were not found.");
           return false;
         }
-        ConfigureAddressablesBuilderDefaults(settings, logResult: true);
+        ConfigureAddressablesBuilderDefaults(settings, logResult: logResult);
         return true;
-      })) return;
+      })) return false;
 
-      if (!RunStep(7, "Build Addressables content", () =>
-        BuildAddressablesContent(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true)
-      )) return;
+      if (!RunStep(stepIndex++, "Build Addressables content", () =>
+        BuildAddressablesContent(logResult: logResult, cleanCachesBeforeBuild: false, useChunkedWarmup: useChunkedWarmup)
+      )) return false;
     }
     finally {
       EditorUtility.ClearProgressBar();
-      var duration = (float)(EditorApplication.timeSinceStartup - startedAt);
-      var result = aborted ? "aborted" : "completed";
-      Debug.Log("[SpriteIndexBuilder] [Essential Pipeline] " + result + " in " + duration.ToString("0.00", CultureInfo.InvariantCulture) + "s.");
+      if (logResult) {
+        var duration = (float)(EditorApplication.timeSinceStartup - startedAt);
+        var result = aborted ? "aborted" : "completed";
+        Debug.Log("[SpriteIndexBuilder] [" + pipelineLabel + "] " + result + " in " + duration.ToString("0.00", CultureInfo.InvariantCulture) + "s.");
+      }
     }
+
+    return !aborted;
   }
 
   public static bool RebuildRuntimeIndexAndBuildAddressables(bool logResult, bool cleanCachesBeforeBuild = false, bool useChunkedWarmup = true) {
@@ -683,7 +732,7 @@ public static class SpriteIndexBuilder {
     EditorUtility.SetDirty(settings);
   }
 
-  [MenuItem("Tools/Sprite Streaming/1) Clean Build Caches")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Clean Build Caches")]
   public static void CleanAddressablesBuildCachesMenu() {
     CleanAddressablesBuildCaches(logResult: true);
   }
@@ -700,6 +749,12 @@ public static class SpriteIndexBuilder {
     if (addressableSettings == null) {
       Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Addressables settings were not found.");
       if (failOnError) throw new BuildFailedException("Addressables settings were not found.");
+      return false;
+    }
+
+    if (!ContentPackPipeline.PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult)) {
+      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Content pack staging failed.");
+      if (failOnError) throw new BuildFailedException("Content pack staging failed.");
       return false;
     }
 
@@ -781,6 +836,11 @@ public static class SpriteIndexBuilder {
 
       var shardRows = new List<ShardRow>(colorRows.Count);
       var skippedColorRowsForLibrary = 0;
+      var failedResolveCount = 0;
+      var failedValidateCount = 0;
+      string sampleResolveContext = "";
+      string sampleValidateFailure = "";
+      string sampleValidateContext = "";
       foreach (var pair in colorRows) {
         var separator = pair.Key.IndexOf('\u001f');
         if (separator <= 0 || separator >= pair.Key.Length - 1) {
@@ -796,10 +856,21 @@ public static class SpriteIndexBuilder {
         var colorAddress = ResolveSpriteAddress(state, pair.Value, colorContext, recordError: false);
         if (string.IsNullOrWhiteSpace(colorAddress)) {
           skippedColorRowsForLibrary++;
+          failedResolveCount++;
+          if (string.IsNullOrWhiteSpace(sampleResolveContext)) {
+            sampleResolveContext = colorContext +
+              " guid='" + (pair.Value.guid ?? "") + "'" +
+              " fileId=" + pair.Value.fileId.ToString(CultureInfo.InvariantCulture);
+          }
           continue;
         }
-        if (!ValidateRuntimeAtlasAddress(state, colorAddress, colorContext, recordError: false)) {
+        if (!ValidateRuntimeAtlasAddress(state, colorAddress, colorContext, out var validationFailure, recordError: false)) {
           skippedColorRowsForLibrary++;
+          failedValidateCount++;
+          if (string.IsNullOrWhiteSpace(sampleValidateFailure)) {
+            sampleValidateFailure = validationFailure ?? "";
+            sampleValidateContext = colorContext + " address='" + colorAddress + "'";
+          }
           continue;
         }
 
@@ -836,20 +907,25 @@ public static class SpriteIndexBuilder {
 
       if (skippedColorRowsForLibrary > 0) {
         state.skippedColorRowCount += skippedColorRowsForLibrary;
-        Debug.LogWarning(
-          "[SpriteIndexBuilder] [" + contextLabel + "] Skipped unresolved color rows while rebuilding runtime index." +
-          " libraryName='" + libraryName + "'" +
-          " skippedRows=" + skippedColorRowsForLibrary +
-          " totalRows=" + colorRows.Count);
+        TrackSkippedColorLibrarySummary(state, libraryName, requestedLibraryName, skippedColorRowsForLibrary, colorRows.Count);
       }
 
       if (shardRows.Count == 0) {
         state.skippedColorLibraryCount++;
-        Debug.LogWarning(
-          "[SpriteIndexBuilder] [" + contextLabel + "] Skipped sprite library because all color rows were unresolved." +
-          " libraryName='" + libraryName + "'" +
-          " requested='" + requestedLibraryName + "'" +
-          " totalRows=" + colorRows.Count);
+        if (ShouldLogLibraryDiagnostics(libraryName, requestedLibraryName)) {
+          Debug.LogError(
+            "[SpriteIndexBuilder] Library produced zero shard rows." +
+            " libraryName='" + libraryName + "'" +
+            " requested='" + requestedLibraryName + "'" +
+            " path='" + colorLibraryPath + "'" +
+            " colorRows=" + colorRows.Count +
+            " failedResolveCount=" + failedResolveCount +
+            " failedValidateCount=" + failedValidateCount +
+            (string.IsNullOrWhiteSpace(sampleResolveContext) ? "" : " sampleResolve='" + sampleResolveContext + "'") +
+            (string.IsNullOrWhiteSpace(sampleValidateContext) ? "" : " sampleValidate='" + sampleValidateContext + "'") +
+            (string.IsNullOrWhiteSpace(sampleValidateFailure) ? "" : " validateReason='" + sampleValidateFailure + "'")
+          );
+        }
         continue;
       }
 
@@ -883,6 +959,15 @@ public static class SpriteIndexBuilder {
     CleanupStaleIndexEntries(state, indexGroup, shardAssetPaths, manifestAssetPath, state.activeAtlasMetadataAssetPaths);
 
     manifestEntries.Sort((left, right) => string.Compare(left.libraryName, right.libraryName, StringComparison.Ordinal));
+    if (librariesByKey.TryGetValue("UI/Fonts", out var uiFontsLibraryPath) &&
+        manifestEntries.All(entry => !string.Equals(entry.libraryName, "UI/Fonts", StringComparison.OrdinalIgnoreCase))) {
+      Debug.LogError(
+        "[SpriteIndexBuilder] Missing manifest entry for UI/Fonts after runtime index rebuild." +
+        " libraryPath='" + uiFontsLibraryPath + "'" +
+        " requestedLibraryCount=" + orderedLibraryNames.Count +
+        " activeTextureCount=" + state.activeTextureAssetPaths.Count
+      );
+    }
     WriteManifestTextAsset(manifestAssetPath, manifestEntries);
 
     var manifestAddress = streamingSettings == null || string.IsNullOrWhiteSpace(streamingSettings.manifestAddress)
@@ -1254,19 +1339,23 @@ public static class SpriteIndexBuilder {
 
   static Dictionary<string, string> DiscoverLibraryPaths() {
     var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    var root = NormalizePath(BuilderConfig.SourceRootFolder);
-    if (!Directory.Exists(root)) return result;
+    var roots = ContentPackPipeline.GetSpriteLibrarySearchRoots();
+    for (var rootIndex = 0; rootIndex < roots.Count; rootIndex++) {
+      var root = NormalizePath(roots[rootIndex]);
+      if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
 
-    var files = Directory.GetFiles(root, "*.spriteLib", SearchOption.AllDirectories);
-    Array.Sort(files, StringComparer.Ordinal);
+      var files = Directory.GetFiles(root, "*.spriteLib", SearchOption.AllDirectories);
+      Array.Sort(files, StringComparer.Ordinal);
 
-    for (var i = 0; i < files.Length; i++) {
-      var path = NormalizePath(files[i]);
-      var relative = path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
-        ? path.Substring(root.Length + 1)
-        : path;
-      var key = RemoveExtension(relative);
-      result[key] = path;
+      for (var i = 0; i < files.Length; i++) {
+        var path = NormalizePath(files[i]);
+        var relative = path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
+          ? path.Substring(root.Length + 1)
+          : path;
+        var key = RemoveExtension(relative);
+        if (result.ContainsKey(key)) continue;
+        result[key] = path;
+      }
     }
 
     return result;
@@ -1658,48 +1747,96 @@ public static class SpriteIndexBuilder {
   }
 
   static bool ValidateRuntimeAtlasAddress(BuildState state, string sliceAddress, string context, bool recordError = true) {
+    return ValidateRuntimeAtlasAddress(state, sliceAddress, context, out _, recordError);
+  }
+
+  static bool ValidateRuntimeAtlasAddress(
+    BuildState state,
+    string sliceAddress,
+    string context,
+    out string failureReason,
+    bool recordError = true
+  ) {
+    failureReason = "";
     if (state == null || string.IsNullOrWhiteSpace(sliceAddress)) return false;
-    bool Fail(string message) {
-      if (recordError) {
-        state.errors.Add(message);
-      }
-      return false;
-    }
 
     if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out var spriteName)) {
-      return Fail("Invalid slice address '" + sliceAddress + "' (" + context + ").");
+      return FailRuntimeAtlasAddress(state, "Invalid slice address '" + sliceAddress + "' (" + context + ").", recordError, out failureReason);
     }
 
     var normalizedAtlasPath = NormalizePath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(spriteName)) {
-      return Fail("Slice address '" + sliceAddress + "' did not resolve atlas path + sprite name (" + context + ").");
+      return FailRuntimeAtlasAddress(
+        state,
+        "Slice address '" + sliceAddress + "' did not resolve atlas path + sprite name (" + context + ").",
+        recordError,
+        out failureReason
+      );
     }
 
     if (!state.activeTextureAssetPaths.Contains(normalizedAtlasPath)) {
-      return Fail("Atlas path '" + normalizedAtlasPath + "' was not registered in texture group (" + context + ").");
+      return FailRuntimeAtlasAddress(
+        state,
+        "Atlas path '" + normalizedAtlasPath + "' was not registered in texture group (" + context + ").",
+        recordError,
+        out failureReason
+      );
     }
 
     if (state.addressables == null) return true;
     var guid = AssetDatabase.AssetPathToGUID(normalizedAtlasPath);
     if (string.IsNullOrWhiteSpace(guid)) {
-      return Fail("Atlas path '" + normalizedAtlasPath + "' has no GUID (" + context + ").");
+      return FailRuntimeAtlasAddress(
+        state,
+        "Atlas path '" + normalizedAtlasPath + "' has no GUID (" + context + ").",
+        recordError,
+        out failureReason
+      );
     }
 
     var entry = state.addressables.FindAssetEntry(guid);
     if (entry == null || entry.parentGroup == null || !IsManagedTextureGroup(entry.parentGroup)) {
-      return Fail("Atlas path '" + normalizedAtlasPath + "' is not in texture addressables group (" + context + ").");
+      return FailRuntimeAtlasAddress(
+        state,
+        "Atlas path '" + normalizedAtlasPath + "' is not in texture addressables group (" + context + ").",
+        recordError,
+        out failureReason
+      );
     }
     if (state.activeTextureGroupNames.Count > 0 && !state.activeTextureGroupNames.Contains(entry.parentGroup.Name)) {
-      return Fail("Atlas path '" + normalizedAtlasPath + "' is not in an active managed texture group (" + context + ").");
+      return FailRuntimeAtlasAddress(
+        state,
+        "Atlas path '" + normalizedAtlasPath + "' is not in an active managed texture group (" + context + ").",
+        recordError,
+        out failureReason
+      );
     }
 
     if (!string.Equals(entry.address, normalizedAtlasPath, StringComparison.Ordinal)) {
-      return Fail(
-        "Atlas path '" + normalizedAtlasPath + "' has addressable key '" + entry.address + "' instead of atlas asset path (" + context + ")."
+      return FailRuntimeAtlasAddress(
+        state,
+        "Atlas path '" + normalizedAtlasPath + "' has addressable key '" + entry.address + "' instead of atlas asset path (" + context + ").",
+        recordError,
+        out failureReason
       );
     }
 
     return true;
+  }
+
+  static bool FailRuntimeAtlasAddress(BuildState state, string message, bool recordError, out string failureReason) {
+    failureReason = message ?? "";
+    if (recordError && state != null && !string.IsNullOrWhiteSpace(message)) {
+      state.errors.Add(message);
+    }
+    return false;
+  }
+
+  static bool ShouldLogLibraryDiagnostics(string libraryName, string requestedLibraryName) {
+    if (string.IsNullOrWhiteSpace(libraryName) && string.IsNullOrWhiteSpace(requestedLibraryName)) return false;
+    if (string.Equals(libraryName, "UI/Fonts", StringComparison.OrdinalIgnoreCase)) return true;
+    if (string.Equals(requestedLibraryName, "UI/Fonts", StringComparison.OrdinalIgnoreCase)) return true;
+    return false;
   }
 
   static string TryResolveSpriteAddressFromContext(Dictionary<long, string> byFileId, string context) {
@@ -2153,8 +2290,24 @@ public static class SpriteIndexBuilder {
       return false;
     }
 
+    if (TryParseLegacyNameFileIdTable(metaPath, target, out error)) {
+      return true;
+    }
+
+    return TryParseInternalIdToNameTable(metaPath, target, out error);
+  }
+
+  static bool TryParseLegacyNameFileIdTable(string metaPath, Dictionary<long, string> target, out string error) {
+    error = "";
+    if (target == null) {
+      error = "Target dictionary is null.";
+      return false;
+    }
+
     var inTable = false;
     var tableIndent = -1;
+    var foundTable = false;
+    var parsedAny = false;
 
     foreach (var rawLine in File.ReadLines(metaPath)) {
       var line = rawLine ?? "";
@@ -2165,6 +2318,7 @@ public static class SpriteIndexBuilder {
         if (trimmed.StartsWith("nameFileIdTable:", StringComparison.Ordinal)) {
           inTable = true;
           tableIndent = indent;
+          foundTable = true;
         }
         continue;
       }
@@ -2190,6 +2344,73 @@ public static class SpriteIndexBuilder {
       if (!long.TryParse(idValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fileId)) continue;
 
       target[fileId] = spriteName;
+      parsedAny = true;
+    }
+
+    return foundTable && parsedAny;
+  }
+
+  static bool TryParseInternalIdToNameTable(string metaPath, Dictionary<long, string> target, out string error) {
+    error = "";
+    if (target == null) {
+      error = "Target dictionary is null.";
+      return false;
+    }
+
+    var inTable = false;
+    var tableIndent = -1;
+    var currentEntryIndent = -1;
+    long? currentFileId = null;
+
+    void FlushEntry(string spriteName) {
+      if (!currentFileId.HasValue || string.IsNullOrWhiteSpace(spriteName)) return;
+      target[currentFileId.Value] = spriteName;
+    }
+
+    foreach (var rawLine in File.ReadLines(metaPath)) {
+      var line = rawLine ?? "";
+      var trimmed = line.Trim();
+      var indent = line.Length - line.TrimStart().Length;
+
+      if (!inTable) {
+        if (trimmed.StartsWith("internalIDToNameTable:", StringComparison.Ordinal)) {
+          inTable = true;
+          tableIndent = indent;
+        }
+        continue;
+      }
+
+      if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+      if (indent < tableIndent || (indent == tableIndent && !trimmed.StartsWith("- ", StringComparison.Ordinal))) {
+        break;
+      }
+
+      if (trimmed.StartsWith("- first:", StringComparison.Ordinal)) {
+        currentEntryIndent = indent;
+        currentFileId = null;
+        continue;
+      }
+
+      if (currentEntryIndent >= 0 && indent <= currentEntryIndent) {
+        currentEntryIndent = -1;
+        currentFileId = null;
+      }
+
+      if (trimmed.StartsWith("213:", StringComparison.Ordinal)) {
+        var idValue = trimmed.Substring("213:".Length).Trim();
+        if (long.TryParse(idValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fileId)) {
+          currentFileId = fileId;
+        }
+        continue;
+      }
+
+      if (!trimmed.StartsWith("second:", StringComparison.Ordinal)) continue;
+
+      var spriteName = DecodeScalar(trimmed.Substring("second:".Length));
+      FlushEntry(spriteName);
+      currentEntryIndent = -1;
+      currentFileId = null;
     }
 
     return true;
@@ -2916,10 +3137,34 @@ public static class SpriteIndexBuilder {
       }
     }
 
+    if (string.Equals(runtimeAssetPath, normalizedSourceAssetPath, StringComparison.OrdinalIgnoreCase)) {
+      var stagedCoreAssetPath = TryResolveExistingCoreStageTextureAssetPath(normalizedSourceAssetPath);
+      if (!string.IsNullOrWhiteSpace(stagedCoreAssetPath)) {
+        runtimeAssetPath = stagedCoreAssetPath;
+      }
+    }
+
     if (state != null) {
       state.runtimeTextureAssetPathBySourceAssetPath[normalizedSourceAssetPath] = runtimeAssetPath;
     }
     return runtimeAssetPath;
+  }
+
+  static string TryResolveExistingCoreStageTextureAssetPath(string sourceAssetPath) {
+    var normalizedSourceAssetPath = NormalizePath(sourceAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedSourceAssetPath)) return "";
+    if (!normalizedSourceAssetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return "";
+    if (GeneratedAtlasBuildSurrogateUtility.IsBuildSurrogatePath(normalizedSourceAssetPath) ||
+        GeneratedAtlasBuildSurrogateUtility.IsContentStagePath(normalizedSourceAssetPath)) {
+      return normalizedSourceAssetPath;
+    }
+
+    var stagedCoreAssetPath = NormalizePath(
+      ContentPackPipeline.StageCoreAssetPath + "/" + normalizedSourceAssetPath.Substring("Assets/".Length)
+    );
+    return string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(stagedCoreAssetPath))
+      ? ""
+      : stagedCoreAssetPath;
   }
 
   static bool EnsureGroupedAtlasBuildSurrogate(string sourceAtlasAssetPath, string surrogateAtlasAssetPath, out bool copiedAny) {
@@ -3007,10 +3252,32 @@ public static class SpriteIndexBuilder {
     if (state == null) return;
     if (state.skippedColorRowCount <= 0 && state.skippedColorLibraryCount <= 0) return;
 
-    Debug.LogWarning(
-      "[SpriteIndexBuilder] [" + contextLabel + "] Skipped unresolved color sprite references." +
+    var summary = "[SpriteIndexBuilder] [" + contextLabel + "] Skipped unresolved color sprite references." +
       " skippedRows=" + state.skippedColorRowCount +
-      " skippedLibraries=" + state.skippedColorLibraryCount);
+      " skippedLibraries=" + state.skippedColorLibraryCount;
+    if (state.skippedColorLibrarySummaries.Count > 0) {
+      summary += " samples=" + string.Join(" | ", state.skippedColorLibrarySummaries);
+    }
+
+    Debug.LogWarning(summary);
+  }
+
+  static void TrackSkippedColorLibrarySummary(
+    BuildState state,
+    string libraryName,
+    string requestedLibraryName,
+    int skippedRows,
+    int totalRows
+  ) {
+    if (state == null || state.skippedColorLibrarySummaries == null) return;
+    if (state.skippedColorLibrarySummaries.Count >= 8) return;
+
+    state.skippedColorLibrarySummaries.Add(
+      "library='" + (libraryName ?? "") + "'" +
+      " requested='" + (requestedLibraryName ?? "") + "'" +
+      " skippedRows=" + skippedRows +
+      "/" + totalRows
+    );
   }
 
   static void LogAtlasMetadataSummary(string contextLabel, BuildState state) {
@@ -3354,17 +3621,24 @@ public static class SpriteIndexBuilder {
     }
 
     state.projectGroupedMetadataScanCompleted = true;
-    var sourceRoot = NormalizePath(SpriteStreamingConfig.TextureSourceRootFolder);
-    if (string.IsNullOrWhiteSpace(sourceRoot)) return false;
+    var searchRoots = ContentPackPipeline.GetTextureSearchRoots();
+    for (var rootIndex = 0; rootIndex < searchRoots.Count; rootIndex++) {
+      var sourceRoot = NormalizePath(searchRoots[rootIndex]);
+      if (string.IsNullOrWhiteSpace(sourceRoot)) continue;
 
-    var fullSourceRoot = Path.GetFullPath(sourceRoot);
-    if (!Directory.Exists(fullSourceRoot)) return false;
+      var fullSourceRoot = Path.GetFullPath(sourceRoot);
+      if (!Directory.Exists(fullSourceRoot)) continue;
 
-    foreach (var metadataFullPath in Directory.EnumerateFiles(fullSourceRoot, "*.json", SearchOption.AllDirectories)) {
-      var normalizedAssetPath = NormalizePath(metadataFullPath);
-      if (GetAtlasMetadataKind(state, normalizedAssetPath) != AtlasMetadataKind.Grouped) continue;
-      state.projectHasGroupedMetadataAssets = true;
-      break;
+      foreach (var metadataFullPath in Directory.EnumerateFiles(fullSourceRoot, "*.json", SearchOption.AllDirectories)) {
+        var normalizedAssetPath = NormalizePath(metadataFullPath);
+        if (GetAtlasMetadataKind(state, normalizedAssetPath) != AtlasMetadataKind.Grouped) continue;
+        state.projectHasGroupedMetadataAssets = true;
+        break;
+      }
+
+      if (state.projectHasGroupedMetadataAssets) {
+        break;
+      }
     }
 
     return state.projectHasGroupedMetadataAssets;
@@ -3383,11 +3657,22 @@ public static class SpriteIndexBuilder {
 
     var metadataKind = AtlasMetadataKind.Invalid;
     if (normalizedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
-      var sourceRoot = NormalizePath(BuilderConfig.TextureSourceRootFolder);
       var surrogateRoot = NormalizePath(BuilderConfig.GroupedAtlasBuildSurrogateRootFolder);
-      var underKnownAtlasRoot =
-        (string.IsNullOrWhiteSpace(sourceRoot) || normalizedAssetPath.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)) ||
-        (!string.IsNullOrWhiteSpace(surrogateRoot) && normalizedAssetPath.StartsWith(surrogateRoot + "/", StringComparison.OrdinalIgnoreCase));
+      var underKnownAtlasRoot = false;
+      var searchRoots = ContentPackPipeline.GetTextureSearchRoots();
+      for (var rootIndex = 0; rootIndex < searchRoots.Count; rootIndex++) {
+        var sourceRoot = NormalizePath(searchRoots[rootIndex]);
+        if (string.IsNullOrWhiteSpace(sourceRoot)) continue;
+        if (!normalizedAssetPath.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)) continue;
+        underKnownAtlasRoot = true;
+        break;
+      }
+
+      if (!underKnownAtlasRoot &&
+          !string.IsNullOrWhiteSpace(surrogateRoot) &&
+          normalizedAssetPath.StartsWith(surrogateRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+        underKnownAtlasRoot = true;
+      }
       if (underKnownAtlasRoot) {
         var fullPath = Path.GetFullPath(normalizedAssetPath);
         if (File.Exists(fullPath)) {

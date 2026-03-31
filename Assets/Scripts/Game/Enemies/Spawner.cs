@@ -8,6 +8,8 @@ public class Spawner : MonoBehaviour {
     public string enemyType;
     public GameObject prefab;
     public int maxAlive;
+    public int level;
+    public List<DemonStatModifier> statBonuses = new();
   }
 
   public GameObject ParentHolder;
@@ -253,6 +255,8 @@ public class Spawner : MonoBehaviour {
     if (spawned == null) return;
     activeInstancePools[spawned] = pool;
 
+    ApplySpawnContextToEnemy(spawned, spawnRule);
+
     var enemyController = spawned.GetComponent<EnemyController>();
     if (enemyController != null) {
       enemyController.SetEnemyType(selectedEnemyType, playDefaultImmediately: true);
@@ -263,7 +267,6 @@ public class Spawner : MonoBehaviour {
     if (enemyInfo != null) {
       enemyInfo.enemyType = selectedEnemyType;
     }
-
   }
 
   public void DespawnEnemy(GameObject enemy) {
@@ -358,6 +361,8 @@ public class Spawner : MonoBehaviour {
         "[Spawner] Initialized enemy pool" +
         " enemy_type='" + spawnRule.enemyType + "'" +
         " prefab='" + spawnRule.prefab.name + "'" +
+        " level=" + spawnRule.level +
+        " bonuses=" + (spawnRule.statBonuses != null ? spawnRule.statBonuses.Count : 0) +
         " max_alive=" + spawnRule.maxAlive +
         " pool_size=" + Mathf.Max(spawnRule.maxAlive, 1)
       );
@@ -382,7 +387,7 @@ public class Spawner : MonoBehaviour {
     for (var i = 0; i < rules.Count; i++) {
       var rule = rules[i];
       if (rule == null || rule.prefab == null || rule.maxAlive <= 0) continue;
-      TryAddSpawnRule(rule.prefab, rule.maxAlive);
+      TryAddSpawnRule(rule.prefab, rule.maxAlive, rule.level, rule.statBonuses);
     }
 
     if (activeSpawnRules.Count <= 0) {
@@ -400,7 +405,7 @@ public class Spawner : MonoBehaviour {
     return true;
   }
 
-  bool TryAddSpawnRule(GameObject enemyPrefab, int maxAlive) {
+  bool TryAddSpawnRule(GameObject enemyPrefab, int maxAlive, int level, IList<DemonStatModifier> statBonuses) {
     if (enemyPrefab == null || maxAlive <= 0) return false;
     if (!TryResolveEnemyTypeFromPrefab(enemyPrefab, out var enemyType)) {
       Debug.LogWarning("[Spawner] Skipping spawn rule because enemy type could not be resolved from prefab '" + enemyPrefab.name + "'.");
@@ -413,13 +418,17 @@ public class Spawner : MonoBehaviour {
       if (!ReferenceEquals(existing.prefab, enemyPrefab)) continue;
       existing.enemyType = normalizedEnemyType;
       existing.maxAlive = Mathf.Max(existing.maxAlive, maxAlive);
+      existing.level = Mathf.Max(level, 1);
+      existing.statBonuses = CloneStatBonuses(statBonuses);
       return true;
     }
 
     activeSpawnRules.Add(new SpawnRuleState {
       enemyType = normalizedEnemyType,
       prefab = enemyPrefab,
-      maxAlive = Mathf.Max(maxAlive, 1)
+      maxAlive = Mathf.Max(maxAlive, 1),
+      level = Mathf.Max(level, 1),
+      statBonuses = CloneStatBonuses(statBonuses)
     });
     return true;
   }
@@ -465,6 +474,65 @@ public class Spawner : MonoBehaviour {
 
   GameObject ResolveActiveLocationInstance() {
     return LocationManager.ResolveActiveLocationInstance();
+  }
+
+  void ApplySpawnContextToEnemy(GameObject enemyObject, SpawnRuleState spawnRule) {
+    if (enemyObject == null || spawnRule == null) {
+      return;
+    }
+
+    var enemyInfo = enemyObject.GetComponent<EnemyInfo>();
+    if (enemyInfo != null) {
+      enemyInfo.ApplySpawnContext(
+        spawnRule.enemyType,
+        spawnRule.level,
+        spawnRule.statBonuses,
+        this
+      );
+    }
+
+    DisableEnemyHurtBoxLaunchRandomOnHit(enemyObject);
+
+    var enemyHealth = enemyObject.GetComponent<EnemyHealth>();
+    if (enemyHealth == null) {
+      enemyHealth = enemyObject.AddComponent<EnemyHealth>();
+    }
+    if (enemyHealth != null) {
+      enemyHealth.RefreshFromEnemyInfo("spawn");
+    }
+
+    var enemyAiController = enemyObject.GetComponent<EnemyAIController>();
+    if (enemyAiController != null) {
+      enemyAiController.RefreshResolvedCombatStats(force: true);
+    }
+  }
+
+  static void DisableEnemyHurtBoxLaunchRandomOnHit(GameObject enemyObject) {
+    if (enemyObject == null) {
+      return;
+    }
+
+    var hurtBoxes = enemyObject.GetComponentsInChildren<HurtBox2D>(includeInactive: true);
+    for (var i = 0; i < hurtBoxes.Length; i++) {
+      var hurtBox = hurtBoxes[i];
+      if (hurtBox == null) continue;
+      hurtBox.launchRandomOnHit = false;
+    }
+  }
+
+  static List<DemonStatModifier> CloneStatBonuses(IList<DemonStatModifier> source) {
+    var clone = new List<DemonStatModifier>();
+    if (source == null || source.Count <= 0) {
+      return clone;
+    }
+
+    for (var i = 0; i < source.Count; i++) {
+      var modifier = source[i];
+      if (modifier == null) continue;
+      clone.Add(modifier.Clone());
+    }
+
+    return clone;
   }
 
   void ClearEnemyPools() {

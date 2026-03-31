@@ -23,12 +23,12 @@ public class LoadMenuInput : ButtonGroup {
 
   void Start() {
     actions.Add(MessageBus.On("openLoadMenu", o => ResetSaveSlotInteractionLock()));
-    actions.Add(MessageBus.On("loadMenu.cancel", o => BackOut()));
-    actions.Add(MessageBus.On("loadMenu.delete", o => DeleteDir()));
-    actions.Add(MessageBus.On("loadMenu.down", o => MenuDown()));
+    actions.Add(MessageBus.On("loadMenu.cancel", o => { if (InputMessageValue.IsPressed(o)) BackOut(); }));
+    actions.Add(MessageBus.On("loadMenu.delete", o => { if (InputMessageValue.IsPressed(o)) DeleteDir(); }));
+    actions.Add(MessageBus.On("loadMenu.down", o => { if (InputMessageValue.IsPressed(o)) MenuDown(); }));
     actions.Add(MessageBus.On("loadMenu.scrollDown", o => ScrollFromMouseWheel(o, direction: -1f)));
-    actions.Add(MessageBus.On("loadMenu.select", o => Select()));
-    actions.Add(MessageBus.On("loadMenu.up", o => MenuUp()));
+    actions.Add(MessageBus.On("loadMenu.select", o => { if (InputMessageValue.IsPressed(o)) Select(); }));
+    actions.Add(MessageBus.On("loadMenu.up", o => { if (InputMessageValue.IsPressed(o)) MenuUp(); }));
     actions.Add(MessageBus.On("loadMenu.scrollUp", o => ScrollFromMouseWheel(o, direction: 1f)));
     actions.Add(MessageBus.On("loadMenu.hover", o => MouseHover(o)));
     actions.Add(MessageBus.On("loadMenu.click", o => BeginClick()));

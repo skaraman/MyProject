@@ -16,9 +16,9 @@ public class MainMenuInput : ButtonGroup {
 
   void Start() {
     ResolveButtonReferences();
-    actions.Add(MessageBus.On("mainMenu.up", o => MenuUp()));
-    actions.Add(MessageBus.On("mainMenu.down", o => MenuDown()));
-    actions.Add(MessageBus.On("mainMenu.select", o => MenuSelect()));
+    actions.Add(MessageBus.On("mainMenu.up", o => { if (InputMessageValue.IsPressed(o)) MenuUp(); }));
+    actions.Add(MessageBus.On("mainMenu.down", o => { if (InputMessageValue.IsPressed(o)) MenuDown(); }));
+    actions.Add(MessageBus.On("mainMenu.select", o => { if (InputMessageValue.IsPressed(o)) MenuSelect(); }));
     actions.Add(MessageBus.On("mainMenu.hover", o => MouseHover(o)));
     actions.Add(MessageBus.On("mainMenu.click", o => MenuSelect()));
   }

@@ -5,7 +5,7 @@ using UnityEngine.UI;
 public class HealthBarControl : MonoBehaviour {
     public string Form;
   [SerializeField] private List<GameObject> objectsToChange = new();
-  [SerializeField] private CharacterState characterState;
+  private CharacterState characterState;
   [SerializeField] private FontText healthText;
   [SerializeField] private FontText nrgText;
   private string lastLabelPrefix;

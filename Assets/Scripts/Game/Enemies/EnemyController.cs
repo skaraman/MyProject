@@ -40,6 +40,8 @@ public class EnemyController : MonoBehaviour {
   private AnimationController animationController = new();
   private AnimationController effectAnimationController = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
+  private readonly List<string> linkedEffectWarmKeyScratch = new();
+  private readonly HashSet<string> linkedEffectWarmKeySeenScratch = new(StringComparer.OrdinalIgnoreCase);
   private bool effectControllerInitialized;
   private bool effectResetToEmptyPending;
   private Dictionary<string, AnimData> animationData;
@@ -134,6 +136,7 @@ public class EnemyController : MonoBehaviour {
 
     LoadAnimationData();
     ConfigureAnimationController();
+    PrimeEnemyAnimationWarmupOnce();
 
     if (playDefaultImmediately && animationData != null && !string.IsNullOrEmpty(defaultAnimation)) {
       return PlayAnimation(defaultAnimation, true);
@@ -208,9 +211,7 @@ public class EnemyController : MonoBehaviour {
 
     var warmFrames = Mathf.Max(prewarmFramesPerAnimation, 1);
     animationController.PrimeAllAnimationStarts(warmFrames);
-    if (effectControllerInitialized) {
-      effectAnimationController.PrimeAllAnimationStarts(1);
-    }
+    PrimeLinkedEffectWarmup("startup");
   }
 
   public bool PlayAnimation(string animationName, bool forceRestart = false) {
@@ -416,6 +417,37 @@ public class EnemyController : MonoBehaviour {
       " object=" + gameObject.name +
       " manager='" + projectileManager.gameObject.name + "'"
     );
+  }
+
+  void PrimeLinkedEffectWarmup(string source) {
+    if (!Application.isPlaying || !effectControllerInitialized || animationData == null || animationData.Count <= 0) {
+      return;
+    }
+
+    linkedEffectWarmKeyScratch.Clear();
+    linkedEffectWarmKeySeenScratch.Clear();
+    AnimationLinkUtility.CollectLinkedEffectKeys(
+      animationData,
+      null,
+      linkedEffectWarmKeyScratch,
+      linkedEffectWarmKeySeenScratch
+    );
+    if (linkedEffectWarmKeyScratch.Count > 0) {
+      effectAnimationController.PrimeAnimationStarts(linkedEffectWarmKeyScratch, 1);
+    }
+
+    if (linkedEffectWarmKeyScratch.Count > 0 && (Application.isEditor || Debug.isDebugBuild)) {
+      Debug.Log(
+        "[EnemyController] PrimedLinkedEffects" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " object=" + gameObject.name +
+        " enemy_type='" + enemyType + "'" +
+        " count=" + linkedEffectWarmKeyScratch.Count
+      );
+    }
+
+    linkedEffectWarmKeyScratch.Clear();
+    linkedEffectWarmKeySeenScratch.Clear();
   }
 
   static string NormalizeEnemyType(string value) {

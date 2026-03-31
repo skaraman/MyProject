@@ -64,6 +64,12 @@ public static class LocationWarmRegistryRuntime {
 
   public static LocationWarmProfile ResolveForLocation(string locationId) {
     var normalized = Normalize(locationId);
+    if (!string.IsNullOrWhiteSpace(normalized) &&
+        ActiveContentRegistryRuntime.TryGetWarmProfile(normalized, out var externalProfile) &&
+        externalProfile != null) {
+      return externalProfile;
+    }
+
     var asset = Registry;
     if (asset != null) {
       if (!string.IsNullOrWhiteSpace(normalized) && asset.TryGetProfile(normalized, out var mapped) && mapped != null) {

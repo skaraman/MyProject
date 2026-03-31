@@ -14,17 +14,23 @@ public class EnemyAIController : MonoBehaviour {
   public float fallbackClosingDistance = 1.5f;
 
   private float closingDistance;
+  private float runtimeMoveSpeed;
+  private float runtimeAttackCooldown;
+  private float baselineMoveSpeed;
+  private float baselineAttackCooldown;
   private Rigidbody2D rb;
   private EnemyInfo info;
   private Coroutine aiRoutine;
   private float nextAttackTime;
-  private string cachedEnemyType = "";
+  private int cachedSpawnContextVersion = -1;
 
   void Awake() {
+    baselineMoveSpeed = moveSpeed;
+    baselineAttackCooldown = attackCooldown;
     rb = GetComponent<Rigidbody2D>();
     enemyController ??= GetComponent<EnemyController>();
     info = GetComponent<EnemyInfo>();
-    RefreshClosingDistance(force: true);
+    RefreshResolvedCombatStats(force: true);
   }
 
   void OnEnable() {
@@ -44,7 +50,7 @@ public class EnemyAIController : MonoBehaviour {
         yield return null;
         continue;
       }
-      RefreshClosingDistance();
+      RefreshResolvedCombatStats();
 
       float distance = Vector2.Distance(transform.position, player.position);
       FacePlayer();
@@ -62,7 +68,7 @@ public class EnemyAIController : MonoBehaviour {
   private IEnumerator AttackSequence() {
     var now = TimeScale.GetNow(this);
     if (now < nextAttackTime) yield break;
-    nextAttackTime = now + attackCooldown;
+    nextAttackTime = now + runtimeAttackCooldown;
 
     StopMovement();
     if (enemyController.PlayAnimation("Attack")) {
@@ -124,7 +130,7 @@ public class EnemyAIController : MonoBehaviour {
   }
 
   private void ApplyMovement(Vector2 dir, float speedMultiplier) {
-    Vector2 velocity = dir * moveSpeed * speedMultiplier;
+    Vector2 velocity = dir * runtimeMoveSpeed * speedMultiplier;
     if (rb != null) {
       rb.linearVelocity = velocity * TimeScale.GetEffectiveFactor(this);
     }
@@ -145,12 +151,25 @@ public class EnemyAIController : MonoBehaviour {
     enemyController.FaceDirection(delta);
   }
 
-  private void RefreshClosingDistance(bool force = false) {
-    var resolvedType = ResolveEnemyType();
-    if (!force && string.Equals(cachedEnemyType, resolvedType, System.StringComparison.OrdinalIgnoreCase)) return;
+  public void RefreshResolvedCombatStats(bool force = false) {
+    var contextVersion = info != null ? info.SpawnContextVersion : -1;
+    if (!force && cachedSpawnContextVersion == contextVersion) return;
 
-    cachedEnemyType = resolvedType;
-    closingDistance = ResolveClosingDistanceForType(resolvedType);
+    cachedSpawnContextVersion = contextVersion;
+    runtimeMoveSpeed = ResolveRuntimeMoveSpeed();
+    runtimeAttackCooldown = ResolveRuntimeAttackCooldown();
+    closingDistance = ResolveClosingDistance();
+
+    if (Application.isEditor || Debug.isDebugBuild) {
+      Debug.Log(
+        "[EnemyAIController][RefreshResolvedCombatStats]" +
+        " object='" + gameObject.name + "'" +
+        " enemy_type='" + ResolveEnemyType() + "'" +
+        " move_speed=" + runtimeMoveSpeed.ToString("0.###") +
+        " attack_cooldown=" + runtimeAttackCooldown.ToString("0.###") +
+        " closing_distance=" + closingDistance.ToString("0.###")
+      );
+    }
   }
 
   private string ResolveEnemyType() {
@@ -158,10 +177,17 @@ public class EnemyAIController : MonoBehaviour {
     return string.IsNullOrWhiteSpace(type) ? "" : type.Trim();
   }
 
-  private float ResolveClosingDistanceForType(string type) {
-    if (!string.IsNullOrEmpty(type) && AllStatValues.Enemies.TryGetValue(type, out var stats) && stats.TryGetValue("CDST", out var cd)) {
-      return cd;
-    }
-    return fallbackClosingDistance;
+  private float ResolveRuntimeMoveSpeed() {
+    var multiplier = info != null ? info.GetResolvedStat("MVSP", 1f) : 1f;
+    return baselineMoveSpeed * Mathf.Max(multiplier, 0f);
+  }
+
+  private float ResolveRuntimeAttackCooldown() {
+    var attackSpeed = info != null ? info.GetResolvedStat("AKSP", 1f) : 1f;
+    return baselineAttackCooldown / Mathf.Max(attackSpeed, 0.01f);
+  }
+
+  private float ResolveClosingDistance() {
+    return info != null ? info.GetResolvedStat("CDST", fallbackClosingDistance) : fallbackClosingDistance;
   }
 }

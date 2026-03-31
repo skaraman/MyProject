@@ -207,13 +207,4 @@ public static class AllStatValues {
     { "CCHC", 0 }, { "LDMG", 0 }, { "LCHC", 0 }, { "DDMG", 0 }, { "BONUS", 0 }, { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "LDSC", 0 }, { "FDMG", 0 },
     { "AREA", 0 }, { "DUR", 0 }, { "AFT", 0 }, { "EVD", 0 }, { "CLN", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
   };
-
-  public static Dictionary<string, float> Imp { set; get; } = new Dictionary<string, float> {
-    { "DMG", 1 }, { "HP", 10 }, { "AKSP", 1 }, { "HPRG", 0 }, { "ARM", 0 },  { "BONUS", 0 }, { "MVSP", 1 }, { "CDST", 1 }, { "EVD", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
-  };
-
-  public static Dictionary<string, Dictionary<string, float>> Enemies { get; } = new Dictionary<string, Dictionary<string, float>> {
-    { "Imp", Imp }
-  };
-
 }

@@ -8,6 +8,7 @@ using UnityEditor.U2D.Sprites;
 using UnityEngine;
 
 public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
+  const string StandardMetadataKind = "standard";
   const string TrimmedMetadataKind = "trimmed";
   const string GroupedMetadataKind = "grouped";
   static bool pendingSpriteWithNormalsRefresh;
@@ -56,6 +57,22 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     public ImportPixelRect packedRect;
   }
 
+  [Serializable]
+  sealed class StandardAtlasImportPayload {
+    public string metadataKind;
+    public string exportedAtlasAssetPath;
+    public float spritePixelsPerUnit;
+    public int spriteMeshType = -1;
+    public List<StandardSpriteImportPayload> sprites = new();
+  }
+
+  [Serializable]
+  sealed class StandardSpriteImportPayload {
+    public string name;
+    public bool empty;
+    public ImportPixelRect packedRect;
+  }
+
   sealed class GeneratedAtlasImportDefinition {
     public string atlasAssetPath;
     public string metadataAssetPath;
@@ -92,10 +109,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       return;
     }
 
-    if (importer.spriteImportMode != SpriteImportMode.Single) {
-      importer.spriteImportMode = SpriteImportMode.Single;
-    }
-    ApplySpriteEditorData(importer, definition.sprites, clearSprites: true);
+    ApplySingleSpriteImportMode(importer);
   }
 
   static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths) {
@@ -111,6 +125,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
 
     foreach (var atlasAssetPath in atlasAssetPaths) {
       TrimmedSpriteOffsetResolver.InvalidateAtlas(atlasAssetPath);
+      SpriteIndexBuilder.InvalidateCachedSpriteSliceEstimate(atlasAssetPath);
     }
 
     if (metadataAssetPaths.Count > 0) {
@@ -208,7 +223,8 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     }
 
     return TryBuildTrimmedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition) ||
-           TryBuildGroupedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition);
+           TryBuildGroupedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition) ||
+           TryBuildStandardImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition);
   }
 
   static bool TryBuildImportDefinitionForMetadataAsset(string metadataAssetPath, out GeneratedAtlasImportDefinition definition) {
@@ -235,10 +251,55 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
             assetPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase));
   }
 
+  static void ApplySingleSpriteImportMode(TextureImporter importer) {
+    if (importer == null) return;
+
+    var settings = new TextureImporterSettings();
+    importer.ReadTextureSettings(settings);
+    if (settings.spriteMode != (int)SpriteImportMode.Single) {
+      settings.spriteMode = (int)SpriteImportMode.Single;
+      importer.SetTextureSettings(settings);
+    }
+
+    if (importer.spriteImportMode != SpriteImportMode.Single) {
+      importer.spriteImportMode = SpriteImportMode.Single;
+    }
+
+    ClearSpriteEditorData(importer);
+  }
+
+  static void ClearSpriteEditorData(TextureImporter importer) {
+    if (importer == null) return;
+
+    var dataProvider = CreateSpriteEditorDataProvider(importer);
+    if (dataProvider == null) return;
+
+    var existingRects = dataProvider.GetSpriteRects();
+    var existingCount = existingRects == null ? 0 : existingRects.Length;
+    if (existingCount <= 0 && !dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider))) return;
+
+    dataProvider.SetSpriteRects(Array.Empty<SpriteRect>());
+
+    if (dataProvider.HasDataProvider(typeof(ISpriteNameFileIdDataProvider))) {
+      var nameFileIdProvider = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
+      nameFileIdProvider.SetNameFileIdPairs(Array.Empty<SpriteNameFileIdPair>());
+    }
+
+    dataProvider.Apply();
+
+    if (existingCount > 0 && GeneratedAtlasBuildSurrogateUtility.IsContentStagePath(importer.assetPath)) {
+      Debug.Log(
+        "[GeneratedAtlasImport] Cleared staged atlas sprite sheet data." +
+        " path='" + importer.assetPath + "'" +
+        " prior_sprite_rects=" + existingCount);
+    }
+  }
+
   static void InvalidateSiblingGeneratedAtlas(string atlasAssetPath) {
     var normalizedAtlasAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) return;
     TrimmedSpriteOffsetResolver.InvalidateAtlas(normalizedAtlasAssetPath);
+    SpriteIndexBuilder.InvalidateCachedSpriteSliceEstimate(normalizedAtlasAssetPath);
   }
 
   static bool TryBuildTrimmedImportDefinition(string atlasAssetPath, string metadataAssetPath, string json, out GeneratedAtlasImportDefinition definition) {
@@ -301,7 +362,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       atlasAssetPath = atlasAssetPath,
       metadataAssetPath = metadataAssetPath,
       sourceAtlasAssetPath = ResolveGroupedSourceAtlasAssetPath(payload),
-      sliceAtlas = !GeneratedAtlasBuildSurrogateUtility.IsBuildSurrogatePath(atlasAssetPath),
+      sliceAtlas = !GeneratedAtlasBuildSurrogateUtility.ShouldImportGroupedAtlasAsSingleSprite(atlasAssetPath),
       spritePixelsPerUnit = payload.spritePixelsPerUnit,
       spriteMeshType = payload.spriteMeshType,
       hasImporterSnapshot = payload.spritePixelsPerUnit > 0f && payload.spriteMeshType >= 0
@@ -309,6 +370,36 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
 
     BuildSpriteMetadata(payload.sprites, definition.sprites);
     return !definition.sliceAtlas || definition.sprites.Count > 0;
+  }
+
+  static bool TryBuildStandardImportDefinition(string atlasAssetPath, string metadataAssetPath, string json, out GeneratedAtlasImportDefinition definition) {
+    definition = null;
+    if (string.IsNullOrWhiteSpace(json)) return false;
+    if (!GeneratedAtlasBuildSurrogateUtility.ShouldImportGroupedAtlasAsSingleSprite(atlasAssetPath)) return false;
+
+    StandardAtlasImportPayload payload;
+    try {
+      payload = JsonUtility.FromJson<StandardAtlasImportPayload>(json);
+    }
+    catch {
+      return false;
+    }
+
+    if (payload == null || payload.sprites == null) return false;
+    if (!string.Equals(payload.metadataKind, StandardMetadataKind, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    definition = new GeneratedAtlasImportDefinition {
+      atlasAssetPath = atlasAssetPath,
+      metadataAssetPath = metadataAssetPath,
+      sourceAtlasAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(payload.exportedAtlasAssetPath),
+      sliceAtlas = false,
+      spritePixelsPerUnit = payload.spritePixelsPerUnit,
+      spriteMeshType = payload.spriteMeshType,
+      hasImporterSnapshot = payload.spritePixelsPerUnit > 0f && payload.spriteMeshType >= 0
+    };
+    return true;
   }
 
   static string ResolveGroupedSourceAtlasAssetPath(GroupedAtlasImportPayload payload) {

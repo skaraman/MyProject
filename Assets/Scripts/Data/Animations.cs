@@ -55,7 +55,7 @@ public static class Animations {
     { "KickRight", new AnimData { start = 1, end = 31, duration = 300 } },
     { "PunchLeft", new AnimData { start = 1, end = 19, duration = 150 } },
     { "PunchRight", new AnimData { start = 1, end = 19, duration = 120 } },
-    { "Blast", new AnimData { start = 1, end = 60, duration = 1000, effect = "Blast", projectile = "BlastBall", effectFrame = 1, projectileFrame = 60 } },
+    { "Blast", new AnimData { start = 1, end = 60, duration = 1000, effect = "Blast", projectile = "BlastBall", effectFrame = 1, projectileFrame = 50 } },
 
     { "BlastToKickLeft", new AnimData { start = 222, end = 238, duration = 175, To = 2 } },
     { "BlastToKickRight", new AnimData { start = 205, end = 221, duration = 175, To = 2 } },

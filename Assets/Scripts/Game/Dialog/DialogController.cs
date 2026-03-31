@@ -5,11 +5,42 @@ using UnityEngine;
 public static class DialogController {
   const string DialogSaveName = "dialog";
   const string SeenLinesPrefix = "seenLines";
+  const string AutoTrigger = "auto";
+
+  sealed class GameplayDialogNodeLineComparer : IComparer<GameplayDialogController.GameplayDialogNode> {
+    public int Compare(
+      GameplayDialogController.GameplayDialogNode left,
+      GameplayDialogController.GameplayDialogNode right
+    ) {
+      if (ReferenceEquals(left, right)) {
+        return 0;
+      }
+      if (left == null) {
+        return 1;
+      }
+      if (right == null) {
+        return -1;
+      }
+
+      var lineCompare = left.lineNumber.CompareTo(right.lineNumber);
+      if (lineCompare != 0) {
+        return lineCompare;
+      }
+
+      var speakerCompare = string.Compare(left.speakerId, right.speakerId, StringComparison.OrdinalIgnoreCase);
+      if (speakerCompare != 0) {
+        return speakerCompare;
+      }
+
+      return string.Compare(left.text, right.text, StringComparison.Ordinal);
+    }
+  }
 
   static readonly HashSet<string> seenLineKeys = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> debugSessionSeenLineKeys = new(StringComparer.OrdinalIgnoreCase);
   static readonly SaveData saveBuffer = new();
   static readonly Dictionary<string, int> seenSnapshotBuffer = new(StringComparer.OrdinalIgnoreCase);
+  static readonly GameplayDialogNodeLineComparer dialogNodeLineComparer = new();
 
   static bool debugTreatAllDialogAsUnseen;
   static string debugSessionLocationId = "";
@@ -121,6 +152,14 @@ public static class DialogController {
   }
 
   public static bool TryBuildUnseenSequence(string locationId, List<GameplayDialogController.GameplayDialogNode> sequence) {
+    return TryBuildTriggeredSequence(locationId, AutoTrigger, sequence);
+  }
+
+  public static bool TryBuildTriggeredSequence(
+    string locationId,
+    string trigger,
+    List<GameplayDialogController.GameplayDialogNode> sequence
+  ) {
     if (sequence == null) {
       return false;
     }
@@ -129,34 +168,83 @@ public static class DialogController {
     if (!DialogData.TryGetLocation(locationId, out var locationDialog) || locationDialog == null) {
       if (ShouldLogDialogDebug()) {
         Debug.Log(
-          "[DialogController][TryBuildUnseenSequence] Missing location dialog location='" + (locationId ?? "") + "'"
+          "[DialogController][TryBuildTriggeredSequence] Missing location dialog location='" + (locationId ?? "") + "'"
         );
       }
       return false;
     }
 
-    AppendUnseenLocationLines(locationDialog, sequence);
+    var normalizedTrigger = NormalizeDialogTrigger(trigger);
+    AppendTriggeredLocationLines(locationDialog, normalizedTrigger, sequence);
     if (sequence.Count <= 0) {
       if (ShouldLogDialogDebug()) {
         Debug.Log(
-          "[DialogController][TryBuildUnseenSequence] No unseen lines remain location='" + locationDialog.locationId + "'"
+          "[DialogController][TryBuildTriggeredSequence] No unseen lines remain" +
+          " location='" + locationDialog.locationId + "'" +
+          " trigger='" + normalizedTrigger + "'"
         );
       }
       return false;
-    }
-
-    if (sequence.Count > 1) {
-      sequence.Sort(CompareNodes);
     }
 
     if (ShouldLogDialogDebug()) {
       Debug.Log(
-        "[DialogController][TryBuildUnseenSequence] location='" + locationDialog.locationId +
+        "[DialogController][TryBuildTriggeredSequence] location='" + locationDialog.locationId +
+        "' trigger='" + normalizedTrigger +
         "' unseen_count=" + sequence.Count
       );
     }
 
     return true;
+  }
+
+  public static void CollectPendingTriggers(string locationId, List<string> triggers) {
+    if (triggers == null) {
+      return;
+    }
+
+    triggers.Clear();
+    if (!DialogData.TryGetLocation(locationId, out var locationDialog) || locationDialog == null || locationDialog.speakers == null) {
+      return;
+    }
+
+    for (var speakerIndex = 0; speakerIndex < locationDialog.speakers.Count; speakerIndex++) {
+      if (!TryResolveNextUnseenChunk(locationDialog.locationId, locationDialog.speakers[speakerIndex], out _, out var chunkTrigger)) {
+        continue;
+      }
+      if (string.Equals(chunkTrigger, AutoTrigger, StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+      AddUniqueTrigger(triggers, chunkTrigger);
+    }
+
+    if (!ShouldLogDialogDebug()) {
+      return;
+    }
+
+    Debug.Log(
+      "[DialogController][CollectPendingTriggers] location='" + locationDialog.locationId +
+      "' trigger_count=" + triggers.Count +
+      " triggers='" + string.Join(", ", triggers) + "'"
+    );
+  }
+
+  public static bool HasPendingTriggeredSequence(string locationId, string trigger) {
+    if (!DialogData.TryGetLocation(locationId, out var locationDialog) || locationDialog == null || locationDialog.speakers == null) {
+      return false;
+    }
+
+    var normalizedTrigger = NormalizeDialogTrigger(trigger);
+    for (var speakerIndex = 0; speakerIndex < locationDialog.speakers.Count; speakerIndex++) {
+      if (!TryResolveNextUnseenChunk(locationDialog.locationId, locationDialog.speakers[speakerIndex], out _, out var chunkTrigger)) {
+        continue;
+      }
+      if (string.Equals(chunkTrigger, normalizedTrigger, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   public static bool MarkSeen(GameplayDialogController.GameplayDialogNode node, string source = "runtime") {
@@ -228,8 +316,9 @@ public static class DialogController {
     }
   }
 
-  static void AppendUnseenLocationLines(
+  static void AppendTriggeredLocationLines(
     LocationDialogDefinition locationDialog,
+    string trigger,
     List<GameplayDialogController.GameplayDialogNode> sequence
   ) {
     if (locationDialog == null || locationDialog.speakers == null) {
@@ -237,18 +326,67 @@ public static class DialogController {
     }
 
     var normalizedLocationId = NormalizeToken(locationDialog.locationId);
+    var startCount = sequence != null ? sequence.Count : 0;
     for (var speakerIndex = 0; speakerIndex < locationDialog.speakers.Count; speakerIndex++) {
-      AppendUnseenSpeakerLines(normalizedLocationId, locationDialog.speakers[speakerIndex], sequence);
+      AppendTriggeredSpeakerChunk(normalizedLocationId, locationDialog.speakers[speakerIndex], trigger, sequence);
+    }
+
+    if (sequence == null) {
+      return;
+    }
+
+    var addedCount = sequence.Count - startCount;
+    if (addedCount > 1) {
+      sequence.Sort(startCount, addedCount, dialogNodeLineComparer);
     }
   }
 
-  static void AppendUnseenSpeakerLines(
+  static void AppendTriggeredSpeakerChunk(
     string normalizedLocationId,
     DialogSpeakerDefinition speaker,
+    string requestedTrigger,
     List<GameplayDialogController.GameplayDialogNode> sequence
   ) {
-    if (speaker == null || speaker.lines == null) {
+    if (sequence == null ||
+        !TryResolveNextUnseenChunk(normalizedLocationId, speaker, out var startIndex, out var chunkTrigger) ||
+        !string.Equals(chunkTrigger, NormalizeDialogTrigger(requestedTrigger), StringComparison.OrdinalIgnoreCase)) {
       return;
+    }
+
+    var normalizedSpeakerId = NormalizeToken(speaker.speakerId);
+    for (var lineIndex = startIndex; lineIndex < speaker.lines.Count; lineIndex++) {
+      var line = speaker.lines[lineIndex];
+      if (line == null) {
+        continue;
+      }
+
+      var normalizedLineNumber = Mathf.Max(line.lineNumber, 0);
+      if (!IsValidLineNumber(normalizedLocationId, normalizedSpeakerId, normalizedLineNumber)) {
+        continue;
+      }
+      if (WasSeen(normalizedLocationId, normalizedSpeakerId, normalizedLineNumber)) {
+        break;
+      }
+
+      if (!string.Equals(NormalizeDialogTrigger(line.trigger), chunkTrigger, StringComparison.OrdinalIgnoreCase)) {
+        break;
+      }
+
+      ApplyMissingSpeakerName(line, speaker, normalizedSpeakerId);
+      sequence.Add(line);
+    }
+  }
+
+  static bool TryResolveNextUnseenChunk(
+    string normalizedLocationId,
+    DialogSpeakerDefinition speaker,
+    out int startIndex,
+    out string chunkTrigger
+  ) {
+    startIndex = -1;
+    chunkTrigger = AutoTrigger;
+    if (speaker == null || speaker.lines == null) {
+      return false;
     }
 
     var normalizedSpeakerId = NormalizeToken(speaker.speakerId);
@@ -266,9 +404,12 @@ public static class DialogController {
         continue;
       }
 
-      ApplyMissingSpeakerName(line, speaker, normalizedSpeakerId);
-      sequence.Add(line);
+      startIndex = lineIndex;
+      chunkTrigger = NormalizeDialogTrigger(line.trigger);
+      return true;
     }
+
+    return false;
   }
 
   static void ApplyMissingSpeakerName(
@@ -330,30 +471,32 @@ public static class DialogController {
     }
   }
 
-  static int CompareNodes(
-    GameplayDialogController.GameplayDialogNode left,
-    GameplayDialogController.GameplayDialogNode right
-  ) {
-    if (ReferenceEquals(left, right)) {
-      return 0;
-    }
-    if (left == null) {
-      return 1;
-    }
-    if (right == null) {
-      return -1;
-    }
-
-    var lineComparison = left.lineNumber.CompareTo(right.lineNumber);
-    if (lineComparison != 0) {
-      return lineComparison;
-    }
-
-    return string.Compare(left.speakerId, right.speakerId, StringComparison.OrdinalIgnoreCase);
-  }
-
   static string BuildSeenKey(string locationId, string speakerId, int lineNumber) {
     return NormalizeToken(locationId) + "|" + NormalizeToken(speakerId) + "|" + Mathf.Max(lineNumber, 0);
+  }
+
+  static void AddUniqueTrigger(List<string> triggers, string trigger) {
+    if (triggers == null) {
+      return;
+    }
+
+    var normalizedTrigger = NormalizeDialogTrigger(trigger);
+    for (var i = 0; i < triggers.Count; i++) {
+      if (string.Equals(triggers[i], normalizedTrigger, StringComparison.OrdinalIgnoreCase)) {
+        return;
+      }
+    }
+
+    triggers.Add(normalizedTrigger);
+  }
+
+  static string NormalizeDialogTrigger(string value) {
+    if (string.IsNullOrWhiteSpace(value) ||
+        string.Equals(value.Trim(), AutoTrigger, StringComparison.OrdinalIgnoreCase)) {
+      return AutoTrigger;
+    }
+
+    return value.Trim();
   }
 
   static string NormalizeToken(string value) {

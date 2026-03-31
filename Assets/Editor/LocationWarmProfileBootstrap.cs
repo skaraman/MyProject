@@ -42,6 +42,15 @@ public static class LocationWarmProfileBootstrap {
     return EnsureLocationWarmAssets(logResult, saveAndRefresh);
   }
 
+  public static bool SyncLocationPrefabAddressables(bool logResult, bool saveAndRefresh) {
+    var changed = EnsureLocationPrefabAddressables(logResult);
+    if (changed && saveAndRefresh) {
+      AssetDatabase.SaveAssets();
+      AssetDatabase.Refresh();
+    }
+    return changed;
+  }
+
   static bool EnsureLocationWarmAssets(bool logResult, bool saveAndRefresh) {
     EnsureFolderExists(ResourcesFolder);
 

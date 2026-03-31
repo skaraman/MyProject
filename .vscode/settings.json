@@ -24,6 +24,7 @@
         "**/*.tiff": true,
         "**/*.3ds": true,
         "**/*.3DS": true,
+        "**/Assets/ContentStage": true,
         "**/*.fbx": true,
         "**/*.FBX": true,
         "**/*.lxo": true,
@@ -65,6 +66,7 @@
         "**/ProfilerCaptures/**": true,
         "**/ServerData/**": true,
         "**/Assets/Addressables_Temp/**": true,
+        "**/Assets/ContentStage/**": true,
         "**/Assets/Generated/**": true,
         "**/Assets/_Recovery/**": true,
         "**/UserSettings/**": true,
@@ -106,10 +108,12 @@
         "**/ProfilerCaptures": true,
         "**/ServerData": true,
         "**/Assets/Addressables_Temp": true,
+        "**/Assets/ContentStage": true,
         "**/Assets/Generated": true,
         "**/Assets/_Recovery": true,
         "**/UserSettings": true
     },
+    "search.followSymlinks": false,
     "files.associations": {
         "*.asset": "yaml",
         "*.meta": "yaml",

@@ -2,6 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class Projectile : MonoBehaviour {
+  struct AuthoredSettings {
+    public MovementType movementType;
+    public float speed;
+    public bool rotateToMovement;
+    public float rotationOffsetDegrees;
+    public bool loopAnimation;
+    public string effectKeyOverride;
+    public float lifetimeSeconds;
+    public bool despawnOnHurtBoxHit;
+    public bool despawnOnAnyCollision;
+    public LayerMask collisionLayers;
+    public bool ignoreSameRoot;
+  }
+
   public enum MovementType {
     Linear,
     Homing
@@ -28,6 +42,10 @@ public class Projectile : MonoBehaviour {
   public SpriteWithNormals spriteTarget;
   public PolygonCollider2D hitboxCollider;
 
+  [Header("Spawn Offset Tuning")]
+  public float runtimeSpawnOffsetX;
+  public float runtimeSpawnOffsetY;
+
   private Rigidbody2D rb2d;
   private ProjectileManager owner;
   private string poolKey;
@@ -38,6 +56,14 @@ public class Projectile : MonoBehaviour {
   private Dictionary<string, AnimData> animationData;
   private bool animationControllerInitialized;
   private float lifetimeRemaining;
+  private bool authoredSettingsCaptured;
+  private AuthoredSettings authoredSettings;
+  private float runtimeSpawnDirectionSign = 1f;
+  private Vector3 runtimeSpawnBasePosition;
+  private Vector3 runtimeSpawnResolvedPosition;
+  private bool hasRuntimeSpawnOffsetState;
+  private float lastAppliedRuntimeSpawnOffsetX;
+  private float lastAppliedRuntimeSpawnOffsetY;
   private static readonly Dictionary<string, AnimData> EmptyAnimations = new();
   private static readonly Dictionary<string, Dictionary<string, string>> EmptyInterrupts = new();
   private static readonly Dictionary<string, Dictionary<string, List<HBox>>> EmptyHBoxData = new();
@@ -48,6 +74,7 @@ public class Projectile : MonoBehaviour {
     if (spriteTarget == null) spriteTarget = GetComponentInChildren<SpriteWithNormals>();
     if (hitboxCollider == null) hitboxCollider = GetComponentInChildren<PolygonCollider2D>();
     rb2d = GetComponent<Rigidbody2D>();
+    CaptureAuthoredSettings();
     InitializeAnimationController();
   }
 
@@ -59,6 +86,7 @@ public class Projectile : MonoBehaviour {
     var scaledDeltaTime = TimeScale.GetDeltaTime(this);
     animationController.Tick(scaledDeltaTime);
     UpdateLifetime(scaledDeltaTime);
+    TryApplyRuntimeSpawnOffsetTuning("update");
   }
 
   void FixedUpdate() {
@@ -70,13 +98,24 @@ public class Projectile : MonoBehaviour {
     lifetimeRemaining = 0f;
   }
 
+  void OnValidate() {
+    if (!Application.isPlaying) {
+      return;
+    }
+
+    TryApplyRuntimeSpawnOffsetTuning("validate");
+  }
+
   public void Launch(ProjectileManager owner, string key, Vector3 direction, Transform target = null, float? speedOverride = null) {
     this.owner = owner;
     poolKey = ResolveKey(key);
+    RestoreAuthoredSettings();
+    ApplyProjectileData(poolKey);
     effectKey = !string.IsNullOrEmpty(effectKeyOverride) ? NormalizeKey(effectKeyOverride) : poolKey;
     this.target = target;
     this.direction = direction.sqrMagnitude > 0f ? direction.normalized : transform.right;
     ResolveMovementTargets();
+    CaptureRuntimeSpawnOffsetState();
     if (speedOverride.HasValue) {
       speed = speedOverride.Value;
     }
@@ -154,6 +193,121 @@ public class Projectile : MonoBehaviour {
 
   public void ConfigureAnimationData(Dictionary<string, AnimData> animations) {
     animationData = animations;
+  }
+
+  void CaptureAuthoredSettings() {
+    authoredSettings = new AuthoredSettings {
+      movementType = movementType,
+      speed = speed,
+      rotateToMovement = rotateToMovement,
+      rotationOffsetDegrees = rotationOffsetDegrees,
+      loopAnimation = loopAnimation,
+      effectKeyOverride = effectKeyOverride,
+      lifetimeSeconds = lifetimeSeconds,
+      despawnOnHurtBoxHit = despawnOnHurtBoxHit,
+      despawnOnAnyCollision = despawnOnAnyCollision,
+      collisionLayers = collisionLayers,
+      ignoreSameRoot = ignoreSameRoot
+    };
+    authoredSettingsCaptured = true;
+  }
+
+  void RestoreAuthoredSettings() {
+    if (!authoredSettingsCaptured) {
+      CaptureAuthoredSettings();
+    }
+
+    movementType = authoredSettings.movementType;
+    speed = authoredSettings.speed;
+    rotateToMovement = authoredSettings.rotateToMovement;
+    rotationOffsetDegrees = authoredSettings.rotationOffsetDegrees;
+    loopAnimation = authoredSettings.loopAnimation;
+    effectKeyOverride = authoredSettings.effectKeyOverride;
+    lifetimeSeconds = authoredSettings.lifetimeSeconds;
+    despawnOnHurtBoxHit = authoredSettings.despawnOnHurtBoxHit;
+    despawnOnAnyCollision = authoredSettings.despawnOnAnyCollision;
+    collisionLayers = authoredSettings.collisionLayers;
+    ignoreSameRoot = authoredSettings.ignoreSameRoot;
+  }
+
+  void ApplyProjectileData(string key) {
+    if (!Projectiles.TryGet(key, out var data) || data == null) {
+      return;
+    }
+
+    movementType = data.movementType;
+    speed = data.speed;
+    rotateToMovement = data.rotateToMovement;
+    rotationOffsetDegrees = data.rotationOffsetDegrees;
+    loopAnimation = data.loopAnimation;
+    effectKeyOverride = data.effectKeyOverride;
+    lifetimeSeconds = data.lifetimeSeconds;
+    despawnOnHurtBoxHit = data.despawnOnHurtBoxHit;
+    despawnOnAnyCollision = data.despawnOnAnyCollision;
+    collisionLayers = data.collisionLayers;
+    ignoreSameRoot = data.ignoreSameRoot;
+  }
+
+  void CaptureRuntimeSpawnOffsetState() {
+    runtimeSpawnDirectionSign = ResolveRuntimeSpawnDirectionSign();
+    if (Projectiles.TryGet(poolKey, out var data) && data != null) {
+      runtimeSpawnOffsetX = data.spawnOffsetX;
+      runtimeSpawnOffsetY = data.spawnOffsetY;
+    }
+    else {
+      runtimeSpawnOffsetX = 0f;
+      runtimeSpawnOffsetY = 0f;
+    }
+
+    runtimeSpawnResolvedPosition = transform.position;
+    runtimeSpawnBasePosition = runtimeSpawnResolvedPosition - ResolveRuntimeSpawnOffsetVector();
+    lastAppliedRuntimeSpawnOffsetX = runtimeSpawnOffsetX;
+    lastAppliedRuntimeSpawnOffsetY = runtimeSpawnOffsetY;
+    hasRuntimeSpawnOffsetState = true;
+  }
+
+  void TryApplyRuntimeSpawnOffsetTuning(string source) {
+    if (!hasRuntimeSpawnOffsetState) {
+      return;
+    }
+
+    if (Mathf.Approximately(lastAppliedRuntimeSpawnOffsetX, runtimeSpawnOffsetX) &&
+        Mathf.Approximately(lastAppliedRuntimeSpawnOffsetY, runtimeSpawnOffsetY)) {
+      return;
+    }
+
+    runtimeSpawnDirectionSign = ResolveRuntimeSpawnDirectionSign();
+    var resolvedPosition = runtimeSpawnBasePosition + ResolveRuntimeSpawnOffsetVector();
+    if (rb2d != null) {
+      rb2d.position = resolvedPosition;
+      rb2d.linearVelocity = Vector2.zero;
+      rb2d.angularVelocity = 0f;
+    }
+    else {
+      transform.position = resolvedPosition;
+    }
+
+    runtimeSpawnResolvedPosition = resolvedPosition;
+    lastAppliedRuntimeSpawnOffsetX = runtimeSpawnOffsetX;
+    lastAppliedRuntimeSpawnOffsetY = runtimeSpawnOffsetY;
+    if (Application.isEditor || Debug.isDebugBuild) {
+      Debug.Log(
+        "[Projectile] AppliedRuntimeSpawnOffsetTuning" +
+        " source=" + source +
+        " key='" + poolKey + "'" +
+        " base=" + runtimeSpawnBasePosition +
+        " authored_offset=(" + runtimeSpawnOffsetX.ToString("0.###") + ", " + runtimeSpawnOffsetY.ToString("0.###") + ")" +
+        " resolved=" + runtimeSpawnResolvedPosition
+      );
+    }
+  }
+
+  float ResolveRuntimeSpawnDirectionSign() {
+    return direction.x < 0f ? -1f : 1f;
+  }
+
+  Vector3 ResolveRuntimeSpawnOffsetVector() {
+    return new Vector3(runtimeSpawnOffsetX * runtimeSpawnDirectionSign, runtimeSpawnOffsetY, 0f);
   }
 
   private void InitializeAnimationController() {

@@ -229,8 +229,10 @@ public class LocationInfo {
 public static class LocationEnemyData {
   public const string MainMenuLocationId = "mainmenu";
   public const string DomeCityLocationId = "DomeCity";
+  public const string HomebaseLocationId = "Homebase";
+  public const string SunkenCaveLocationId = "SunkenCave";
 
-  public static Dictionary<string, LocationInfo> locations { get; } = new(StringComparer.OrdinalIgnoreCase) {
+  static readonly Dictionary<string, LocationInfo> defaultLocations = new(StringComparer.OrdinalIgnoreCase) {
     {
       MainMenuLocationId,
       new LocationInfo(
@@ -265,21 +267,35 @@ public static class LocationEnemyData {
     }
   };
 
+  static Dictionary<string, LocationInfo> cachedLocationsView;
+  static int cachedLocationsReloadVersion = -1;
+
+  public static Dictionary<string, LocationInfo> locations => GetActiveLocationsView();
+
   public static string NormalizeLocationId(string locationId) {
     return string.IsNullOrWhiteSpace(locationId) ? "" : locationId.Trim();
   }
 
   public static bool ContainsLocation(string locationId) {
     var normalized = NormalizeLocationId(locationId);
-    return !string.IsNullOrWhiteSpace(normalized) && locations.ContainsKey(normalized);
+    return !string.IsNullOrWhiteSpace(normalized) && GetActiveLocationsView().ContainsKey(normalized);
   }
 
   public static bool TryGetLocation(string locationId, out LocationInfo locationInfo) {
     locationInfo = null;
     var normalized = NormalizeLocationId(locationId);
     if (string.IsNullOrWhiteSpace(normalized)) return false;
-    if (!locations.TryGetValue(normalized, out var found) || found == null) return false;
-    locationInfo = found;
+    if (!GetActiveLocationsView().TryGetValue(normalized, out var found) || found == null) return false;
+    locationInfo = ActiveContentRegistry.CloneLocation(found) ?? found;
+    return true;
+  }
+
+  public static bool TryGetBuiltInLocation(string locationId, out LocationInfo locationInfo) {
+    locationInfo = null;
+    var normalized = NormalizeLocationId(locationId);
+    if (string.IsNullOrWhiteSpace(normalized)) return false;
+    if (!defaultLocations.TryGetValue(normalized, out var found) || found == null) return false;
+    locationInfo = ActiveContentRegistry.CloneLocation(found) ?? found;
     return true;
   }
 
@@ -305,11 +321,47 @@ public static class LocationEnemyData {
   }
 
   public static string GetDefaultLocation() {
-    if (locations.ContainsKey(DomeCityLocationId)) return DomeCityLocationId;
-    foreach (var pair in locations) {
+    var externalDefault = NormalizeLocationId(ActiveContentRegistryRuntime.GetDefaultLocationId());
+    var activeLocations = GetActiveLocationsView();
+    if (!string.IsNullOrWhiteSpace(externalDefault) && activeLocations.ContainsKey(externalDefault)) {
+      return externalDefault;
+    }
+
+    if (activeLocations.ContainsKey(DomeCityLocationId)) return DomeCityLocationId;
+    foreach (var pair in activeLocations) {
       if (!string.IsNullOrWhiteSpace(pair.Key) && pair.Value != null) return pair.Key;
     }
     return DomeCityLocationId;
+  }
+
+  static Dictionary<string, LocationInfo> GetActiveLocationsView() {
+    if (!ActiveContentRegistryRuntime.HasActiveExternalContent()) {
+      cachedLocationsView = null;
+      cachedLocationsReloadVersion = -1;
+      return defaultLocations;
+    }
+
+    var reloadVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (cachedLocationsView != null && cachedLocationsReloadVersion == reloadVersion) {
+      return cachedLocationsView;
+    }
+
+    var merged = new Dictionary<string, LocationInfo>(defaultLocations, StringComparer.OrdinalIgnoreCase);
+    var registry = ActiveContentRegistryRuntime.Registry;
+    var externalLocations = registry != null ? registry.Locations : null;
+    if (externalLocations != null) {
+      for (var i = 0; i < externalLocations.Count; i++) {
+        var location = externalLocations[i];
+        if (location == null) continue;
+        var normalizedId = NormalizeLocationId(location.id);
+        if (string.IsNullOrWhiteSpace(normalizedId)) continue;
+        merged[normalizedId] = ActiveContentRegistry.CloneLocation(location) ?? location;
+      }
+    }
+
+    cachedLocationsView = merged;
+    cachedLocationsReloadVersion = reloadVersion;
+    return cachedLocationsView;
   }
 
   static bool DoesLocationUsePrefab(LocationInfo locationInfo, GameObject prefab, string selectedAssetPath) {

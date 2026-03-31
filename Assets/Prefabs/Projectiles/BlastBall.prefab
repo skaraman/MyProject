@@ -116,7 +116,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: 0333f2851fbfbaf4dac326b64de9e6d3, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -135,8 +135,8 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
+  m_SortingLayerID: 619821003
+  m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: -3919779002189068522, guid: f21e095bec0450f4bb1d8d339e23fbaa, type: 3}
@@ -157,8 +157,8 @@ SortingGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7967227520933354192}
   m_Enabled: 1
-  m_SortingLayerID: -1567155121
-  m_SortingLayer: 0
+  m_SortingLayerID: 619821003
+  m_SortingLayer: 3
   m_SortingOrder: 48
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
@@ -188,7 +188,7 @@ Transform:
   m_GameObject: {fileID: 8321494052513208523}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: -0.074, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -206,7 +206,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9197b2376edb39042ae0d2dc8426e599, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::Zpoint
-  sortingGroup: {fileID: 5139290945509360972}
 --- !u!1 &8540394127696640831
 GameObject:
   m_ObjectHideFlags: 0
@@ -285,8 +284,8 @@ PolygonCollider2D:
   m_AutoTiling: 0
   m_Points:
     m_Paths:
-    - - {x: 0.11599413, y: 0.07970227}
-      - {x: 0.01863642, y: 0.07897151}
-      - {x: 0.017211666, y: 0.0011149701}
-      - {x: 0.11609511, y: 0.0009222962}
+    - - {x: 0.14886114, y: 0.047422167}
+      - {x: -0.0007316563, y: 0.070754774}
+      - {x: -0.006851636, y: -0.07811799}
+      - {x: 0.14954904, y: -0.060703326}
   m_UseDelaunayMesh: 1

@@ -7,6 +7,7 @@ using UnityEngine.InputSystem;
 
 [DisallowMultipleComponent]
 public class GameplayDialogController : MonoBehaviour {
+  const string AutoDialogTrigger = "auto";
   const string DialogEsperPortraitLibrary = "Dialog/DialogEsper";
   const string DefaultPortraitLabelPrefix = "Base";
   const string PlayerNameColorGroup = "secondary";
@@ -66,6 +67,7 @@ public class GameplayDialogController : MonoBehaviour {
     public string locationId = "";
     public string speakerId = "";
     public int lineNumber;
+    public string trigger = "";
     public DialogSpeakerSide speaker = DialogSpeakerSide.Esperanza;
     public DialogOtherType otherType = DialogOtherType.Auto;
     public string speakerName = "Esperanza";
@@ -80,6 +82,12 @@ public class GameplayDialogController : MonoBehaviour {
   public class GameplayDialogPlayRequest {
     public string source = "runtime";
     public List<GameplayDialogNode> nodes = new();
+  }
+
+  sealed class PendingDialogRequest {
+    public string locationId = "";
+    public string trigger = "";
+    public string source = "";
   }
 
   sealed class SpeakerWidgets {
@@ -117,6 +125,9 @@ public class GameplayDialogController : MonoBehaviour {
   readonly SpeakerWidgets otherWidgets = new("other", "Other");
   readonly List<GameplayDialogNode> sequenceNodes = new();
   readonly List<GameplayDialogNode> resolvedLocationSequence = new();
+  readonly List<Action> locationTriggerActions = new();
+  readonly List<string> resolvedLocationTriggers = new();
+  readonly List<PendingDialogRequest> pendingDialogRequests = new();
   readonly List<SpriteRenderer> fontTextRendererBuffer = new();
 
   GameObject dialogRoot;
@@ -127,14 +138,12 @@ public class GameplayDialogController : MonoBehaviour {
   bool dialogStateReady;
   int currentNodeIndex = -1;
   string currentFullText = "";
-  string pendingLocationId = "";
-  string pendingLocationSource = "";
+  string activeLocationDialogId = "";
   int visibleCharacterCount;
   float typewriterCharacterProgress;
   int pauseDialogSuspendToken;
   bool debugSeenOverrideInitialized;
   bool appliedDebugSeenOverride;
-  readonly List<GameplayDialogNode> pendingLocationSequence = new();
 
   public bool IsDialogActive => dialogueActive;
   public bool HasResolvedUiReferencesForLoadingProgress {
@@ -147,7 +156,7 @@ public class GameplayDialogController : MonoBehaviour {
     isActiveAndEnabled &&
     HasResolvedUiReferencesForLoadingProgress &&
     dialogStateReady;
-  public bool HasPendingLocationDialog => pendingLocationSequence.Count > 0;
+  public bool HasPendingLocationDialog => HasPendingDialogRequestForActiveLocation() || HasPendingAutoLocationDialog();
   public bool IsBlockingGameplayInput => dialogueActive || HasPendingLocationDialog;
 
   static bool ShouldLogDialogDebug() {
@@ -224,13 +233,14 @@ public class GameplayDialogController : MonoBehaviour {
     EnsureResolved();
     RegisterHandlers();
     dialogStateReady = DialogController.IsStateReadyForCurrentSlot;
-    pendingLocationId = ResolveLocationId(LocationManager.currentLocation);
+    activeLocationDialogId = ResolveLocationId(LocationManager.currentLocation);
+    RegisterLocationTriggerHandlers(activeLocationDialogId, "enable");
     if (TryResumeDialogueAfterPause("enable")) {
       return;
     }
     SetDialogVisible(false, "enable");
     if (dialogStateReady) {
-      QueueLocationDialogIfNeeded(pendingLocationId, "enable");
+      TryPlayPendingDialogRequest("enable");
     }
   }
 
@@ -240,7 +250,7 @@ public class GameplayDialogController : MonoBehaviour {
 
   void Update() {
     TickTypewriter();
-    TryPlayPendingLocationSequence("update");
+    TryPlayPendingDialogRequest("update");
   }
 
   void OnDisable() {
@@ -261,9 +271,9 @@ public class GameplayDialogController : MonoBehaviour {
     }
 
     ResetPauseDialogueResumeState();
-    pendingLocationSequence.Clear();
-    pendingLocationSource = "";
-    pendingLocationId = "";
+    ClearPendingDialogRequests();
+    ClearLocationTriggerHandlers();
+    activeLocationDialogId = "";
     dialogStateReady = false;
     if (dialogueActive) {
       StopDialogue("disable");
@@ -353,7 +363,8 @@ public class GameplayDialogController : MonoBehaviour {
       Debug.Log("[GameplayDialogController] Dialog finished reason='" + (reason ?? "") + "'");
     }
     MessageBus.Send("dialog.finished", reason);
-    TryPlayPendingLocationSequence("dialog_finished");
+    RegisterLocationTriggerHandlers(activeLocationDialogId, "dialog_finished");
+    TryPlayPendingDialogRequest("dialog_finished");
   }
 
   void ResetDialogueWithoutNotification(string source) {
@@ -364,9 +375,9 @@ public class GameplayDialogController : MonoBehaviour {
     visibleCharacterCount = 0;
     typewriterCharacterProgress = 0f;
     sequenceNodes.Clear();
-    pendingLocationSequence.Clear();
-    pendingLocationSource = "";
-    pendingLocationId = "";
+    ClearPendingDialogRequests();
+    ClearLocationTriggerHandlers();
+    activeLocationDialogId = "";
     ApplyText(dialogText, "");
     ClearSpeakerState();
     SetDialogVisible(false, source);
@@ -391,6 +402,7 @@ public class GameplayDialogController : MonoBehaviour {
       actions[i]?.Invoke();
     }
     actions.Clear();
+    ClearLocationTriggerHandlers();
   }
 
   void EnsureResolved(bool force = false) {
@@ -673,38 +685,44 @@ public class GameplayDialogController : MonoBehaviour {
   }
 
   void OnLocationLoaded(object payload) {
-    pendingLocationId = ResolveLocationId(payload);
-    if (string.IsNullOrWhiteSpace(pendingLocationId)) {
+    var previousLocationDialogId = activeLocationDialogId;
+    activeLocationDialogId = ResolveLocationId(payload);
+    if (string.IsNullOrWhiteSpace(activeLocationDialogId)) {
+      ClearPendingDialogRequests();
+      ClearLocationTriggerHandlers();
       return;
     }
 
-    DialogController.BeginLocationDialogSession(pendingLocationId, "location_loaded");
+    ClearPendingDialogRequestsForLocation(activeLocationDialogId, previousLocationDialogId, "location_loaded");
+    DialogController.BeginLocationDialogSession(activeLocationDialogId, "location_loaded");
+    RegisterLocationTriggerHandlers(activeLocationDialogId, "location_loaded");
     if (!dialogStateReady) {
       if (ShouldLogDialogDebug()) {
         Debug.Log(
           "[GameplayDialogController] Deferred location dialog until dialog state is ready" +
-          " location='" + pendingLocationId + "'"
+          " location='" + activeLocationDialogId + "'"
         );
       }
       return;
     }
 
-    QueueLocationDialogIfNeeded(pendingLocationId, "location_loaded");
+    TryPlayPendingDialogRequest("location_loaded");
   }
 
   void OnDialogStateReady(object payload) {
     dialogStateReady = true;
-    if (string.IsNullOrWhiteSpace(pendingLocationId)) {
-      pendingLocationId = ResolveLocationId(LocationManager.currentLocation);
+    if (string.IsNullOrWhiteSpace(activeLocationDialogId)) {
+      activeLocationDialogId = ResolveLocationId(LocationManager.currentLocation);
     }
 
     if (ShouldLogDialogDebug()) {
       Debug.Log(
         "[GameplayDialogController] Dialog state ready source='" + (payload != null ? payload.ToString() : "") +
-        "' location='" + pendingLocationId + "'"
+        "' location='" + activeLocationDialogId + "'"
       );
     }
-    QueueLocationDialogIfNeeded(pendingLocationId, "dialog_state_ready");
+    RegisterLocationTriggerHandlers(activeLocationDialogId, "dialog_state_ready");
+    TryPlayPendingDialogRequest("dialog_state_ready");
   }
 
   void PlayRequestedSequence(object payload) {
@@ -772,6 +790,7 @@ public class GameplayDialogController : MonoBehaviour {
         "[GameplayDialogController] Showing node index=" + currentNodeIndex +
         " source='" + (source ?? "") + "'" +
         " location='" + (node.locationId ?? "") + "'" +
+        " trigger='" + ResolveDialogTrigger(node.trigger) + "'" +
         " speaker='" + ResolveSpeakerName(node) + "'" +
         " speaker_id='" + (node.speakerId ?? "") + "'" +
         " side='" + node.speaker + "'" +
@@ -1164,6 +1183,12 @@ public class GameplayDialogController : MonoBehaviour {
       return true;
     }
 
+    if (!string.IsNullOrWhiteSpace(node.speakerId)) {
+      libraryName = "Dialog/Dialog" + node.speakerId.Trim();
+      labelPrefix = ResolvePortraitLabelPrefix(libraryName, formName);
+      return true;
+    }
+
     if (TryResolveKnownPortraitSpeakerConfig(node.speakerId, out var config) ||
         TryResolveKnownPortraitSpeakerConfig(node.speakerName, out config)) {
       libraryName = config.libraryName;
@@ -1291,71 +1316,229 @@ public class GameplayDialogController : MonoBehaviour {
     );
   }
 
-  void QueueLocationDialogIfNeeded(string locationId, string source) {
-    if (!dialogStateReady) {
-      return;
-    }
+  void RegisterLocationTriggerHandlers(string locationId, string source) {
+    ClearLocationTriggerHandlers();
 
     var resolvedLocationId = ResolveLocationId(locationId);
+    activeLocationDialogId = resolvedLocationId;
     if (string.IsNullOrWhiteSpace(resolvedLocationId)) {
       return;
     }
 
-    pendingLocationId = resolvedLocationId;
-    if (!DialogController.TryBuildUnseenSequence(resolvedLocationId, resolvedLocationSequence) ||
-        resolvedLocationSequence.Count <= 0) {
-      pendingLocationSequence.Clear();
-      pendingLocationSource = "";
+    DialogController.CollectPendingTriggers(resolvedLocationId, resolvedLocationTriggers);
+    for (var i = 0; i < resolvedLocationTriggers.Count; i++) {
+      var trigger = ResolveDialogTrigger(resolvedLocationTriggers[i]);
+      if (string.IsNullOrWhiteSpace(trigger)) {
+        continue;
+      }
+
+      var subscribedTrigger = trigger;
+      locationTriggerActions.Add(MessageBus.On(subscribedTrigger, payload => OnDialogTriggerReceived(subscribedTrigger, payload)));
+    }
+
+    if (!ShouldLogDialogDebug()) {
       return;
     }
 
-    if (pendingLocationSequence.Capacity < resolvedLocationSequence.Count) {
-      pendingLocationSequence.Capacity = resolvedLocationSequence.Count;
+    Debug.Log(
+      "[GameplayDialogController] Registered location dialog triggers" +
+      " location='" + resolvedLocationId +
+      "' source='" + (source ?? "") +
+      "' trigger_count=" + resolvedLocationTriggers.Count +
+      " triggers='" + string.Join(", ", resolvedLocationTriggers) + "'"
+    );
+  }
+
+  void ClearLocationTriggerHandlers() {
+    for (var i = 0; i < locationTriggerActions.Count; i++) {
+      locationTriggerActions[i]?.Invoke();
     }
-    pendingLocationSequence.Clear();
-    pendingLocationSequence.AddRange(resolvedLocationSequence);
-    pendingLocationSource = string.IsNullOrWhiteSpace(source) ? "location_dialog" : source;
+    locationTriggerActions.Clear();
+    resolvedLocationTriggers.Clear();
+  }
+
+  void OnDialogTriggerReceived(string trigger, object payload) {
+    if (string.IsNullOrWhiteSpace(activeLocationDialogId)) {
+      return;
+    }
+
+    QueueTriggeredDialog(activeLocationDialogId, trigger, "message_bus:" + ResolveDialogTrigger(trigger));
+  }
+
+  void QueueTriggeredDialog(string locationId, string trigger, string source) {
+    var resolvedLocationId = ResolveLocationId(locationId);
+    var resolvedTrigger = ResolveDialogTrigger(trigger);
+    if (string.IsNullOrWhiteSpace(resolvedLocationId) ||
+        string.Equals(resolvedTrigger, AutoDialogTrigger, StringComparison.OrdinalIgnoreCase)) {
+      return;
+    }
+
+    for (var i = 0; i < pendingDialogRequests.Count; i++) {
+      var existing = pendingDialogRequests[i];
+      if (existing == null) {
+        continue;
+      }
+      if (!string.Equals(existing.locationId, resolvedLocationId, StringComparison.OrdinalIgnoreCase) ||
+          !string.Equals(existing.trigger, resolvedTrigger, StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      if (ShouldLogDialogDebug()) {
+        Debug.Log(
+          "[GameplayDialogController] Ignored duplicate pending dialog trigger" +
+          " location='" + resolvedLocationId +
+          "' trigger='" + resolvedTrigger + "'"
+        );
+      }
+      return;
+    }
+
+    pendingDialogRequests.Add(new PendingDialogRequest {
+      locationId = resolvedLocationId,
+      trigger = resolvedTrigger,
+      source = string.IsNullOrWhiteSpace(source) ? "message_bus:" + resolvedTrigger : source
+    });
 
     if (ShouldLogDialogDebug()) {
       Debug.Log(
-        "[GameplayDialogController] Queued location dialog" +
+        "[GameplayDialogController] Queued triggered dialog" +
         " location='" + resolvedLocationId +
-        "' source='" + pendingLocationSource +
-        "' line_count=" + pendingLocationSequence.Count +
+        "' trigger='" + resolvedTrigger +
+        "' source='" + (source ?? "") +
+        "' pending_count=" + pendingDialogRequests.Count +
         " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0)
       );
     }
-    TryPlayPendingLocationSequence(source);
+
+    TryPlayPendingDialogRequest("trigger_queue");
   }
 
-  void TryPlayPendingLocationSequence(string source) {
-    if (!isActiveAndEnabled || dialogueActive) {
+  void ClearPendingDialogRequests() {
+    pendingDialogRequests.Clear();
+  }
+
+  void ClearPendingDialogRequestsForLocation(string activeLocationId, string previousLocationId, string source) {
+    var resolvedActiveLocationId = ResolveLocationId(activeLocationId);
+    var removedCount = 0;
+    for (var i = pendingDialogRequests.Count - 1; i >= 0; i--) {
+      var request = pendingDialogRequests[i];
+      if (request == null ||
+          !string.Equals(ResolveLocationId(request.locationId), resolvedActiveLocationId, StringComparison.OrdinalIgnoreCase)) {
+        pendingDialogRequests.RemoveAt(i);
+        removedCount += 1;
+      }
+    }
+
+    if (removedCount <= 0 || !ShouldLogDialogDebug()) {
       return;
     }
 
-    if (!dialogStateReady || pendingLocationSequence.Count <= 0) {
+    Debug.Log(
+      "[GameplayDialogController] Cleared stale pending dialog requests" +
+      " source='" + (source ?? "") +
+      "' previous_location='" + ResolveLocationId(previousLocationId) +
+      "' active_location='" + resolvedActiveLocationId +
+      "' removed_count=" + removedCount
+    );
+  }
+
+  bool HasPendingDialogRequestForActiveLocation() {
+    if (pendingDialogRequests.Count <= 0 || string.IsNullOrWhiteSpace(activeLocationDialogId)) {
+      return false;
+    }
+
+    for (var i = 0; i < pendingDialogRequests.Count; i++) {
+      var request = pendingDialogRequests[i];
+      if (request == null) {
+        continue;
+      }
+
+      if (string.Equals(request.locationId, activeLocationDialogId, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool HasPendingAutoLocationDialog() {
+    return !dialogueActive &&
+           dialogStateReady &&
+           !string.IsNullOrWhiteSpace(activeLocationDialogId) &&
+           DialogController.HasPendingTriggeredSequence(activeLocationDialogId, AutoDialogTrigger);
+  }
+
+  void TryPlayPendingDialogRequest(string source) {
+    if (!isActiveAndEnabled || dialogueActive || !dialogStateReady || SpriteStreamingLoadingState.IsLoadingOverlayActive) {
       return;
     }
 
-    if (SpriteStreamingLoadingState.IsLoadingOverlayActive) {
+    if (TryPlayAutoLocationDialog(source)) {
       return;
     }
 
-    var queuedSource = string.IsNullOrWhiteSpace(pendingLocationSource) ? source : pendingLocationSource;
-    var locationId = pendingLocationId;
-    ReplaceSequenceNodes(pendingLocationSequence);
-    pendingLocationSequence.Clear();
-    pendingLocationSource = "";
+    for (var i = 0; i < pendingDialogRequests.Count; i++) {
+      var request = pendingDialogRequests[i];
+      if (request == null) {
+        pendingDialogRequests.RemoveAt(i);
+        i--;
+        continue;
+      }
+
+      if (!string.Equals(request.locationId, activeLocationDialogId, StringComparison.OrdinalIgnoreCase)) {
+        pendingDialogRequests.RemoveAt(i);
+        i--;
+        continue;
+      }
+
+      if (TryBuildTriggeredDialogSequence(request.locationId, request.trigger)) {
+        pendingDialogRequests.RemoveAt(i);
+        PlayResolvedLocationDialog(request.locationId, request.trigger, request.source);
+        return;
+      }
+
+      if (ShouldLogDialogDebug()) {
+        Debug.Log(
+          "[GameplayDialogController] Dropped pending dialog trigger because no matching unseen chunk was available" +
+          " location='" + request.locationId +
+          "' trigger='" + request.trigger +
+          "' source='" + request.source + "'"
+        );
+      }
+      pendingDialogRequests.RemoveAt(i);
+      i--;
+    }
+  }
+
+  bool TryPlayAutoLocationDialog(string source) {
+    if (!TryBuildTriggeredDialogSequence(activeLocationDialogId, AutoDialogTrigger)) {
+      return false;
+    }
+
+    PlayResolvedLocationDialog(activeLocationDialogId, AutoDialogTrigger, source);
+    return true;
+  }
+
+  bool TryBuildTriggeredDialogSequence(string locationId, string trigger) {
+    return !string.IsNullOrWhiteSpace(locationId) &&
+           DialogController.TryBuildTriggeredSequence(locationId, trigger, resolvedLocationSequence) &&
+           resolvedLocationSequence.Count > 0;
+  }
+
+  void PlayResolvedLocationDialog(string locationId, string trigger, string source) {
+    ReplaceSequenceNodes(resolvedLocationSequence);
 
     if (ShouldLogDialogDebug()) {
       Debug.Log(
-        "[GameplayDialogController] Starting queued location dialog" +
+        "[GameplayDialogController] Starting location dialog chunk" +
         " location='" + locationId +
-        "' source='" + queuedSource +
+        "' trigger='" + ResolveDialogTrigger(trigger) +
+        "' source='" + (source ?? "") +
         "' line_count=" + sequenceNodes.Count
       );
     }
-    PlayAuthoredSequence(queuedSource);
+
+    PlayAuthoredSequence(BuildDialogSource(source, trigger));
   }
 
   void ReplaceSequenceNodes(IList<GameplayDialogNode> nodes) {
@@ -1447,6 +1630,23 @@ public class GameplayDialogController : MonoBehaviour {
 
   static int GetActiveSelf(GameObject target) {
     return target != null && target.activeSelf ? 1 : 0;
+  }
+
+  static string ResolveDialogTrigger(string value) {
+    if (string.IsNullOrWhiteSpace(value) ||
+        string.Equals(value.Trim(), AutoDialogTrigger, StringComparison.OrdinalIgnoreCase)) {
+      return AutoDialogTrigger;
+    }
+
+    return value.Trim();
+  }
+
+  static string BuildDialogSource(string source, string trigger) {
+    var resolvedSource = string.IsNullOrWhiteSpace(source) ? "location_dialog" : source.Trim();
+    var resolvedTrigger = ResolveDialogTrigger(trigger);
+    return string.Equals(resolvedTrigger, AutoDialogTrigger, StringComparison.OrdinalIgnoreCase)
+      ? resolvedSource + ":auto"
+      : resolvedSource + ":trigger:" + resolvedTrigger;
   }
 
   static string ResolveLocationId(object payload) {
