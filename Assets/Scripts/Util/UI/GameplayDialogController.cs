@@ -144,6 +144,7 @@ public class GameplayDialogController : MonoBehaviour {
   int pauseDialogSuspendToken;
   bool debugSeenOverrideInitialized;
   bool appliedDebugSeenOverride;
+  string suppressedAutoDialogLocationId = "";
 
   public bool IsDialogActive => dialogueActive;
   public bool HasResolvedUiReferencesForLoadingProgress {
@@ -160,7 +161,14 @@ public class GameplayDialogController : MonoBehaviour {
   public bool IsBlockingGameplayInput => dialogueActive || HasPendingLocationDialog;
 
   static bool ShouldLogDialogDebug() {
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
+      return false;
+    }
     return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  bool IsEditorDebugSeenOverrideEnabled() {
+    return Application.isEditor && debugTreatAllDialogAsUnseen;
   }
 
   bool ShouldSuspendDialogueForPause() {
@@ -234,6 +242,7 @@ public class GameplayDialogController : MonoBehaviour {
     RegisterHandlers();
     dialogStateReady = DialogController.IsStateReadyForCurrentSlot;
     activeLocationDialogId = ResolveLocationId(LocationManager.currentLocation);
+    ResetAutoDialogRetryState();
     RegisterLocationTriggerHandlers(activeLocationDialogId, "enable");
     if (TryResumeDialogueAfterPause("enable")) {
       return;
@@ -271,6 +280,7 @@ public class GameplayDialogController : MonoBehaviour {
     }
 
     ResetPauseDialogueResumeState();
+    ResetAutoDialogRetryState();
     ClearPendingDialogRequests();
     ClearLocationTriggerHandlers();
     activeLocationDialogId = "";
@@ -303,21 +313,24 @@ public class GameplayDialogController : MonoBehaviour {
   }
 
   void SyncDebugSeenOverride(string source, bool force = false) {
+    var effectiveDebugSeenOverride = IsEditorDebugSeenOverrideEnabled();
     if (!force &&
         debugSeenOverrideInitialized &&
-        appliedDebugSeenOverride == debugTreatAllDialogAsUnseen) {
+        appliedDebugSeenOverride == effectiveDebugSeenOverride) {
       return;
     }
 
-    DialogController.SetDebugTreatAllDialogAsUnseen(debugTreatAllDialogAsUnseen, source);
-    appliedDebugSeenOverride = debugTreatAllDialogAsUnseen;
+    DialogController.SetDebugTreatAllDialogAsUnseen(effectiveDebugSeenOverride, source);
+    ResetAutoDialogRetryState();
+    appliedDebugSeenOverride = effectiveDebugSeenOverride;
     debugSeenOverrideInitialized = true;
     if (!ShouldLogDialogDebug()) {
       return;
     }
 
     Debug.Log(
-      "[GameplayDialogController] Debug seen override enabled=" + (debugTreatAllDialogAsUnseen ? 1 : 0) +
+      "[GameplayDialogController] Debug seen override configured=" + (debugTreatAllDialogAsUnseen ? 1 : 0) +
+      " enabled=" + (effectiveDebugSeenOverride ? 1 : 0) +
       " source='" + (source ?? "") + "'"
     );
   }
@@ -347,6 +360,7 @@ public class GameplayDialogController : MonoBehaviour {
     var wasActive = dialogueActive;
     dialogueActive = false;
     ResetPauseDialogueResumeState();
+    ResetAutoDialogRetryState();
     currentNodeIndex = -1;
     currentFullText = "";
     visibleCharacterCount = 0;
@@ -369,6 +383,7 @@ public class GameplayDialogController : MonoBehaviour {
 
   void ResetDialogueWithoutNotification(string source) {
     ResetPauseDialogueResumeState();
+    ResetAutoDialogRetryState();
     dialogueActive = false;
     currentNodeIndex = -1;
     currentFullText = "";
@@ -687,6 +702,7 @@ public class GameplayDialogController : MonoBehaviour {
   void OnLocationLoaded(object payload) {
     var previousLocationDialogId = activeLocationDialogId;
     activeLocationDialogId = ResolveLocationId(payload);
+    ResetAutoDialogRetryState();
     if (string.IsNullOrWhiteSpace(activeLocationDialogId)) {
       ClearPendingDialogRequests();
       ClearLocationTriggerHandlers();
@@ -714,6 +730,7 @@ public class GameplayDialogController : MonoBehaviour {
     if (string.IsNullOrWhiteSpace(activeLocationDialogId)) {
       activeLocationDialogId = ResolveLocationId(LocationManager.currentLocation);
     }
+    ResetAutoDialogRetryState();
 
     if (ShouldLogDialogDebug()) {
       Debug.Log(
@@ -1511,12 +1528,35 @@ public class GameplayDialogController : MonoBehaviour {
   }
 
   bool TryPlayAutoLocationDialog(string source) {
+    if (ShouldSkipAutoDialogRetry(activeLocationDialogId)) {
+      return false;
+    }
+
     if (!TryBuildTriggeredDialogSequence(activeLocationDialogId, AutoDialogTrigger)) {
+      SuppressAutoDialogRetry(activeLocationDialogId);
       return false;
     }
 
     PlayResolvedLocationDialog(activeLocationDialogId, AutoDialogTrigger, source);
     return true;
+  }
+
+  void ResetAutoDialogRetryState() {
+    suppressedAutoDialogLocationId = "";
+  }
+
+  bool ShouldSkipAutoDialogRetry(string locationId) {
+    return !string.IsNullOrWhiteSpace(locationId) &&
+           string.Equals(suppressedAutoDialogLocationId, locationId, StringComparison.OrdinalIgnoreCase);
+  }
+
+  void SuppressAutoDialogRetry(string locationId) {
+    if (string.IsNullOrWhiteSpace(locationId) ||
+        string.Equals(suppressedAutoDialogLocationId, locationId, StringComparison.OrdinalIgnoreCase)) {
+      return;
+    }
+
+    suppressedAutoDialogLocationId = locationId;
   }
 
   bool TryBuildTriggeredDialogSequence(string locationId, string trigger) {

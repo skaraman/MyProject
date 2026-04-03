@@ -217,6 +217,10 @@ public class ProjectileManager : MonoBehaviour {
     return Application.isEditor || Debug.isDebugBuild;
   }
 
+  bool IsEditorPauseAfterFirstProjectileSpawnEnabled() {
+    return Application.isEditor && pauseEditorAfterFirstProjectileSpawnFrame;
+  }
+
   static string NormalizeProjectileKey(string key) {
     return string.IsNullOrWhiteSpace(key) ? "" : key.Trim();
   }
@@ -356,7 +360,9 @@ public class ProjectileManager : MonoBehaviour {
 
   void TryQueueEditorPauseAfterFirstProjectileSpawn(string key, Vector3 spawnPosition, Vector3 direction) {
 #if UNITY_EDITOR
-    if (!pauseEditorAfterFirstProjectileSpawnFrame || hasQueuedEditorPauseAfterFirstProjectileSpawn || !Application.isPlaying) {
+    if (!IsEditorPauseAfterFirstProjectileSpawnEnabled() ||
+        hasQueuedEditorPauseAfterFirstProjectileSpawn ||
+        !Application.isPlaying) {
       return;
     }
 
@@ -375,7 +381,7 @@ public class ProjectileManager : MonoBehaviour {
 #if UNITY_EDITOR
   IEnumerator PauseEditorAfterFirstProjectileSpawnFrameRoutine(string key, Vector3 spawnPosition, Vector3 direction) {
     yield return new WaitForEndOfFrame();
-    if (!pauseEditorAfterFirstProjectileSpawnFrame) {
+    if (!IsEditorPauseAfterFirstProjectileSpawnEnabled()) {
       yield break;
     }
 

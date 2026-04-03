@@ -5,6 +5,12 @@ using UnityEngine;
 public class GearButtons : ButtonGroup {
   readonly List<Action> actions = new();
 
+  static bool ShouldLogRuntimeUiDebug() {
+    if (!Application.isPlaying) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) return false;
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
   void OnEnable() {
     RegisterHandlers();
     OnGearReady(EsperanzaForms.GetActive());
@@ -57,11 +63,13 @@ public class GearButtons : ButtonGroup {
       refreshedSlots++;
     }
 
-    Debug.Log(
-      "[GearButtons] Refreshed gear slot icons" +
-      " form='" + resolvedForm + "'" +
-      " slots=" + refreshedSlots
-    );
+    if (ShouldLogRuntimeUiDebug()) {
+      Debug.Log(
+        "[GearButtons] Refreshed gear slot icons" +
+        " form='" + resolvedForm + "'" +
+        " slots=" + refreshedSlots
+      );
+    }
   }
 
   void RefreshSlotButton(GameObject button, string formName) {
@@ -108,11 +116,13 @@ public class GearButtons : ButtonGroup {
       spriteRenderer.color = Color.white;
     }
 
-    Debug.Log(
-      "[GearButtons] Reset empty gear slot" +
-      " form='" + formName + "'" +
-      " slot='" + button.name + "'"
-    );
+    if (ShouldLogRuntimeUiDebug()) {
+      Debug.Log(
+        "[GearButtons] Reset empty gear slot" +
+        " form='" + formName + "'" +
+        " slot='" + button.name + "'"
+      );
+    }
   }
 
   static void ApplyGearColor(GameObject button, AllIn1AnimatorInspector shaderAnimator, GearItem gearItem, string formName) {
@@ -135,12 +145,14 @@ public class GearButtons : ButtonGroup {
       spriteRenderer.color = newColor;
     }
 
-    Debug.Log(
-      "[GearButtons] Applied gear slot icon" +
-      " form='" + formName + "'" +
-      " slot='" + button.name + "'" +
-      " gear='" + (gearItem.gearId ?? "") + "'" +
-      " color='" + (gearItem.gearColor ?? "") + "'"
-    );
+    if (ShouldLogRuntimeUiDebug()) {
+      Debug.Log(
+        "[GearButtons] Applied gear slot icon" +
+        " form='" + formName + "'" +
+        " slot='" + button.name + "'" +
+        " gear='" + (gearItem.gearId ?? "") + "'" +
+        " color='" + (gearItem.gearColor ?? "") + "'"
+      );
+    }
   }
 }

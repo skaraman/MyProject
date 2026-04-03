@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -16,6 +17,7 @@ using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 public static class ContentPackPipeline {
   public const string DefaultExternalRoot = @"d:\localDev\Unity\MyProjectContent";
   public const string CorePackId = "Core";
+  public const string BaseFormPackId = "Form_Base";
   public const string SlicePackId = "Slice_DomeCity_Imp_Base";
   public const string HomebaseSlicePackId = "Slice_Homebase_Placeholder";
   public const string SunkenCaveSlicePackId = "Slice_SunkenCave_Placeholder";
@@ -26,7 +28,10 @@ public static class ContentPackPipeline {
   public const string ActiveRegistryAssetPath = "Assets/Resources/ActiveContentRegistry.asset";
   public const string StageRootAssetPath = "Assets/ContentStage";
   public const string StageCoreAssetPath = "Assets/ContentStage/Core";
+  public const string StageFormsAssetPath = "Assets/ContentStage/Forms";
+  public const string StageGearsAssetPath = "Assets/ContentStage/Gears";
   public const string StageSlicesAssetPath = "Assets/ContentStage/Slices";
+  const string EsperanzaGroupedGearRoot = "Assets/Sprites/Characters/Esperanza/GroupedGearAtlases";
 
   const string ManifestFileName = "ContentPackManifest.json";
   const string PackDataFolderName = "_PackData";
@@ -186,27 +191,129 @@ public static class ContentPackPipeline {
     public string stageAssetPath;
   }
 
-  [MenuItem("Tools/Content Packs/Advanced/Export First Pack Set")]
+  enum TransitionPipelineMode {
+    Smart = 0,
+    Clean = 1
+  }
+
+  sealed class ExportSyncStats {
+    public int packDirectoriesCreated;
+    public int packDirectoriesRecreated;
+    public int assetPayloadsWritten;
+    public int assetPayloadsSkipped;
+    public int metaPayloadsWritten;
+    public int metaPayloadsSkipped;
+    public int generatedFilesWritten;
+    public int manifestsWritten;
+  }
+
+  sealed class OwnershipAnalysisReport {
+    public string authoritativeExternalRoot;
+    public int legacyGeneratedReferenceCount;
+    public int spriteDuplicateCount;
+    public int ownershipViolationCount;
+    public int placeholderExemptionCount;
+    public int stagedProjectTreeDependencyCount;
+    public int stagedCodeDependencyCount;
+    public readonly List<string> coreFindings = new();
+    public readonly List<string> formFindings = new();
+    public readonly List<string> gearFindings = new();
+    public readonly List<string> sliceFindings = new();
+    public readonly List<string> episodeFindings = new();
+    public readonly List<string> legacyFindings = new();
+    public readonly List<string> unknownFindings = new();
+    public readonly List<string> placeholderFindings = new();
+    public readonly List<string> stagedDependencyLeaks = new();
+    public readonly List<string> stagedCodeDependencies = new();
+  }
+
+  sealed class TransitionRunSummary {
+    public readonly TransitionPipelineMode mode;
+    public readonly ExportSyncStats export = new();
+    public OwnershipAnalysisReport analysis;
+    public bool stageCompleted;
+    public bool auditCompleted;
+    public bool runtimeIndexCompleted;
+    public bool addressablesCompleted;
+    public bool unifiedImportCompleted;
+    public bool hotsetCompleted;
+
+    public TransitionRunSummary(TransitionPipelineMode mode) {
+      this.mode = mode;
+    }
+  }
+
+  [MenuItem("Tools/Content Pipeline/1) Build Active Content (Smart)")]
+  public static void BuildActiveContentSmartMenu() {
+    RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
+  }
+
+  [MenuItem("Tools/Content Pipeline/2) Build Active Content (Clean)")]
+  public static void BuildActiveContentCleanMenu() {
+    RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/1) Analyze Ownership + Duplicates")]
+  public static void AnalyzeOwnershipAndDuplicatesMenu() {
+    AnalyzeOwnershipAndDuplicates(logResult: true);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/2) Export Missing Pack Content")]
+  public static void ExportMissingPackContentMenu() {
+    RunExportTransitionStep(logResult: true, TransitionPipelineMode.Smart);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/3) Stage Active Packs")]
+  public static void StageTransitionActivePacksMenu() {
+    RunStageTransitionStep(logResult: true, TransitionPipelineMode.Smart);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/4) Audit Legacy Dependencies")]
+  public static void AuditLegacyDependenciesMenu() {
+    AuditLegacyDependencies(logResult: true);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/5) Rebuild Runtime Index")]
+  public static void RebuildTransitionRuntimeIndexMenu() {
+    RunRebuildRuntimeIndexTransitionStep(logResult: true);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/6) Build Addressables")]
+  public static void BuildTransitionAddressablesMenu() {
+    RunBuildAddressablesTransitionStep(logResult: true, cleanCachesBeforeBuild: false);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/7) Full Migration Pass (Smart)")]
+  public static void FullMigrationPassSmartMenu() {
+    RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Transition/8) Full Migration Pass (Clean)")]
+  public static void FullMigrationPassCleanMenu() {
+    RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
+  }
+
+  [MenuItem("Tools/Content Pipeline/Advanced/Export First Pack Set (Clean)")]
   public static void ExportFirstPackSetMenu() {
     ExportFirstPackSet(logResult: true);
   }
 
-  [MenuItem("Tools/Content Packs/Advanced/Stage Active Packs")]
+  [MenuItem("Tools/Content Pipeline/Advanced/Stage Active Packs")]
   public static void StageActivePacksMenu() {
     StageActivePacks(logResult: true);
   }
 
-  [MenuItem("Tools/Content Packs/Advanced/Audit Active Packs")]
+  [MenuItem("Tools/Content Pipeline/Advanced/Audit Active Packs")]
   public static void AuditActivePacksMenu() {
     AuditActivePacks(logResult: true);
   }
 
-  [MenuItem("Tools/Content Packs/Advanced/Prepare Active Packs")]
+  [MenuItem("Tools/Content Pipeline/Advanced/Prepare Active Packs")]
   public static void StageAuditAndRebuildRuntimeIndexMenu() {
-    StageAuditAndRebuildRuntimeIndex(logResult: true);
+    RunPrepareActivePacksPipeline(logResult: true);
   }
 
-  [MenuItem("Tools/Content Packs/Focus First Slice")]
+  [MenuItem("Tools/Content Pipeline/Advanced/Focus First Slice")]
   public static void FocusSelectionOnFirstSliceMenu() {
     FocusSelectionOnFirstSlice(logResult: true);
   }
@@ -259,7 +366,172 @@ public static class ContentPackPipeline {
     return StageActivePacksInternal(selection, logResult, contextLabel);
   }
 
+  public static bool PrepareSelectedPacksForPlayerBuild(string contextLabel, bool logResult) {
+    if (!PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult)) {
+      return false;
+    }
+    return AuditActivePacks(logResult);
+  }
+
   public static bool ExportFirstPackSet(bool logResult) {
+    return ExportPackSet(logResult, TransitionPipelineMode.Clean, stats: null);
+  }
+
+  static bool RunExportTransitionStep(bool logResult, TransitionPipelineMode mode) {
+    var summary = new TransitionRunSummary(mode);
+    var ok = ExportPackSet(logResult, mode, summary.export);
+    if (logResult) {
+      LogTransitionRunSummary("Export Pack Content", summary);
+    }
+    return ok;
+  }
+
+  static bool RunStageTransitionStep(bool logResult, TransitionPipelineMode mode) {
+    var summary = new TransitionRunSummary(mode);
+    var selection = LoadOrCreateSelectionAsset(logResult);
+    if (selection == null) {
+      return false;
+    }
+
+    if (!RefreshExportedPackSetForStage(selection, "transition_stage", logResult, mode, summary.export)) {
+      return false;
+    }
+    if (!EnsureSelectedPackDirectories(selection, "transition_stage", logResult, mode, summary.export)) {
+      return false;
+    }
+
+    summary.stageCompleted = StageActivePacksInternal(selection, logResult, "transition_stage");
+    if (logResult) {
+      LogTransitionRunSummary("Stage Active Packs", summary);
+    }
+    return summary.stageCompleted;
+  }
+
+  static bool RunRebuildRuntimeIndexTransitionStep(bool logResult) {
+    return SpriteIndexBuilder.RebuildRuntimeIndexPrepared("Content Pipeline Transition", logResult, failOnError: false);
+  }
+
+  static bool RunBuildAddressablesTransitionStep(bool logResult, bool cleanCachesBeforeBuild) {
+    return SpriteIndexBuilder.BuildAddressablesContentPrepared(
+      "Content Pipeline Transition",
+      logResult,
+      cleanCachesBeforeBuild,
+      useChunkedWarmup: true
+    );
+  }
+
+  static bool RunFullMigrationPass(bool logResult, TransitionPipelineMode mode) {
+    const int stepCount = 8;
+    const string pipelineLabel = "Full Migration Pass";
+    var summary = new TransitionRunSummary(mode);
+    var startedAt = EditorApplication.timeSinceStartup;
+    var stepIndex = 1;
+
+    bool RunStep(string stepName, Func<bool> action) {
+      ShowContentPackProgress(pipelineLabel, stepIndex, stepCount, stepName);
+      if (logResult) {
+        Debug.Log(
+          "[ContentPackPipeline] [" + pipelineLabel + "] mode='" + mode + "' step " + stepIndex + "/" + stepCount +
+          " - " + stepName + " (start)"
+        );
+      }
+
+      try {
+        if (!action()) {
+          Debug.LogError(
+            "[ContentPackPipeline] [" + pipelineLabel + "] mode='" + mode + "' step " + stepIndex + "/" + stepCount +
+            " - " + stepName + " failed."
+          );
+          return false;
+        }
+      }
+      catch (Exception ex) {
+        Debug.LogError(
+          "[ContentPackPipeline] [" + pipelineLabel + "] mode='" + mode + "' step " + stepIndex + "/" + stepCount +
+          " - " + stepName + " threw an exception.\n" + ex
+        );
+        return false;
+      }
+
+      if (logResult) {
+        Debug.Log(
+          "[ContentPackPipeline] [" + pipelineLabel + "] mode='" + mode + "' step " + stepIndex + "/" + stepCount +
+          " - " + stepName + " (done)"
+        );
+      }
+
+      stepIndex++;
+      return true;
+    }
+
+    try {
+      if (!RunStep("Analyze ownership + duplicates", () => {
+        summary.analysis = AnalyzeOwnershipAndDuplicates(logResult);
+        return summary.analysis != null;
+      })) return false;
+
+      var selection = LoadOrCreateSelectionAsset(logResult);
+      if (selection == null) {
+        return false;
+      }
+
+      if (!RunStep("Export external pack content", () =>
+        RefreshExportedPackSetForStage(selection, "full_migration_pass", logResult, mode, summary.export))) return false;
+
+      if (!RunStep("Stage active packs", () => {
+        if (!EnsureSelectedPackDirectories(selection, "full_migration_pass", logResult, mode, summary.export)) {
+          return false;
+        }
+
+        summary.stageCompleted = StageActivePacksInternal(selection, logResult, "full_migration_pass");
+        return summary.stageCompleted;
+      })) return false;
+
+      if (!RunStep("Audit legacy dependencies", () => {
+        summary.auditCompleted = AuditLegacyDependencies(logResult);
+        return summary.auditCompleted;
+      })) return false;
+
+      if (!RunStep("Apply unified import flow", () => {
+        summary.unifiedImportCompleted = SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: false, logResult: logResult);
+        return summary.unifiedImportCompleted;
+      })) return false;
+
+      if (!RunStep("Rebuild runtime index", () => {
+        summary.runtimeIndexCompleted = SpriteIndexBuilder.RebuildRuntimeIndexPrepared("Content Pipeline Transition", logResult, failOnError: false);
+        return summary.runtimeIndexCompleted;
+      })) return false;
+
+      if (!RunStep("Apply gameplay + location hotset", () => {
+        summary.hotsetCompleted = SpriteStreamingHotsetConfigurator.ApplyPerformanceHotset(
+          rebuildRuntimeIndexFirst: false,
+          saveAndRefreshAtEnd: false,
+          logResult: logResult
+        );
+        return summary.hotsetCompleted;
+      })) return false;
+
+      if (!RunStep("Build Addressables content", () => {
+        summary.addressablesCompleted = RunBuildAddressablesTransitionStep(logResult, cleanCachesBeforeBuild: mode == TransitionPipelineMode.Clean);
+        return summary.addressablesCompleted;
+      })) return false;
+
+      return true;
+    }
+    finally {
+      EditorUtility.ClearProgressBar();
+      if (logResult) {
+        var duration = (float)(EditorApplication.timeSinceStartup - startedAt);
+        Debug.Log(
+          "[ContentPackPipeline] [" + pipelineLabel + "] mode='" + mode + "' finished in " +
+          duration.ToString("0.00", CultureInfo.InvariantCulture) + "s."
+        );
+        LogTransitionRunSummary(pipelineLabel, summary);
+      }
+    }
+  }
+
+  static bool ExportPackSet(bool logResult, TransitionPipelineMode mode, ExportSyncStats stats) {
     var selection = LoadOrCreateSelectionAsset(logResult);
     if (selection == null) return false;
 
@@ -287,17 +559,17 @@ public static class ContentPackPipeline {
 
     try {
       for (var i = 0; i < packDefinitions.Count; i++) {
-        RecreatePackDirectory(packDefinitions[i].externalRootPath, externalRoot);
+        PreparePackDirectory(packDefinitions[i].externalRootPath, externalRoot, mode, stats);
       }
 
-      WriteAssignedAssets(assignedAssets, errors);
+      WriteAssignedAssets(assignedAssets, errors, mode, stats);
       if (errors.Count > 0) {
         LogErrors("export_copy", errors);
         return false;
       }
 
       for (var i = 0; i < packDefinitions.Count; i++) {
-        WriteGeneratedPackData(packDefinitions[i], errors);
+        WriteGeneratedPackData(packDefinitions[i], errors, mode, stats);
       }
 
       if (errors.Count > 0) {
@@ -306,7 +578,7 @@ public static class ContentPackPipeline {
       }
 
       for (var i = 0; i < packDefinitions.Count; i++) {
-        WritePackManifest(packDefinitions[i], errors);
+        WritePackManifest(packDefinitions[i], errors, mode, stats);
       }
 
       if (errors.Count > 0) {
@@ -316,10 +588,12 @@ public static class ContentPackPipeline {
 
       if (logResult) {
         Debug.Log(
-          "[ContentPackPipeline] Exported first external pack set." +
+          "[ContentPackPipeline] Exported external pack content." +
+          " mode='" + mode + "'" +
           " external_root='" + externalRoot + "'" +
           " pack_count=" + packDefinitions.Count +
-          " asset_count=" + assignedAssets.Count
+          " asset_count=" + assignedAssets.Count +
+          FormatExportStats(stats)
         );
       }
 
@@ -358,10 +632,127 @@ public static class ContentPackPipeline {
     if (!AuditActivePacks(logResult)) {
       return false;
     }
-    return SpriteIndexBuilder.RebuildRuntimeIndex(logResult, failOnError: false);
+    return SpriteIndexBuilder.RebuildRuntimeIndexPrepared("Prepare Active Packs", logResult, failOnError: false);
+  }
+
+  static bool RunPrepareActivePacksPipeline(bool logResult) {
+    const string pipelineLabel = "Prepare Active Packs";
+    const int stepCount = 4;
+    const string contextLabel = "prepare_active_packs";
+    var startedAt = EditorApplication.timeSinceStartup;
+    var completed = false;
+
+    bool RunStep(int stepIndex, string stepName, Func<bool> action) {
+      ShowContentPackProgress(pipelineLabel, stepIndex, stepCount, stepName);
+      if (logResult) {
+        Debug.Log(
+          "[ContentPackPipeline] [" + pipelineLabel + "] Step " + stepIndex + "/" + stepCount +
+          " - " + stepName + " (start)"
+        );
+      }
+
+      try {
+        if (!action()) {
+          Debug.LogError(
+            "[ContentPackPipeline] [" + pipelineLabel + "] Step " + stepIndex + "/" + stepCount +
+            " - " + stepName + " failed."
+          );
+          return false;
+        }
+      }
+      catch (Exception ex) {
+        Debug.LogError(
+          "[ContentPackPipeline] [" + pipelineLabel + "] Step " + stepIndex + "/" + stepCount +
+          " - " + stepName + " threw an exception.\n" + ex
+        );
+        return false;
+      }
+
+      if (logResult) {
+        Debug.Log(
+          "[ContentPackPipeline] [" + pipelineLabel + "] Step " + stepIndex + "/" + stepCount +
+          " - " + stepName + " (done)"
+        );
+      }
+      return true;
+    }
+
+    try {
+      var selection = LoadOrCreateSelectionAsset(logResult);
+      if (selection == null) {
+        return false;
+      }
+
+      if (!selection.ExternalContentEnabled) {
+        ShowContentPackProgress(pipelineLabel, 1, 1, "Write inactive registry fallback");
+        WriteInactiveRegistryAsset(logResult);
+        completed = true;
+        return true;
+      }
+
+      if (!RunStep(1, "Refresh external pack exports", () =>
+        RefreshExportedPackSetForStage(selection, contextLabel, logResult))) {
+        return false;
+      }
+
+      if (!RunStep(2, "Stage active packs", () => {
+        if (!EnsureSelectedPackDirectories(selection, contextLabel, logResult)) {
+          return false;
+        }
+        return StageActivePacksInternal(selection, logResult, contextLabel);
+      })) {
+        return false;
+      }
+
+      if (!RunStep(3, "Audit staged packs", () => AuditActivePacks(logResult))) {
+        return false;
+      }
+
+      if (!RunStep(4, "Rebuild sprite runtime index", () =>
+        SpriteIndexBuilder.RebuildRuntimeIndexPrepared(pipelineLabel, logResult, failOnError: false))) {
+        return false;
+      }
+
+      completed = true;
+      return true;
+    }
+    finally {
+      if (completed) {
+        EditorUtility.DisplayProgressBar("Content Packs", pipelineLabel + " complete.", 1f);
+      }
+      EditorUtility.ClearProgressBar();
+      if (logResult) {
+        var duration = (float)(EditorApplication.timeSinceStartup - startedAt);
+        Debug.Log(
+          "[ContentPackPipeline] [" + pipelineLabel + "] " + (completed ? "completed" : "aborted") +
+          " in " + duration.ToString("0.00", CultureInfo.InvariantCulture) + "s."
+        );
+      }
+    }
+  }
+
+  static void ShowContentPackProgress(string pipelineLabel, int stepIndex, int stepCount, string stepName) {
+    var normalizedStepCount = Math.Max(stepCount, 1);
+    var clampedStepIndex = Math.Max(Math.Min(stepIndex, normalizedStepCount), 1);
+    var progress = normalizedStepCount <= 1 ? 0f : (float)(clampedStepIndex - 1) / normalizedStepCount;
+    EditorUtility.DisplayProgressBar(
+      "Content Packs",
+      pipelineLabel + " " + clampedStepIndex + "/" + normalizedStepCount + ": " + (stepName ?? ""),
+      progress
+    );
   }
 
   static bool RefreshExportedPackSetForStage(ContentPackSelection selection, string contextLabel, bool logResult) {
+    return RefreshExportedPackSetForStage(selection, contextLabel, logResult, TransitionPipelineMode.Clean, stats: null);
+  }
+
+  static bool RefreshExportedPackSetForStage(
+    ContentPackSelection selection,
+    string contextLabel,
+    bool logResult,
+    TransitionPipelineMode mode,
+    ExportSyncStats stats
+  ) {
     if (selection == null || !selection.ExternalContentEnabled) {
       return true;
     }
@@ -369,12 +760,13 @@ public static class ContentPackPipeline {
     if (logResult) {
       Debug.Log(
         "[ContentPackPipeline] Refreshing external pack exports before staging." +
+        " mode='" + mode + "'" +
         " context='" + (contextLabel ?? "") + "'" +
         " external_root='" + NormalizeFullPath(selection.ExternalRoot) + "'"
       );
     }
 
-    var exportOk = ExportFirstPackSet(logResult);
+    var exportOk = ExportPackSet(logResult, mode, stats);
     if (!exportOk) {
       return false;
     }
@@ -396,6 +788,7 @@ public static class ContentPackPipeline {
     var selectedPackIds = selection.GetNormalizedActivePackIds();
     var activePackIds = ResolveConcreteActivePackIds(selectedPackIds, packById);
     var stageErrors = CollectStageValidationErrors(packById, activePackIds);
+    var stageCodeDependencies = CollectStageCodeDependencies(packById, activePackIds);
     var packPolicyErrors = CollectActivePackPolicyValidationErrors(packById, activePackIds);
     var gameplayCoreErrors = CollectGameplayCoreValidationErrors(selection, activePackIds);
     var generatedReferenceCount = CountLegacyGeneratedReferences();
@@ -409,9 +802,14 @@ public static class ContentPackPipeline {
     summary.Append(" registry_present=").Append(AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ActiveRegistryAssetPath) != null);
     summary.Append(" generated_refs=").Append(generatedReferenceCount);
     summary.Append(" stage_errors=").Append(stageErrors.Count);
+    summary.Append(" stage_code_refs=").Append(stageCodeDependencies.Count);
     summary.Append(" pack_policy_errors=").Append(packPolicyErrors.Count);
     summary.Append(" gameplay_core_errors=").Append(gameplayCoreErrors.Count);
     Debug.Log(summary.ToString());
+
+    if (stageCodeDependencies.Count > 0) {
+      LogInfoBucket("StageCodeRefs", stageCodeDependencies);
+    }
 
     for (var i = 0; i < selectedPackIds.Count; i++) {
       var packId = selectedPackIds[i];
@@ -510,6 +908,8 @@ public static class ContentPackPipeline {
       var reusedStageLinks = 0;
 
       EnsureDirectoryAssetPath(StageRootAssetPath);
+      EnsureDirectoryAssetPath(StageFormsAssetPath);
+      EnsureDirectoryAssetPath(StageGearsAssetPath);
       EnsureDirectoryAssetPath(StageSlicesAssetPath);
       stageLinkChanges += RemoveInactiveStageLinks(activePackIds);
 
@@ -631,6 +1031,16 @@ public static class ContentPackPipeline {
   }
 
   static bool EnsureSelectedPackDirectories(ContentPackSelection selection, string contextLabel, bool logResult) {
+    return EnsureSelectedPackDirectories(selection, contextLabel, logResult, TransitionPipelineMode.Clean, stats: null);
+  }
+
+  static bool EnsureSelectedPackDirectories(
+    ContentPackSelection selection,
+    string contextLabel,
+    bool logResult,
+    TransitionPipelineMode mode,
+    ExportSyncStats stats
+  ) {
     if (selection == null || !selection.ExternalContentEnabled) {
       return true;
     }
@@ -642,9 +1052,10 @@ public static class ContentPackPipeline {
     LogMissingSelectedPackDirectories(selection, contextLabel);
     Debug.LogWarning(
       "[ContentPackPipeline] Missing external pack directories for active selection. Exporting the first pack set before staging." +
+      " mode='" + mode + "'" +
       " context='" + contextLabel + "'"
     );
-    return ExportFirstPackSet(logResult);
+    return ExportPackSet(logResult, mode, stats);
   }
 
   static void LogMissingSelectedPackDirectories(ContentPackSelection selection, string contextLabel) {
@@ -706,19 +1117,35 @@ public static class ContentPackPipeline {
       defaultLocationId = "",
     };
     core.seedRoots.Add("Assets/Prefabs/Characters/ESPER.prefab");
-    core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/Base");
     core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/Skin");
     core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/Expressions/Base");
-    core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/Effects");
     core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/_Bounces");
+    core.seedRoots.Add("Assets/Prefabs/Fonts/FontCharacter.prefab");
     AddCoreUiOwnedRoots(core.seedRoots);
     foreach (var projectile in Projectiles.EnumerateAll()) {
       var projectilePrefabPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
-      if (string.IsNullOrWhiteSpace(projectilePrefabPath)) continue;
+      if (string.IsNullOrWhiteSpace(projectilePrefabPath) ||
+          string.Equals(projectilePrefabPath, "Assets/Prefabs/Projectiles/BlastBall.prefab", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
       AddUniquePath(core.seedRoots, projectilePrefabPath);
     }
     core.manualLibraryNames.Add("Dialog/DialogEsper");
     core.ownedRoots.AddRange(core.seedRoots);
+
+    var baseForm = new PackDefinition {
+      packId = BaseFormPackId,
+      kind = "form",
+      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Forms", BaseFormPackId)),
+      stageAssetRoot = StageFormsAssetPath + "/" + BaseFormPackId,
+      defaultLocationId = ""
+    };
+    baseForm.requiredPackIds.Add(CorePackId);
+    baseForm.seedRoots.Add("Assets/Prefabs/Projectiles/BlastBall.prefab");
+    baseForm.seedRoots.Add("Assets/Sprites/Characters/Esperanza/Effects");
+    baseForm.ownedRoots.AddRange(baseForm.seedRoots);
+
+    var gearPacks = DiscoverGearPackDefinitions(normalizedRoot);
 
     var slice = new PackDefinition {
       packId = SlicePackId,
@@ -730,6 +1157,7 @@ public static class ContentPackPipeline {
       dialogSnapshotRelativePath = PackDataFolderName + "/" + DomeCityDialogSnapshotFileName
     };
     slice.requiredPackIds.Add(CorePackId);
+    slice.requiredPackIds.Add(BaseFormPackId);
     slice.seedRoots.Add("Assets/Prefabs/Locations/DomeCity.prefab");
     slice.seedRoots.Add("Assets/Prefabs/Enemies/Imp.prefab");
     slice.seedRoots.Add("Assets/Sprites/Characters/Enemies/Imp");
@@ -771,7 +1199,68 @@ public static class ContentPackPipeline {
     episode.requiredPackIds.Add(HomebaseSlicePackId);
     episode.requiredPackIds.Add(SunkenCaveSlicePackId);
 
-    return new List<PackDefinition> { core, slice, homebase, sunkenCave, episode };
+    var result = new List<PackDefinition> { core, baseForm };
+    result.AddRange(gearPacks);
+    result.Add(slice);
+    result.Add(homebase);
+    result.Add(sunkenCave);
+    result.Add(episode);
+    return result;
+  }
+
+  static List<PackDefinition> DiscoverGearPackDefinitions(string normalizedExternalRoot) {
+    var result = new List<PackDefinition>();
+    var groupedGearRoot = NormalizeAssetPath(EsperanzaGroupedGearRoot);
+    var groupedGearFullPath = Path.GetFullPath(groupedGearRoot);
+    if (!Directory.Exists(groupedGearFullPath)) {
+      return result;
+    }
+
+    var formDirectories = Directory.GetDirectories(groupedGearFullPath);
+    Array.Sort(formDirectories, StringComparer.OrdinalIgnoreCase);
+    for (var formIndex = 0; formIndex < formDirectories.Length; formIndex++) {
+      var formAssetPath = ToProjectAssetPath(formDirectories[formIndex]);
+      var formName = Path.GetFileName(formAssetPath);
+      if (string.IsNullOrWhiteSpace(formName) ||
+          string.Equals(formName, "Skin", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      var gearDirectories = Directory.GetDirectories(formDirectories[formIndex]);
+      Array.Sort(gearDirectories, StringComparer.OrdinalIgnoreCase);
+      for (var gearIndex = 0; gearIndex < gearDirectories.Length; gearIndex++) {
+        var gearAssetPath = ToProjectAssetPath(gearDirectories[gearIndex]);
+        var gearCode = Path.GetFileName(gearAssetPath);
+        if (string.IsNullOrWhiteSpace(gearCode)) {
+          continue;
+        }
+
+        var leafDirectories = Directory.GetDirectories(gearDirectories[gearIndex]);
+        Array.Sort(leafDirectories, StringComparer.OrdinalIgnoreCase);
+        for (var leafIndex = 0; leafIndex < leafDirectories.Length; leafIndex++) {
+          var leafAssetPath = ToProjectAssetPath(leafDirectories[leafIndex]);
+          var leafCode = Path.GetFileName(leafAssetPath);
+          var packId = EquippedItems.BuildGearPackId(formName + "_" + gearCode, leafCode);
+          if (string.IsNullOrWhiteSpace(packId)) {
+            continue;
+          }
+
+          var pack = new PackDefinition {
+            packId = packId,
+            kind = "gear",
+            externalRootPath = NormalizeFullPath(Path.Combine(normalizedExternalRoot, "Gears", packId)),
+            stageAssetRoot = StageGearsAssetPath + "/" + packId,
+            defaultLocationId = ""
+          };
+          pack.requiredPackIds.Add(CorePackId);
+          pack.seedRoots.Add(leafAssetPath);
+          pack.ownedRoots.Add(leafAssetPath);
+          result.Add(pack);
+        }
+      }
+    }
+
+    return result;
   }
 
   static void AddCoreUiOwnedRoots(List<string> output) {
@@ -829,7 +1318,7 @@ public static class ContentPackPipeline {
         continue;
       }
 
-      var assignedPackId = ResolveAssignedPackId(pair.Value);
+      var assignedPackId = ResolveAssignedPackId(assetPath, pair.Value, packDefinitions);
       if (!packById.TryGetValue(assignedPackId, out var pack)) {
         errors.Add("Failed to resolve assigned pack for asset '" + assetPath + "'.");
         continue;
@@ -855,22 +1344,80 @@ public static class ContentPackPipeline {
     return result;
   }
 
-  static string ResolveAssignedPackId(HashSet<string> usage) {
+  static string ResolveAssignedPackId(string assetPath, HashSet<string> usage, List<PackDefinition> packDefinitions) {
+    var ownedPackId = ResolveOwnedPackId(assetPath, packDefinitions);
+    if (!string.IsNullOrWhiteSpace(ownedPackId)) {
+      return ownedPackId;
+    }
+
     if (usage == null || usage.Count <= 0) return CorePackId;
     if (usage.Contains(CorePackId) || usage.Count > 1) return CorePackId;
     foreach (var packId in usage) return packId;
     return CorePackId;
   }
 
-  static void WriteAssignedAssets(Dictionary<string, AssignedAsset> assignedAssets, List<string> errors) {
+  static string ResolveOwnedPackId(string assetPath, List<PackDefinition> packDefinitions) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath) || packDefinitions == null || packDefinitions.Count <= 0) {
+      return "";
+    }
+
+    string bestPackId = "";
+    var bestMatchLength = -1;
+
+    for (var packIndex = 0; packIndex < packDefinitions.Count; packIndex++) {
+      var pack = packDefinitions[packIndex];
+      if (pack == null || pack.ownedRoots == null || pack.ownedRoots.Count <= 0) {
+        continue;
+      }
+
+      for (var rootIndex = 0; rootIndex < pack.ownedRoots.Count; rootIndex++) {
+        var ownedRoot = NormalizeAssetPath(pack.ownedRoots[rootIndex]);
+        if (string.IsNullOrWhiteSpace(ownedRoot)) {
+          continue;
+        }
+
+        var isDirectMatch = string.Equals(normalizedAssetPath, ownedRoot, StringComparison.OrdinalIgnoreCase);
+        var isUnderRoot = normalizedAssetPath.StartsWith(ownedRoot + "/", StringComparison.OrdinalIgnoreCase);
+        if (!isDirectMatch && !isUnderRoot) {
+          continue;
+        }
+
+        if (ownedRoot.Length < bestMatchLength) {
+          continue;
+        }
+
+        if (ownedRoot.Length == bestMatchLength &&
+            string.Equals(bestPackId, CorePackId, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) {
+          bestPackId = pack.packId;
+          continue;
+        }
+
+        if (ownedRoot.Length > bestMatchLength) {
+          bestMatchLength = ownedRoot.Length;
+          bestPackId = pack.packId;
+        }
+      }
+    }
+
+    return bestPackId;
+  }
+
+  static void WriteAssignedAssets(
+    Dictionary<string, AssignedAsset> assignedAssets,
+    List<string> errors,
+    TransitionPipelineMode mode,
+    ExportSyncStats stats
+  ) {
     var guidMap = BuildGuidMap(assignedAssets);
     var orderedAssets = assignedAssets.Values.OrderBy(asset => asset.externalAssetPath, StringComparer.OrdinalIgnoreCase).ToList();
 
     for (var i = 0; i < orderedAssets.Count; i++) {
       var assigned = orderedAssets[i];
       try {
-        CopyAssetPayload(assigned.assetPath, assigned.externalAssetPath, guidMap);
-        CopyMetaPayload(assigned.assetPath, assigned.externalAssetPath, guidMap);
+        CopyAssetPayload(assigned.assetPath, assigned.externalAssetPath, guidMap, mode, stats);
+        CopyMetaPayload(assigned.assetPath, assigned.externalAssetPath, guidMap, mode, stats);
       }
       catch (Exception ex) {
         errors.Add(
@@ -905,28 +1452,62 @@ public static class ContentPackPipeline {
     return builder.ToString();
   }
 
-  static void CopyAssetPayload(string sourceAssetPath, string targetFullPath, Dictionary<string, string> guidMap) {
+  static void CopyAssetPayload(
+    string sourceAssetPath,
+    string targetFullPath,
+    Dictionary<string, string> guidMap,
+    TransitionPipelineMode mode,
+    ExportSyncStats stats
+  ) {
     var sourceFullPath = Path.GetFullPath(sourceAssetPath);
     EnsureDirectoryFullPath(Path.GetDirectoryName(targetFullPath));
+    if (mode == TransitionPipelineMode.Smart && File.Exists(targetFullPath)) {
+      if (stats != null) {
+        stats.assetPayloadsSkipped++;
+      }
+      return;
+    }
 
     if (ShouldRewriteTextFile(sourceFullPath)) {
       var text = File.ReadAllText(sourceFullPath);
       File.WriteAllText(targetFullPath, RewriteGuids(text, guidMap), new UTF8Encoding(false));
+      if (stats != null) {
+        stats.assetPayloadsWritten++;
+      }
       return;
     }
 
     File.Copy(sourceFullPath, targetFullPath, overwrite: true);
+    if (stats != null) {
+      stats.assetPayloadsWritten++;
+    }
   }
 
-  static void CopyMetaPayload(string sourceAssetPath, string targetFullPath, Dictionary<string, string> guidMap) {
+  static void CopyMetaPayload(
+    string sourceAssetPath,
+    string targetFullPath,
+    Dictionary<string, string> guidMap,
+    TransitionPipelineMode mode,
+    ExportSyncStats stats
+  ) {
     var sourceMetaFullPath = Path.GetFullPath(sourceAssetPath + ".meta");
     if (!File.Exists(sourceMetaFullPath)) {
       throw new FileNotFoundException("Missing meta file.", sourceMetaFullPath);
     }
 
     var targetMetaFullPath = targetFullPath + ".meta";
+    if (mode == TransitionPipelineMode.Smart && File.Exists(targetMetaFullPath)) {
+      if (stats != null) {
+        stats.metaPayloadsSkipped++;
+      }
+      return;
+    }
+
     var metaText = File.ReadAllText(sourceMetaFullPath);
     File.WriteAllText(targetMetaFullPath, RewriteGuids(metaText, guidMap), new UTF8Encoding(false));
+    if (stats != null) {
+      stats.metaPayloadsWritten++;
+    }
   }
 
   static string RewriteGuids(string text, Dictionary<string, string> guidMap) {
@@ -944,17 +1525,17 @@ public static class ContentPackPipeline {
     });
   }
 
-  static void WriteGeneratedPackData(PackDefinition pack, List<string> errors) {
+  static void WriteGeneratedPackData(PackDefinition pack, List<string> errors, TransitionPipelineMode mode, ExportSyncStats stats) {
     if (pack == null) return;
 
     try {
       if (string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) {
-        WriteEsperanzaSnapshot(pack);
+        WriteEsperanzaSnapshot(pack, mode, stats);
         return;
       }
 
       if (string.Equals(pack.packId, SlicePackId, StringComparison.OrdinalIgnoreCase)) {
-        WriteDomeCitySnapshots(pack);
+        WriteDomeCitySnapshots(pack, mode, stats);
       }
     }
     catch (Exception ex) {
@@ -966,7 +1547,7 @@ public static class ContentPackPipeline {
     }
   }
 
-  static void WritePackManifest(PackDefinition pack, List<string> errors) {
+  static void WritePackManifest(PackDefinition pack, List<string> errors, TransitionPipelineMode mode, ExportSyncStats stats) {
     if (pack == null) return;
 
     try {
@@ -984,7 +1565,7 @@ public static class ContentPackPipeline {
       };
 
       var manifestPath = Path.Combine(pack.externalRootPath, ManifestFileName);
-      WriteJson(manifestPath, manifest);
+      WriteJson(manifestPath, manifest, mode, stats, generatedFile: false);
     }
     catch (Exception ex) {
       errors.Add(
@@ -995,7 +1576,7 @@ public static class ContentPackPipeline {
     }
   }
 
-  static void WriteEsperanzaSnapshot(PackDefinition pack) {
+  static void WriteEsperanzaSnapshot(PackDefinition pack, TransitionPipelineMode mode, ExportSyncStats stats) {
     var snapshot = new ExportedEsperanzaSnapshotJson {
       generatedAtUtc = DateTime.UtcNow.ToString("O")
     };
@@ -1026,10 +1607,10 @@ public static class ContentPackPipeline {
     }
 
     var outputPath = Path.Combine(pack.externalRootPath, PackDataFolderName, EsperanzaSnapshotFileName);
-    WriteJson(outputPath, snapshot);
+    WriteJson(outputPath, snapshot, mode, stats, generatedFile: true);
   }
 
-  static void WriteDomeCitySnapshots(PackDefinition pack) {
+  static void WriteDomeCitySnapshots(PackDefinition pack, TransitionPipelineMode mode, ExportSyncStats stats) {
     if (!LocationEnemyData.TryGetBuiltInLocation(LocationEnemyData.DomeCityLocationId, out var locationInfo) || locationInfo == null) {
       throw new InvalidOperationException("Built-in DomeCity location data was not found.");
     }
@@ -1103,8 +1684,8 @@ public static class ContentPackPipeline {
       }
     }
 
-    WriteJson(Path.Combine(pack.externalRootPath, pack.snapshotRelativePath), locationSnapshot);
-    WriteJson(Path.Combine(pack.externalRootPath, pack.dialogSnapshotRelativePath), dialogSnapshot);
+    WriteJson(Path.Combine(pack.externalRootPath, pack.snapshotRelativePath), locationSnapshot, mode, stats, generatedFile: true);
+    WriteJson(Path.Combine(pack.externalRootPath, pack.dialogSnapshotRelativePath), dialogSnapshot, mode, stats, generatedFile: true);
   }
 
   static bool GenerateActiveRegistryAsset(
@@ -1179,9 +1760,13 @@ public static class ContentPackPipeline {
     ActiveContentRegistryRuntime.ForceReload();
 
     if (logResult) {
+      var activeForm = EsperanzaForms.GetActive();
+      var equippedGearPackIds = ResolveEquippedGearPackIds(packById);
       Debug.Log(
         "[ContentPackPipeline] Generated active content registry." +
         " active_packs=" + string.Join(", ", activePackIds) +
+        " active_form='" + (string.IsNullOrWhiteSpace(activeForm) ? "-" : activeForm) + "'" +
+        " equipped_gear_packs=" + (equippedGearPackIds.Count <= 0 ? "-" : string.Join(", ", equippedGearPackIds)) +
         " default_location='" + (string.IsNullOrWhiteSpace(defaultLocationId) ? "-" : defaultLocationId) + "'" +
         " staged_texture_roots=" + stagedTextureRoots.Count +
         " staged_library_roots=" + stagedSpriteLibraryRoots.Count
@@ -1341,11 +1926,16 @@ public static class ContentPackPipeline {
     List<string> activePackIds
   ) {
     var stageErrors = CollectStageValidationErrors(packById, activePackIds);
+    var stageCodeDependencies = CollectStageCodeDependencies(packById, activePackIds);
     var packPolicyErrors = CollectActivePackPolicyValidationErrors(packById, activePackIds);
     var gameplayCoreErrors = CollectGameplayCoreValidationErrors(selection, activePackIds);
 
     if (stageErrors.Count > 0) {
       LogErrors("stage_validation", stageErrors);
+    }
+
+    if (stageCodeDependencies.Count > 0) {
+      LogInfoBucket("StageCodeRefs", stageCodeDependencies);
     }
 
     if (packPolicyErrors.Count > 0) {
@@ -1365,15 +1955,7 @@ public static class ContentPackPipeline {
 
   static List<string> CollectStageValidationErrors(Dictionary<string, PackDefinition> packById, List<string> activePackIds) {
     var errors = new List<string>();
-    var stageRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-      NormalizeAssetPath(StageCoreAssetPath)
-    };
-
-    for (var i = 0; i < activePackIds.Count; i++) {
-      if (packById.TryGetValue(activePackIds[i], out var pack) && pack != null) {
-        stageRoots.Add(NormalizeAssetPath(pack.stageAssetRoot));
-      }
-    }
+    var stageRoots = BuildActiveStageRoots(packById, activePackIds);
 
     for (var i = 0; i < activePackIds.Count; i++) {
       if (!packById.TryGetValue(activePackIds[i], out var pack) || pack == null) continue;
@@ -1384,6 +1966,21 @@ public static class ContentPackPipeline {
     }
 
     return errors;
+  }
+
+  static List<string> CollectStageCodeDependencies(Dictionary<string, PackDefinition> packById, List<string> activePackIds) {
+    var codeDependencies = new List<string>();
+    var stageRoots = BuildActiveStageRoots(packById, activePackIds);
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      if (!packById.TryGetValue(activePackIds[i], out var pack) || pack == null) continue;
+      var stagedOwnedRoots = ExpandStagedOwnedRoots(pack);
+      for (var rootIndex = 0; rootIndex < stagedOwnedRoots.Count; rootIndex++) {
+        CollectCodeDependenciesForStagedRoot(stagedOwnedRoots[rootIndex], stageRoots, codeDependencies);
+      }
+    }
+
+    return codeDependencies;
   }
 
   static List<string> CollectGameplayCoreValidationErrors(ContentPackSelection selection, List<string> activePackIds) {
@@ -1406,7 +2003,7 @@ public static class ContentPackPipeline {
         continue;
       }
 
-      ValidateGameplayCoreAssetExists(projectileAssetPath, "projectile_prefab:" + projectile.Key, errors);
+      ValidateActivePackAssetExists(projectileAssetPath, "projectile_prefab:" + projectile.Key, activePackIds, errors);
     }
 
     ValidateGameplayCoreAddressable(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath, "player_prefab", errors);
@@ -1414,7 +2011,7 @@ public static class ContentPackPipeline {
     foreach (var projectile in Projectiles.EnumerateAll()) {
       var projectileAssetPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
       if (string.IsNullOrWhiteSpace(projectileAssetPath)) continue;
-      ValidateGameplayCoreAddressable(projectileAssetPath, "projectile_prefab:" + projectile.Key, errors);
+      ValidateActivePackAddressable(projectileAssetPath, "projectile_prefab:" + projectile.Key, activePackIds, errors);
     }
 
     return errors;
@@ -1826,6 +2423,58 @@ public static class ContentPackPipeline {
     }
   }
 
+  static void ValidateActivePackAssetExists(string projectAssetPath, string label, List<string> activePackIds, List<string> errors) {
+    var stagedAssetPath = ResolveStagedAssetPathForActivePacks(projectAssetPath, activePackIds);
+    if (string.IsNullOrWhiteSpace(stagedAssetPath) || !File.Exists(Path.GetFullPath(stagedAssetPath))) {
+      errors?.Add(
+        "Missing staged active-pack asset." +
+        " label='" + label + "'" +
+        " project_path='" + NormalizeAssetPath(projectAssetPath) + "'" +
+        " staged_path='" + stagedAssetPath + "'"
+      );
+    }
+  }
+
+  static void ValidateActivePackAddressable(string projectAssetPath, string label, List<string> activePackIds, List<string> errors) {
+    var stagedAssetPath = ResolveStagedAssetPathForActivePacks(projectAssetPath, activePackIds);
+    if (string.IsNullOrWhiteSpace(stagedAssetPath)) return;
+
+    var settings = AddressableAssetSettingsDefaultObject.GetSettings(false);
+    if (settings == null) {
+      errors?.Add("Addressables settings were not found while validating active-pack asset '" + label + "'.");
+      return;
+    }
+
+    var guid = AssetDatabase.AssetPathToGUID(stagedAssetPath);
+    if (string.IsNullOrWhiteSpace(guid)) {
+      errors?.Add(
+        "Missing GUID for staged active-pack asset." +
+        " label='" + label + "'" +
+        " staged_path='" + stagedAssetPath + "'"
+      );
+      return;
+    }
+
+    var entry = settings.FindAssetEntry(guid);
+    if (entry == null) {
+      errors?.Add(
+        "Missing Addressables entry for staged active-pack asset." +
+        " label='" + label + "'" +
+        " staged_path='" + stagedAssetPath + "'"
+      );
+      return;
+    }
+
+    if (!string.Equals(entry.address, stagedAssetPath, StringComparison.Ordinal)) {
+      errors?.Add(
+        "Addressables entry address mismatch for staged active-pack asset." +
+        " label='" + label + "'" +
+        " staged_path='" + stagedAssetPath + "'" +
+        " address='" + entry.address + "'"
+      );
+    }
+  }
+
   static string BuildCoreStageAssetPath(string projectAssetPath) {
     var normalizedProjectPath = NormalizeAssetPath(projectAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedProjectPath) ||
@@ -1834,6 +2483,43 @@ public static class ContentPackPipeline {
     }
 
     return NormalizeAssetPath(StageCoreAssetPath + "/" + normalizedProjectPath.Substring("Assets/".Length));
+  }
+
+  static string ResolveStagedAssetPathForActivePacks(string projectAssetPath, List<string> activePackIds) {
+    var normalizedProjectPath = NormalizeAssetPath(projectAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedProjectPath) ||
+        !normalizedProjectPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+        activePackIds == null ||
+        activePackIds.Count <= 0) {
+      return "";
+    }
+
+    var relativePath = normalizedProjectPath.Substring("Assets/".Length);
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var stageRoot = GetStageAssetRoot(activePackIds[i]);
+      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
+      var stagedAssetPath = NormalizeAssetPath(stageRoot + "/" + relativePath);
+      if (File.Exists(Path.GetFullPath(stagedAssetPath))) {
+        return stagedAssetPath;
+      }
+    }
+
+    return "";
+  }
+
+  static HashSet<string> BuildActiveStageRoots(Dictionary<string, PackDefinition> packById, List<string> activePackIds) {
+    var stageRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+      NormalizeAssetPath(StageCoreAssetPath)
+    };
+    if (packById == null || activePackIds == null) return stageRoots;
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      if (packById.TryGetValue(activePackIds[i], out var pack) && pack != null) {
+        stageRoots.Add(NormalizeAssetPath(pack.stageAssetRoot));
+      }
+    }
+
+    return stageRoots;
   }
 
   static List<string> ExpandStagedOwnedRoots(PackDefinition pack) {
@@ -1871,6 +2557,26 @@ public static class ContentPackPipeline {
     }
   }
 
+  static void CollectCodeDependenciesForStagedRoot(string stagedAssetPath, HashSet<string> stageRoots, List<string> output) {
+    if (string.IsNullOrWhiteSpace(stagedAssetPath) || stageRoots == null || output == null) return;
+    if (!File.Exists(Path.GetFullPath(stagedAssetPath))) return;
+
+    var dependencies = AssetDatabase.GetDependencies(new[] { stagedAssetPath }, true);
+    for (var i = 0; i < dependencies.Length; i++) {
+      var dependency = NormalizeAssetPath(dependencies[i]);
+      if (string.IsNullOrWhiteSpace(dependency) ||
+          string.Equals(dependency, stagedAssetPath, StringComparison.OrdinalIgnoreCase) ||
+          !dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+          AssetDatabase.IsValidFolder(dependency) ||
+          !IsCodeDependency(dependency)) {
+        continue;
+      }
+
+      output.Add("staged_asset='" + stagedAssetPath + "' dependency='" + dependency + "'");
+      break;
+    }
+  }
+
   static void ValidateDependencyUnderStageRoots(
     string stagedAssetPath,
     string dependency,
@@ -1878,6 +2584,7 @@ public static class ContentPackPipeline {
     List<string> errors
   ) {
     if (string.IsNullOrWhiteSpace(dependency) || stageRoots == null || errors == null) return;
+    if (IsCodeDependency(dependency)) return;
 
     var isStaged = false;
     foreach (var stageRoot in stageRoots) {
@@ -1930,9 +2637,19 @@ public static class ContentPackPipeline {
       return NormalizeAssetPath(pack.stageAssetRoot);
     }
 
-    return string.Equals(normalizedPackId, CorePackId, StringComparison.OrdinalIgnoreCase)
-      ? StageCoreAssetPath
-      : StageSlicesAssetPath + "/" + normalizedPackId;
+    if (string.Equals(normalizedPackId, CorePackId, StringComparison.OrdinalIgnoreCase)) {
+      return StageCoreAssetPath;
+    }
+
+    if (normalizedPackId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase)) {
+      return StageFormsAssetPath + "/" + normalizedPackId;
+    }
+
+    if (normalizedPackId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) {
+      return StageGearsAssetPath + "/" + normalizedPackId;
+    }
+
+    return StageSlicesAssetPath + "/" + normalizedPackId;
   }
 
   static List<string> ResolveConcreteActivePackIds(
@@ -1971,12 +2688,55 @@ public static class ContentPackPipeline {
       Visit(selectedPackIds[i]);
     }
 
+    var equippedGearPackIds = ResolveEquippedGearPackIds(packById);
+    for (var i = 0; i < equippedGearPackIds.Count; i++) {
+      Visit(equippedGearPackIds[i]);
+    }
+
     return resolved;
+  }
+
+  static List<string> ResolveEquippedGearPackIds(Dictionary<string, PackDefinition> packById) {
+    var result = new List<string>();
+    if (packById == null || packById.Count <= 0) {
+      return result;
+    }
+
+    var equippedGearIds = EquippedItems.GetEquippedGearIds();
+    if (equippedGearIds.Count <= 0) {
+      return result;
+    }
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var pair in packById) {
+      var pack = pair.Value;
+      if (pack == null || !string.Equals(pack.kind, "gear", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      if (!EquippedItems.TryParseGearPackId(pack.packId, out var gearForm, out var gearCode, out _)) {
+        continue;
+      }
+
+      var equippedGearId = NormalizeToken(gearForm + "_" + gearCode);
+      if (string.IsNullOrWhiteSpace(equippedGearId) ||
+          !equippedGearIds.Contains(equippedGearId, StringComparer.OrdinalIgnoreCase) ||
+          !seen.Add(pack.packId)) {
+        continue;
+      }
+
+      result.Add(pack.packId);
+    }
+
+    result.Sort(StringComparer.OrdinalIgnoreCase);
+    return result;
   }
 
   static int RemoveInactiveStageLinks(List<string> activePackIds) {
     var removedCount = 0;
     EnsureDirectoryAssetPath(StageRootAssetPath);
+    EnsureDirectoryAssetPath(StageFormsAssetPath);
+    EnsureDirectoryAssetPath(StageGearsAssetPath);
     EnsureDirectoryAssetPath(StageSlicesAssetPath);
 
     if (RemoveStageLinkIfInactive(StageCoreAssetPath, activePackIds.Contains(CorePackId, StringComparer.OrdinalIgnoreCase))) {
@@ -1989,6 +2749,32 @@ public static class ContentPackPipeline {
 
     for (var i = 0; i < existingSliceDirectories.Length; i++) {
       var assetPath = ToProjectAssetPath(existingSliceDirectories[i]);
+      var packId = Path.GetFileName(assetPath);
+      var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
+      if (RemoveStageLinkIfInactive(assetPath, keep)) {
+        removedCount++;
+      }
+    }
+
+    var existingFormDirectories = Directory.Exists(Path.GetFullPath(StageFormsAssetPath))
+      ? Directory.GetDirectories(Path.GetFullPath(StageFormsAssetPath))
+      : Array.Empty<string>();
+
+    for (var i = 0; i < existingFormDirectories.Length; i++) {
+      var assetPath = ToProjectAssetPath(existingFormDirectories[i]);
+      var packId = Path.GetFileName(assetPath);
+      var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
+      if (RemoveStageLinkIfInactive(assetPath, keep)) {
+        removedCount++;
+      }
+    }
+
+    var existingGearDirectories = Directory.Exists(Path.GetFullPath(StageGearsAssetPath))
+      ? Directory.GetDirectories(Path.GetFullPath(StageGearsAssetPath))
+      : Array.Empty<string>();
+
+    for (var i = 0; i < existingGearDirectories.Length; i++) {
+      var assetPath = ToProjectAssetPath(existingGearDirectories[i]);
       var packId = Path.GetFileName(assetPath);
       var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
       if (RemoveStageLinkIfInactive(assetPath, keep)) {
@@ -2411,6 +3197,16 @@ public static class ContentPackPipeline {
     return !string.IsNullOrWhiteSpace(extension) && IgnoredDependencyExtensions.Contains(extension);
   }
 
+  static bool IsCodeDependency(string assetPath) {
+    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+    var extension = Path.GetExtension(assetPath);
+    return !string.IsNullOrWhiteSpace(extension) &&
+           (string.Equals(extension, ".cs", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".dll", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".asmdef", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".asmref", StringComparison.OrdinalIgnoreCase));
+  }
+
   static bool ShouldRewriteTextFile(string pathOrAssetPath) {
     var extension = Path.GetExtension(pathOrAssetPath);
     if (string.IsNullOrWhiteSpace(extension)) return false;
@@ -2428,7 +3224,7 @@ public static class ContentPackPipeline {
     return NormalizeAssetPath(pack.stageAssetRoot + "/" + normalizedProjectPath.Substring("Assets/".Length));
   }
 
-  static void RecreatePackDirectory(string packRootPath, string externalRoot) {
+  static void PreparePackDirectory(string packRootPath, string externalRoot, TransitionPipelineMode mode, ExportSyncStats stats) {
     var normalizedPackRoot = NormalizeFullPath(packRootPath);
     var normalizedExternalRoot = NormalizeFullPath(externalRoot);
 
@@ -2437,11 +3233,19 @@ public static class ContentPackPipeline {
       throw new InvalidOperationException("Pack root escaped external root. pack='" + normalizedPackRoot + "'");
     }
 
-    if (Directory.Exists(normalizedPackRoot)) {
+    if (mode == TransitionPipelineMode.Clean && Directory.Exists(normalizedPackRoot)) {
       Directory.Delete(normalizedPackRoot, recursive: true);
+      if (stats != null) {
+        stats.packDirectoriesRecreated++;
+      }
     }
 
-    Directory.CreateDirectory(normalizedPackRoot);
+    if (!Directory.Exists(normalizedPackRoot)) {
+      Directory.CreateDirectory(normalizedPackRoot);
+      if (stats != null) {
+        stats.packDirectoriesCreated++;
+      }
+    }
   }
 
   static void EnsureDirectoryAssetPath(string assetPath) {
@@ -2455,9 +3259,17 @@ public static class ContentPackPipeline {
     Directory.CreateDirectory(fullPath);
   }
 
-  static void WriteJson<T>(string fullPath, T payload) {
+  static void WriteJson<T>(string fullPath, T payload, TransitionPipelineMode mode, ExportSyncStats stats, bool generatedFile) {
     EnsureDirectoryFullPath(Path.GetDirectoryName(fullPath));
     File.WriteAllText(fullPath, JsonUtility.ToJson(payload, prettyPrint: true), new UTF8Encoding(false));
+    if (stats != null) {
+      if (generatedFile) {
+        stats.generatedFilesWritten++;
+      }
+      else {
+        stats.manifestsWritten++;
+      }
+    }
   }
 
   static string NormalizeLibraryName(string value) {
@@ -2518,6 +3330,60 @@ public static class ContentPackPipeline {
     return Directory.GetParent(Application.dataPath)?.FullName ?? Directory.GetCurrentDirectory();
   }
 
+  static OwnershipAnalysisReport AnalyzeOwnershipAndDuplicates(bool logResult) {
+    var selection = LoadOrCreateSelectionAsset(logResult: false);
+    var externalRoot = selection != null ? NormalizeFullPath(selection.ExternalRoot) : NormalizeFullPath(DefaultExternalRoot);
+    var report = new OwnershipAnalysisReport {
+      authoritativeExternalRoot = externalRoot,
+      legacyGeneratedReferenceCount = CountLegacyGeneratedReferences(),
+      spriteDuplicateCount = CountSpriteExternalDuplicates(externalRoot)
+    };
+
+    var packDefinitions = BuildPackDefinitions(externalRoot);
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      AnalyzePackOwnership(packDefinitions[i], report);
+    }
+
+    report.stagedProjectTreeDependencyCount = CountStageDependenciesOutsideStageRoots(packDefinitions);
+    report.stagedDependencyLeaks.Clear();
+    CollectStageDependencyLeaks(packDefinitions, report.stagedDependencyLeaks);
+    report.stagedCodeDependencyCount = CountStageCodeDependenciesOutsideStageRoots(packDefinitions);
+    report.stagedCodeDependencies.Clear();
+    CollectStageCodeDependencies(packDefinitions, report.stagedCodeDependencies);
+    report.ownershipViolationCount =
+      report.coreFindings.Count +
+      report.formFindings.Count +
+      report.gearFindings.Count +
+      report.sliceFindings.Count +
+      report.episodeFindings.Count +
+      report.legacyFindings.Count +
+      report.unknownFindings.Count;
+
+    if (logResult) {
+      LogOwnershipAnalysisReport(report);
+    }
+
+    return report;
+  }
+
+  static bool AuditLegacyDependencies(bool logResult) {
+    var report = AnalyzeOwnershipAndDuplicates(logResult);
+    var auditOk = AuditActivePacks(logResult);
+    var analysisOk =
+      report.legacyGeneratedReferenceCount <= 0 &&
+      report.stagedProjectTreeDependencyCount <= 0 &&
+      report.ownershipViolationCount <= 0;
+
+    if (logResult && report.spriteDuplicateCount > 0) {
+      Debug.Log(
+        "[ContentPackPipeline] Duplicate sprite assets remain as transition debt. " +
+        "duplicate_assets=" + report.spriteDuplicateCount +
+        " duplicate assets are reported but do not block the migration pass.");
+    }
+
+    return auditOk && analysisOk;
+  }
+
   static int CountLegacyGeneratedReferences() {
     var count = CountTextOccurrences("Assets/AddressableAssetsData/AssetGroups/SpriteRuntimeIndex.asset", "Assets/Generated/");
 
@@ -2531,6 +3397,325 @@ public static class ContentPackPipeline {
     }
 
     return count;
+  }
+
+  static int CountSpriteExternalDuplicates(string authoritativeExternalRoot) {
+    var spritesRoot = NormalizeFullPath("Assets/Sprites");
+    var externalRoot = NormalizeFullPath(authoritativeExternalRoot);
+    if (!Directory.Exists(spritesRoot) || !Directory.Exists(externalRoot)) return 0;
+
+    var externalSpriteRoots = BuildPackDefinitions(externalRoot)
+      .Where(pack => pack != null && !string.IsNullOrWhiteSpace(pack.externalRootPath))
+      .Select(pack => NormalizeFullPath(Path.Combine(pack.externalRootPath, "Sprites")))
+      .Where(Directory.Exists)
+      .Distinct(StringComparer.OrdinalIgnoreCase)
+      .ToList();
+    if (externalSpriteRoots.Count <= 0) return 0;
+
+    var files = Directory.GetFiles(spritesRoot, "*", SearchOption.AllDirectories);
+    var duplicateCount = 0;
+    for (var i = 0; i < files.Length; i++) {
+      var fullPath = NormalizeFullPath(files[i]);
+      if (Directory.Exists(fullPath)) continue;
+      var relativePath = fullPath.Substring(spritesRoot.Length).TrimStart('/');
+      if (string.IsNullOrWhiteSpace(relativePath)) continue;
+
+      for (var rootIndex = 0; rootIndex < externalSpriteRoots.Count; rootIndex++) {
+        var externalMatch = NormalizeFullPath(Path.Combine(externalSpriteRoots[rootIndex], relativePath));
+        if (!File.Exists(externalMatch)) continue;
+        duplicateCount++;
+        break;
+      }
+    }
+
+    return duplicateCount;
+  }
+
+  static void AnalyzePackOwnership(PackDefinition pack, OwnershipAnalysisReport report) {
+    if (pack == null || report == null) return;
+    if (IsPlaceholderPack(pack)) {
+      report.placeholderExemptionCount++;
+      report.placeholderFindings.Add(
+        "Placeholder ownership checks deferred. pack_id='" + pack.packId + "'"
+      );
+      return;
+    }
+
+    var findings = GetOwnershipFindingsBucket(pack, report);
+    if (findings == null) return;
+
+    if (pack.ownedRoots == null || pack.ownedRoots.Count <= 0) {
+      findings.Add("Pack has no declared owned roots. pack_id='" + pack.packId + "'");
+    }
+
+    if (string.Equals(pack.kind, "slice", StringComparison.OrdinalIgnoreCase)) {
+      if (pack.ownedLocations == null || pack.ownedLocations.Count <= 0) {
+        findings.Add("Slice has no owned location. pack_id='" + pack.packId + "'");
+      }
+      if (pack.dialogIds == null || pack.dialogIds.Count <= 0) {
+        findings.Add("Slice has no dialog ownership declared. pack_id='" + pack.packId + "'");
+      }
+      if (pack.warmProfiles == null || pack.warmProfiles.Count <= 0) {
+        findings.Add("Slice has no warm profile ownership declared. pack_id='" + pack.packId + "'");
+      }
+    }
+
+    if (string.Equals(pack.kind, "episode", StringComparison.OrdinalIgnoreCase) &&
+        (pack.requiredPackIds == null || pack.requiredPackIds.Count <= 0)) {
+      findings.Add("Episode has no slice dependencies declared. pack_id='" + pack.packId + "'");
+    }
+  }
+
+  static List<string> GetOwnershipFindingsBucket(PackDefinition pack, OwnershipAnalysisReport report) {
+    if (pack == null || report == null) return null;
+    if (string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) return report.coreFindings;
+    if (string.Equals(pack.kind, "form", StringComparison.OrdinalIgnoreCase)) return report.formFindings;
+    if (string.Equals(pack.kind, "gear", StringComparison.OrdinalIgnoreCase)) return report.gearFindings;
+    if (string.Equals(pack.kind, "slice", StringComparison.OrdinalIgnoreCase)) return report.sliceFindings;
+    if (string.Equals(pack.kind, "episode", StringComparison.OrdinalIgnoreCase)) return report.episodeFindings;
+    return report.unknownFindings;
+  }
+
+  static bool IsPlaceholderPack(PackDefinition pack) {
+    if (pack == null || string.IsNullOrWhiteSpace(pack.packId)) return false;
+    return pack.packId.IndexOf("Placeholder", StringComparison.OrdinalIgnoreCase) >= 0 ||
+           string.Equals(pack.packId, EpisodePackId, StringComparison.OrdinalIgnoreCase);
+  }
+
+  static int CountStageDependenciesOutsideStageRoots(List<PackDefinition> packDefinitions) {
+    var stageRoots = BuildStageRoots(packDefinitions);
+    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    if (!Directory.Exists(stageRootFullPath)) return 0;
+
+    var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
+    var count = 0;
+    for (var i = 0; i < files.Length; i++) {
+      var assetPath = ToProjectAssetPath(files[i]);
+      if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+      if (AssetDatabase.IsValidFolder(assetPath)) continue;
+      var dependencies = AssetDatabase.GetDependencies(new[] { assetPath }, true);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Length; dependencyIndex++) {
+        var dependency = NormalizeAssetPath(dependencies[dependencyIndex]);
+        if (string.IsNullOrWhiteSpace(dependency) ||
+            string.Equals(dependency, assetPath, StringComparison.OrdinalIgnoreCase) ||
+            !dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+            IsCodeDependency(dependency)) {
+          continue;
+        }
+
+        var underStage = false;
+        foreach (var stageRoot in stageRoots) {
+          if (dependency.StartsWith(stageRoot + "/", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(dependency, stageRoot, StringComparison.OrdinalIgnoreCase)) {
+            underStage = true;
+            break;
+          }
+        }
+
+        if (!underStage) {
+          count++;
+          break;
+        }
+      }
+    }
+
+    return count;
+  }
+
+  static int CountStageCodeDependenciesOutsideStageRoots(List<PackDefinition> packDefinitions) {
+    var stageRoots = BuildStageRoots(packDefinitions);
+    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    if (!Directory.Exists(stageRootFullPath)) return 0;
+
+    var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
+    var count = 0;
+    for (var i = 0; i < files.Length; i++) {
+      var assetPath = ToProjectAssetPath(files[i]);
+      if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+      if (AssetDatabase.IsValidFolder(assetPath)) continue;
+      var dependencies = AssetDatabase.GetDependencies(new[] { assetPath }, true);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Length; dependencyIndex++) {
+        var dependency = NormalizeAssetPath(dependencies[dependencyIndex]);
+        if (string.IsNullOrWhiteSpace(dependency) ||
+            string.Equals(dependency, assetPath, StringComparison.OrdinalIgnoreCase) ||
+            !dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+            !IsCodeDependency(dependency)) {
+          continue;
+        }
+
+        if (IsUnderStageRoots(dependency, stageRoots)) continue;
+
+        count++;
+        break;
+      }
+    }
+
+    return count;
+  }
+
+  static void CollectStageDependencyLeaks(List<PackDefinition> packDefinitions, List<string> output) {
+    if (output == null) return;
+
+    var stageRoots = BuildStageRoots(packDefinitions);
+    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    if (!Directory.Exists(stageRootFullPath)) return;
+
+    var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
+    for (var i = 0; i < files.Length; i++) {
+      var assetPath = ToProjectAssetPath(files[i]);
+      if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+      if (AssetDatabase.IsValidFolder(assetPath)) continue;
+      var dependencies = AssetDatabase.GetDependencies(new[] { assetPath }, true);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Length; dependencyIndex++) {
+        var dependency = NormalizeAssetPath(dependencies[dependencyIndex]);
+        if (string.IsNullOrWhiteSpace(dependency) ||
+            string.Equals(dependency, assetPath, StringComparison.OrdinalIgnoreCase) ||
+            !dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+            IsCodeDependency(dependency)) {
+          continue;
+        }
+
+        if (IsUnderStageRoots(dependency, stageRoots)) continue;
+
+        output.Add("staged_asset='" + assetPath + "' dependency='" + dependency + "'");
+        break;
+      }
+    }
+  }
+
+  static void CollectStageCodeDependencies(List<PackDefinition> packDefinitions, List<string> output) {
+    if (output == null) return;
+
+    var stageRoots = BuildStageRoots(packDefinitions);
+    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    if (!Directory.Exists(stageRootFullPath)) return;
+
+    var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
+    for (var i = 0; i < files.Length; i++) {
+      var assetPath = ToProjectAssetPath(files[i]);
+      if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+      if (AssetDatabase.IsValidFolder(assetPath)) continue;
+      var dependencies = AssetDatabase.GetDependencies(new[] { assetPath }, true);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Length; dependencyIndex++) {
+        var dependency = NormalizeAssetPath(dependencies[dependencyIndex]);
+        if (string.IsNullOrWhiteSpace(dependency) ||
+            string.Equals(dependency, assetPath, StringComparison.OrdinalIgnoreCase) ||
+            !dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+            !IsCodeDependency(dependency)) {
+          continue;
+        }
+
+        if (IsUnderStageRoots(dependency, stageRoots)) continue;
+
+        output.Add("staged_asset='" + assetPath + "' dependency='" + dependency + "'");
+        break;
+      }
+    }
+  }
+
+  static HashSet<string> BuildStageRoots(List<PackDefinition> packDefinitions) {
+    var stageRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+      NormalizeAssetPath(StageCoreAssetPath)
+    };
+    if (packDefinitions == null) return stageRoots;
+
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null || string.IsNullOrWhiteSpace(pack.stageAssetRoot)) continue;
+      stageRoots.Add(NormalizeAssetPath(pack.stageAssetRoot));
+    }
+
+    return stageRoots;
+  }
+
+  static bool IsUnderStageRoots(string dependency, HashSet<string> stageRoots) {
+    if (string.IsNullOrWhiteSpace(dependency) || stageRoots == null || stageRoots.Count <= 0) return false;
+    foreach (var stageRoot in stageRoots) {
+      if (dependency.StartsWith(stageRoot + "/", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(dependency, stageRoot, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static void LogOwnershipAnalysisReport(OwnershipAnalysisReport report) {
+    if (report == null) return;
+
+    Debug.Log(
+      "[ContentPackPipeline] [TransitionAnalysis] legacy_generated_refs=" + report.legacyGeneratedReferenceCount +
+      " sprite_duplicates=" + report.spriteDuplicateCount +
+      " staged_project_tree_dependencies=" + report.stagedProjectTreeDependencyCount +
+      " staged_code_dependencies=" + report.stagedCodeDependencyCount +
+      " ownership_findings=" + report.ownershipViolationCount +
+      " placeholder_exemptions=" + report.placeholderExemptionCount +
+      " authoritative_external_root='" + NormalizeFullPath(report.authoritativeExternalRoot) + "'" +
+      " stage_root='" + NormalizeAssetPath(StageRootAssetPath) + "'"
+    );
+    LogFindingBucket("Core", report.coreFindings);
+    LogFindingBucket("Form", report.formFindings);
+    LogFindingBucket("Gear", report.gearFindings);
+    LogFindingBucket("Slice", report.sliceFindings);
+    LogFindingBucket("Episode", report.episodeFindings);
+    LogFindingBucket("Legacy/Unknown", report.legacyFindings.Concat(report.unknownFindings).ToList());
+    LogInfoBucket("Placeholder", report.placeholderFindings);
+    LogInfoBucket("StageLeaks", report.stagedDependencyLeaks);
+    LogInfoBucket("StageCodeRefs", report.stagedCodeDependencies);
+  }
+
+  static void LogFindingBucket(string label, List<string> findings) {
+    if (findings == null || findings.Count <= 0) return;
+    for (var i = 0; i < findings.Count; i++) {
+      Debug.LogWarning("[ContentPackPipeline] [TransitionAnalysis][" + label + "] " + findings[i]);
+    }
+  }
+
+  static void LogInfoBucket(string label, List<string> findings) {
+    if (findings == null || findings.Count <= 0) return;
+    for (var i = 0; i < findings.Count; i++) {
+      Debug.Log("[ContentPackPipeline] [TransitionAnalysis][" + label + "] " + findings[i]);
+    }
+  }
+
+  static void LogTransitionRunSummary(string label, TransitionRunSummary summary) {
+    if (summary == null) return;
+
+    Debug.Log(
+      "[ContentPackPipeline] [TransitionSummary] label='" + label + "'" +
+      " mode='" + summary.mode + "'" +
+      " stage=" + (summary.stageCompleted ? 1 : 0) +
+      " audit=" + (summary.auditCompleted ? 1 : 0) +
+      " runtime_index=" + (summary.runtimeIndexCompleted ? 1 : 0) +
+      " unified_import=" + (summary.unifiedImportCompleted ? 1 : 0) +
+      " hotset=" + (summary.hotsetCompleted ? 1 : 0) +
+      " addressables=" + (summary.addressablesCompleted ? 1 : 0) +
+      FormatExportStats(summary.export) +
+      FormatAnalysisStats(summary.analysis)
+    );
+  }
+
+  static string FormatExportStats(ExportSyncStats stats) {
+    if (stats == null) return "";
+    return
+      " pack_dirs_created=" + stats.packDirectoriesCreated +
+      " pack_dirs_recreated=" + stats.packDirectoriesRecreated +
+      " asset_writes=" + stats.assetPayloadsWritten +
+      " asset_skips=" + stats.assetPayloadsSkipped +
+      " meta_writes=" + stats.metaPayloadsWritten +
+      " meta_skips=" + stats.metaPayloadsSkipped +
+      " generated_writes=" + stats.generatedFilesWritten +
+      " manifest_writes=" + stats.manifestsWritten;
+  }
+
+  static string FormatAnalysisStats(OwnershipAnalysisReport report) {
+    if (report == null) return "";
+    return
+      " duplicate_assets=" + report.spriteDuplicateCount +
+      " legacy_generated_refs=" + report.legacyGeneratedReferenceCount +
+      " staged_project_tree_dependencies=" + report.stagedProjectTreeDependencyCount +
+      " staged_code_dependencies=" + report.stagedCodeDependencyCount +
+      " ownership_findings=" + report.ownershipViolationCount;
   }
 
   static int CountTextOccurrences(string assetPath, string pattern) {

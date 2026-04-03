@@ -1,5 +1,8 @@
 using CustomInspector;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -32,6 +35,9 @@ public class AnchoredSpriteStretch : MonoBehaviour {
   Vector4 slicedSpriteBorderPixels;
   Vector3 lastResolvedPosition;
   bool hasResolvedPosition;
+#if UNITY_EDITOR
+  bool refreshQueuedInEditor;
+#endif
 
   void Reset() {
     CacheRenderer();
@@ -46,7 +52,7 @@ public class AnchoredSpriteStretch : MonoBehaviour {
 
   void OnValidate() {
     ClampInputs();
-    RefreshStretch();
+    QueueRefreshStretch();
   }
 
   void LateUpdate() {
@@ -98,6 +104,29 @@ public class AnchoredSpriteStretch : MonoBehaviour {
     ApplyTransform(resolvedScale, resolvedPosition);
     LogAppliedValues(sprite, targetSizePixels, resolvedScale, resolvedPosition);
   }
+
+  void QueueRefreshStretch() {
+#if UNITY_EDITOR
+    if (Application.isPlaying) {
+      RefreshStretch();
+      return;
+    }
+
+    if (refreshQueuedInEditor) return;
+    refreshQueuedInEditor = true;
+    EditorApplication.delayCall += HandleDeferredEditorRefreshStretch;
+#else
+    RefreshStretch();
+#endif
+  }
+
+#if UNITY_EDITOR
+  void HandleDeferredEditorRefreshStretch() {
+    refreshQueuedInEditor = false;
+    if (this == null || gameObject == null) return;
+    RefreshStretch();
+  }
+#endif
 
   public void SetOriginFromCurrentTransform() {
     ClampInputs();

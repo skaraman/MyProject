@@ -15,7 +15,7 @@ public static class GameplayPlayerAddressablesBootstrap {
     EditorApplication.delayCall += () => EnsureGameplayPlayerAddressables(logResult: false, saveAndRefresh: false);
   }
 
-  [MenuItem("Tools/Sprite Streaming/3a) Sync Player Addressables")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Sync Player Addressables")]
   public static void SyncGameplayPlayerAddressablesMenu() {
     EnsureGameplayPlayerAddressables(logResult: true, saveAndRefresh: true);
   }

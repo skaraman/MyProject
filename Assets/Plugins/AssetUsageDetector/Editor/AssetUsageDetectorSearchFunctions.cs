@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Collections;
 using System.IO;
-using System.Globalization;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
@@ -163,7 +162,6 @@ namespace AssetUsageDetectorNamespace
 		// All MonoScripts in objectsToSearchSet
 		private readonly List<MonoScript> monoScriptsToSearch = new List<MonoScript>();
 		private readonly List<Type> monoScriptsToSearchTypes = new List<Type>();
-		private readonly Dictionary<MonoScript, Dictionary<string, ScriptFieldConstraint>> scriptFieldConstraints = new Dictionary<MonoScript, Dictionary<string, ScriptFieldConstraint>>();
 
 		// Path(s) of .cginc, .cg, .hlsl and .glslinc assets in assetsToSearchSet
 		private readonly HashSet<string> shaderIncludesToSearchSet = new HashSet<string>();
@@ -253,27 +251,9 @@ namespace AssetUsageDetectorNamespace
 			searchMonoBehavioursForScript = false;
 			searchTextureReferences = false;
 			searchShaderGraphsForSubGraphs = false;
-			monoScriptsToSearch.Clear();
-			monoScriptsToSearchTypes.Clear();
-			scriptFieldConstraints.Clear();
 #if ASSET_USAGE_VFX_GRAPH
 			bool searchVFXGraphs = false;
 #endif
-
-			if( searchParameters.scriptFieldConstraints != null )
-			{
-				for( int i = 0; i < searchParameters.scriptFieldConstraints.Length; i++ )
-				{
-					ScriptFieldConstraint constraint = searchParameters.scriptFieldConstraints[i];
-					if( constraint == null || !constraint.script || string.IsNullOrEmpty( constraint.fieldName ) || string.IsNullOrEmpty( constraint.declaringTypeName ) )
-						continue;
-
-					if( !scriptFieldConstraints.TryGetValue( constraint.script, out Dictionary<string, ScriptFieldConstraint> scriptConstraints ) )
-						scriptConstraints = scriptFieldConstraints[constraint.script] = new Dictionary<string, ScriptFieldConstraint>( 4 );
-
-					scriptConstraints[GetScriptConstraintKey( constraint.declaringTypeName, constraint.fieldName )] = constraint;
-				}
-			}
 
 			foreach( Object obj in objectsToSearchSet )
 			{
@@ -356,182 +336,6 @@ namespace AssetUsageDetectorNamespace
 #endif
 		}
 
-		private static string GetScriptConstraintKey( string declaringTypeName, string fieldName )
-		{
-			return string.Concat( declaringTypeName, ".", fieldName );
-		}
-
-		private bool DoesScriptReferenceMatchFieldConstraints( Object referenceObject, MonoScript script )
-		{
-			if( referenceObject == null || referenceObject.Equals( null ) )
-				return false;
-
-			if( script == null || script.Equals( null ) || !scriptFieldConstraints.TryGetValue( script, out Dictionary<string, ScriptFieldConstraint> constraints ) || constraints.Count == 0 )
-				return true;
-
-			Type type = referenceObject.GetType();
-			foreach( ScriptFieldConstraint constraint in constraints.Values )
-			{
-				if( !TryGetFieldForScriptConstraint( type, constraint, out FieldInfo fieldInfo ) )
-					return false;
-
-				object actualValue = null;
-				try
-				{
-					actualValue = fieldInfo.GetValue( referenceObject );
-				}
-				catch
-				{
-					return false;
-				}
-
-				if( !DoesFieldValueMatchScriptConstraint( actualValue, fieldInfo.FieldType, constraint ) )
-					return false;
-			}
-
-			return true;
-		}
-
-		private bool TryGetFieldForScriptConstraint( Type objectType, ScriptFieldConstraint constraint, out FieldInfo fieldInfo )
-		{
-			fieldInfo = null;
-			for( Type type = objectType; type != null && type != typeof( object ); type = type.BaseType )
-			{
-				if( type.AssemblyQualifiedName != constraint.declaringTypeName && type.FullName != constraint.declaringTypeName )
-					continue;
-
-				fieldInfo = type.GetField( constraint.fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly );
-				return fieldInfo != null;
-			}
-
-			return false;
-		}
-
-		private bool DoesFieldValueMatchScriptConstraint( object actualValue, Type fieldType, ScriptFieldConstraint constraint )
-		{
-			Type effectiveFieldType = Nullable.GetUnderlyingType( fieldType ) ?? fieldType;
-			if( typeof( Object ).IsAssignableFrom( effectiveFieldType ) )
-			{
-				Object actualObject = actualValue as Object;
-				bool actualIsNull = actualObject == null || actualObject.Equals( null );
-				bool expectedIsNull = constraint.value == null || constraint.value.Equals( null );
-				if( expectedIsNull )
-					return actualIsNull;
-
-				return !actualIsNull && actualObject == constraint.value;
-			}
-
-			if( effectiveFieldType == typeof( string ) )
-			{
-				string actualString = actualValue as string ?? string.Empty;
-				string expectedString = constraint.stringValue ?? constraint.textValue ?? string.Empty;
-				return MatchesPartialText( actualString, expectedString, true );
-			}
-
-			if( effectiveFieldType == typeof( bool ) )
-			{
-				bool expectedBool = constraint.boolValue;
-				if( !string.IsNullOrEmpty( constraint.textValue ) && bool.TryParse( constraint.textValue, out bool parsedBool ) )
-					expectedBool = parsedBool;
-
-				return actualValue is bool actualBool && actualBool == expectedBool;
-			}
-
-			if( effectiveFieldType == typeof( float ) )
-			{
-				float expectedFloat = constraint.floatValue;
-				if( !string.IsNullOrEmpty( constraint.textValue ) && float.TryParse( constraint.textValue, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float parsedFloat ) )
-					expectedFloat = parsedFloat;
-
-				if( !( actualValue is float actualFloat ) )
-					return false;
-
-				string expectedFloatText = !string.IsNullOrEmpty( constraint.textValue ) ? constraint.textValue : expectedFloat.ToString( "G9", CultureInfo.InvariantCulture );
-				string actualFloatText = actualFloat.ToString( "G9", CultureInfo.InvariantCulture );
-				return MatchesPartialText( actualFloatText, expectedFloatText, false );
-			}
-
-			if( effectiveFieldType == typeof( double ) )
-			{
-				double expectedDouble = constraint.doubleValue;
-				if( !string.IsNullOrEmpty( constraint.textValue ) && double.TryParse( constraint.textValue, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double parsedDouble ) )
-					expectedDouble = parsedDouble;
-
-				if( !( actualValue is double actualDouble ) )
-					return false;
-
-				string expectedDoubleText = !string.IsNullOrEmpty( constraint.textValue ) ? constraint.textValue : expectedDouble.ToString( "G17", CultureInfo.InvariantCulture );
-				string actualDoubleText = actualDouble.ToString( "G17", CultureInfo.InvariantCulture );
-				return MatchesPartialText( actualDoubleText, expectedDoubleText, false );
-			}
-
-			if( IsIntegralFieldType( effectiveFieldType ) )
-			{
-				long expectedLong = constraint.longValue;
-				if( !string.IsNullOrEmpty( constraint.textValue ) && long.TryParse( constraint.textValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsedLong ) )
-					expectedLong = parsedLong;
-
-				if( actualValue == null )
-					return false;
-
-				try
-				{
-					string expectedLongText = !string.IsNullOrEmpty( constraint.textValue ) ? constraint.textValue : expectedLong.ToString( CultureInfo.InvariantCulture );
-					string actualLongText = Convert.ToInt64( actualValue, CultureInfo.InvariantCulture ).ToString( CultureInfo.InvariantCulture );
-					return MatchesPartialText( actualLongText, expectedLongText, false );
-				}
-				catch
-				{
-					return false;
-				}
-			}
-
-			if( effectiveFieldType.IsEnum )
-			{
-				string expectedEnumValue = !string.IsNullOrEmpty( constraint.enumValueName ) ? constraint.enumValueName : constraint.textValue;
-				if( string.IsNullOrEmpty( expectedEnumValue ) || actualValue == null )
-					return false;
-
-				string actualEnumValue = Enum.GetName( effectiveFieldType, actualValue );
-				return actualEnumValue == expectedEnumValue;
-			}
-
-			string expectedText = constraint.textValue ?? constraint.stringValue ?? string.Empty;
-			string actualText = GetFieldValueAsStringForScriptConstraint( actualValue );
-			return MatchesPartialText( actualText, expectedText, false );
-		}
-
-		private static bool IsIntegralFieldType( Type type )
-		{
-			return type == typeof( byte ) || type == typeof( sbyte ) || type == typeof( short ) || type == typeof( ushort ) ||
-				   type == typeof( int ) || type == typeof( uint ) || type == typeof( long );
-		}
-
-		private static bool MatchesPartialText( string actualText, string expectedText, bool ignoreCase )
-		{
-			if( string.IsNullOrEmpty( expectedText ) )
-				return string.IsNullOrEmpty( actualText );
-
-			if( string.IsNullOrEmpty( actualText ) )
-				return false;
-
-			return actualText.IndexOf( expectedText, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal ) >= 0;
-		}
-
-		private string GetFieldValueAsStringForScriptConstraint( object value )
-		{
-			if( value == null )
-				return string.Empty;
-
-			if( value is string strValue )
-				return strValue;
-
-			if( value is IFormattable formattable )
-				return formattable.ToString( null, CultureInfo.InvariantCulture );
-
-			return value.ToString() ?? string.Empty;
-		}
-
 		private ReferenceNode SearchGameObject( object obj )
 		{
 			GameObject go = (GameObject) obj;
@@ -586,7 +390,7 @@ namespace AssetUsageDetectorNamespace
 				// If a searched asset is script, check if this component is an instance of it
 				// Although SearchVariablesWithSerializedObject can detect these references with SerializedObject, it isn't possible when reflection is used in Play mode
 				MonoScript script = MonoScript.FromMonoBehaviour( (MonoBehaviour) component );
-				if( objectsToSearchSet.Contains( script ) && DoesScriptReferenceMatchFieldConstraints( component, script ) )
+				if( objectsToSearchSet.Contains( script ) )
 				{
 					if( ShouldExcludeRedundantPrefabReferences( component ) && !component.HasAnyPrefabOverrides() )
 						currentSearchResultGroup.NumberOfRedundantReferences++;
@@ -1025,7 +829,7 @@ namespace AssetUsageDetectorNamespace
 				for( int i = 0; i < behaviours.Length; i++ )
 				{
 					MonoScript script = MonoScript.FromScriptableObject( behaviours[i] );
-					if( objectsToSearchSet.Contains( script ) && DoesScriptReferenceMatchFieldConstraints( behaviours[i], script ) )
+					if( objectsToSearchSet.Contains( script ) )
 					{
 						referenceNode.AddLinkTo( GetReferenceNode( script ) );
 
@@ -1054,7 +858,7 @@ namespace AssetUsageDetectorNamespace
 				for( int i = 0; i < behaviours.Length; i++ )
 				{
 					MonoScript script = MonoScript.FromScriptableObject( behaviours[i] );
-					if( objectsToSearchSet.Contains( script ) && DoesScriptReferenceMatchFieldConstraints( behaviours[i], script ) )
+					if( objectsToSearchSet.Contains( script ) )
 					{
 						referenceNode.AddLinkTo( GetReferenceNode( script ) );
 
@@ -1677,9 +1481,7 @@ namespace AssetUsageDetectorNamespace
 								// m_RD.texture is a redundant reference that shows up when searching sprites
 								if( !propertyPath.EndsWithFast( "m_RD.texture" ) )
 								{
-									if( propertyPath == "m_Script" && propertyValue is MonoScript scriptReference && !DoesScriptReferenceMatchFieldConstraints( unityObject, scriptReference ) )
-										enterChildren = false;
-									else if( searchPrefabOverridesOnly && !iterator.prefabOverride && ObjectBelongsToDifferentPrefabInstance( propertyValue, unityObjectPrefabInstanceRoot ) )
+                                    if (searchPrefabOverridesOnly && !iterator.prefabOverride && ObjectBelongsToDifferentPrefabInstance(propertyValue, unityObjectPrefabInstanceRoot))
 									{
 										currentSearchResultGroup.NumberOfRedundantReferences++;
 										enterChildren = false;
@@ -1692,21 +1494,21 @@ namespace AssetUsageDetectorNamespace
 											searchParameters.searchRefactoring( new SerializedPropertyMatch( unityObject, propertyValue, iterator ) );
 									}
 
-									/// Searching for references of a prefab instance's child object in either a scene or prefab mode should show the references coming from
-									/// that prefab instance to the child object. That's because even though <see cref="SerializedProperty.prefabOverride"/> returns
-									/// false for the variable that points to the child GameObject, that child GameObject is essentially different than its counterpart
-									/// in the prefab asset (it's an instance/clone of it after all). So no references will be reported unless we intervene.
-									bool ObjectBelongsToDifferentPrefabInstance( Object obj, GameObject prefabInstanceRoot )
-									{
-										if( obj == null )
-											return true;
+                                    /// Searching for references of a prefab instance's child object in either a scene or prefab mode should show the references coming from
+                                    /// that prefab instance to the child object. That's because even though <see cref="SerializedProperty.prefabOverride"/> returns
+                                    /// false for the variable that points to the child GameObject, that child GameObject is essentially different than its counterpart
+                                    /// in the prefab asset (it's an instance/clone of it after all). So no references will be reported unless we intervene.
+                                    bool ObjectBelongsToDifferentPrefabInstance(Object obj, GameObject prefabInstanceRoot)
+                                    {
+                                        if (obj == null)
+                                            return true;
 
-										GameObject objPrefabInstanceRoot = PrefabUtility.GetOutermostPrefabInstanceRoot( obj );
-										if( objPrefabInstanceRoot == null )
-											return true;
+                                        GameObject objPrefabInstanceRoot = PrefabUtility.GetOutermostPrefabInstanceRoot(obj);
+                                        if (objPrefabInstanceRoot == null)
+                                            return true;
 
-										return objPrefabInstanceRoot != prefabInstanceRoot;
-									}
+                                        return objPrefabInstanceRoot != prefabInstanceRoot;
+                                    }
 								}
 							}
 						}
@@ -1840,10 +1642,6 @@ namespace AssetUsageDetectorNamespace
 					if( field.FieldType.IsIgnoredUnityType() )
 						continue;
 
-					// "ref struct"s can't be accessed via reflection
-					if( field.FieldType.IsByRefLike )
-						continue;
-
 					// Additional filtering for fields:
 					// 1- Ignore "m_RectTransform", "m_CanvasRenderer" and "m_Canvas" fields of Graphic components
 					string fieldName = field.Name;
@@ -1864,10 +1662,6 @@ namespace AssetUsageDetectorNamespace
 
 					// Skip primitive types
 					if( property.PropertyType.IsIgnoredUnityType() )
-						continue;
-
-					// "ref struct"s can't be accessed via reflection
-					if( property.PropertyType.IsByRefLike )
 						continue;
 
 					// Skip properties without a getter function

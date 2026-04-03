@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-
 public static class EquippedItems {
   static readonly Dictionary<string, Dictionary<string, GearItem>> DefaultGearForms = CreateDefaultGearForms();
 
@@ -68,6 +67,76 @@ public static class EquippedItems {
       gearColor = gearItem.gearColor,
       boosts = boosts
     };
+  }
+
+  public static List<string> GetEquippedGearIds(IEnumerable<string> forms = null) {
+    EnsureKnownForms();
+
+    var result = new List<string>();
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    if (forms == null) {
+      forms = AllGearForms.Keys;
+    }
+
+    foreach (var form in forms) {
+      var resolvedForm = EsperanzaForms.ResolveFormKey(form) ?? NormalizeToken(form);
+      if (string.IsNullOrWhiteSpace(resolvedForm)) {
+        continue;
+      }
+
+      EnsureForm(resolvedForm);
+      if (!AllGearForms.TryGetValue(resolvedForm, out var slots) || slots == null || slots.Count <= 0) {
+        continue;
+      }
+
+      foreach (var slotEntry in slots) {
+        var gearId = NormalizeToken(slotEntry.Value != null ? slotEntry.Value.gearId : "");
+        if (string.IsNullOrWhiteSpace(gearId) || !seen.Add(gearId)) {
+          continue;
+        }
+
+        result.Add(gearId);
+      }
+    }
+
+    return result;
+  }
+
+  public static string BuildGearPackId(string gearId, string leafCode) {
+    var normalizedGearId = NormalizeToken(gearId);
+    var normalizedLeafCode = NormalizeToken(leafCode);
+    if (string.IsNullOrWhiteSpace(normalizedGearId) || string.IsNullOrWhiteSpace(normalizedLeafCode)) {
+      return "";
+    }
+
+    return "Gear_" + normalizedGearId.Replace(' ', '_') + "_" + normalizedLeafCode.Replace(' ', '_');
+  }
+
+  public static bool TryParseGearPackId(string packId, out string gearForm, out string gearCode, out string leafCode) {
+    gearForm = "";
+    gearCode = "";
+    leafCode = "";
+
+    var normalizedPackId = NormalizeToken(packId);
+    if (!normalizedPackId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var payload = normalizedPackId.Substring("Gear_".Length);
+    var parts = payload.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+    if (parts.Length < 3) {
+      return false;
+    }
+
+    leafCode = parts[parts.Length - 1];
+    gearCode = parts[parts.Length - 2];
+    gearForm = string.Join("_", parts, 0, parts.Length - 2);
+    return !string.IsNullOrWhiteSpace(gearForm) && !string.IsNullOrWhiteSpace(gearCode);
+  }
+
+  static string NormalizeToken(string value) {
+    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
   }
 
   static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearForms() {

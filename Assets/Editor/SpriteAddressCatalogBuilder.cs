@@ -15,7 +15,6 @@ using UnityEditor.AddressableAssets.Settings;
 using UnityEditor.AddressableAssets.Settings.GroupSchemas;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using UnityEditor.U2D.Sprites;
 using UnityEngine;
 using UnityEngine.Profiling;
 
@@ -119,51 +118,24 @@ public static class SpriteIndexBuilder {
 
   enum AtlasMetadataKind : byte {
     Invalid = 0,
-    Standard = 1,
+    OffsetOnly = 1,
     Grouped = 2,
   }
 
   [Serializable]
-  sealed class StandardAtlasMetadataPayload {
-    public string metadataKind = "standard";
-    public string exportedAtlasAssetPath;
-    public float spritePixelsPerUnit = 100f;
-    public int spriteMeshType = (int)SpriteMeshType.Tight;
-    public List<StandardAtlasSpriteMetadata> sprites = new();
+  sealed class OffsetOnlyAtlasMetadataPayload {
+    public List<OffsetOnlyAtlasSpriteMetadata> sprites = new();
   }
 
   [Serializable]
-  sealed class StandardAtlasSpriteMetadata {
-    public string name;
-    public bool empty;
-    public StandardAtlasPixelRect packedRect;
-    public StandardAtlasPixelPoint offsetFromCellCenterPx;
+  sealed class OffsetOnlyAtlasSpriteMetadata {
+    public OffsetOnlyAtlasPixelPoint offsetFromCellCenterPx;
   }
 
   [Serializable]
-  sealed class StandardAtlasPixelRect {
-    public int x;
-    public int y;
-    public int width;
-    public int height;
-
-    public StandardAtlasPixelRect(int x, int y, int width, int height) {
-      this.x = x;
-      this.y = y;
-      this.width = width;
-      this.height = height;
-    }
-  }
-
-  [Serializable]
-  sealed class StandardAtlasPixelPoint {
+  struct OffsetOnlyAtlasPixelPoint {
     public float x;
     public float y;
-
-    public StandardAtlasPixelPoint(float x, float y) {
-      this.x = x;
-      this.y = y;
-    }
   }
 
   sealed class BuildState {
@@ -256,12 +228,12 @@ public static class SpriteIndexBuilder {
     public int entryCount;
   }
 
-  [MenuItem("Tools/Sprite Streaming/Build Active Content")]
+  [MenuItem("Tools/Sprite Streaming/3) Build Active Content")]
   public static void BuildActiveContentMenu() {
     RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Build Active Content (Clean)")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Build Active Content (Clean)")]
   public static void BuildActiveContentCleanMenu() {
     RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
   }
@@ -297,9 +269,8 @@ public static class SpriteIndexBuilder {
     BuildAddressablesContent(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Run Full Prep Pipeline")]
   public static void RunEssentialPipelineSequentialMenu() {
-    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
+    BuildActiveContentCleanMenu();
   }
 
   static bool RunFullBuildPipeline(bool logResult, bool cleanCachesBeforeBuild, bool useChunkedWarmup) {
@@ -413,7 +384,7 @@ public static class SpriteIndexBuilder {
       ConfigureAddressablesBuilderDefaults(settings, logResult);
 
       EditorUtility.DisplayProgressBar("Sprite Streaming", "Rebuilding runtime index...", 0.45f);
-      if (!RebuildRuntimeIndexInternal(logResult: false, failOnError: true, contextLabel: contextLabel)) {
+      if (!RebuildRuntimeIndexInternal(logResult: false, failOnError: true, contextLabel: contextLabel, prepareSelectedPacks: true)) {
         Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Runtime index rebuild failed.");
         return false;
       }
@@ -439,7 +410,27 @@ public static class SpriteIndexBuilder {
   }
 
   public static bool RebuildRuntimeIndex(bool logResult, bool failOnError) {
-    return RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.ManualRuntimeIndex);
+    return RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.ManualRuntimeIndex, prepareSelectedPacks: true);
+  }
+
+  public static bool RebuildRuntimeIndexPrepared(string contextLabel, bool logResult, bool failOnError) {
+    var resolvedContextLabel = string.IsNullOrWhiteSpace(contextLabel) ? BuildContext.ManualRuntimeIndex : contextLabel.Trim();
+    return RebuildRuntimeIndexInternal(logResult, failOnError, resolvedContextLabel, prepareSelectedPacks: false);
+  }
+
+  public static bool BuildAddressablesContentPrepared(
+    string contextLabel,
+    bool logResult,
+    bool cleanCachesBeforeBuild,
+    bool useChunkedWarmup = true
+  ) {
+    var resolvedContextLabel = string.IsNullOrWhiteSpace(contextLabel) ? BuildContext.ManualAddressablesBuild : contextLabel.Trim();
+    return BuildAddressablesContent(
+      logResult: logResult,
+      cleanCachesBeforeBuild: cleanCachesBeforeBuild,
+      contextLabel: resolvedContextLabel,
+      useChunkedWarmup: useChunkedWarmup
+    );
   }
 
   static bool BuildAddressablesContent(
@@ -739,12 +730,14 @@ public static class SpriteIndexBuilder {
 
   public static bool PrepareForPlayerBuild(bool logResult, bool failOnError) {
     if (logResult) {
-      Debug.Log("[SpriteIndexBuilder] [" + BuildContext.PlayerPrebuild + "] Preparing runtime index for player build. Addressables content build is handled by Unity's build pipeline.");
+      Debug.Log(
+        "[SpriteIndexBuilder] [" + BuildContext.PlayerPrebuild + "] Preparing staged active packs, auditing staged content, and rebuilding the runtime index for player build. Addressables content build is handled by Unity's build pipeline."
+      );
     }
-    return RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.PlayerPrebuild);
+    return RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.PlayerPrebuild, prepareSelectedPacks: false);
   }
 
-  static bool RebuildRuntimeIndexInternal(bool logResult, bool failOnError, string contextLabel) {
+  static bool RebuildRuntimeIndexInternal(bool logResult, bool failOnError, string contextLabel, bool prepareSelectedPacks) {
     var addressableSettings = AddressableAssetSettingsDefaultObject.GetSettings(true);
     if (addressableSettings == null) {
       Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Addressables settings were not found.");
@@ -752,10 +745,19 @@ public static class SpriteIndexBuilder {
       return false;
     }
 
-    if (!ContentPackPipeline.PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult)) {
-      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Content pack staging failed.");
-      if (failOnError) throw new BuildFailedException("Content pack staging failed.");
-      return false;
+    if (prepareSelectedPacks) {
+      if (!ContentPackPipeline.PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult)) {
+        Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Content pack staging failed.");
+        if (failOnError) throw new BuildFailedException("Content pack staging failed.");
+        return false;
+      }
+    }
+    else if (string.Equals(contextLabel, BuildContext.PlayerPrebuild, StringComparison.Ordinal)) {
+      if (!ContentPackPipeline.PrepareSelectedPacksForPlayerBuild(contextLabel, logResult)) {
+        Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Player-build content pack preparation failed.");
+        if (failOnError) throw new BuildFailedException("Player-build content pack preparation failed.");
+        return false;
+      }
     }
 
     EnsureFolderExists(Path.GetDirectoryName(BuilderConfig.SettingsAssetPath));
@@ -3355,214 +3357,8 @@ public static class SpriteIndexBuilder {
     EnsureAtlasMetadataEntry(state, normalizedAssetPath);
   }
 
-  static void EnsureGeneratedAtlasMetadata(BuildState state, string atlasAssetPath) {
-    var normalizedAtlasAssetPath = NormalizePath(atlasAssetPath);
-    if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) return;
-    if (!GeneratedAtlasBuildSurrogateUtility.CanAtlasPathUseMetadata(normalizedAtlasAssetPath)) return;
-    if (GeneratedAtlasBuildSurrogateUtility.IsBuildSurrogatePath(normalizedAtlasAssetPath)) return;
-
-    var metadataAssetPath = GeneratedAtlasBuildSurrogateUtility.BuildMetadataAssetPath(normalizedAtlasAssetPath);
-    if (string.IsNullOrWhiteSpace(metadataAssetPath)) return;
-
-    var fullMetadataPath = Path.GetFullPath(metadataAssetPath);
-    if (File.Exists(fullMetadataPath)) {
-      if (state != null) {
-        state.atlasMetadataAssetPathByAtlasPath[normalizedAtlasAssetPath] = metadataAssetPath;
-      }
-      return;
-    }
-
-    if (!TryBuildGeneratedAtlasMetadataJson(
-      normalizedAtlasAssetPath,
-      out var metadataJson,
-      out var spriteCount,
-      out var spritePixelsPerUnit,
-      out var spriteMeshType,
-      out var spriteImportMode,
-      out var error)) {
-      Debug.LogWarning(
-        "[SpriteIndexBuilder] Failed to generate runtime atlas metadata" +
-        " atlas='" + normalizedAtlasAssetPath + "'" +
-        " sprite_import_mode=" + spriteImportMode +
-        " reason='" + (string.IsNullOrWhiteSpace(error) ? "unknown" : error) + "'"
-      );
-      return;
-    }
-
-    WriteIfChanged(metadataAssetPath, metadataJson);
-    AssetDatabase.ImportAsset(metadataAssetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-
-    if (state != null) {
-      state.atlasMetadataAssetPathByAtlasPath[normalizedAtlasAssetPath] = metadataAssetPath;
-      state.atlasMetadataKindByPath.Remove(metadataAssetPath);
-    }
-
-    Debug.Log(
-      "[SpriteIndexBuilder] Generated runtime atlas metadata" +
-      " atlas='" + normalizedAtlasAssetPath + "'" +
-      " metadata='" + metadataAssetPath + "'" +
-      " sprite_count=" + spriteCount +
-      " sprite_import_mode=" + spriteImportMode +
-      " sprite_ppu=" + spritePixelsPerUnit.ToString("0.###", CultureInfo.InvariantCulture) +
-      " sprite_mesh_type=" + spriteMeshType
-    );
-  }
-
-  static bool TryBuildGeneratedAtlasMetadataJson(
-    string atlasAssetPath,
-    out string metadataJson,
-    out int spriteCount,
-    out float spritePixelsPerUnit,
-    out int spriteMeshType,
-    out SpriteImportMode spriteImportMode,
-    out string error
-  ) {
-    metadataJson = "";
-    spriteCount = 0;
-    spritePixelsPerUnit = 100f;
-    spriteMeshType = (int)SpriteMeshType.Tight;
-    spriteImportMode = SpriteImportMode.Single;
-    error = "";
-
-    var normalizedAtlasAssetPath = NormalizePath(atlasAssetPath);
-    if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) {
-      error = "Atlas asset path was empty.";
-      return false;
-    }
-
-    var importer = AssetImporter.GetAtPath(normalizedAtlasAssetPath) as TextureImporter;
-    if (importer == null) {
-      error = "TextureImporter was not found.";
-      return false;
-    }
-
-    spriteImportMode = importer.spriteImportMode;
-    spritePixelsPerUnit = importer.spritePixelsPerUnit > 0f ? importer.spritePixelsPerUnit : 100f;
-
-    var importerSettings = new TextureImporterSettings();
-    importer.ReadTextureSettings(importerSettings);
-    spriteMeshType = (int)importerSettings.spriteMeshType;
-
-    if (!TryCollectGeneratedAtlasSpriteMetadata(importer, normalizedAtlasAssetPath, out var sprites, out error)) {
-      return false;
-    }
-
-    spriteCount = sprites.Count;
-    metadataJson = JsonUtility.ToJson(new StandardAtlasMetadataPayload {
-      exportedAtlasAssetPath = normalizedAtlasAssetPath,
-      spritePixelsPerUnit = spritePixelsPerUnit,
-      spriteMeshType = spriteMeshType,
-      sprites = sprites
-    }, true);
-    return !string.IsNullOrWhiteSpace(metadataJson);
-  }
-
-  static bool TryCollectGeneratedAtlasSpriteMetadata(
-    TextureImporter importer,
-    string atlasAssetPath,
-    out List<StandardAtlasSpriteMetadata> sprites,
-    out string error
-  ) {
-    sprites = new List<StandardAtlasSpriteMetadata>();
-    error = "";
-    if (importer == null) {
-      error = "TextureImporter was null.";
-      return false;
-    }
-
-    var metadataByName = new Dictionary<string, StandardAtlasSpriteMetadata>(StringComparer.Ordinal);
-    if (importer.spriteImportMode == SpriteImportMode.Multiple) {
-      var dataProvider = CreateSpriteEditorDataProvider(importer);
-      var spriteRects = dataProvider?.GetSpriteRects();
-      if (spriteRects != null) {
-        for (var i = 0; i < spriteRects.Length; i++) {
-          var spriteRect = spriteRects[i];
-          TryAddGeneratedAtlasSpriteMetadata(metadataByName, spriteRect.name, spriteRect.rect);
-        }
-      }
-    }
-
-    if (metadataByName.Count <= 0) {
-      CollectGeneratedAtlasSpriteMetadataFromLoadedAssets(atlasAssetPath, metadataByName);
-    }
-
-    if (metadataByName.Count <= 0) {
-      error = "No sprite slice data was found from importer or loaded sprite assets.";
-      return false;
-    }
-
-    sprites = metadataByName.Values.ToList();
-    sprites.Sort((left, right) => SpriteSliceAddressUtility.CompareNaturally(left?.name, right?.name));
-    return true;
-  }
-
-  static void CollectGeneratedAtlasSpriteMetadataFromLoadedAssets(
-    string atlasAssetPath,
-    Dictionary<string, StandardAtlasSpriteMetadata> metadataByName
-  ) {
-    if (metadataByName == null || string.IsNullOrWhiteSpace(atlasAssetPath)) return;
-
-    void AddSprites(UnityEngine.Object[] assets) {
-      if (assets == null || assets.Length <= 0) return;
-      for (var i = 0; i < assets.Length; i++) {
-        if (assets[i] is not Sprite sprite) continue;
-        TryAddGeneratedAtlasSpriteMetadata(metadataByName, sprite.name, sprite.rect);
-      }
-    }
-
-    AddSprites(AssetDatabase.LoadAllAssetsAtPath(atlasAssetPath));
-    AddSprites(AssetDatabase.LoadAllAssetRepresentationsAtPath(atlasAssetPath));
-
-    var mainSprite = AssetDatabase.LoadAssetAtPath<Sprite>(atlasAssetPath);
-    if (mainSprite != null) {
-      TryAddGeneratedAtlasSpriteMetadata(metadataByName, mainSprite.name, mainSprite.rect);
-    }
-  }
-
-  static bool TryAddGeneratedAtlasSpriteMetadata(
-    Dictionary<string, StandardAtlasSpriteMetadata> metadataByName,
-    string spriteName,
-    Rect spriteRect
-  ) {
-    if (metadataByName == null) return false;
-
-    var normalizedSpriteName = string.IsNullOrWhiteSpace(spriteName) ? "" : spriteName.Trim();
-    if (string.IsNullOrWhiteSpace(normalizedSpriteName)) return false;
-
-    var packedRect = new Rect(
-      Mathf.RoundToInt(spriteRect.x),
-      Mathf.RoundToInt(spriteRect.y),
-      Mathf.RoundToInt(spriteRect.width),
-      Mathf.RoundToInt(spriteRect.height)
-    );
-    if (packedRect.width <= 0f || packedRect.height <= 0f) return false;
-
-    metadataByName[normalizedSpriteName] = new StandardAtlasSpriteMetadata {
-      name = normalizedSpriteName,
-      empty = false,
-      packedRect = new StandardAtlasPixelRect(
-        Mathf.RoundToInt(packedRect.x),
-        Mathf.RoundToInt(packedRect.y),
-        Mathf.RoundToInt(packedRect.width),
-        Mathf.RoundToInt(packedRect.height)
-      ),
-      offsetFromCellCenterPx = new StandardAtlasPixelPoint(0f, 0f)
-    };
-    return true;
-  }
-
-  static ISpriteEditorDataProvider CreateSpriteEditorDataProvider(TextureImporter importer) {
-    if (importer == null) return null;
-    var factory = new SpriteDataProviderFactories();
-    factory.Init();
-    var dataProvider = factory.GetSpriteEditorDataProviderFromObject(importer) as ISpriteEditorDataProvider;
-    dataProvider?.InitSpriteEditorDataProvider();
-    return dataProvider;
-  }
-
   static void EnsureAtlasMetadataEntry(BuildState state, string atlasAssetPath) {
     if (state == null) return;
-    EnsureGeneratedAtlasMetadata(state, atlasAssetPath);
     if (!TryGetAtlasMetadataAssetPath(state, atlasAssetPath, out var metadataAssetPath)) return;
 
     state.activeAtlasMetadataAssetPaths.Add(metadataAssetPath);
@@ -3681,13 +3477,10 @@ public static class SpriteIndexBuilder {
             if (!string.IsNullOrWhiteSpace(jsonText) &&
                 jsonText.IndexOf("\"sprites\"", StringComparison.Ordinal) >= 0 &&
                 jsonText.IndexOf("\"offsetFromCellCenterPx\"", StringComparison.Ordinal) >= 0 &&
-                (jsonText.IndexOf("\"sourceAtlasAssetPath\"", StringComparison.Ordinal) >= 0 ||
-                 jsonText.IndexOf("\"exportedAtlasAssetPath\"", StringComparison.Ordinal) >= 0)) {
-              metadataKind =
-                jsonText.IndexOf("\"groupKey\"", StringComparison.Ordinal) >= 0 &&
-                jsonText.IndexOf("\"sourceCategories\"", StringComparison.Ordinal) >= 0
-                  ? AtlasMetadataKind.Grouped
-                  : AtlasMetadataKind.Standard;
+                HasMeaningfulRuntimeOffsetMetadata(jsonText)) {
+              metadataKind = IsGroupedOffsetMetadataAssetPath(normalizedAssetPath)
+                ? AtlasMetadataKind.Grouped
+                : AtlasMetadataKind.OffsetOnly;
             }
           }
           catch {
@@ -3701,6 +3494,36 @@ public static class SpriteIndexBuilder {
       state.atlasMetadataKindByPath[normalizedAssetPath] = metadataKind;
     }
     return metadataKind;
+  }
+
+  static bool IsGroupedOffsetMetadataAssetPath(string metadataAssetPath) {
+    var normalizedMetadataAssetPath = NormalizePath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return false;
+    if (GeneratedAtlasBuildSurrogateUtility.IsBuildSurrogatePath(normalizedMetadataAssetPath)) return true;
+    return GeneratedAtlasBuildSurrogateUtility.IsGroupedGearAtlasPath(normalizedMetadataAssetPath);
+  }
+
+  static bool HasMeaningfulRuntimeOffsetMetadata(string jsonText) {
+    if (string.IsNullOrWhiteSpace(jsonText)) return false;
+
+    OffsetOnlyAtlasMetadataPayload payload;
+    try {
+      payload = JsonUtility.FromJson<OffsetOnlyAtlasMetadataPayload>(jsonText);
+    }
+    catch {
+      return false;
+    }
+
+    if (payload?.sprites == null || payload.sprites.Count <= 0) return false;
+    for (var i = 0; i < payload.sprites.Count; i++) {
+      var sprite = payload.sprites[i];
+      if (Mathf.Abs(sprite.offsetFromCellCenterPx.x) > 0.001f ||
+          Mathf.Abs(sprite.offsetFromCellCenterPx.y) > 0.001f) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static bool ApplySyntheticBundleLabel(AddressableAssetEntry entry, string syntheticLabel) {

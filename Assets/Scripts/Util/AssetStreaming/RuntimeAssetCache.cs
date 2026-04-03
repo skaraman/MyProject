@@ -237,7 +237,7 @@ public static class RuntimeAssetCache {
         continue;
       }
 
-      ReleaseEntry(entry);
+      ReleaseEntry(entry, reason: "clear_session_scope");
       keysToRemove.Add(pair.Key);
     }
 
@@ -488,6 +488,71 @@ public static class RuntimeAssetCache {
     return null;
   }
 
+  static void RecordRuntimeAssetTraceQueue(CacheEntry entry, bool highPriority) {
+    if (entry == null) return;
+    AssetLoadTraceMonitor.RecordEvent(
+      source: "RuntimeAssetCache",
+      stage: "queue",
+      address: entry.address,
+      assetTypeOverride: entry.assetType != null ? entry.assetType.Name : "",
+      detail:
+        "priority=" + (highPriority ? "high" : "normal") +
+        " scope=" + entry.scope
+    );
+  }
+
+  static void RecordRuntimeAssetTracePromote(CacheEntry entry) {
+    if (entry == null) return;
+    AssetLoadTraceMonitor.RecordEvent(
+      source: "RuntimeAssetCache",
+      stage: "promote",
+      address: entry.address,
+      assetTypeOverride: entry.assetType != null ? entry.assetType.Name : "",
+      detail: "priority=high scope=" + entry.scope
+    );
+  }
+
+  static void RecordRuntimeAssetTraceStart(CacheEntry entry) {
+    if (entry == null) return;
+    AssetLoadTraceMonitor.RecordEvent(
+      source: "RuntimeAssetCache",
+      stage: "start",
+      address: entry.address,
+      assetTypeOverride: entry.assetType != null ? entry.assetType.Name : "",
+      detail: "scope=" + entry.scope
+    );
+  }
+
+  static void RecordRuntimeAssetTraceComplete(CacheEntry entry, UnityEngine.Object asset, bool loadSucceeded) {
+    if (entry == null) return;
+    AssetLoadTraceMonitor.RecordEvent(
+      source: "RuntimeAssetCache",
+      stage: loadSucceeded ? "complete" : "fail",
+      address: entry.address,
+      asset: asset,
+      assetTypeOverride: entry.assetType != null ? entry.assetType.Name : "",
+      detail:
+        "scope=" + entry.scope +
+        " release_when_complete=" + (entry.releaseWhenLoadCompletes ? 1 : 0),
+      error: loadSucceeded ? "" : entry.lastError
+    );
+  }
+
+  static void RecordRuntimeAssetTraceRelease(CacheEntry entry, string reason) {
+    if (entry == null) return;
+    AssetLoadTraceMonitor.RecordEvent(
+      source: "RuntimeAssetCache",
+      stage: "release",
+      address: entry.address,
+      asset: entry.loadedAsset,
+      assetTypeOverride: entry.assetType != null ? entry.assetType.Name : "",
+      detail:
+        "scope=" + entry.scope +
+        " reason=" + NormalizeToken(reason) +
+        " was_loaded=" + (entry.isLoaded && entry.loadedAsset != null ? 1 : 0)
+    );
+  }
+
   static void StartLoad(CacheEntry entry) {
     if (entry == null || entry.isLoaded || entry.isLoading || entry.failed) return;
     entry.pendingQueued = false;
@@ -496,6 +561,7 @@ public static class RuntimeAssetCache {
     if (entry.assetType == typeof(GameObject)) {
       var handle = Addressables.LoadAssetAsync<GameObject>(entry.address);
       entry.loadHandle = handle;
+      RecordRuntimeAssetTraceStart(entry);
       handle.Completed += op => CompleteLoad(entry.key, op);
       return;
     }
@@ -503,6 +569,7 @@ public static class RuntimeAssetCache {
     if (entry.assetType == typeof(Material)) {
       var handle = Addressables.LoadAssetAsync<Material>(entry.address);
       entry.loadHandle = handle;
+      RecordRuntimeAssetTraceStart(entry);
       handle.Completed += op => CompleteLoad(entry.key, op);
       return;
     }
@@ -510,6 +577,7 @@ public static class RuntimeAssetCache {
     entry.isLoading = false;
     entry.failed = true;
     entry.lastError = "unsupported_type";
+    RecordRuntimeAssetTraceComplete(entry, asset: null, loadSucceeded: false);
   }
 
   static void CompleteLoad<T>(string key, AsyncOperationHandle<T> operation) where T : UnityEngine.Object {
@@ -527,6 +595,7 @@ public static class RuntimeAssetCache {
       entry.isLoaded = true;
       entry.failed = false;
       entry.lastError = "";
+      RecordRuntimeAssetTraceComplete(entry, operation.Result, loadSucceeded: true);
       if (ShouldLogDebug()) {
         Debug.Log(
           "[RuntimeAssetCache] Loaded asset" +
@@ -542,6 +611,7 @@ public static class RuntimeAssetCache {
       if (operation.IsValid()) {
         Addressables.Release(operation);
       }
+      RecordRuntimeAssetTraceComplete(entry, asset: null, loadSucceeded: false);
       Debug.LogWarning(
         "[RuntimeAssetCache] Failed to load asset" +
         " address='" + entry.address + "'" +
@@ -552,7 +622,7 @@ public static class RuntimeAssetCache {
 
     if (!entry.releaseWhenLoadCompletes) return;
 
-    ReleaseEntry(entry);
+    ReleaseEntry(entry, reason: "release_when_complete");
     entriesByKey.Remove(key);
   }
 
@@ -595,12 +665,14 @@ public static class RuntimeAssetCache {
         entry.pendingQueued = true;
         entry.pendingHighPriority = true;
         highPriorityQueue.Enqueue(key);
+        RecordRuntimeAssetTraceQueue(entry, highPriority: true);
         return QueueOutcome.Enqueued;
       }
 
       if (!entry.pendingHighPriority) {
         entry.pendingHighPriority = true;
         highPriorityQueue.Enqueue(key);
+        RecordRuntimeAssetTracePromote(entry);
       }
       return QueueOutcome.AlreadyPending;
     }
@@ -609,6 +681,7 @@ public static class RuntimeAssetCache {
       entry.pendingQueued = true;
       entry.pendingHighPriority = false;
       normalPriorityQueue.Enqueue(key);
+      RecordRuntimeAssetTraceQueue(entry, highPriority: false);
       return QueueOutcome.Enqueued;
     }
 
@@ -620,8 +693,9 @@ public static class RuntimeAssetCache {
     return entry.isLoaded && entry.loadedAsset != null;
   }
 
-  static void ReleaseEntry(CacheEntry entry) {
+  static void ReleaseEntry(CacheEntry entry, string reason = "") {
     if (entry == null) return;
+    RecordRuntimeAssetTraceRelease(entry, reason);
     if (entry.loadHandle.IsValid()) {
       Addressables.Release(entry.loadHandle);
     }

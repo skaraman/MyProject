@@ -33,7 +33,7 @@ public static class LocationWarmProfileBootstrap {
     EditorApplication.delayCall += () => EnsureLocationWarmAssets(logResult: false, saveAndRefresh: false);
   }
 
-  [MenuItem("Tools/Sprite Streaming/2) Sync Location Profiles")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Sync Location Profiles")]
   public static void InitializeLocationWarmProfilesMenu() {
     EnsureLocationWarmAssets(logResult: true, saveAndRefresh: true);
   }

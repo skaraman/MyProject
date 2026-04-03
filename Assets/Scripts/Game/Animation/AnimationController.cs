@@ -46,6 +46,7 @@ public class AnimationController {
   private readonly List<SpriteWithNormals> criticalSpriteTargets = new();
   private readonly List<SpriteWithNormals> spriteTargetScanBuffer = new(32);
   private readonly Dictionary<SpriteWithNormals, SpriteRenderer> spriteTargetRenderers = new();
+  private readonly HashSet<SpriteWithNormals> startupVisualHoldSuppressedTargets = new();
   private readonly Dictionary<string, string> animationKeyLookup = new(StringComparer.OrdinalIgnoreCase);
   private readonly Dictionary<string, GameObject> bounceObjectByName = new(StringComparer.Ordinal);
   private readonly Dictionary<string, List<GameObject>> hBoxObjectsByName = new(StringComparer.Ordinal);
@@ -90,6 +91,8 @@ public class AnimationController {
   private string pendingVisualCategory;
   private float pendingVisualFrameStartedAt;
   private int visualSyncTimeoutLogFrame = -1;
+  private bool startupVisualHoldActive;
+  private float startupVisualHoldStartedAt;
   private string appearanceOwnerId;
   private TextureResidencyCache.PinClass appearancePinClass = TextureResidencyCache.PinClass.Enemy;
   private int appearancePinRefreshOffset;
@@ -121,6 +124,7 @@ public class AnimationController {
   // Keep per-frame visual lockstep waits short, then fail open to avoid hard animation stalls.
   const float MaxVisualFrameSyncHoldSeconds = 0.12f;
   const float MaxGameplayVisualFrameSyncHoldSeconds = 0.05f;
+  const float MaxStartupPlayerVisualFrameSyncHoldSeconds = 12f;
 
   public void Initialize(
     Transform root,
@@ -308,11 +312,15 @@ public class AnimationController {
       SpriteStreamingLoadingState.IsLoadingOverlayActive &&
       StreamingWarmOrchestrator.IsWarmGateRunning;
     var gateMs = loadingOverlayWarmGateActive ? Math.Max(runtimeSwitchGateMs, 0) : 0;
+    var shouldHoldInitialPlayerStartFrame = ShouldHoldInitialPlayerStartFrame(enabledTargetCount, category);
 
     if (gateMs <= 0) {
       // Global no-gate mode: commit immediately and let per-frame sync absorb streaming lag.
       if (isTransitionCategory) {
         PrimeTransitionAndQueuedWindows(category, anim, queued);
+      }
+      else if (shouldHoldInitialPlayerStartFrame) {
+        PrimeTargetsForAnimation(category, anim.start, anim.start);
       }
       else {
         var shouldPrimeFullWindow =
@@ -320,9 +328,17 @@ public class AnimationController {
           !IsLocomotionAnimationName(resolvedAnimation);
         PrimeTargetsForAnimation(category, anim.start, anim.end, primeFullWindow: shouldPrimeFullWindow);
       }
+      if (shouldHoldInitialPlayerStartFrame) {
+        BeginStartupVisualHold();
+      }
       LogAttackTrace("commit_no_gate", requestedAnimation: requestedAnimation, resolvedAnimation: resolvedAnimation, queuedAnimationName: queued, category: category);
       ClearPendingAnimationSwitch();
-      CommitAnimationSwitch(resolvedAnimation, queued, category);
+      CommitAnimationSwitch(
+        resolvedAnimation,
+        queued,
+        category,
+        holdOnStartFrameUntilReady: shouldHoldInitialPlayerStartFrame
+      );
       return true;
     }
 
@@ -380,6 +396,29 @@ public class AnimationController {
     string anim = animationName ?? (!string.IsNullOrEmpty(CurrentAnimation) ? CurrentAnimation : defaultAnimation);
     if (string.IsNullOrEmpty(anim)) return;
     PlayAnimation(anim, forceRestart: true, resolveInterrupts: false);
+  }
+
+  bool ShouldHoldInitialPlayerStartFrame(int enabledTargetCount, string category) {
+    return Application.isPlaying &&
+           appearancePinClass == TextureResidencyCache.PinClass.Player &&
+           !string.IsNullOrWhiteSpace(category) &&
+           !string.IsNullOrEmpty(defaultAnimation) &&
+           string.IsNullOrEmpty(currentAnimation) &&
+           enabledTargetCount > 1 &&
+           HasMixedVisibleSpriteTargets();
+  }
+
+  void BeginStartupVisualHold() {
+    startupVisualHoldActive = true;
+    startupVisualHoldStartedAt = Time.realtimeSinceStartup;
+    HideStartupVisualTargetsForHold();
+    if (!ShouldLogStartupVisualHold()) return;
+    Debug.Log(
+      "[AnimationController][StartupSync] stage=begin" +
+      " animation='" + (defaultAnimation ?? "") + "'" +
+      " targets=" + spriteTargets.Count +
+      " enabled_targets=" + CountEnabledSpriteTargets()
+    );
   }
 
   public void ReleaseAppearancePins() {
@@ -496,13 +535,14 @@ public class AnimationController {
       if (string.IsNullOrWhiteSpace(currentAnimation) || !animationData.ContainsKey(currentAnimation)) {
         ClearStartFrameHold();
       }
-      else if (!AreTargetsReadyForWindow(holdCategory, holdFrame, holdFrame)) {
-        var heldFrame = ResolveVisualFrameForApply(holdFrame, holdCategory);
-        UpdateSprites(heldFrame);
-        TraceActivePunchFrameStep(heldFrame, deltaMs);
+      else if (!AreAllTargetsReadyForWindow(holdCategory, holdFrame, holdFrame)) {
+        PrimeTargetsForAnimation(holdCategory, holdFrame, holdFrame);
+        TraceActivePunchFrameStep(holdFrame, deltaMs);
         return;
       }
       else {
+        UpdateSprites(holdFrame);
+        CompleteStartupVisualHold("ready");
         isPlaying = true;
         ClearStartFrameHold();
       }
@@ -1210,7 +1250,12 @@ public class AnimationController {
     }
 
     SetAnimationCategory(targetCategory);
-    UpdateSprites(currentFrame);
+    if (holdOnStartFrameUntilReady) {
+      PrimeTargetsForAnimation(targetCategory, currentFrame, currentFrame);
+    }
+    else {
+      UpdateSprites(currentFrame);
+    }
     SetBounces();
     ResetAnimationEvents(anim);
     TryTriggerFrameEvents(anim, lastFrame, currentFrame);
@@ -1221,6 +1266,29 @@ public class AnimationController {
 
   static string ResolveAnimationCategory(string animationName, AnimData anim) {
     return anim.To == 1 ? "To" : anim.To == 2 ? "To2" : animationName;
+  }
+
+  static bool ShouldLogStartupVisualHold() {
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  void CompleteStartupVisualHold(string stage) {
+    if (!startupVisualHoldActive) return;
+    if (ShouldLogStartupVisualHold()) {
+      Debug.Log(
+        "[AnimationController][StartupSync] stage=" + (string.IsNullOrWhiteSpace(stage) ? "complete" : stage.Trim()) +
+        " animation='" + (currentAnimation ?? "") + "'" +
+        " hold_frame=" + holdFrame +
+        " elapsed_ms=" + ((Time.realtimeSinceStartup - startupVisualHoldStartedAt) * 1000f).ToString("0.0")
+      );
+    }
+    ResetStartupVisualHoldState();
+  }
+
+  void ResetStartupVisualHoldState() {
+    RevealStartupVisualTargetsAfterHold();
+    startupVisualHoldActive = false;
+    startupVisualHoldStartedAt = 0f;
   }
 
   static bool IsTransitionCategory(string category) {
@@ -1251,6 +1319,7 @@ public class AnimationController {
   }
 
   void ClearStartFrameHold() {
+    ResetStartupVisualHoldState();
     holdCurrentAnimationOnStartFrameUntilReady = false;
     holdCategory = null;
     holdFrame = 0;
@@ -1278,6 +1347,10 @@ public class AnimationController {
       !loadingOverlayWarmGateActive &&
       HasMixedVisibleSpriteTargets() &&
       spriteTargets.Count <= MaxTargetsForGateReadinessChecks;
+    var startupPlayerVisualHold =
+      holdCurrentAnimationOnStartFrameUntilReady &&
+      startupVisualHoldActive &&
+      appearancePinClass == TextureResidencyCache.PinClass.Player;
     if (!loadingOverlayWarmGateActive && !gameplayMixedAppearanceSync) {
       ClearVisualFrameHold();
       return desiredFrame;
@@ -1297,9 +1370,11 @@ public class AnimationController {
     }
 
     var waitSeconds = Time.realtimeSinceStartup - pendingVisualFrameStartedAt;
-    var maxHoldSeconds = loadingOverlayWarmGateActive
-      ? MaxVisualFrameSyncHoldSeconds
-      : MaxGameplayVisualFrameSyncHoldSeconds;
+    var maxHoldSeconds = startupPlayerVisualHold
+      ? MaxStartupPlayerVisualFrameSyncHoldSeconds
+      : (loadingOverlayWarmGateActive
+        ? MaxVisualFrameSyncHoldSeconds
+        : MaxGameplayVisualFrameSyncHoldSeconds);
     if (waitSeconds >= maxHoldSeconds) {
       if (visualSyncTimeoutLogFrame != Time.frameCount) {
         visualSyncTimeoutLogFrame = Time.frameCount;
@@ -1314,11 +1389,18 @@ public class AnimationController {
           );
         }
       }
+      if (startupPlayerVisualHold) {
+        CompleteStartupVisualHold("timeout");
+      }
       ClearVisualFrameHold();
       return desiredFrame;
     }
 
-    return lastAppliedSpriteFrame != int.MinValue ? lastAppliedSpriteFrame : desiredFrame;
+    if (lastAppliedSpriteFrame == int.MinValue) {
+      return int.MinValue;
+    }
+
+    return lastAppliedSpriteFrame;
   }
 
   bool HasMixedVisibleSpriteTargets() {
@@ -1332,6 +1414,25 @@ public class AnimationController {
       if (hasVisibleCritical && hasVisibleNonCritical) return true;
     }
     return false;
+  }
+
+  void HideStartupVisualTargetsForHold() {
+    startupVisualHoldSuppressedTargets.Clear();
+    for (var i = 0; i < spriteTargets.Count; i++) {
+      var target = spriteTargets[i];
+      if (!IsSpriteTargetEnabled(target)) continue;
+      target.SetExternalVisualSuppressed(true);
+      startupVisualHoldSuppressedTargets.Add(target);
+    }
+  }
+
+  void RevealStartupVisualTargetsAfterHold() {
+    if (startupVisualHoldSuppressedTargets.Count <= 0) return;
+    foreach (var target in startupVisualHoldSuppressedTargets) {
+      if (target == null) continue;
+      target.SetExternalVisualSuppressed(false);
+    }
+    startupVisualHoldSuppressedTargets.Clear();
   }
 
   void RefreshAppearancePins() {
@@ -1718,6 +1819,7 @@ public class AnimationController {
   }
 
   private void UpdateSprites(int frame) {
+    if (frame == int.MinValue) return;
     if (frame == lastAppliedSpriteFrame) return;
     lastAppliedSpriteFrame = frame;
     foreach (var target in spriteTargets) {
@@ -2056,12 +2158,18 @@ public class AnimationController {
     return count;
   }
 
-  bool IsSpriteTargetEnabled(SpriteWithNormals target) {
-    if (target == null || !target.isActiveAndEnabled || target.DoNotRender) return false;
+  SpriteRenderer ResolveSpriteTargetRenderer(SpriteWithNormals target) {
+    if (target == null) return null;
     if (!spriteTargetRenderers.TryGetValue(target, out var renderer) || renderer == null) {
       renderer = target.GetComponent<SpriteRenderer>();
       spriteTargetRenderers[target] = renderer;
     }
+    return renderer;
+  }
+
+  bool IsSpriteTargetEnabled(SpriteWithNormals target) {
+    if (target == null || !target.isActiveAndEnabled || target.DoNotRender) return false;
+    var renderer = ResolveSpriteTargetRenderer(target);
     if (renderer == null) return target.gameObject.activeInHierarchy;
     return renderer.gameObject.activeInHierarchy;
   }

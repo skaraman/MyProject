@@ -35,6 +35,8 @@ public class SpriteStreamingSettings : ScriptableObject {
   [Min(0)] public int animationSwitchGateMs = 150;
   public bool keepLoadedSpritesForSession = true;
   public bool enableStreamingDiagnostics = false;
+  [Header("Runtime Console Logging")]
+  public bool enableVerboseRuntimeConsoleLogs = false;
   [Header("Loading Screen Logs")]
   public bool enableLoadingScreenLogs = true;
   public bool enableAddressableLoadLogs = true;
@@ -140,6 +142,10 @@ public static class SpriteStreamingRuntimeSettings {
 
   public static bool EnableDiagnostics {
     get { return Asset != null && Asset.enableStreamingDiagnostics; }
+  }
+
+  public static bool EnableVerboseRuntimeConsoleLogs {
+    get { return GetBoolSetting(Asset != null && Asset.enableVerboseRuntimeConsoleLogs, false); }
   }
 
   public static bool KeepLoadedSpritesForSession {

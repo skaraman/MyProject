@@ -12,6 +12,7 @@ using UnityEngine;
 public sealed class TrimmedAtlasExporterWindow : EditorWindow {
   const string DefaultOutputPrefix = "trimmed";
   const int MaxExportSpriteSliceCount = 1024;
+  internal const string EditorMetadataSuffix = ".editor.json";
   static readonly string[] SupportedSourceExtensions = { ".png" };
 
   [Serializable]
@@ -36,6 +37,17 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     public int emptyCellCount;
     public float packedAreaPctOfSource;
     public List<TrimmedSpriteMetadata> sprites = new();
+  }
+
+  [Serializable]
+  sealed class RuntimeTrimmedAtlasExport {
+    public List<RuntimeTrimmedSpriteMetadata> sprites = new();
+  }
+
+  [Serializable]
+  sealed class RuntimeTrimmedSpriteMetadata {
+    public string name;
+    public PixelPoint offsetFromCellCenterPx;
   }
 
   [Serializable]
@@ -1427,11 +1439,55 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
   }
 
   string WriteMetadataJson(string exportedAtlasAssetPath, TrimmedAtlasExport exportData) {
-    var jsonPath = Path.ChangeExtension(exportedAtlasAssetPath, ".json");
-    var fullJsonPath = Path.GetFullPath(jsonPath);
-    Directory.CreateDirectory(Path.GetDirectoryName(fullJsonPath) ?? "");
-    File.WriteAllText(fullJsonPath, JsonUtility.ToJson(exportData, true));
-    return jsonPath.Replace("\\", "/");
+    var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(exportedAtlasAssetPath);
+    var editorMetadataAssetPath = BuildEditorMetadataAssetPath(exportedAtlasAssetPath);
+    var runtimeMetadata = BuildRuntimeMetadata(exportData);
+    if (HasRuntimeOffsetMetadata(runtimeMetadata)) {
+      WriteMetadataPayload(runtimeMetadataAssetPath, JsonUtility.ToJson(runtimeMetadata, true));
+    }
+    else {
+      DeleteMetadataAsset(runtimeMetadataAssetPath);
+      Debug.Log(
+        "[TrimAtlasExport] Skipped runtime offset metadata because all exported offsets resolved to zero." +
+        " atlas='" + exportedAtlasAssetPath + "'" +
+        " sprite_count=" + (exportData?.sprites?.Count ?? 0));
+    }
+    WriteMetadataPayload(editorMetadataAssetPath, JsonUtility.ToJson(exportData, true));
+    return runtimeMetadataAssetPath;
+  }
+
+  static RuntimeTrimmedAtlasExport BuildRuntimeMetadata(TrimmedAtlasExport exportData) {
+    var runtimeMetadata = new RuntimeTrimmedAtlasExport();
+    if (exportData?.sprites == null || exportData.sprites.Count <= 0) return runtimeMetadata;
+
+    runtimeMetadata.sprites.Capacity = exportData.sprites.Count;
+    for (var i = 0; i < exportData.sprites.Count; i++) {
+      var sprite = exportData.sprites[i];
+      if (sprite == null || string.IsNullOrWhiteSpace(sprite.name)) continue;
+      if (!HasMeaningfulRuntimeOffset(sprite.offsetFromCellCenterPx)) continue;
+      runtimeMetadata.sprites.Add(new RuntimeTrimmedSpriteMetadata {
+        name = sprite.name,
+        offsetFromCellCenterPx = sprite.offsetFromCellCenterPx
+      });
+    }
+    return runtimeMetadata;
+  }
+
+  static bool HasRuntimeOffsetMetadata(RuntimeTrimmedAtlasExport runtimeMetadata) {
+    return runtimeMetadata?.sprites != null && runtimeMetadata.sprites.Count > 0;
+  }
+
+  static bool HasMeaningfulRuntimeOffset(PixelPoint offset) {
+    return Mathf.Abs(offset.x) > 0.001f || Mathf.Abs(offset.y) > 0.001f;
+  }
+
+  static void WriteMetadataPayload(string metadataAssetPath, string jsonText) {
+    var normalizedAssetPath = NormalizeAssetPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
+
+    var metadataFullPath = Path.GetFullPath(normalizedAssetPath);
+    Directory.CreateDirectory(Path.GetDirectoryName(metadataFullPath) ?? "");
+    File.WriteAllText(metadataFullPath, jsonText ?? "");
   }
 
   static void CopySourceImporterSnapshot(string sourceAtlasAssetPath, TrimmedAtlasExport exportData) {
@@ -1809,6 +1865,49 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     return string.IsNullOrWhiteSpace(assetPath) ? "" : assetPath.Replace("\\", "/").Trim();
   }
 
+  internal static string BuildRuntimeMetadataAssetPath(string atlasAssetPath) {
+    var normalizedAtlasAssetPath = NormalizeAssetPath(atlasAssetPath);
+    return string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)
+      ? ""
+      : NormalizeAssetPath(Path.ChangeExtension(normalizedAtlasAssetPath, ".json"));
+  }
+
+  internal static string BuildEditorMetadataAssetPath(string atlasAssetPath) {
+    var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(atlasAssetPath);
+    return BuildEditorMetadataAssetPathFromRuntimeMetadata(runtimeMetadataAssetPath);
+  }
+
+  internal static string BuildEditorMetadataAssetPathFromRuntimeMetadata(string metadataAssetPath) {
+    var normalizedMetadataAssetPath = NormalizeAssetPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return "";
+    if (normalizedMetadataAssetPath.EndsWith(EditorMetadataSuffix, StringComparison.OrdinalIgnoreCase)) {
+      return normalizedMetadataAssetPath;
+    }
+    if (!normalizedMetadataAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "";
+    return normalizedMetadataAssetPath.Substring(0, normalizedMetadataAssetPath.Length - ".json".Length) + EditorMetadataSuffix;
+  }
+
+  internal static string ResolveRuntimeMetadataAssetPath(string metadataAssetPath) {
+    var normalizedMetadataAssetPath = NormalizeAssetPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return "";
+    if (normalizedMetadataAssetPath.EndsWith(EditorMetadataSuffix, StringComparison.OrdinalIgnoreCase)) {
+      return normalizedMetadataAssetPath.Substring(0, normalizedMetadataAssetPath.Length - EditorMetadataSuffix.Length) + ".json";
+    }
+    return normalizedMetadataAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+      ? normalizedMetadataAssetPath
+      : "";
+  }
+
+  internal static bool IsEditorMetadataAssetPath(string assetPath) {
+    return NormalizeAssetPath(assetPath).EndsWith(EditorMetadataSuffix, StringComparison.OrdinalIgnoreCase);
+  }
+
+  internal static bool IsRuntimeMetadataAssetPath(string assetPath) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    return normalizedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+           !normalizedAssetPath.EndsWith(EditorMetadataSuffix, StringComparison.OrdinalIgnoreCase);
+  }
+
   static bool IsSupportedSourceTextureAssetPath(string assetPath) {
     var extension = Path.GetExtension(assetPath);
     for (var i = 0; i < SupportedSourceExtensions.Length; i++) {
@@ -2064,8 +2163,12 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     var normalizedAssetPath = NormalizeAssetPath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
 
-    var metadataAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedAssetPath, ".json"));
+    var metadataAssetPath = BuildEditorMetadataAssetPath(normalizedAssetPath);
     var metadataFullPath = Path.GetFullPath(metadataAssetPath);
+    if (!File.Exists(metadataFullPath)) {
+      metadataAssetPath = BuildRuntimeMetadataAssetPath(normalizedAssetPath);
+      metadataFullPath = Path.GetFullPath(metadataAssetPath);
+    }
     if (!File.Exists(metadataFullPath)) return false;
 
     ExistingTrimmedAtlasMetadata metadata;
@@ -2206,14 +2309,18 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
     var normalizedAtlasAssetPath = NormalizeAssetPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) return;
 
-    var metadataAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedAtlasAssetPath, ".json"));
-    if (AssetDatabase.LoadMainAssetAtPath(metadataAssetPath) != null) {
-      AssetDatabase.DeleteAsset(metadataAssetPath);
-    }
+    DeleteMetadataAsset(BuildRuntimeMetadataAssetPath(normalizedAtlasAssetPath));
+    DeleteMetadataAsset(BuildEditorMetadataAssetPath(normalizedAtlasAssetPath));
 
     if (AssetDatabase.LoadMainAssetAtPath(normalizedAtlasAssetPath) != null) {
       AssetDatabase.DeleteAsset(normalizedAtlasAssetPath);
     }
+  }
+
+  static void DeleteMetadataAsset(string metadataAssetPath) {
+    if (string.IsNullOrWhiteSpace(metadataAssetPath)) return;
+    if (AssetDatabase.LoadMainAssetAtPath(metadataAssetPath) == null) return;
+    AssetDatabase.DeleteAsset(metadataAssetPath);
   }
 
   static bool TryConvertFullPathToAssetPath(string fullPath, out string assetPath) {
@@ -2285,8 +2392,8 @@ public sealed class TrimmedAtlasExporterWindow : EditorWindow {
   }
 
   internal static void EnsureMetadataAddressable(string metadataAssetPath, bool saveAssets = true) {
-    var normalizedAssetPath = (metadataAssetPath ?? "").Replace("\\", "/");
-    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
+    var normalizedAssetPath = ResolveRuntimeMetadataAssetPath(metadataAssetPath);
+    if (!IsRuntimeMetadataAssetPath(normalizedAssetPath)) return;
 
     var settings = AddressableAssetSettingsDefaultObject.GetSettings(false);
     if (settings == null) return;

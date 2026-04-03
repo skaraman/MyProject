@@ -4,6 +4,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using UnityEngine.ResourceManagement.ResourceLocations;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -53,6 +54,7 @@ public static class TrimmedSpriteOffsetResolver {
   static readonly Dictionary<string, AtlasOffsets> loadedAtlasOffsets = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> missingAtlasOffsets = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, AsyncOperationHandle<TextAsset>> pendingLoads = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, AsyncOperationHandle<IList<IResourceLocation>>> pendingLocationChecks = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, List<Action>> pendingCallbacks = new(StringComparer.OrdinalIgnoreCase);
   static readonly Stack<List<Action>> pendingCallbackListPool = new();
   static readonly HashSet<string> warmupEligibleAtlasPaths = new(StringComparer.OrdinalIgnoreCase);
@@ -63,9 +65,18 @@ public static class TrimmedSpriteOffsetResolver {
   static readonly HashSet<string> deferredEditorMetadataLoadLogs = new(StringComparer.OrdinalIgnoreCase);
   static int runtimeLoadPumpFrame = -1;
 
+  static bool HasPendingOptionalOffsetOperation(string atlasAssetPath) {
+    if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
+    return pendingLoads.ContainsKey(atlasAssetPath) || pendingLocationChecks.ContainsKey(atlasAssetPath);
+  }
+
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
     foreach (var pair in pendingLoads) {
+      if (!pair.Value.IsValid()) continue;
+      Addressables.Release(pair.Value);
+    }
+    foreach (var pair in pendingLocationChecks) {
       if (!pair.Value.IsValid()) continue;
       Addressables.Release(pair.Value);
     }
@@ -73,6 +84,7 @@ public static class TrimmedSpriteOffsetResolver {
     loadedAtlasOffsets.Clear();
     missingAtlasOffsets.Clear();
     pendingLoads.Clear();
+    pendingLocationChecks.Clear();
     pendingCallbacks.Clear();
     pendingCallbackListPool.Clear();
     warmupEligibleAtlasPaths.Clear();
@@ -98,6 +110,12 @@ public static class TrimmedSpriteOffsetResolver {
       pendingLoads.Remove(normalizedAtlasPath);
       if (loadHandle.IsValid()) {
         Addressables.Release(loadHandle);
+      }
+    }
+    if (pendingLocationChecks.TryGetValue(normalizedAtlasPath, out var locationHandle)) {
+      pendingLocationChecks.Remove(normalizedAtlasPath);
+      if (locationHandle.IsValid()) {
+        Addressables.Release(locationHandle);
       }
     }
 
@@ -146,8 +164,8 @@ public static class TrimmedSpriteOffsetResolver {
       if (!pendingWarmGateRuntimeLoadSet.Remove(atlasAssetPath)) continue;
       if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) continue;
       if (missingAtlasOffsets.Contains(atlasAssetPath)) continue;
-      if (pendingLoads.ContainsKey(atlasAssetPath)) continue;
-      StartRuntimeLoad(atlasAssetPath);
+      if (HasPendingOptionalOffsetOperation(atlasAssetPath)) continue;
+      StartOptionalOffsetRuntimeLoad(atlasAssetPath);
       processed++;
     }
   }
@@ -159,22 +177,70 @@ public static class TrimmedSpriteOffsetResolver {
     var endExclusive = (int)Math.Min((long)atlasAddresses.Count, (long)start + requestedCount);
     var queued = 0;
     for (var i = start; i < endExclusive; i++) {
-      if (!IsWarmupCandidateRegistered(atlasAddresses[i])) continue;
-      if (QueueOverlayWarmupRuntimeLoad(atlasAddresses[i])) queued++;
+      if (!IsOptionalOffsetWarmupCandidateRegistered(atlasAddresses[i])) continue;
+      if (QueueOverlayWarmupOptionalOffsetLoad(atlasAddresses[i])) queued++;
     }
     return queued;
   }
 
+  public static int PrimeMetadataBatch(
+    IList<string> atlasAddresses,
+    bool allowImmediateEditorLoad = false,
+    int startInclusive = 0,
+    int count = int.MaxValue
+  ) {
+    if (atlasAddresses == null || atlasAddresses.Count <= 0) return 0;
+    var start = Mathf.Clamp(startInclusive, 0, atlasAddresses.Count);
+    var requestedCount = count == int.MaxValue ? atlasAddresses.Count - start : Math.Max(count, 0);
+    var endExclusive = (int)Math.Min((long)atlasAddresses.Count, (long)start + requestedCount);
+    var primed = 0;
+    for (var i = start; i < endExclusive; i++) {
+      if (!IsOptionalOffsetWarmupCandidateRegistered(atlasAddresses[i])) continue;
+      if (TryPrimeOptionalOffsetLoad(atlasAddresses[i], allowImmediateEditorLoad)) primed++;
+    }
+    return primed;
+  }
+
   public static void RegisterWarmupMetadataCandidate(string atlasOrSliceAddress) {
-    if (!TryNormalizeWarmupCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return;
+    if (!TryResolveWarmupOptionalOffsetCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return;
     warmupEligibleAtlasPaths.Add(atlasAssetPath);
+  }
+
+  public static bool IsReady(
+    string atlasOrSliceAddress,
+    bool pump = false,
+    bool requestIfNeeded = false,
+    bool allowImmediateEditorLoad = false
+  ) {
+    if (!TryResolveWarmupOptionalOffsetCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return true;
+
+    if (requestIfNeeded) {
+      warmupEligibleAtlasPaths.Add(atlasAssetPath);
+    }
+    else if (!warmupEligibleAtlasPaths.Contains(atlasAssetPath)) {
+      return true;
+    }
+
+    if (loadedAtlasOffsets.ContainsKey(atlasAssetPath) || missingAtlasOffsets.Contains(atlasAssetPath)) {
+      return true;
+    }
+
+    if (requestIfNeeded) {
+      TryPrimeOptionalOffsetLoad(atlasAssetPath, allowImmediateEditorLoad);
+    }
+
+    if (pump) {
+      PumpDeferredRuntimeLoads();
+    }
+
+    return loadedAtlasOffsets.ContainsKey(atlasAssetPath) || missingAtlasOffsets.Contains(atlasAssetPath);
   }
 
   public static bool TryGetExactOffset(string sliceAddress, out Vector2 offsetPx, Action onReady = null) {
     offsetPx = Vector2.zero;
     if (!TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out var spriteName)) return false;
     if (TryGetLoadedOffset(atlasAssetPath, spriteName, out offsetPx)) return true;
-    if (TrySkipUnsupportedMetadataAtlas(atlasAssetPath, "lookup")) return false;
+    if (ShouldSkipOptionalOffsetAtlas(atlasAssetPath, "lookup")) return false;
     if (missingAtlasOffsets.Contains(atlasAssetPath)) return false;
 
 #if UNITY_EDITOR
@@ -191,7 +257,7 @@ public static class TrimmedSpriteOffsetResolver {
 
     if (!Application.isPlaying) return false;
     RegisterPendingCallback(atlasAssetPath, onReady);
-    StartRuntimeLoad(atlasAssetPath);
+    StartOptionalOffsetRuntimeLoad(atlasAssetPath);
     return false;
   }
 
@@ -231,7 +297,7 @@ public static class TrimmedSpriteOffsetResolver {
 
     var loadedSpriteName = sprite != null ? (sprite.name ?? "") : "";
     if (TryGetLoadedOffsetForCandidates(atlasAssetPath, loadedSpriteName, expectedSpriteName, out offsetPx)) return true;
-    if (TrySkipUnsupportedMetadataAtlas(atlasAssetPath, "lookup_for_sprite")) return false;
+    if (ShouldSkipOptionalOffsetAtlas(atlasAssetPath, "lookup_for_sprite")) return false;
     if (missingAtlasOffsets.Contains(atlasAssetPath)) return false;
 
 #if UNITY_EDITOR
@@ -248,7 +314,7 @@ public static class TrimmedSpriteOffsetResolver {
 
     if (!Application.isPlaying) return false;
     RegisterPendingCallback(atlasAssetPath, onReady);
-    StartRuntimeLoad(atlasAssetPath);
+    StartOptionalOffsetRuntimeLoad(atlasAssetPath);
     return false;
   }
 
@@ -261,10 +327,10 @@ public static class TrimmedSpriteOffsetResolver {
 #if UNITY_EDITOR
   static bool TryLoadEditorOffsets(string atlasAssetPath) {
     if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) return true;
-    if (TrySkipUnsupportedMetadataAtlas(atlasAssetPath, "editor_load")) return false;
+    if (ShouldSkipOptionalOffsetAtlas(atlasAssetPath, "editor_load")) return false;
     if (missingAtlasOffsets.Contains(atlasAssetPath)) return false;
 
-    var metadataAssetPath = BuildMetadataAssetPath(atlasAssetPath);
+    var metadataAssetPath = BuildOptionalOffsetMetadataAssetPath(atlasAssetPath);
     var metadataAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(metadataAssetPath);
     if (metadataAsset == null || string.IsNullOrWhiteSpace(metadataAsset.text)) {
       missingAtlasOffsets.Add(atlasAssetPath);
@@ -285,10 +351,10 @@ public static class TrimmedSpriteOffsetResolver {
     RegisterPendingCallback(atlasAssetPath, onReady);
     var warmGateRunning = StreamingWarmOrchestrator.IsWarmGateRunning;
     if (warmGateRunning) {
-      QueueWarmGateRuntimeLoad(atlasAssetPath);
+      QueueWarmGateOptionalOffsetLoad(atlasAssetPath);
     }
     else {
-      QueueOverlayWarmupRuntimeLoad(atlasAssetPath);
+      QueueOverlayWarmupOptionalOffsetLoad(atlasAssetPath);
     }
     if (deferredEditorMetadataLoadLogs.Add(atlasAssetPath) && ShouldLogVerboseOverlayMetadataDebug()) {
       Debug.Log(
@@ -308,24 +374,42 @@ public static class TrimmedSpriteOffsetResolver {
   }
 #endif
 
-  static void QueueWarmGateRuntimeLoad(string atlasAssetPath) {
+  static void QueueWarmGateOptionalOffsetLoad(string atlasAssetPath) {
     var normalizedAtlasPath = NormalizeAtlasPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) return;
-    if (TrySkipUnsupportedMetadataAtlas(normalizedAtlasPath, "warm_gate_queue")) return;
+    if (ShouldSkipOptionalOffsetAtlas(normalizedAtlasPath, "warm_gate_queue")) return;
     if (loadedAtlasOffsets.ContainsKey(normalizedAtlasPath)) return;
     if (missingAtlasOffsets.Contains(normalizedAtlasPath)) return;
-    if (pendingLoads.ContainsKey(normalizedAtlasPath)) return;
+    if (HasPendingOptionalOffsetOperation(normalizedAtlasPath)) return;
     if (!pendingWarmGateRuntimeLoadSet.Add(normalizedAtlasPath)) return;
     pendingWarmGateRuntimeLoadQueue.Enqueue(normalizedAtlasPath);
   }
 
-  static bool QueueOverlayWarmupRuntimeLoad(string atlasOrSliceAddress) {
-    if (!TryNormalizeWarmupAtlasPath(atlasOrSliceAddress, out var normalizedAtlasPath)) return false;
+  static bool QueueOverlayWarmupOptionalOffsetLoad(string atlasOrSliceAddress) {
+    if (!TryResolveWarmupOptionalOffsetAtlasPath(atlasOrSliceAddress, out var normalizedAtlasPath)) return false;
     if (loadedAtlasOffsets.ContainsKey(normalizedAtlasPath)) return false;
     if (missingAtlasOffsets.Contains(normalizedAtlasPath)) return false;
-    if (pendingLoads.ContainsKey(normalizedAtlasPath)) return false;
+    if (HasPendingOptionalOffsetOperation(normalizedAtlasPath)) return false;
     if (!pendingOverlayWarmupLoadSet.Add(normalizedAtlasPath)) return false;
     pendingOverlayWarmupLoadQueue.Enqueue(normalizedAtlasPath);
+    return true;
+  }
+
+  static bool TryPrimeOptionalOffsetLoad(string atlasOrSliceAddress, bool allowImmediateEditorLoad) {
+    if (!TryResolveWarmupOptionalOffsetAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return false;
+    if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) return true;
+    if (missingAtlasOffsets.Contains(atlasAssetPath)) return true;
+    if (HasPendingOptionalOffsetOperation(atlasAssetPath)) return true;
+
+#if UNITY_EDITOR
+    if (allowImmediateEditorLoad && Application.isEditor) {
+      if (TryLoadEditorOffsets(atlasAssetPath)) return true;
+      if (missingAtlasOffsets.Contains(atlasAssetPath)) return true;
+    }
+#endif
+
+    if (!Application.isPlaying) return false;
+    StartOptionalOffsetRuntimeLoad(atlasAssetPath);
     return true;
   }
 
@@ -350,29 +434,84 @@ public static class TrimmedSpriteOffsetResolver {
       if (!pendingOverlayWarmupLoadSet.Remove(atlasAssetPath)) continue;
       if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) continue;
       if (missingAtlasOffsets.Contains(atlasAssetPath)) continue;
-      if (pendingLoads.ContainsKey(atlasAssetPath)) continue;
-      StartRuntimeLoad(atlasAssetPath);
+      if (HasPendingOptionalOffsetOperation(atlasAssetPath)) continue;
+      StartOptionalOffsetRuntimeLoad(atlasAssetPath);
       processed++;
     }
   }
 
-  static void StartRuntimeLoad(string atlasAssetPath) {
+  static void StartOptionalOffsetRuntimeLoad(string atlasAssetPath) {
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return;
     if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) return;
-    if (TrySkipUnsupportedMetadataAtlas(atlasAssetPath, "runtime_load")) return;
+    if (ShouldSkipOptionalOffsetAtlas(atlasAssetPath, "runtime_load")) return;
     if (missingAtlasOffsets.Contains(atlasAssetPath)) return;
-    if (pendingLoads.ContainsKey(atlasAssetPath)) return;
+    if (HasPendingOptionalOffsetOperation(atlasAssetPath)) return;
 
-    var metadataAssetPath = BuildMetadataAssetPath(atlasAssetPath);
+    var metadataAssetPath = BuildOptionalOffsetMetadataAssetPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(metadataAssetPath)) {
       missingAtlasOffsets.Add(atlasAssetPath);
       return;
     }
+#if UNITY_EDITOR
+    if (!OptionalOffsetMetadataAssetExistsInEditor(metadataAssetPath)) {
+      missingAtlasOffsets.Add(atlasAssetPath);
+      return;
+    }
+#else
+    var locationHandle = Addressables.LoadResourceLocationsAsync(metadataAssetPath, typeof(TextAsset));
+    pendingLocationChecks[atlasAssetPath] = locationHandle;
+    locationHandle.Completed += operation => CompleteRuntimeLocationCheck(atlasAssetPath, metadataAssetPath, operation);
+    return;
+#endif
+    StartResolvedOptionalOffsetRuntimeLoad(atlasAssetPath, metadataAssetPath);
+  }
+
+  static void StartResolvedOptionalOffsetRuntimeLoad(string atlasAssetPath, string metadataAssetPath) {
+    if (string.IsNullOrWhiteSpace(atlasAssetPath) || string.IsNullOrWhiteSpace(metadataAssetPath)) return;
     var loadStartedAt = ShouldMeasureRuntimeLoadStartCosts() ? Time.realtimeSinceStartup : 0f;
-    var loadHandle = Addressables.LoadAssetAsync<TextAsset>(metadataAssetPath);
+    AsyncOperationHandle<TextAsset> loadHandle;
+    try {
+      loadHandle = Addressables.LoadAssetAsync<TextAsset>(metadataAssetPath);
+    }
+    catch (Exception ex) {
+      missingAtlasOffsets.Add(atlasAssetPath);
+      if (ShouldLogVerboseOverlayMetadataDebug()) {
+        Debug.Log(
+          "[TrimmedSpriteOffsetResolver][MetadataMissing]" +
+          " atlas='" + atlasAssetPath + "'" +
+          " metadata='" + metadataAssetPath + "'" +
+          " source=runtime_load" +
+          " reason='" + ex.GetType().Name + "'");
+      }
+      return;
+    }
     MaybeLogSlowRuntimeLoadStart(atlasAssetPath, metadataAssetPath, loadStartedAt);
     pendingLoads[atlasAssetPath] = loadHandle;
     loadHandle.Completed += operation => CompleteRuntimeLoad(atlasAssetPath, operation);
+  }
+
+  static void CompleteRuntimeLocationCheck(
+    string atlasAssetPath,
+    string metadataAssetPath,
+    AsyncOperationHandle<IList<IResourceLocation>> operation
+  ) {
+    pendingLocationChecks.Remove(atlasAssetPath);
+
+    var hasLocation = operation.Status == AsyncOperationStatus.Succeeded &&
+                      operation.Result != null &&
+                      operation.Result.Count > 0;
+
+    if (operation.IsValid()) {
+      Addressables.Release(operation);
+    }
+
+    if (!hasLocation) {
+      missingAtlasOffsets.Add(atlasAssetPath);
+      NotifyPendingCallbacks(atlasAssetPath);
+      return;
+    }
+
+    StartResolvedOptionalOffsetRuntimeLoad(atlasAssetPath, metadataAssetPath);
   }
 
   static void CompleteRuntimeLoad(string atlasAssetPath, AsyncOperationHandle<TextAsset> operation) {
@@ -452,7 +591,7 @@ public static class TrimmedSpriteOffsetResolver {
     return !string.IsNullOrWhiteSpace(atlasAssetPath) && !string.IsNullOrWhiteSpace(spriteName);
   }
 
-  static bool TryNormalizeWarmupAtlasPath(string atlasOrSliceAddress, out string atlasAssetPath) {
+  static bool TryResolveWarmupOptionalOffsetAtlasPath(string atlasOrSliceAddress, out string atlasAssetPath) {
     atlasAssetPath = "";
     if (string.IsNullOrWhiteSpace(atlasOrSliceAddress)) return false;
     if (TryParseSliceAddress(atlasOrSliceAddress, out var parsedAtlasAssetPath, out _)) {
@@ -462,11 +601,11 @@ public static class TrimmedSpriteOffsetResolver {
       atlasAssetPath = NormalizeAtlasPath(atlasOrSliceAddress);
     }
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
-    if (TrySkipUnsupportedMetadataAtlas(atlasAssetPath, "warmup_queue")) return false;
-    return CanWarmupAtlasMetadata(atlasAssetPath);
+    if (ShouldSkipOptionalOffsetAtlas(atlasAssetPath, "warmup_queue")) return false;
+    return SupportsWarmupOptionalOffsetMetadata(atlasAssetPath);
   }
 
-  static bool TryNormalizeWarmupCandidateAtlasPath(string atlasOrSliceAddress, out string atlasAssetPath) {
+  static bool TryResolveWarmupOptionalOffsetCandidateAtlasPath(string atlasOrSliceAddress, out string atlasAssetPath) {
     atlasAssetPath = "";
     if (string.IsNullOrWhiteSpace(atlasOrSliceAddress)) return false;
     if (TryParseSliceAddress(atlasOrSliceAddress, out var parsedAtlasAssetPath, out _)) {
@@ -476,18 +615,27 @@ public static class TrimmedSpriteOffsetResolver {
       atlasAssetPath = NormalizeAtlasPath(atlasOrSliceAddress);
     }
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
-    return CanWarmupAtlasMetadata(atlasAssetPath);
+    return SupportsWarmupOptionalOffsetMetadata(atlasAssetPath);
   }
 
-  static bool IsWarmupCandidateRegistered(string atlasOrSliceAddress) {
-    if (!TryNormalizeWarmupCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return false;
+  static bool IsOptionalOffsetWarmupCandidateRegistered(string atlasOrSliceAddress) {
+    if (!TryResolveWarmupOptionalOffsetCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return false;
     return warmupEligibleAtlasPaths.Contains(atlasAssetPath);
   }
 
-  static bool CanWarmupAtlasMetadata(string atlasAssetPath) {
+  static bool SupportsWarmupOptionalOffsetMetadata(string atlasAssetPath) {
     var extension = Path.GetExtension(atlasAssetPath);
     if (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase)) return false;
     if (string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase)) return false;
+    if (!SupportsOptionalOffsetMetadata(atlasAssetPath)) return false;
+#if UNITY_EDITOR
+    return OptionalOffsetMetadataAssetExistsInEditor(BuildOptionalOffsetMetadataAssetPath(atlasAssetPath));
+#else
+    return true;
+#endif
+  }
+
+  static bool SupportsOptionalOffsetMetadata(string atlasAssetPath) {
     return GeneratedAtlasBuildSurrogateUtility.CanAtlasPathUseMetadata(atlasAssetPath);
   }
 
@@ -517,7 +665,7 @@ public static class TrimmedSpriteOffsetResolver {
     return true;
   }
 
-  static string BuildMetadataAssetPath(string atlasAssetPath) {
+  static string BuildOptionalOffsetMetadataAssetPath(string atlasAssetPath) {
     return GeneratedAtlasBuildSurrogateUtility.BuildMetadataAssetPath(atlasAssetPath);
   }
 
@@ -526,10 +674,19 @@ public static class TrimmedSpriteOffsetResolver {
     return atlasAssetPath.Trim().Replace("\\", "/");
   }
 
-  static bool TrySkipUnsupportedMetadataAtlas(string atlasAssetPath, string source) {
+#if UNITY_EDITOR
+  static bool OptionalOffsetMetadataAssetExistsInEditor(string metadataAssetPath) {
+    var normalizedMetadataAssetPath = NormalizeAtlasPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return false;
+    if (!string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(normalizedMetadataAssetPath))) return true;
+    return File.Exists(Path.GetFullPath(normalizedMetadataAssetPath));
+  }
+#endif
+
+  static bool ShouldSkipOptionalOffsetAtlas(string atlasAssetPath, string source) {
     var normalizedAtlasPath = NormalizeAtlasPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) return true;
-    if (GeneratedAtlasBuildSurrogateUtility.CanAtlasPathUseMetadata(normalizedAtlasPath)) return false;
+    if (SupportsOptionalOffsetMetadata(normalizedAtlasPath)) return false;
 
     var firstSkip = missingAtlasOffsets.Add(normalizedAtlasPath);
     if (firstSkip && Application.isPlaying && (Application.isEditor || Debug.isDebugBuild)) {

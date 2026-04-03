@@ -27,6 +27,9 @@ public struct CombatPopulationWarmPackEntry {
 [CreateAssetMenu(fileName = "LocationWarmProfile", menuName = "Sprite Streaming/Location Warm Profile")]
 public class LocationWarmProfile : ScriptableObject {
   static readonly HashSet<string> autoPackDiagnosticsLoggedLocations = new(StringComparer.OrdinalIgnoreCase);
+#if UNITY_EDITOR
+  bool autoAssignLocationPrefabQueued;
+#endif
 
   [SerializeField] string locationId = "DomeCity";
   [SerializeField] GameObject locationPrefab;
@@ -423,7 +426,7 @@ public class LocationWarmProfile : ScriptableObject {
 
 #if UNITY_EDITOR
   void OnValidate() {
-    AutoAssignLocationPrefabByName();
+    QueueAutoAssignLocationPrefabByName();
     const int kWarningThreshold = 64;
     void CheckList(string name, List<string> list) {
       if (list != null && list.Count > kWarningThreshold) {
@@ -447,6 +450,18 @@ public class LocationWarmProfile : ScriptableObject {
     CheckList(nameof(warmUiAssetLabels), warmUiAssetLabels);
   }
 
+  void QueueAutoAssignLocationPrefabByName() {
+    if (Application.isPlaying || autoAssignLocationPrefabQueued) return;
+    autoAssignLocationPrefabQueued = true;
+    EditorApplication.delayCall += HandleQueuedAutoAssignLocationPrefabByName;
+  }
+
+  void HandleQueuedAutoAssignLocationPrefabByName() {
+    autoAssignLocationPrefabQueued = false;
+    if (this == null) return;
+    AutoAssignLocationPrefabByName();
+  }
+
   void AutoAssignLocationPrefabByName() {
     var normalizedLocationId = LocationId;
     if (string.IsNullOrWhiteSpace(normalizedLocationId)) return;
@@ -462,6 +477,7 @@ public class LocationWarmProfile : ScriptableObject {
       var candidate = AssetDatabase.LoadAssetAtPath<GameObject>(path);
       if (candidate == null) continue;
       if (!string.Equals(candidate.name, normalizedLocationId, StringComparison.OrdinalIgnoreCase)) continue;
+      if (locationPrefab == candidate) return;
       locationPrefab = candidate;
       EditorUtility.SetDirty(this);
       return;

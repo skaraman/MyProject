@@ -80,7 +80,7 @@ public class ProjectileData {
   }
 
   public bool TryGetPrefabAddress(out string address) {
-    address = ActiveContentRegistryRuntime.ResolveCoreAssetPath(
+    address = ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(
       string.IsNullOrWhiteSpace(prefabAddress) ? "" : prefabAddress.Trim()
     );
     return !string.IsNullOrWhiteSpace(address);

@@ -50,6 +50,9 @@ public static class DialogController {
   public static bool IsStateReadyForCurrentSlot => runtimeStateReady && loadedSlot == SaveSlotManager.slot;
 
   static bool ShouldLogDialogDebug() {
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
+      return false;
+    }
     return Application.isEditor || Debug.isDebugBuild;
   }
 

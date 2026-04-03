@@ -14,13 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_PixelRect:
     serializedVersion: 2
-    x: 708
-    y: 16
-    width: 1698
-    height: 1375
+    x: 1
+    y: 11
+    width: 1653
+    height: 1380
   m_ShowMode: 4
   m_Title: Profiler
-  m_RootView: {fileID: 5}
+  m_RootView: {fileID: 4}
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
   m_Maximized: 0
@@ -34,21 +34,22 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 12006, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: 
+  m_Name: ProfilerWindow
   m_EditorClassIdentifier: 
   m_Children: []
   m_Position:
     serializedVersion: 2
     x: 0
-    y: 1081
-    width: 1698
-    height: 274
-  m_MinSize: {x: 100, y: 126}
+    y: 0
+    width: 1653
+    height: 1360
+  m_MinSize: {x: 900, y: 242}
   m_MaxSize: {x: 4000, y: 4026}
   m_ActualView: {fileID: 7}
   m_Panes:
+  - {fileID: 6}
   - {fileID: 7}
-  m_Selected: 0
+  m_Selected: 1
   m_LastSelected: 0
 --- !u!114 &3
 MonoBehaviour:
@@ -63,46 +64,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Children:
-  - {fileID: 4}
   - {fileID: 2}
   m_Position:
     serializedVersion: 2
     x: 0
     y: 0
-    width: 1698
-    height: 1355
-  m_MinSize: {x: 100, y: 112}
-  m_MaxSize: {x: 8096, y: 16192}
+    width: 1653
+    height: 1360
+  m_MinSize: {x: 100, y: 56}
+  m_MaxSize: {x: 8096, y: 8096}
   vertical: 1
-  controlID: 55
+  controlID: 2
   draggingID: 0
 --- !u!114 &4
-MonoBehaviour:
-  m_ObjectHideFlags: 52
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 12006, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Children: []
-  m_Position:
-    serializedVersion: 2
-    x: 0
-    y: 0
-    width: 1698
-    height: 1081
-  m_MinSize: {x: 900, y: 242}
-  m_MaxSize: {x: 4000, y: 4026}
-  m_ActualView: {fileID: 8}
-  m_Panes:
-  - {fileID: 8}
-  m_Selected: 0
-  m_LastSelected: 0
---- !u!114 &5
 MonoBehaviour:
   m_ObjectHideFlags: 52
   m_CorrespondingSourceObject: {fileID: 0}
@@ -116,20 +90,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Children:
   - {fileID: 3}
-  - {fileID: 6}
+  - {fileID: 5}
   m_Position:
     serializedVersion: 2
     x: 0
     y: 0
-    width: 1698
-    height: 1375
+    width: 1653
+    height: 1380
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
   m_UseTopView: 1
   m_TopViewHeight: 36
   m_UseBottomView: 1
   m_BottomViewHeight: 20
---- !u!114 &6
+--- !u!114 &5
 MonoBehaviour:
   m_ObjectHideFlags: 52
   m_CorrespondingSourceObject: {fileID: 0}
@@ -145,12 +119,12 @@ MonoBehaviour:
   m_Position:
     serializedVersion: 2
     x: 0
-    y: 1355
-    width: 1698
+    y: 1360
+    width: 1653
     height: 20
   m_MinSize: {x: 0, y: 0}
   m_MaxSize: {x: 0, y: 0}
---- !u!114 &7
+--- !u!114 &6
 MonoBehaviour:
   m_ObjectHideFlags: 52
   m_CorrespondingSourceObject: {fileID: 0}
@@ -171,10 +145,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Console\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 0
-    y: 1105
+    x: 542
+    y: 368
     width: 1698
-    height: 248
+    height: 1309
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -188,7 +162,7 @@ MonoBehaviour:
     m_DynamicPanelContainerData: []
     m_OverlaysVisible: 1
     m_DynamicPanelBehavior: 0
---- !u!114 &8
+--- !u!114 &7
 MonoBehaviour:
   m_ObjectHideFlags: 52
   m_CorrespondingSourceObject: {fileID: 0}
@@ -211,8 +185,8 @@ MonoBehaviour:
     serializedVersion: 2
     x: 0
     y: 24
-    width: 1698
-    height: 1055
+    width: 1653
+    height: 1334
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -258,16 +232,16 @@ MonoBehaviour:
         m_PaneScroll: {x: 0, y: 0}
         m_ViewType: 2
         updateViewLive: 0
-        m_CurrentFrameIndex: 754
+        m_CurrentFrameIndex: 1305
         m_HierarchyOverruledThreadFromSelection: 0
         m_ProfilerViewFilteringOptions: 1
         m_FrameDataHierarchyView:
           m_Serialized: 1
           m_TreeViewState:
-            scrollPos: {x: 0, y: 4672.5}
-            m_SelectedIDs: 08f30e00
-            m_LastClickedID: 979720
-            m_ExpandedIDs: 0100000003000000050000000a0000005e000000960000002b01000031010000d8010000660d0100cf6802003c6b0400b2500500b5500500b8500500fe1907000af618005dec1900492f1a0093301f00e1401f0005411f0025421f0019813e001a813e00
+            scrollPos: {x: 0, y: 540}
+            m_SelectedIDs: 4d020000
+            m_LastClickedID: 589
+            m_ExpandedIDs: 0100000003000000050000000a0000003d0000007e000000f40000004b0200004d020000
             m_RenameOverlay:
               m_UserAcceptedRename: 0
               m_Name: 
@@ -288,7 +262,7 @@ MonoBehaviour:
             m_SearchString: 
           m_MultiColumnHeaderState:
             m_Columns:
-            - width: 200
+            - width: 595
               sortedAscending: 1
               headerContent:
                 m_Text: Overview
@@ -421,22 +395,22 @@ MonoBehaviour:
           m_ThreadIndexInThreadNames: 0
           m_DetailedViewType: 1
           m_DetailedViewSpliterState:
-            ID: 33867
-            splitterInitialOffset: 647
+            ID: 94
+            splitterInitialOffset: 1114
             currentActiveSplitter: -1
             realSizes:
-            - 648
-            - 779
+            - 1113
+            - 269
             relativeSizes:
-            - 0.4540995
-            - 0.54590046
+            - 0.80535454
+            - 0.19464546
             minSizes:
             - 450
             - 50
             maxSizes:
             - 0
             - 0
-            lastTotalSize: 1427
+            lastTotalSize: 1382
             splitSize: 6
             xOffset: 0
             m_Version: 1
@@ -445,7 +419,7 @@ MonoBehaviour:
             oldMaxSizes: 
             oldSplitSize: 0
           m_DetailedObjectsView:
-            m_SelectedID: 979720
+            m_SelectedID: 589
             m_TreeViewState:
               scrollPos: {x: 0, y: 0}
               m_SelectedIDs: 00000000
@@ -471,7 +445,7 @@ MonoBehaviour:
               m_SearchString: 
             m_MultiColumnHeaderState:
               m_Columns:
-              - width: 524
+              - width: 60
                 sortedAscending: 1
                 headerContent:
                   m_Text: Unity Object Name
@@ -538,12 +512,12 @@ MonoBehaviour:
               m_VisibleColumns: 00000000010000000200000003000000
               m_SortedColumns: 03000000
             m_VertSplit:
-              ID: 36842
+              ID: 2527
               splitterInitialOffset: 0
               currentActiveSplitter: -1
               realSizes:
-              - 439
-              - 292
+              - 601
+              - 401
               relativeSizes:
               - 0.6
               - 0.39999998
@@ -553,7 +527,7 @@ MonoBehaviour:
               maxSizes:
               - 0
               - 0
-              lastTotalSize: 731
+              lastTotalSize: 1002
               splitSize: 6
               xOffset: 0
               m_Version: 1

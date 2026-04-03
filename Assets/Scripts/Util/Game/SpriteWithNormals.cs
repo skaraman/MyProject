@@ -89,6 +89,7 @@ public class SpriteWithNormals : MonoBehaviour {
 
   [SerializeField] bool isAnimation = true;
   [SerializeField] bool doNotRender;
+  bool externalVisualSuppressed;
   [SerializeField] bool useTrimmedAtlasOffset;
   [Header("Shader Margins")]
   [SerializeField, Min(0f)] float shaderMarginPixelsX;
@@ -335,6 +336,12 @@ public class SpriteWithNormals : MonoBehaviour {
     SyncRendererVisibility();
   }
 
+  public void SetExternalVisualSuppressed(bool value) {
+    if (externalVisualSuppressed == value) return;
+    externalVisualSuppressed = value;
+    SyncRendererVisibility();
+  }
+
   public void ForceUpdateSpriteAndNormal() => ForceUpdateSpriteAndNormal(_lastRequestedFrame);
 
   public void ForceUpdateSpriteAndNormal(int frame) {
@@ -433,7 +440,9 @@ public class SpriteWithNormals : MonoBehaviour {
       if (!TryResolvePairCached(lookupKey, out var pair, out _)) continue;
       pair = StripUnavailableRuntimeNormalAddress(pair, lookupKey);
       if (!pair.HasColor) continue;
+      var colorWarmupAddress = ResolveWarmupAddress(pair.colorAddress, pair.RuntimeColorAddress);
       var priority = TextureResidencyCache.LoadPriority.Warmup;
+      PrimeTrimmedMetadataWarmup(colorWarmupAddress);
       WarmupAddress(pair.RuntimeColorAddress, priority);
       WarmupAddress(pair.RuntimeNormalAddress, priority);
     }
@@ -459,9 +468,12 @@ public class SpriteWithNormals : MonoBehaviour {
     }
     pair = StripUnavailableRuntimeNormalAddress(pair, lookupKey);
     if (!pair.HasColor) return true;
-    var ready = TextureResidencyCache.IsAtlasReady(pair.RuntimeColorAddress, pump: false);
+    var colorWarmupAddress = ResolveWarmupAddress(pair.colorAddress, pair.RuntimeColorAddress);
+    PrimeTrimmedMetadataWarmup(colorWarmupAddress);
+    var ready = TextureResidencyCache.IsReady(colorWarmupAddress, pump: false);
+    if (ready && !IsTrimmedMetadataReady(colorWarmupAddress)) return false;
     if (ready && pair.HasNormal &&
-        !TextureResidencyCache.IsAtlasReady(pair.RuntimeNormalAddress, pump: false)) {
+        !TextureResidencyCache.IsReady(ResolveWarmupAddress(pair.normalAddress, pair.RuntimeNormalAddress), pump: false)) {
       colorReadyOnly = true;
     }
     return ready;
@@ -513,9 +525,11 @@ public class SpriteWithNormals : MonoBehaviour {
 
     if (!isAnimation) {
       if (!TryGetFrameAddressPair(0, out var staticPair, lookupCategory)) return;
-      TrackTrimmedMetadataWarmupCandidate(staticPair.RuntimeColorAddress);
-      AddUniqueAddress(outAddresses, staticPair.RuntimeColorAddress, seenAddresses, maxAddresses);
-      AddUniqueAddress(outAddresses, staticPair.RuntimeNormalAddress, seenAddresses, maxAddresses);
+      var staticColorAddress = ResolveWarmupAddress(staticPair.colorAddress, staticPair.RuntimeColorAddress);
+      var staticNormalAddress = ResolveWarmupAddress(staticPair.normalAddress, staticPair.RuntimeNormalAddress);
+      TrackTrimmedMetadataWarmupCandidate(staticColorAddress);
+      AddUniqueAddress(outAddresses, staticColorAddress, seenAddresses, maxAddresses);
+      AddUniqueAddress(outAddresses, staticNormalAddress, seenAddresses, maxAddresses);
       return;
     }
 
@@ -529,10 +543,17 @@ public class SpriteWithNormals : MonoBehaviour {
       var lookupKey = new SpriteLookupKey(lookupLibraryName, lookupLabelPrefix, lookupCategory, frame);
       if (!TryResolvePairCached(lookupKey, out var pair, out _)) continue;
       pair = StripUnavailableRuntimeNormalAddress(pair, lookupKey);
-      TrackTrimmedMetadataWarmupCandidate(pair.RuntimeColorAddress);
-      AddUniqueAddress(outAddresses, pair.RuntimeColorAddress, seenAddresses, maxAddresses);
-      AddUniqueAddress(outAddresses, pair.RuntimeNormalAddress, seenAddresses, maxAddresses);
+      var colorWarmupAddress = ResolveWarmupAddress(pair.colorAddress, pair.RuntimeColorAddress);
+      var normalWarmupAddress = ResolveWarmupAddress(pair.normalAddress, pair.RuntimeNormalAddress);
+      TrackTrimmedMetadataWarmupCandidate(colorWarmupAddress);
+      AddUniqueAddress(outAddresses, colorWarmupAddress, seenAddresses, maxAddresses);
+      AddUniqueAddress(outAddresses, normalWarmupAddress, seenAddresses, maxAddresses);
     }
+  }
+
+  static string ResolveWarmupAddress(string sliceAddress, string fallbackAtlasAddress) {
+    if (!string.IsNullOrWhiteSpace(sliceAddress)) return sliceAddress.Trim();
+    return string.IsNullOrWhiteSpace(fallbackAtlasAddress) ? "" : fallbackAtlasAddress.Trim();
   }
 
   public bool IsUiTarget() {
@@ -926,7 +947,7 @@ public class SpriteWithNormals : MonoBehaviour {
 #endif
     if (colorSprite == null) {
 #if UNITY_EDITOR
-      if (TryKeepPendingSliceResolve(colorLease, colorSliceAddress, allowBlockingEditorSliceFallbackNow)) {
+      if (TryKeepPendingSliceResolve(colorLease, colorSliceAddress, allowBlockingEditorSliceFallbackNow, "color")) {
         return;
       }
 #endif
@@ -946,6 +967,15 @@ public class SpriteWithNormals : MonoBehaviour {
 #if UNITY_EDITOR
     normalSprite ??= TryResolveEditorSliceFallback(normalSliceAddress, "normal", allowBlockingEditorSliceFallbackNow);
 #endif
+    if (normalLease != null &&
+        !string.IsNullOrWhiteSpace(normalSliceAddress) &&
+        normalSprite == null) {
+#if UNITY_EDITOR
+      if (TryKeepPendingSliceResolve(normalLease, normalSliceAddress, allowBlockingEditorSliceFallbackNow, "normal")) {
+        return;
+      }
+#endif
+    }
     normalSprite = ResolveExpectedSliceSprite(normalSprite, normalSliceAddress, "normal");
     if (normalSprite != null) CacheLocalLoadedSprite(normalSliceAddress, normalSprite);
     if (normalLease != null && normalLease.IsDone && normalSprite == null && !string.IsNullOrWhiteSpace(normalSliceAddress))
@@ -968,13 +998,15 @@ public class SpriteWithNormals : MonoBehaviour {
 
 #if UNITY_EDITOR
   bool TryKeepPendingSliceResolve(
-    TextureResidencyCache.Lease colorLease,
-    string colorSliceAddress,
-    bool allowBlockingEditorSliceFallback
+    TextureResidencyCache.Lease lease,
+    string sliceAddress,
+    bool allowBlockingEditorSliceFallback,
+    string channel
   ) {
     if (!Application.isEditor || !Application.isPlaying) return false;
-    if (colorLease == null || colorLease != _pendingColorLease) return false;
-    if (!SpriteSliceAddressUtility.TryParseSliceAddress(colorSliceAddress, out _, out _)) return false;
+    if (lease == null) return false;
+    if (lease != _pendingColorLease && lease != _pendingNormalLease) return false;
+    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out _, out _)) return false;
 
     var startedAt = _pendingSupplementWaitStartedAt;
     if (startedAt < 0f) {
@@ -988,14 +1020,15 @@ public class SpriteWithNormals : MonoBehaviour {
     }
 
     if (allowBlockingEditorSliceFallback) {
-      TryForceImportPendingSliceAsset(colorSliceAddress);
+      TryForceImportPendingSliceAsset(sliceAddress);
     }
 
-    var warningKey = "pending_slice_retry|" + colorSliceAddress;
+    var warningKey = "pending_slice_retry|" + channel + "|" + sliceAddress;
     if (_sliceMismatchWarnings.Add(warningKey)) {
       Debug.LogWarning(
         "[SpriteWithNormals] Delaying unresolved slice resolve on " + gameObject.name +
-        " address='" + colorSliceAddress + "'" +
+        " channel=" + (string.IsNullOrWhiteSpace(channel) ? "unknown" : channel) +
+        " address='" + sliceAddress + "'" +
         " elapsed_ms=" + Mathf.RoundToInt(elapsed * 1000f) +
         " allow_editor_fallback=" + (allowBlockingEditorSliceFallback ? 1 : 0)
       );
@@ -1086,6 +1119,10 @@ public class SpriteWithNormals : MonoBehaviour {
     if (!Application.isEditor) return false;
     if (lease == null || !lease.IsDone || !lease.IsSuccess) return false;
     if (!lease.HasPendingSpriteMapSupplement) return false;
+    if (ShouldAvoidBlockingEditorSpriteFallback() &&
+        !ShouldDeferEditorSliceFallbackForAddress(sliceOrAtlasAddress)) {
+      return false;
+    }
     return lease.NeedsPendingSpriteMapSupplement(sliceOrAtlasAddress);
   }
 
@@ -1102,6 +1139,11 @@ public class SpriteWithNormals : MonoBehaviour {
 #else
     return false;
 #endif
+  }
+
+  static bool ShouldDeferEditorSliceFallbackForAddress(string sliceAddress) {
+    if (string.IsNullOrWhiteSpace(sliceAddress)) return true;
+    return sliceAddress.IndexOf("/Environments/", StringComparison.OrdinalIgnoreCase) >= 0;
   }
 
   void ApplySprites(Sprite colorSprite, Sprite normalSprite, string colorSliceAddress) {
@@ -1277,7 +1319,7 @@ public class SpriteWithNormals : MonoBehaviour {
     }
 
     if (!TryResolveTrimmedOffsetLocalUnits(_appliedColorSliceAddress, colorSprite, out var offsetLocalUnits)) {
-      ClearAppliedTrimmedOffset();
+      ClearAppliedTrimmedOffset("offset_unresolved", _appliedColorSliceAddress);
       return;
     }
 
@@ -1299,12 +1341,24 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
   void ApplyTrimmedOffsetLocal(Vector3 offsetLocalUnits, Sprite colorSprite, string colorSliceAddress) {
+    var previousLocalPosition = transform.localPosition;
+    var previousAppliedOffsetLocalUnits = _lastAppliedTrimmedOffsetLocalUnits;
     var appliedPositionOffsetLocalUnits = ScaleTrimmedOffsetForTransform(offsetLocalUnits);
     var baseLocalPosition = ResolveTrimmedOffsetBaseLocalPosition(offsetLocalUnits, appliedPositionOffsetLocalUnits);
-    transform.localPosition = baseLocalPosition + appliedPositionOffsetLocalUnits;
+    var nextLocalPosition = baseLocalPosition + appliedPositionOffsetLocalUnits;
+    transform.localPosition = nextLocalPosition;
     _lastAppliedTrimmedOffsetLocalUnits = appliedPositionOffsetLocalUnits;
     _hasAppliedTrimmedOffset = true;
     PersistTrimmedOffsetState();
+    LogTrimmedOffsetReposition(
+      "offset_applied",
+      colorSliceAddress,
+      previousLocalPosition,
+      nextLocalPosition,
+      previousAppliedOffsetLocalUnits,
+      offsetLocalUnits,
+      appliedPositionOffsetLocalUnits
+    );
     LogSpriteApply(
       "offset_applied",
       colorSprite,
@@ -1315,22 +1369,38 @@ public class SpriteWithNormals : MonoBehaviour {
     );
   }
 
-  void ClearAppliedTrimmedOffset() {
-    if (_hasTrimmedOffsetBaseLocalPosition) {
-      transform.localPosition = _trimmedOffsetBaseLocalPosition;
-    } else if (_hasAppliedTrimmedOffset) {
-      transform.localPosition -= _lastAppliedTrimmedOffsetLocalUnits;
-    }
+  void ClearAppliedTrimmedOffset(string reason = "", string colorSliceAddress = "", bool shouldLog = true) {
+    var previousLocalPosition = transform.localPosition;
+    var previousAppliedOffsetLocalUnits = _lastAppliedTrimmedOffsetLocalUnits;
+    var nextLocalPosition = ResolveClearedTrimmedOffsetLocalPosition(previousLocalPosition);
+    transform.localPosition = nextLocalPosition;
     _lastAppliedTrimmedOffsetLocalUnits = Vector3.zero;
     _hasAppliedTrimmedOffset = false;
     PersistTrimmedOffsetState();
+    if (!shouldLog) return;
+    LogTrimmedOffsetReposition(
+      "offset_cleared",
+      colorSliceAddress,
+      previousLocalPosition,
+      nextLocalPosition,
+      previousAppliedOffsetLocalUnits,
+      Vector3.zero,
+      Vector3.zero,
+      reason
+    );
   }
 
   void ResetAppliedTrimmedOffsetState(bool clearSliceAddress = true) {
-    ClearAppliedTrimmedOffset();
+    ClearAppliedTrimmedOffset(shouldLog: false);
     if (clearSliceAddress) {
       _appliedColorSliceAddress = "";
     }
+  }
+
+  Vector3 ResolveClearedTrimmedOffsetLocalPosition(Vector3 currentLocalPosition) {
+    if (_hasTrimmedOffsetBaseLocalPosition) return _trimmedOffsetBaseLocalPosition;
+    if (_hasAppliedTrimmedOffset) return currentLocalPosition - _lastAppliedTrimmedOffsetLocalUnits;
+    return currentLocalPosition;
   }
 
   void RefreshTrimmedOffsetForCurrentSprite() {
@@ -1344,6 +1414,16 @@ public class SpriteWithNormals : MonoBehaviour {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     if (_renderer == null || _renderer.sprite == null) return;
     if (string.IsNullOrWhiteSpace(_appliedColorSliceAddress)) return;
+    if (ShouldLogRuntimeOffsetDebug()) {
+      Debug.Log(
+        "[SpriteWithNormals][Offset] object='" + gameObject.name +
+        "' category='" + (category ?? "") +
+        "' requested_frame=" + _lastRequestedFrame +
+        " stage='metadata_ready'" +
+        " address='" + _appliedColorSliceAddress + "'" +
+        " current_local=" + FormatTrimmedOffsetVector(transform.localPosition)
+      );
+    }
     ApplyConfiguredTrimmedOffset(_renderer.sprite, _appliedColorSliceAddress);
   }
 
@@ -1378,7 +1458,7 @@ public class SpriteWithNormals : MonoBehaviour {
       }
     }
 
-    if (restoredBasePosition) {
+    if (restoredBasePosition && ShouldLogRuntimeOffsetDebug()) {
       Debug.Log(
         "[SpriteWithNormals] Normalized persisted trimmed offset state for '" + name +
         "'. current=(" + currentLocalPosition.x.ToString("0.###") + "," + currentLocalPosition.y.ToString("0.###") +
@@ -1736,6 +1816,34 @@ public class SpriteWithNormals : MonoBehaviour {
     TrimmedSpriteOffsetResolver.RegisterWarmupMetadataCandidate(colorAddress);
   }
 
+  void PrimeTrimmedMetadataWarmup(string colorAddress) {
+    if (!useTrimmedAtlasOffset) return;
+    if (string.IsNullOrWhiteSpace(colorAddress)) return;
+    TrackTrimmedMetadataWarmupCandidate(colorAddress);
+    TrimmedSpriteOffsetResolver.IsReady(
+      colorAddress,
+      pump: false,
+      requestIfNeeded: true,
+      allowImmediateEditorLoad: ShouldAllowImmediateTrimmedMetadataWarmup()
+    );
+  }
+
+  bool IsTrimmedMetadataReady(string colorAddress) {
+    if (!useTrimmedAtlasOffset) return true;
+    if (string.IsNullOrWhiteSpace(colorAddress)) return true;
+    TrackTrimmedMetadataWarmupCandidate(colorAddress);
+    return TrimmedSpriteOffsetResolver.IsReady(colorAddress, pump: false);
+  }
+
+  static bool ShouldAllowImmediateTrimmedMetadataWarmup() {
+#if UNITY_EDITOR
+    if (!Application.isEditor || !Application.isPlaying) return false;
+    return SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning;
+#else
+    return false;
+#endif
+  }
+
   static void WarmupAddress(string address, TextureResidencyCache.LoadPriority priority = TextureResidencyCache.LoadPriority.Warmup) {
     if (string.IsNullOrWhiteSpace(address)) return;
     if (priority == TextureResidencyCache.LoadPriority.Immediate) {
@@ -2047,7 +2155,7 @@ public class SpriteWithNormals : MonoBehaviour {
 
   void SyncRendererVisibility() {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) _renderer.enabled = !doNotRender;
+    if (_renderer != null) _renderer.enabled = !doNotRender && !externalVisualSuppressed;
   }
 
   void LogSpriteFetch(string stage, string details = "") {
@@ -2130,8 +2238,52 @@ public class SpriteWithNormals : MonoBehaviour {
       " expected='" + expectedName + "'" +
       " loaded='" + (loadedName ?? "") + "'" +
       " address='" + (sliceAddress ?? "") + "'" +
-      " corrected=" + (corrected ? 1 : 0)
+       " corrected=" + (corrected ? 1 : 0)
     );
+  }
+
+  void LogTrimmedOffsetReposition(
+    string stage,
+    string colorSliceAddress,
+    Vector3 previousLocalPosition,
+    Vector3 nextLocalPosition,
+    Vector3 previousAppliedOffsetLocalUnits,
+    Vector3 sourceOffsetLocalUnits,
+    Vector3 appliedOffsetLocalUnits,
+    string reason = ""
+  ) {
+    if (!ShouldLogRuntimeOffsetDebug()) return;
+    if (!Application.isPlaying) return;
+    var moved = !ApproximatelyVector3(previousLocalPosition, nextLocalPosition);
+    var offsetChanged = !ApproximatelyVector3(previousAppliedOffsetLocalUnits, appliedOffsetLocalUnits);
+    if (!moved && !offsetChanged && string.IsNullOrWhiteSpace(reason)) return;
+
+    Debug.Log(
+      "[SpriteWithNormals][Offset] object='" + gameObject.name +
+      "' category='" + (category ?? "") +
+      "' requested_frame=" + _lastRequestedFrame +
+      " stage='" + (stage ?? "") + "'" +
+      " address='" + (colorSliceAddress ?? "") + "'" +
+      " previous_local=" + FormatTrimmedOffsetVector(previousLocalPosition) +
+      " next_local=" + FormatTrimmedOffsetVector(nextLocalPosition) +
+      " base_local=" + FormatTrimmedOffsetVector(_trimmedOffsetBaseLocalPosition) +
+      " previous_applied=" + FormatTrimmedOffsetVector(previousAppliedOffsetLocalUnits) +
+      " source_offset=" + FormatTrimmedOffsetVector(sourceOffsetLocalUnits) +
+      " applied_offset=" + FormatTrimmedOffsetVector(appliedOffsetLocalUnits) +
+      (string.IsNullOrWhiteSpace(reason) ? "" : " reason='" + reason + "'")
+    );
+  }
+
+  static string FormatTrimmedOffsetVector(Vector3 value) {
+    return "(" + value.x.ToString("0.###") + "," + value.y.ToString("0.###") + "," + value.z.ToString("0.###") + ")";
+  }
+
+  static bool ShouldLogRuntimeOffsetDebug() {
+    if (ForceDisableDebugLogsForPerfPass) return false;
+    if (!Application.isPlaying) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) return false;
+    return Application.isEditor || Debug.isDebugBuild;
   }
 
   static bool ShouldLogVerboseEditorFallbackDebug() {
@@ -2144,7 +2296,9 @@ public class SpriteWithNormals : MonoBehaviour {
 #if UNITY_EDITOR
   Sprite TryResolveEditorSliceFallback(string sliceAddress, string channel, bool allowDuringOverlayFallback = false) {
     if (!Application.isEditor || string.IsNullOrWhiteSpace(sliceAddress)) return null;
-    if (ShouldAvoidBlockingEditorSpriteFallback() && !allowDuringOverlayFallback) {
+    if (ShouldAvoidBlockingEditorSpriteFallback() &&
+        !allowDuringOverlayFallback &&
+        ShouldDeferEditorSliceFallbackForAddress(sliceAddress)) {
       var deferredKey = $"{channel}|editor_fallback_deferred|{sliceAddress}";
       if (_sliceMismatchWarnings.Add(deferredKey) && ShouldLogVerboseEditorFallbackDebug()) {
         Debug.Log(

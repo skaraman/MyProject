@@ -4,17 +4,57 @@
 
 Use this as the working loop for scaling gameplay content so builds can contain a very large asset set while day-to-day development only stages a smaller active slice.
 
+## Current Transition Workflow
+
+The project is currently migrating from mixed legacy content roots into authoritative external content packs under `../MyProjectContent`.
+
+Primary daily workflow:
+
+- `Tools/Content Pipeline/1) Build Active Content (Smart)`
+- `Tools/Content Pipeline/2) Build Active Content (Clean)`
+
+Transition workflow:
+
+- `Tools/Content Pipeline/Transition/1) Analyze Ownership + Duplicates`
+- `Tools/Content Pipeline/Transition/2) Export Missing Pack Content`
+- `Tools/Content Pipeline/Transition/3) Stage Active Packs`
+- `Tools/Content Pipeline/Transition/4) Audit Legacy Dependencies`
+- `Tools/Content Pipeline/Transition/5) Rebuild Runtime Index`
+- `Tools/Content Pipeline/Transition/6) Build Addressables`
+- `Tools/Content Pipeline/Transition/7) Full Migration Pass (Smart)`
+- `Tools/Content Pipeline/Transition/8) Full Migration Pass (Clean)`
+
+Behavior rules:
+
+- `Smart` is the default daily button and skips external export writes when the destination file already exists.
+- `Clean` is the recovery button and recreates or overwrites external content when corruption or stale output is suspected.
+- external pack outputs in `../MyProjectContent` are the intended authoritative destination
+- staged content in `Assets/ContentStage` is the runtime/editor mirror
+- duplicate content in `Assets/Sprites`, `Assets/Generated`, and `../MyProjectContent` is migration debt and must be surfaced by audit rather than silently tolerated
+
+## Runtime Authority Rule
+
+- authoring roots under `Assets/Sprites` and related project folders remain production/editing inputs
+- `../MyProjectContent` is the authoritative exported content-pack destination
+- `Assets/ContentStage` is the intentional runtime/editor mirror for active packs
+- runtime resolves through active-pack ownership and staged paths first, not through the full dev tree
+- duplication to reduce is legacy/source duplication across authoring roots and exported pack roots, not the existence of the stage mirror itself
+
 ## Packaging Model
 
-This project now uses three content ownership layers:
+This project now uses five content ownership layers:
 
 - `Core`
+- `Form`
+- `Gear`
 - `Slice`
 - `Episode Pack`
 
 Current concrete pack IDs:
 
 - `Core`
+- `Form_Base`
+- equipped `Gear_*` packs discovered from `Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/<Form>/<GearCode>/<Leaf>`
 - `Slice_DomeCity_Imp_Base`
 - `Slice_Homebase_Placeholder`
 - `Slice_SunkenCave_Placeholder`
@@ -23,12 +63,24 @@ Current concrete pack IDs:
 Current dependency rule:
 
 - `Episode_01 -> Slice_DomeCity_Imp_Base + Slice_Homebase_Placeholder + Slice_SunkenCave_Placeholder`
+- `Slice_DomeCity_Imp_Base -> Core + Form_Base`
+- active gameplay gear is additive: `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base`
 - each slice depends on `Core`
-- current stand-up scope is `Core + Slice_DomeCity_Imp_Base` only
+- each form depends on `Core`
+- each `Gear_*` pack depends on `Core`
+- current stand-up scope is `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base`
+
+## Why This Performs Well
+
+- preload only the content that known scene flow and player choice make likely to be needed
+- keep ownership narrow so runtime avoids broad scans, broad residency, and accidental fallback to the full project tree
+- use `Assets/ContentStage` as the stable runtime/editor mirror so active content resolves through predictable paths
+- keep the loading contract ordered:
+  `player -> location -> enemies -> ui -> dialog`
 
 ### Core
 
-`Core` is the globally shared runtime base that should exist in nearly every build.
+`Core` is the globally shared runtime base that should exist in nearly every build and should keep always-present player/UI dependencies hot.
 
 For your current definition, `Core` contains:
 
@@ -46,7 +98,7 @@ For your current definition, `Core` contains:
 
 ### Slice
 
-A `slice` is the smallest independently stageable gameplay unit that should run with `Core` and without the full dev project tree.
+A `slice` is the smallest independently stageable gameplay unit that should run with `Core` and without the full dev project tree, and it supplies the current location/enemy/dialog payload for the scene.
 
 For your current definition, a slice contains:
 
@@ -69,9 +121,54 @@ Current example slice:
 
 This means the slice owns the zone-specific encounter content and location dialog, while `Core` owns the always-present player locomotion, dialog UI, and broader interface baseline.
 
+### Form
+
+A `form` pack is the player-choice combat layer for one Esperanza form and supplies the currently active combat payload.
+
+Current example form pack:
+
+- `Form_Base`
+
+For your current definition, a form contains:
+
+- form-specific projectile prefabs
+- form-specific combat effects and VFX
+- form-specific combat animation payloads that are not part of the always-present locomotion baseline
+
+Current baseline form-owned example:
+
+- `BlastBall`
+
+### Gear
+
+A `gear` pack is the player-choice visual equipment layer for Esperanza and supplies only the currently equipped visual payload.
+
+For the current rollout:
+
+- each equippable grouped gear atlas leaf folder becomes its own pack
+- pack ids are generated from folder structure:
+  `Gear_<Form>_<GearCode>_<Leaf>`
+- example:
+  `Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/Aqua/aa/p`
+  becomes `Gear_Aqua_aa_p`
+- daily smart/clean builds stage only the currently equipped gear packs for the active Esperanza form
+- project-wide analysis still discovers all gear packs
+
+Current rules:
+
+- `Skin` stays in `Core`
+- form combat effects stay in `Form_Base`
+- equippable grouped gear atlas leaves move to `Gear_*`
+- runtime active gear pack ids are derived from the equipped gear set for the current active form
+- grouped gear atlases remain atlas assets
+- staged grouped gear atlas sprite slices come from Unity importer data in `.meta`
+- runtime `.json` for grouped gear atlases remains an offset-only placement payload and is not the slice-definition authority
+- runtime `atlas.json` must only come from authored trimmed-atlas export output; build/runtime-index steps must not regenerate `packedRect` or other slice-definition metadata into runtime `atlas.json`
+- if an authored trimmed-atlas export resolves every sprite to zero placement offset, it should not emit a runtime `atlas.json`
+
 ### Episode Pack
 
-An `episode pack` is a larger progression bundle made from multiple slices plus any shared progression spaces.
+An `episode pack` is a larger progression bundle made from multiple slices plus any shared progression spaces, and it composes multi-slice progression without becoming the runtime authority for unrelated scene-local content.
 
 For your current definition, an episode pack contains:
 
@@ -125,9 +222,12 @@ The working test for a valid episode pack is:
 ## Codex-Automated Already
 
 - remap core gameplay prefab paths through the staged core pack at runtime
-- remap projectile prefab paths through the staged core pack at runtime
+- remap projectile prefab paths through the active staged pack set at runtime
+- remap grouped gear atlas asset paths through active staged `Gear_*` packs before falling back to broader roots
 - sync staged player, projectile, and location prefab Addressables entries after active-pack staging
 - include projectile prefabs in the core pack seed set
+- discover `Gear_*` packs automatically from grouped gear atlas leaf folders
+- stage active equipped `Gear_*` packs under `Assets/ContentStage/Gears`
 - add runtime content-pack summary logging
 - add gameplay-core validation to content-pack audit
 - fix staged warm profile registration so profiles resolve to the correct location id instead of always using `DomeCity`

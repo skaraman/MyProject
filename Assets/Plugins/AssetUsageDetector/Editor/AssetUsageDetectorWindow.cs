@@ -317,8 +317,6 @@ namespace AssetUsageDetectorNamespace
 					foreach( Object obj in searchParameters.excludedScenesFromSearch )
 						excludedScenes.Add( obj );
 				}
-
-				ApplyScriptFieldConstraints( searchParameters.scriptFieldConstraints );
 			}
 
 			InitiateSearch();
@@ -643,93 +641,6 @@ namespace AssetUsageDetectorNamespace
 			return result;
 		}
 
-		private AssetUsageDetector.ScriptFieldConstraint[] GetScriptFieldConstraints()
-		{
-			List<AssetUsageDetector.ScriptFieldConstraint> constraints = null;
-			for( int i = 0; i < objectsToSearch.Count; i++ )
-			{
-				ObjectToSearch objectToSearch = objectsToSearch[i];
-				if( objectToSearch == null || !( objectToSearch.obj is MonoScript script ) )
-					continue;
-
-				List<ObjectToSearch.ScriptFieldFilter> scriptFieldFilters = objectToSearch.scriptFieldFilters;
-				if( scriptFieldFilters == null || scriptFieldFilters.Count == 0 )
-					continue;
-
-				for( int j = 0; j < scriptFieldFilters.Count; j++ )
-				{
-					ObjectToSearch.ScriptFieldFilter fieldFilter = scriptFieldFilters[j];
-					if( !fieldFilter.shouldFilter )
-						continue;
-
-					if( constraints == null )
-						constraints = new List<AssetUsageDetector.ScriptFieldConstraint>( 4 );
-
-					constraints.Add( new AssetUsageDetector.ScriptFieldConstraint()
-					{
-						script = script,
-						declaringTypeName = fieldFilter.declaringTypeName,
-						fieldName = fieldFilter.fieldName,
-						fieldTypeName = fieldFilter.fieldTypeName,
-						value = fieldFilter.value,
-						stringValue = fieldFilter.stringValue,
-						boolValue = fieldFilter.boolValue,
-						longValue = fieldFilter.longValue,
-						floatValue = fieldFilter.floatValue,
-						doubleValue = fieldFilter.doubleValue,
-						enumValueName = fieldFilter.enumValueName,
-						textValue = fieldFilter.textValue
-					} );
-				}
-			}
-
-			return constraints != null && constraints.Count > 0 ? constraints.ToArray() : null;
-		}
-
-		private void ApplyScriptFieldConstraints( AssetUsageDetector.ScriptFieldConstraint[] constraints )
-		{
-			if( constraints == null || constraints.Length == 0 )
-				return;
-
-			for( int i = 0; i < constraints.Length; i++ )
-			{
-				AssetUsageDetector.ScriptFieldConstraint constraint = constraints[i];
-				if( constraint == null || !constraint.script )
-					continue;
-
-				for( int j = 0; j < objectsToSearch.Count; j++ )
-				{
-					ObjectToSearch objectToSearch = objectsToSearch[j];
-					if( objectToSearch == null || objectToSearch.obj != constraint.script || objectToSearch.scriptFieldFilters == null )
-						continue;
-
-					for( int k = 0; k < objectToSearch.scriptFieldFilters.Count; k++ )
-					{
-						ObjectToSearch.ScriptFieldFilter fieldFilter = objectToSearch.scriptFieldFilters[k];
-						if( fieldFilter.declaringTypeName == constraint.declaringTypeName && fieldFilter.fieldName == constraint.fieldName )
-						{
-							fieldFilter.shouldFilter = true;
-							fieldFilter.value = constraint.value;
-							fieldFilter.stringValue = constraint.stringValue;
-							fieldFilter.boolValue = constraint.boolValue;
-							fieldFilter.longValue = constraint.longValue;
-							fieldFilter.floatValue = constraint.floatValue;
-							fieldFilter.doubleValue = constraint.doubleValue;
-							fieldFilter.enumValueName = constraint.enumValueName;
-							fieldFilter.textValue = constraint.textValue;
-
-							if( fieldFilter.EffectiveFieldType == typeof( string ) && string.IsNullOrEmpty( fieldFilter.stringValue ) && !string.IsNullOrEmpty( constraint.textValue ) )
-								fieldFilter.stringValue = constraint.textValue;
-							else if( fieldFilter.EffectiveFieldType.IsEnum && string.IsNullOrEmpty( fieldFilter.enumValueName ) && !string.IsNullOrEmpty( constraint.textValue ) )
-								fieldFilter.enumValueName = constraint.textValue;
-
-							break;
-						}
-					}
-				}
-			}
-		}
-
 		private void InitiateSearch()
 		{
 			currentPhase = Phase.Processing;
@@ -750,7 +661,6 @@ namespace AssetUsageDetectorNamespace
 				excludedScenesFromSearch = !excludedScenes.IsEmpty() ? excludedScenes.ToArray() : null,
 				searchInProjectSettings = searchInProjectSettings,
 				searchUnusedMaterialProperties = searchUnusedMaterialProperties,
-				scriptFieldConstraints = GetScriptFieldConstraints(),
 				searchRefactoring = searchRefactoring,
 #if ASSET_USAGE_ADDRESSABLES
 				lazySceneSearch = lazySceneSearch && !addressablesSupport,

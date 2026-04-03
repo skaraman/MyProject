@@ -114,7 +114,7 @@ def out(p,i,s):A,B=os.path.splitext(p);return p if i else A+(s or'')+B
 class AA:
         def __init__(A,r):
                 A.r=r;r.title('Esperanza Tools Hub');r.geometry('1250x420');A._img_workers=IMG_WORKERS;A._io_workers=IO_WORKERS;A._style();A.n=ttk.Notebook(r);A.n.pack(fill='both',expand=1,padx=10,pady=10)
-                for B in(A._comp,A._desat,A._dup,A._crunch,A._atlas,A._slices,A._spritelib,A._spritelib_overwrite,A._spritelib_renumber,A._rename_files,A._rename_atlas):B()
+                for B in(A._comp,A._desat,A._dup,A._crunch,A._atlas,A._slices,A._spritelib,A._spritelib_overwrite,A._spritelib_renumber,A._gif,A._rename_files,A._rename_atlas):B()
         def _style(G):
                 F='TNotebook.Tab';E='#2a2a2a';C='#e6e6e6';B='#1e1e1e';D=G.r;D.configure(bg=B);D.option_add('*Background',B);D.option_add('*Foreground',C);A=ttk.Style(D)
                 try:A.theme_use('clam')
@@ -165,6 +165,60 @@ class AA:
                 B=os.path.splitext(name)[0];C=B[len(prefix):]if B.startswith(prefix)else B;D=re.search('(\\d+)$',C)
                 if D:E=D.group(1);return 0,int(E),len(E),B.lower()
                 print(f"[10x10 Compositor] No trailing frame number found for {name}; using lexical fallback.");return 1,0,0,B.lower()
+        def _nat_key(A,name):
+                B=[]
+                for C in re.split('(\\d+)',os.path.splitext(os.path.basename(name))[0]):
+                        if C=='':continue
+                        if C.isdigit():B.append((0,int(C),len(C)))
+                        else:B.append((1,C.lower()))
+                return B
+        def _gif_frame_paths(A,folder):
+                B=[]
+                with os.scandir(folder)as C:
+                        for D in C:
+                                if not D.is_file():continue
+                                E=os.path.splitext(D.name)[1].lower()
+                                if E in EXT:B.append(D.path)
+                B.sort(key=A._nat_key);print(f"[Folder To GIF] folder={folder} frames_found={len(B)} frames={[os.path.basename(C)for C in B[:5]]}");return B
+        def _gif_output_path(A,folder):
+                B=os.path.basename(os.path.normpath(folder))or'output';return os.path.join(folder,f"{B}.gif")
+        def _gif_prepare_frames(A,paths):
+                B=[];C=D=1
+                for E in paths:
+                        with Image.open(E)as F:G=F.convert(_L);B.append(G.copy());C=max(C,G.width);D=max(D,G.height)
+                if any(E.size!=(C,D)for E in B):
+                        print(f"[Folder To GIF] Normalizing frame sizes to {C}x{D}.")
+                        E=[]
+                        for F in B:
+                                G=Image.new(_L,(C,D),(0,0,0,0));H=((C-F.width)//2,(D-F.height)//2);G.paste(F,H,F);E.append(G);F.close()
+                        B=E
+                return B,C,D
+        def _gif(A):
+                B=A._tab('Folder To GIF');A.gif_folder=tk.StringVar(A.r);A.gif_duration=tk.StringVar(A.r,'100');A.gif_status=tk.StringVar(A.r,_O);C=0;A._entry_with_button(B,C,A.gif_folder,label='Folder:');C+=1;ttk.Label(B,text='Frame delay (ms):').grid(row=C,column=0,sticky=_D);ttk.Entry(B,textvariable=A.gif_duration,width=10).grid(row=C,column=1,sticky=_D);C+=1;ttk.Label(B,text='Builds one GIF beside the selected frames folder using natural numeric order.').grid(row=C,column=0,columnspan=3,sticky=_D);C+=1
+                def D():
+                        B=A.gif_folder.get().strip()
+                        try:C=max(1,int(A.gif_duration.get().strip()))
+                        except ValueError:messagebox.showerror(_v,'Frame delay must be an integer.');return
+                        if not B or not os.path.isdir(B):messagebox.showerror(_d,_e);return
+                        def D():
+                                D=A._gif_frame_paths(B)
+                                if not D:raise ValueError('No PNG/JPG/JPEG files found in the selected folder.')
+                                E=A._gif_output_path(B);F,G,H=A._gif_prepare_frames(D)
+                                try:
+                                        I,*J=F;K=I.convert('P',palette=Image.ADAPTIVE)
+                                        L=[M.convert('P',palette=Image.ADAPTIVE)for M in J]
+                                        print(f"[Folder To GIF] output={E} frame_count={len(F)} duration_ms={C} size={G}x{H}")
+                                        K.save(E,save_all=_C,append_images=L,duration=C,loop=0,disposal=2)
+                                finally:
+                                        for M in F:M.close()
+                                        if 'L'in locals():
+                                                for M in L:M.close()
+                                        if 'K'in locals():K.close()
+                                return E,len(D),C
+                        def E(result):
+                                B,C,D=result;A.gif_status.set(f"DONE - wrote {C} frame(s) to {B} at {D}ms per frame.")
+                        A._run(lambda:A.gif_status.set(_P),D,E)
+                ttk.Button(B,text=_f,command=D).grid(row=C,column=0,columnspan=3);C+=1;ttk.Label(B,textvariable=A.gif_status).grid(row=C,column=0,columnspan=3,sticky=_D)
         def _comp(A):
                 B=A._tab('10x10 Compositor');A.comp_folder=tk.StringVar(A.r);A.comp_prefix=tk.StringVar(A.r,'frame_');A.comp_canvas=tk.StringVar(A.r,'1920');A.comp_grid=tk.StringVar(A.r,'10');A.comp_status=tk.StringVar(A.r,_O)
                 for(C,(D,E,F))in enumerate((('Root:',A.comp_folder,50),('Prefix:',A.comp_prefix,25),('Canvas:',A.comp_canvas,10),('Grid:',A.comp_grid,10))):

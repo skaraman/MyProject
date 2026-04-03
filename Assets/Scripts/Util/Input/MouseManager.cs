@@ -28,6 +28,13 @@ public class MouseManager : MonoBehaviour {
   private Mouse mouse;
   ContactFilter2D overlapFilter;
 
+  static bool ShouldLogMouseDebug() {
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
+      return false;
+    }
+    return Application.isEditor || Debug.isDebugBuild;
+  }
+
   void Awake() {
     Instance = this;
     overlapFilter.useLayerMask = false;
@@ -116,7 +123,9 @@ public class MouseManager : MonoBehaviour {
     scrollUpKey = $"{newMap}.scrollUp";
     scrollDownKey = $"{newMap}.scrollDown";
     currentMap = string.IsNullOrWhiteSpace(newMap) ? "" : newMap.Trim();
-    Debug.Log($"[MouseManager] Swapped to: {newMap}");
+    if (ShouldLogMouseDebug()) {
+      Debug.Log($"[MouseManager] Swapped to: {newMap}");
+    }
   }
 
   GameObject ResolvePointTarget(Vector3 worldPos) {

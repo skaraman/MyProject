@@ -14,7 +14,7 @@ public static class SpriteStreamingHotsetConfigurator {
   const int AutomaticTextureFormat = -1;
   static readonly Regex guidRegex = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
 
-  [MenuItem("Tools/Sprite Streaming/5) Apply Hotset")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Hotset")]
   public static void ApplyPerformanceHotsetMenu() {
     ApplyPerformanceHotset(rebuildRuntimeIndexFirst: true, saveAndRefreshAtEnd: true, logResult: true);
   }
@@ -85,7 +85,7 @@ public static class SpriteStreamingHotsetConfigurator {
     }
   }
 
-  [MenuItem("Tools/Sprite Streaming/3) Apply Unified Import Flow")]
+  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Unified Import Flow")]
   public static void ApplyUnifiedImportFlowMenu() {
     ApplyUnifiedImportFlow(saveAndRefreshAtEnd: true, logResult: true);
   }

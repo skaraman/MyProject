@@ -83,6 +83,7 @@ public static class SpriteRuntimeResolver {
   static readonly Dictionary<string, float> shardLoadStartedAt = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, float> shardLoadEwmaMs = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, int> shardSlowLoadHits = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, int> shardReloadInvalidatedFrame = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, float> logCooldown = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<LookupCacheKey, SpriteAddressPair> lookupHitCache = new();
   static readonly HashSet<LookupCacheKey> lookupMissCache = new();
@@ -135,12 +136,18 @@ public static class SpriteRuntimeResolver {
     shardLoadStartedAt.Clear();
     shardLoadEwmaMs.Clear();
     shardSlowLoadHits.Clear();
+    shardReloadInvalidatedFrame.Clear();
     logCooldown.Clear();
     lookupHitCache.Clear();
     lookupMissCache.Clear();
     tokenNormCache.Clear();
     namepartNormCache.Clear();
     atlasSiblingSeenScratch.Clear();
+
+#if UNITY_EDITOR
+    editorSpriteLoadWarnings.Clear();
+    editorMetaSpriteIdsByAssetPath.Clear();
+#endif
 
     manifestLoadStarted = false;
     manifestReady = false;
@@ -340,6 +347,11 @@ public static class SpriteRuntimeResolver {
     }
 
     if (!reloadShard) return;
+    var currentFrame = Time.frameCount;
+    if (shardReloadInvalidatedFrame.TryGetValue(shardKey, out var invalidatedFrame) && invalidatedFrame == currentFrame) {
+      return;
+    }
+    shardReloadInvalidatedFrame[shardKey] = currentFrame;
     loadedShards.Remove(shardKey);
   }
 
@@ -423,6 +435,29 @@ public static class SpriteRuntimeResolver {
   }
 
 #if UNITY_EDITOR
+  static bool TryEnsureEditorManifestReady() {
+    if (!Application.isEditor || !Application.isPlaying) return false;
+    if (manifestLoadStarted || manifestParse != null) return false;
+
+    var manifestAsset = LoadEditorManifestAsset();
+    if (manifestAsset == null || string.IsNullOrWhiteSpace(manifestAsset.text)) return false;
+
+    var parsed = ParseManifestRows(manifestAsset.text);
+    if (parsed.Count <= 0) return false;
+
+    manifestByNamepart.Clear();
+    lookupHitCache.Clear();
+    lookupMissCache.Clear();
+    foreach (var pair in parsed) {
+      manifestByNamepart[pair.Key] = pair.Value;
+    }
+
+    manifestReady = true;
+    manifestFailed = false;
+    DrainPendingWarmups();
+    return true;
+  }
+
   public static bool TryResolveEditor(SpriteLookupKey key, out SpriteAddressPair pair, Object logContext = null) {
     pair = default;
     var manifestAsset = LoadEditorManifestAsset();
@@ -712,6 +747,9 @@ public static class SpriteRuntimeResolver {
   static bool EnsureManifestReady() {
     if (manifestReady) return true;
     if (manifestFailed) return false;
+#if UNITY_EDITOR
+    if (TryEnsureEditorManifestReady()) return true;
+#endif
     if (manifestParse != null) {
       if (!manifestParse.IsCompleted) return false;
 

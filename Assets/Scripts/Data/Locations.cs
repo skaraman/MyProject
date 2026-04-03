@@ -304,15 +304,35 @@ public static class LocationEnemyData {
     if (prefab == null) return false;
 
     var selectedAssetPath = GetPrefabAssetPath(prefab);
-    foreach (var pair in locations) {
-      var candidate = pair.Value;
-      if (candidate == null) continue;
-      if (!DoesLocationUsePrefab(candidate, prefab, selectedAssetPath)) continue;
-      locationInfo = candidate;
+    var activeLocations = GetActiveLocationsView();
+    if (TryFindLocationByPrefab(activeLocations, prefab, selectedAssetPath, out locationInfo)) {
       return true;
     }
 
-    return false;
+    if (!TryFindLocationByPrefab(defaultLocations, prefab, selectedAssetPath, out var builtInLocation) || builtInLocation == null) {
+      return false;
+    }
+
+    var normalizedLocationId = NormalizeLocationId(builtInLocation.id);
+    if (!string.IsNullOrWhiteSpace(normalizedLocationId) &&
+        activeLocations.TryGetValue(normalizedLocationId, out var activeLocation) &&
+        activeLocation != null) {
+      locationInfo = ActiveContentRegistry.CloneLocation(activeLocation) ?? activeLocation;
+    }
+    else {
+      locationInfo = ActiveContentRegistry.CloneLocation(builtInLocation) ?? builtInLocation;
+    }
+
+    if (ShouldLogLocationDebug()) {
+      Debug.Log(
+        "[LocationEnemyData] Resolved prefab via built-in fallback" +
+        " prefab='" + prefab.name +
+        "' asset_path='" + (string.IsNullOrWhiteSpace(selectedAssetPath) ? "-" : selectedAssetPath) +
+        "' location='" + normalizedLocationId + "'"
+      );
+    }
+
+    return locationInfo != null;
   }
 
   public static string ResolveRequestedOrDefault(string locationId) {
@@ -384,6 +404,32 @@ public static class LocationEnemyData {
 
     var resolvedPrefab = prefabData.ResolvePrefab();
     return ReferenceEquals(resolvedPrefab, prefab);
+  }
+
+  static bool TryFindLocationByPrefab(
+    Dictionary<string, LocationInfo> locationsView,
+    GameObject prefab,
+    string selectedAssetPath,
+    out LocationInfo locationInfo
+  ) {
+    locationInfo = null;
+    if (locationsView == null || prefab == null) {
+      return false;
+    }
+
+    foreach (var pair in locationsView) {
+      var candidate = pair.Value;
+      if (candidate == null) continue;
+      if (!DoesLocationUsePrefab(candidate, prefab, selectedAssetPath)) continue;
+      locationInfo = candidate;
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool ShouldLogLocationDebug() {
+    return Application.isEditor || Debug.isDebugBuild;
   }
 
   static string NormalizeAssetPath(string assetPath) {

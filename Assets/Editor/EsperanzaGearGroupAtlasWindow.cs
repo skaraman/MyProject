@@ -68,6 +68,21 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   }
 
   [Serializable]
+  sealed class GroupedAtlasRuntimePayload {
+    public string metadataKind = "grouped";
+    public float spritePixelsPerUnit = 100f;
+    public int spriteMeshType = (int)SpriteMeshType.Tight;
+    public List<GroupedAtlasRuntimeSpriteMetadata> sprites = new();
+  }
+
+  [Serializable]
+  sealed class GroupedAtlasRuntimeSpriteMetadata {
+    public string name;
+    public bool empty;
+    public PixelRect packedRect;
+  }
+
+  [Serializable]
   sealed class GroupedAtlasSpriteMetadata {
     public string name;
     public bool empty;
@@ -800,13 +815,26 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   static void AddCleanupMetadataAssetPath(HashSet<string> sourceAssetPaths, string assetPath) {
     var normalizedAssetPath = NormalizePath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
-    AddCleanupAssetPath(sourceAssetPaths, Path.ChangeExtension(normalizedAssetPath, ".json"));
+    AddMetadataAssetPaths(sourceAssetPaths, normalizedAssetPath);
   }
 
   static void AddCleanupAssetPath(HashSet<string> sourceAssetPaths, string assetPath) {
     var normalizedAssetPath = NormalizePath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
     sourceAssetPaths.Add(normalizedAssetPath);
+  }
+
+  static void AddMetadataAssetPaths(ICollection<string> assetPaths, string atlasAssetPath) {
+    if (assetPaths == null) return;
+    var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(atlasAssetPath);
+    if (!string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) {
+      assetPaths.Add(runtimeMetadataAssetPath);
+    }
+
+    var editorMetadataAssetPath = BuildEditorMetadataAssetPath(atlasAssetPath);
+    if (!string.IsNullOrWhiteSpace(editorMetadataAssetPath)) {
+      assetPaths.Add(editorMetadataAssetPath);
+    }
   }
 
   static int DeleteSourceAssets(HashSet<string> sourceAssetPaths) {
@@ -986,6 +1014,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
     var filePrefix = BuildOutputFilePrefix(candidate) + "_p";
     var metadataFullPaths = Directory.GetFiles(fullOutputFolderPath, "*.json", SearchOption.TopDirectoryOnly)
+      .Where(path => !TrimmedAtlasExporterWindow.IsEditorMetadataAssetPath(path))
       .Where(path => Path.GetFileNameWithoutExtension(path).StartsWith(filePrefix, StringComparison.OrdinalIgnoreCase))
       .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
       .ToList();
@@ -995,12 +1024,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
       var metadataFullPath = metadataFullPaths[i];
       if (!TryConvertFullPathToAssetPath(metadataFullPath, out var metadataAssetPath)) continue;
 
-      GroupedAtlasMetadataPayload payload;
-      try {
-        payload = JsonUtility.FromJson<GroupedAtlasMetadataPayload>(File.ReadAllText(metadataFullPath));
-      }
-      catch (Exception ex) {
-        error = "Failed to read grouped atlas metadata '" + metadataAssetPath + "': " + ex.Message;
+      if (!TryLoadGroupedMetadataPayload(metadataAssetPath, out var payload, out error)) {
+        error = "Failed to read grouped atlas metadata '" + metadataAssetPath + "': " + error;
         return false;
       }
 
@@ -1371,11 +1396,11 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
   static Dictionary<string, ExistingTrimmedAtlasSpriteMetadata> LoadTrimmedSourceMetadataByName(string atlasAssetPath) {
     var metadataByName = new Dictionary<string, ExistingTrimmedAtlasSpriteMetadata>(StringComparer.Ordinal);
-    var metadataAssetPath = NormalizePath(Path.ChangeExtension(atlasAssetPath ?? "", ".json"));
+    var metadataAssetPath = BuildRuntimeMetadataAssetPath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(metadataAssetPath)) return metadataByName;
 
-    var metadataFullPath = Path.GetFullPath(metadataAssetPath);
-    if (!File.Exists(metadataFullPath)) return metadataByName;
+    var metadataFullPath = ResolveExistingTrimmedMetadataReadPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(metadataFullPath)) return metadataByName;
 
     ExistingTrimmedAtlasMetadataPayload payload;
     try {
@@ -1715,10 +1740,9 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     }
 
     try {
-      metadataAssetPath = Path.ChangeExtension(atlasAssetPath, ".json").Replace("\\", "/");
-      var metadataFullPath = Path.GetFullPath(metadataAssetPath);
-      Directory.CreateDirectory(Path.GetDirectoryName(metadataFullPath) ?? "");
-      File.WriteAllText(metadataFullPath, JsonUtility.ToJson(payload, true));
+      metadataAssetPath = BuildRuntimeMetadataAssetPath(atlasAssetPath);
+      WriteJsonPayload(metadataAssetPath, JsonUtility.ToJson(BuildRuntimeGroupedMetadata(payload), true));
+      WriteJsonPayload(BuildEditorMetadataAssetPath(atlasAssetPath), JsonUtility.ToJson(payload, true));
       return true;
     }
     catch (Exception ex) {
@@ -1857,7 +1881,9 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
     var cleanupPlansByKey = new Dictionary<string, CleanupPlan>(StringComparer.OrdinalIgnoreCase);
     var sequencedPendingReplacementsByKey = new Dictionary<LibraryEntrySequenceKey, List<PendingGroupedSpriteReplacement>>();
     var directPendingReplacementsByKey = new Dictionary<LibraryEntryKey, List<PendingGroupedSpriteReplacement>>();
-    var metadataFullPaths = Directory.GetFiles(sourceFolderFullPath, "*.json", SearchOption.AllDirectories);
+    var metadataFullPaths = Directory.GetFiles(sourceFolderFullPath, "*.json", SearchOption.AllDirectories)
+      .Where(path => !TrimmedAtlasExporterWindow.IsEditorMetadataAssetPath(path))
+      .ToArray();
     Array.Sort(metadataFullPaths, StringComparer.OrdinalIgnoreCase);
 
     for (var metadataIndex = 0; metadataIndex < metadataFullPaths.Length; metadataIndex++) {
@@ -1870,12 +1896,8 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         continue;
       }
 
-      GroupedAtlasMetadataPayload payload;
-      try {
-        payload = JsonUtility.FromJson<GroupedAtlasMetadataPayload>(File.ReadAllText(metadataFullPath));
-      }
-      catch (Exception ex) {
-        error = "Failed to read grouped atlas metadata '" + metadataAssetPath + "': " + ex.Message;
+      if (!TryLoadGroupedMetadataPayload(metadataAssetPath, out var payload, out error)) {
+        error = "Failed to read grouped atlas metadata '" + metadataAssetPath + "': " + error;
         return false;
       }
 
@@ -1909,7 +1931,7 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
         }
 
         cleanupPlan.keepAssetPaths.Add(atlasAssetPath);
-        cleanupPlan.keepAssetPaths.Add(metadataAssetPath);
+        AddMetadataAssetPaths(cleanupPlan.keepAssetPaths, atlasAssetPath);
       }
 
       for (var spriteIndex = 0; spriteIndex < payload.sprites.Count; spriteIndex++) {
@@ -3274,12 +3296,12 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
 
       if (!string.IsNullOrWhiteSpace(page.colorAtlasPath)) {
         cleanupPlan.keepAssetPaths.Add(page.colorAtlasPath);
-        cleanupPlan.keepAssetPaths.Add(Path.ChangeExtension(page.colorAtlasPath, ".json").Replace("\\", "/"));
+        AddMetadataAssetPaths(cleanupPlan.keepAssetPaths, page.colorAtlasPath);
       }
 
       if (!includeNormalAtlases || string.IsNullOrWhiteSpace(page.normalAtlasPath)) continue;
       cleanupPlan.keepAssetPaths.Add(page.normalAtlasPath);
-      cleanupPlan.keepAssetPaths.Add(Path.ChangeExtension(page.normalAtlasPath, ".json").Replace("\\", "/"));
+      AddMetadataAssetPaths(cleanupPlan.keepAssetPaths, page.normalAtlasPath);
     }
 
     var deletedCount = CleanupStaleOutputs(new List<CleanupPlan> { cleanupPlan });
@@ -3981,6 +4003,122 @@ public sealed class EsperanzaGearGroupAtlasWindow : EditorWindow {
   static void AddFailureLog(List<string> failureLogs, string context, string error) {
     if (failureLogs == null || failureLogs.Count >= 30) return;
     failureLogs.Add((context ?? "<unknown>") + " :: " + (string.IsNullOrWhiteSpace(error) ? "Unknown export failure." : error));
+  }
+
+  static string BuildRuntimeMetadataAssetPath(string atlasAssetPath) {
+    return TrimmedAtlasExporterWindow.BuildRuntimeMetadataAssetPath(atlasAssetPath);
+  }
+
+  static string BuildEditorMetadataAssetPath(string atlasAssetPath) {
+    return TrimmedAtlasExporterWindow.BuildEditorMetadataAssetPath(atlasAssetPath);
+  }
+
+  static string ResolveExistingTrimmedMetadataReadPath(string runtimeMetadataAssetPath) {
+    return ResolveMetadataReadFullPath(runtimeMetadataAssetPath);
+  }
+
+  static string ResolveMetadataReadFullPath(string runtimeMetadataAssetPath) {
+    var normalizedRuntimeMetadataAssetPath = TrimmedAtlasExporterWindow.ResolveRuntimeMetadataAssetPath(runtimeMetadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedRuntimeMetadataAssetPath)) return "";
+
+    var editorMetadataAssetPath = TrimmedAtlasExporterWindow.BuildEditorMetadataAssetPathFromRuntimeMetadata(normalizedRuntimeMetadataAssetPath);
+    if (TryGetExistingMetadataFullPath(editorMetadataAssetPath, out var editorMetadataFullPath)) {
+      return editorMetadataFullPath;
+    }
+
+    return TryGetExistingMetadataFullPath(normalizedRuntimeMetadataAssetPath, out var runtimeMetadataFullPath)
+      ? runtimeMetadataFullPath
+      : "";
+  }
+
+  static bool TryGetExistingMetadataFullPath(string metadataAssetPath, out string metadataFullPath) {
+    metadataFullPath = "";
+    var normalizedMetadataAssetPath = NormalizePath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return false;
+
+    var candidateFullPath = Path.GetFullPath(normalizedMetadataAssetPath);
+    if (!File.Exists(candidateFullPath)) return false;
+
+    metadataFullPath = candidateFullPath;
+    return true;
+  }
+
+  static bool TryReadMetadataJson(string runtimeMetadataAssetPath, out string jsonText, out string error) {
+    jsonText = "";
+    error = "";
+
+    var metadataFullPath = ResolveMetadataReadFullPath(runtimeMetadataAssetPath);
+    if (string.IsNullOrWhiteSpace(metadataFullPath)) {
+      error = "Metadata file not found.";
+      return false;
+    }
+
+    try {
+      jsonText = File.ReadAllText(metadataFullPath);
+      return true;
+    }
+    catch (Exception ex) {
+      error = ex.Message;
+      return false;
+    }
+  }
+
+  static bool TryLoadGroupedMetadataPayload(string runtimeMetadataAssetPath, out GroupedAtlasMetadataPayload payload, out string error) {
+    payload = null;
+    if (!TryReadMetadataJson(runtimeMetadataAssetPath, out var jsonText, out error)) return false;
+
+    try {
+      payload = JsonUtility.FromJson<GroupedAtlasMetadataPayload>(jsonText);
+    }
+    catch (Exception ex) {
+      error = ex.Message;
+      return false;
+    }
+
+    if (payload == null) {
+      error = "Grouped metadata payload was empty.";
+      return false;
+    }
+
+    if (payload.sprites == null) {
+      payload.sprites = new List<GroupedAtlasSpriteMetadata>();
+    }
+
+    if (payload.sourceCategories == null) {
+      payload.sourceCategories = new List<string>();
+    }
+    return true;
+  }
+
+  static GroupedAtlasRuntimePayload BuildRuntimeGroupedMetadata(GroupedAtlasMetadataPayload payload) {
+    var runtimePayload = new GroupedAtlasRuntimePayload {
+      metadataKind = payload?.metadataKind ?? "grouped",
+      spritePixelsPerUnit = payload?.spritePixelsPerUnit ?? 100f,
+      spriteMeshType = payload?.spriteMeshType ?? (int)SpriteMeshType.Tight
+    };
+    if (payload?.sprites == null || payload.sprites.Count <= 0) return runtimePayload;
+
+    runtimePayload.sprites.Capacity = payload.sprites.Count;
+    for (var i = 0; i < payload.sprites.Count; i++) {
+      var sprite = payload.sprites[i];
+      if (sprite == null || string.IsNullOrWhiteSpace(sprite.name)) continue;
+      runtimePayload.sprites.Add(new GroupedAtlasRuntimeSpriteMetadata {
+        name = sprite.name,
+        empty = sprite.empty,
+        packedRect = sprite.packedRect
+      });
+    }
+
+    return runtimePayload;
+  }
+
+  static void WriteJsonPayload(string assetPath, string jsonText) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
+
+    var fullPath = Path.GetFullPath(normalizedAssetPath);
+    Directory.CreateDirectory(Path.GetDirectoryName(fullPath) ?? "");
+    File.WriteAllText(fullPath, jsonText ?? "");
   }
 
   static string NormalizePath(string assetPath) {

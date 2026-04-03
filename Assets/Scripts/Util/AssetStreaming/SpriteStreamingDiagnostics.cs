@@ -324,11 +324,20 @@ sealed class SpriteStreamingDiagnosticsRunner : MonoBehaviour {
 
   void Update() {
     SpriteStreamingDiagnostics.Tick();
+    AssetLoadTraceMonitor.Tick();
   }
 
   void OnGUI() {
     var text = SpriteStreamingDiagnostics.BuildHudLine();
     if (string.IsNullOrEmpty(text)) return;
     GUI.Label(new Rect(8f, 8f, 1600f, 24f), text);
+  }
+
+  void OnApplicationQuit() {
+    AssetLoadTraceMonitor.Shutdown("application_quit");
+  }
+
+  void OnDestroy() {
+    AssetLoadTraceMonitor.Shutdown("runner_destroy");
   }
 }

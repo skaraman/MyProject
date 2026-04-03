@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using CustomInspector;
 using UnityEngine;
 #if UNITY_EDITOR
@@ -11,6 +10,7 @@ using UnityEditor;
 public class GearController : MonoBehaviour {
   const int MinimumPlayerWarmFramesAtStartup = 8;
   const int MinimumCoreEffectWarmFramesAtStartup = 24;
+  const float StartupAppearanceAddressCollectionTimeoutSeconds = 0.5f;
   static readonly string[] CoreCombatWarmAnimationKeys = { "Blast" };
 
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
@@ -18,6 +18,8 @@ public class GearController : MonoBehaviour {
   [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)] public bool _bool;
   public string defaultAnimation = "Breathe";
   public float timer;
+  public float pseudoTimer;
+  [Button(nameof(ResetPseudoTimer), label = "Reset", size = Size.small)][HideField] public bool resetPseudoTimerButton;
 
   public GameObject[] GearObjects;
   public GameObject[] HairObjects;
@@ -49,6 +51,8 @@ public class GearController : MonoBehaviour {
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private readonly List<string> equipWarmupAddressScratch = new();
   private readonly HashSet<string> equipWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> startupAppearanceWarmupAddressScratch = new();
+  private readonly HashSet<string> startupAppearanceWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> coreEffectWarmupAddressScratch = new();
   private readonly HashSet<string> coreEffectWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> linkedEffectWarmKeyScratch = new();
@@ -58,12 +62,16 @@ public class GearController : MonoBehaviour {
   private readonly Dictionary<string, string> equipPartPrefixScratch = new(StringComparer.OrdinalIgnoreCase);
   private Dictionary<string, string> pendingEquipWarmupPartPrefixes;
   private Coroutine equipWarmupRoutine;
+  private Coroutine startupAppearanceWarmupRoutine;
+  private bool startupAppearanceWarmupPausedAnimation;
   private bool effectControllerInitialized;
   private bool effectResetToEmptyPending;
+  private bool equippedStartupWarmupCompleted;
   private bool runtimeInitialized;
   private string appearanceOwnerId;
   private string effectAppearanceOwnerId;
   private string coreEffectWarmOwnerId;
+  private string startupAppearanceWarmOwnerId;
   private int appearanceRevision = 1;
 
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
@@ -80,6 +88,9 @@ public class GearController : MonoBehaviour {
   }
 
   static bool ShouldLogRuntimeInitDebug() {
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
+      return false;
+    }
     return Application.isEditor || Debug.isDebugBuild;
   }
 
@@ -90,7 +101,8 @@ public class GearController : MonoBehaviour {
     appearanceOwnerId = "player:" + ObjectEntityId.GetString(gameObject);
     effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
     coreEffectWarmOwnerId = "player_core_effects:" + ObjectEntityId.GetString(gameObject);
-    combinedBounces = (HairObjects ?? Array.Empty<GameObject>()).Concat(OtherBounceGearObjects ?? Array.Empty<GameObject>()).ToArray();
+    startupAppearanceWarmOwnerId = "player_startup:" + ObjectEntityId.GetString(gameObject);
+    combinedBounces = CombineGameObjectArrays(HairObjects, OtherBounceGearObjects);
     NormalizeSkinSpriteDefaultsForRuntime();
     ResolveProjectileManagerReference(source);
     PrimeSpriteStreamingWarmup();
@@ -104,6 +116,7 @@ public class GearController : MonoBehaviour {
       LeanTween.init(4000);
     }
     animationController.PlayAnimation(defaultAnimation, true);
+    QueueStartupAppearanceWarmup(source, pauseUntilReady: ShouldPauseStartupAppearanceWarmupUntilReady());
     if (ShouldLogRuntimeInitDebug()) {
       Debug.Log(
         "[GearController] RuntimeInit" +
@@ -123,19 +136,13 @@ public class GearController : MonoBehaviour {
 
   void Update() {
     if (animationController == null) return;
-    timer = animationController.animationTimer;
-    animationController.SlowDown = slowDown;
-    animationController.ForceLoop = forceLoop;
-    if (effectControllerInitialized) {
-      effectAnimationController.SlowDown = slowDown;
-      effectAnimationController.ForceLoop = forceLoop;
-    }
-    if (needsFlip) {
-      animationController.QueueFlip();
-      needsFlip = false;
-    }
+    ApplyPlaybackDebugFlags();
+    QueuePendingFlipIfNeeded();
 
-    TickControllers(TimeScale.GetDeltaTime(this));
+    var deltaTime = TimeScale.GetDeltaTime(this);
+    var timerBeforeTick = animationController.animationTimer;
+    TickControllers(deltaTime);
+    RefreshInspectorTimers(timerBeforeTick, deltaTime);
   }
 
   void TickControllers(float deltaTime) {
@@ -147,10 +154,67 @@ public class GearController : MonoBehaviour {
     }
   }
 
+  void ApplyPlaybackDebugFlags() {
+    animationController.SlowDown = slowDown;
+    animationController.ForceLoop = forceLoop;
+    if (!effectControllerInitialized) return;
+    effectAnimationController.SlowDown = slowDown;
+    effectAnimationController.ForceLoop = forceLoop;
+  }
+
+  void QueuePendingFlipIfNeeded() {
+    if (!needsFlip) return;
+    animationController.QueueFlip();
+    needsFlip = false;
+  }
+
+  void RefreshInspectorTimers(float timerBeforeTick, float deltaTime) {
+    var timerAfterTick = animationController.animationTimer;
+    timer = timerAfterTick;
+    pseudoTimer += ResolvePseudoTimerDelta(timerBeforeTick, timerAfterTick, deltaTime);
+  }
+
+  float ResolvePseudoTimerDelta(float timerBeforeTick, float timerAfterTick, float deltaTime) {
+    if (!ShouldAdvancePseudoTimer(deltaTime)) {
+      return 0f;
+    }
+
+    var timerDelta = timerAfterTick - timerBeforeTick;
+    if (timerDelta >= 0f) {
+      return timerDelta;
+    }
+
+    return ResolveActiveTimerStep(deltaTime);
+  }
+
+  bool ShouldAdvancePseudoTimer(float deltaTime) {
+    return deltaTime > 0f &&
+           animationController != null &&
+           animationController.IsPlaying &&
+           !string.IsNullOrWhiteSpace(animationController.CurrentAnimation);
+  }
+
+  float ResolveActiveTimerStep(float deltaTime) {
+    var slowFactor = animationController != null && animationController.SlowDown ? 20f : 1f;
+    return (deltaTime * 1000f) / slowFactor;
+  }
+
+  public void ResetPseudoTimer() {
+    var previousPseudoTimer = pseudoTimer;
+    pseudoTimer = 0f;
+    if (!ShouldLogRuntimeInitDebug()) return;
+    Debug.Log(
+      "[GearController] ResetPseudoTimer" +
+      " object=" + gameObject.name +
+      " previous_ms=" + previousPseudoTimer +
+      " timer_ms=" + timer
+    );
+  }
+
   private void ConfigureAnimationController() {
     if (animationController == null) return;
     // Prioritize skin targets first so core body animation continuity is protected under pin budgets.
-    var spriteTargets = (SkinObjects ?? Array.Empty<GameObject>()).Concat(GearObjects ?? Array.Empty<GameObject>());
+    var spriteTargets = CombineGameObjectArrays(SkinObjects, GearObjects);
     animationController.Initialize(
       transform,
       spriteTargets,
@@ -235,14 +299,63 @@ public class GearController : MonoBehaviour {
 
     var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
     var startingCount = outAddresses.Count;
-    CollectPersistentSkinStartupAddresses(
+    CollectPersistentStartupAddresses(
       SkinObjects,
       startupWarmFrames,
       outAddresses,
       seenAddresses,
       maxUniqueAddresses
     );
+    CollectPersistentStartupAddresses(
+      GearObjects,
+      startupWarmFrames,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
     return Mathf.Max(outAddresses.Count - startingCount, 0);
+  }
+
+  static GameObject[] CombineGameObjectArrays(GameObject[] first, GameObject[] second) {
+    var firstCount = CountNonNullEntries(first);
+    var secondCount = CountNonNullEntries(second);
+    if (firstCount <= 0 && secondCount <= 0) {
+      return Array.Empty<GameObject>();
+    }
+
+    var combined = new GameObject[firstCount + secondCount];
+    var index = 0;
+    CopyNonNullEntries(first, combined, ref index);
+    CopyNonNullEntries(second, combined, ref index);
+    return combined;
+  }
+
+  static int CountNonNullEntries(GameObject[] values) {
+    if (values == null || values.Length <= 0) {
+      return 0;
+    }
+
+    var count = 0;
+    for (var i = 0; i < values.Length; i++) {
+      if (values[i] != null) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  static void CopyNonNullEntries(GameObject[] source, GameObject[] destination, ref int destinationIndex) {
+    if (source == null || source.Length <= 0 || destination == null) {
+      return;
+    }
+
+    for (var i = 0; i < source.Length; i++) {
+      var value = source[i];
+      if (value == null) {
+        continue;
+      }
+      destination[destinationIndex++] = value;
+    }
   }
 
   public int CollectPersistentEffectStartupAddresses(
@@ -299,6 +412,34 @@ public class GearController : MonoBehaviour {
     return Mathf.Max(outAddresses.Count - startingCount, 0);
   }
 
+  public int CollectBootstrapSkinStartupAddresses(
+    List<string> outAddresses,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
+    var startingCount = outAddresses.Count;
+    CollectPersistentStartupAddresses(
+      SkinObjects,
+      startupWarmFrames,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
+    CollectPersistentStartupAddresses(
+      GearObjects,
+      startupWarmFrames,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
+    return Mathf.Max(outAddresses.Count - startingCount, 0);
+  }
+
   public int CollectPersistentProjectileStartupAssetAddresses(
     List<string> outAddresses,
     IReadOnlyList<string> animationKeys,
@@ -345,26 +486,26 @@ public class GearController : MonoBehaviour {
     return Mathf.Max(configuredFrames, MinimumCoreEffectWarmFramesAtStartup);
   }
 
-  void CollectPersistentSkinStartupAddresses(
-    GameObject[] skinObjects,
+  void CollectPersistentStartupAddresses(
+    GameObject[] objects,
     int startupWarmFrames,
     List<string> outAddresses,
     HashSet<string> seenAddresses,
     int maxUniqueAddresses
   ) {
-    if (skinObjects == null || skinObjects.Length == 0 || outAddresses == null) {
+    if (objects == null || objects.Length == 0 || outAddresses == null) {
       return;
     }
 
-    for (var i = 0; i < skinObjects.Length; i++) {
+    for (var i = 0; i < objects.Length; i++) {
       if (outAddresses.Count >= maxUniqueAddresses) {
         return;
       }
 
-      var go = skinObjects[i];
+      var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
-      CollectPersistentSkinStartupAddresses(
+      CollectPersistentStartupAddresses(
         target,
         startupWarmFrames,
         outAddresses,
@@ -374,7 +515,7 @@ public class GearController : MonoBehaviour {
     }
   }
 
-  void CollectPersistentSkinStartupAddresses(
+  void CollectPersistentStartupAddresses(
     SpriteWithNormals target,
     int startupWarmFrames,
     List<string> outAddresses,
@@ -425,6 +566,293 @@ public class GearController : MonoBehaviour {
     }
   }
 
+  void QueueStartupAppearanceWarmup(string source, bool pauseUntilReady) {
+    if (!Application.isPlaying) return;
+    if (!runtimeInitialized) return;
+    if (string.IsNullOrWhiteSpace(startupAppearanceWarmOwnerId)) return;
+    if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+
+    StopStartupAppearanceWarmup();
+    startupAppearanceWarmupRoutine = StartCoroutine(WarmStartupAppearanceRoutine(source, pauseUntilReady));
+  }
+
+  void StopStartupAppearanceWarmup() {
+    if (startupAppearanceWarmupRoutine != null) {
+      StopCoroutine(startupAppearanceWarmupRoutine);
+      startupAppearanceWarmupRoutine = null;
+    }
+    if (startupAppearanceWarmupPausedAnimation) {
+      animationController?.ResumeAnimation();
+      startupAppearanceWarmupPausedAnimation = false;
+    }
+
+    startupAppearanceWarmupAddressScratch.Clear();
+    startupAppearanceWarmupSeenAddressScratch.Clear();
+    if (!string.IsNullOrWhiteSpace(startupAppearanceWarmOwnerId)) {
+      TextureResidencyCache.ReleaseOwnerPins(startupAppearanceWarmOwnerId);
+    }
+  }
+
+  static bool ShouldPauseStartupAppearanceWarmupUntilReady() {
+    return SpriteStreamingLoadingState.IsLoadingOverlayActive ||
+           StreamingWarmOrchestrator.IsWarmGateRunning;
+  }
+
+  IEnumerator WarmStartupAppearanceRoutine(string source, bool pauseUntilReady) {
+    startupAppearanceWarmupAddressScratch.Clear();
+    startupAppearanceWarmupSeenAddressScratch.Clear();
+
+    var maxAddresses = Mathf.Clamp(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 128, 768);
+    var addressCollectStartedAt = Time.realtimeSinceStartup;
+    var collectedCount = CollectStartupAppearanceAddresses(
+      startupAppearanceWarmupAddressScratch,
+      startupAppearanceWarmupSeenAddressScratch,
+      maxAddresses
+    );
+    while (collectedCount <= 0 &&
+           startupAppearanceWarmupAddressScratch.Count <= 0 &&
+           Time.realtimeSinceStartup - addressCollectStartedAt < StartupAppearanceAddressCollectionTimeoutSeconds) {
+      yield return null;
+      collectedCount = CollectStartupAppearanceAddresses(
+        startupAppearanceWarmupAddressScratch,
+        startupAppearanceWarmupSeenAddressScratch,
+        maxAddresses
+      );
+    }
+
+    if (collectedCount <= 0 || startupAppearanceWarmupAddressScratch.Count <= 0) {
+      if (ShouldLogRuntimeInitDebug()) {
+        Debug.LogWarning(
+          "[GearController][StartupAppearanceWarmup] stage=skip_no_addresses" +
+          " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+          " object=" + gameObject.name +
+          " current_animation='" + (animationController != null ? animationController.CurrentAnimation : "") + "'" +
+          " default_animation='" + (defaultAnimation ?? "") + "'" +
+          " skin_objects=" + (SkinObjects != null ? SkinObjects.Length : 0) +
+          " gear_objects=" + (GearObjects != null ? GearObjects.Length : 0) +
+          " elapsed_ms=" + ((Time.realtimeSinceStartup - addressCollectStartedAt) * 1000f).ToString("0.0")
+        );
+      }
+      startupAppearanceWarmupAddressScratch.Clear();
+      startupAppearanceWarmupSeenAddressScratch.Clear();
+      startupAppearanceWarmupRoutine = null;
+      yield break;
+    }
+
+    var loadingOverlayActive = SpriteStreamingLoadingState.IsLoadingOverlayActive;
+    var overlayWarmGateManaged = loadingOverlayActive &&
+                                 StreamingWarmOrchestrator.IsWarmGateRunning;
+    var loadPriority = loadingOverlayActive
+      ? TextureResidencyCache.LoadPriority.Warmup
+      : TextureResidencyCache.LoadPriority.Immediate;
+    var enqueueBudget = pauseUntilReady ? 192 : 128;
+    var waitTimeoutSeconds = loadingOverlayActive
+      ? 1.5f
+      : (pauseUntilReady ? 0.75f : 0.25f);
+    var pausedAnimation = false;
+    var startedAt = Time.realtimeSinceStartup;
+
+    if (pauseUntilReady && animationController != null && animationController.IsPlaying) {
+      animationController.PauseAnimation();
+      startupAppearanceWarmupPausedAnimation = true;
+      pausedAnimation = true;
+    }
+
+    TextureResidencyCache.UpdateOwnerPins(
+      startupAppearanceWarmOwnerId,
+      TextureResidencyCache.PinClass.Player,
+      startupAppearanceWarmupAddressScratch,
+      loadPriority
+    );
+    yield return TextureResidencyCache.RequestLoadBatchThrottled(
+      startupAppearanceWarmupAddressScratch,
+      loadPriority,
+      allowAtlasExpansion: true,
+      enqueueBudgetPerFrame: enqueueBudget,
+      warmGateManaged: overlayWarmGateManaged
+    );
+    TrimmedSpriteOffsetResolver.PrimeMetadataBatch(
+      startupAppearanceWarmupAddressScratch,
+      allowImmediateEditorLoad: ShouldAllowImmediateStartupTrimmedMetadataLoad(pauseUntilReady)
+    );
+
+    var readyCount = CountReadyStartupAppearanceAddresses();
+    while (readyCount < startupAppearanceWarmupAddressScratch.Count &&
+           Time.realtimeSinceStartup - startedAt < waitTimeoutSeconds) {
+      yield return null;
+      readyCount = CountReadyStartupAppearanceAddresses();
+    }
+
+    if (pausedAnimation) {
+      animationController.ResumeAnimation();
+      startupAppearanceWarmupPausedAnimation = false;
+    }
+
+    if (string.Equals(source, "load_gear", StringComparison.OrdinalIgnoreCase)) {
+      equippedStartupWarmupCompleted = true;
+      TryStartPendingEquipWarmup("startup_warmup_complete");
+    }
+
+    if (ShouldLogRuntimeInitDebug()) {
+      Debug.Log(
+        "[GearController][StartupAppearanceWarmup]" +
+        " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
+        " object=" + gameObject.name +
+        " addresses=" + startupAppearanceWarmupAddressScratch.Count +
+        " ready=" + readyCount + "/" + startupAppearanceWarmupAddressScratch.Count +
+        " priority=" + loadPriority +
+        " paused=" + (pausedAnimation ? 1 : 0) +
+        " elapsed_ms=" + ((Time.realtimeSinceStartup - startedAt) * 1000f).ToString("0.0")
+      );
+    }
+
+    TextureResidencyCache.ReleaseOwnerPins(startupAppearanceWarmOwnerId);
+    startupAppearanceWarmupAddressScratch.Clear();
+    startupAppearanceWarmupSeenAddressScratch.Clear();
+    startupAppearanceWarmupRoutine = null;
+  }
+
+  int CollectStartupAppearanceAddresses(
+    List<string> outAddresses,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null || maxUniqueAddresses <= 0) {
+      return 0;
+    }
+
+    if (!TryResolveStartupAnimationWindow(out var category, out var startFrame, out var endFrame)) {
+      return 0;
+    }
+
+    var startingCount = outAddresses.Count;
+    CollectStartupAppearanceAddresses(
+      SkinObjects,
+      category,
+      startFrame,
+      endFrame,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
+    CollectStartupAppearanceAddresses(
+      GearObjects,
+      category,
+      startFrame,
+      endFrame,
+      outAddresses,
+      seenAddresses,
+      maxUniqueAddresses
+    );
+    return Mathf.Max(outAddresses.Count - startingCount, 0);
+  }
+
+  bool TryResolveStartupAnimationWindow(out string category, out int startFrame, out int endFrame) {
+    category = "";
+    startFrame = 1;
+    endFrame = 1;
+
+    if (!TryResolveStartupAnimationData(out var animationName, out var animationData)) {
+      return false;
+    }
+
+    category = ResolveEsperanzaAnimationCategory(animationName, animationData);
+    if (string.IsNullOrWhiteSpace(category)) {
+      return false;
+    }
+
+    startFrame = Mathf.Max(animationData.start, 1);
+    var warmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
+    endFrame = Mathf.Max(startFrame, Mathf.Min(Mathf.Max(animationData.end, startFrame), startFrame + warmFrames - 1));
+    return true;
+  }
+
+  bool TryResolveStartupAnimationData(out string animationName, out AnimData animationData) {
+    animationName = animationController != null && !string.IsNullOrWhiteSpace(animationController.CurrentAnimation)
+      ? animationController.CurrentAnimation.Trim()
+      : (string.IsNullOrWhiteSpace(defaultAnimation) ? "" : defaultAnimation.Trim());
+    if (!string.IsNullOrWhiteSpace(animationName) &&
+        Animations.Esperanza.TryGetValue(animationName, out animationData) &&
+        animationData != null) {
+      return true;
+    }
+
+    foreach (var pair in Animations.Esperanza) {
+      if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value == null) {
+        continue;
+      }
+
+      animationName = pair.Key;
+      animationData = pair.Value;
+      return true;
+    }
+
+    animationData = null;
+    animationName = "";
+    return false;
+  }
+
+  void CollectStartupAppearanceAddresses(
+    GameObject[] objects,
+    string category,
+    int startFrame,
+    int endFrame,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses
+  ) {
+    if (objects == null || objects.Length == 0 || outAddresses == null || maxUniqueAddresses <= 0) {
+      return;
+    }
+
+    for (var i = 0; i < objects.Length; i++) {
+      if (outAddresses.Count >= maxUniqueAddresses) {
+        return;
+      }
+
+      var go = objects[i];
+      if (go == null) continue;
+      var target = go.GetComponent<SpriteWithNormals>();
+      if (target == null || target.DoNotRender) continue;
+      target.CollectAnimationWindowAddresses(
+        category,
+        startFrame,
+        endFrame,
+        0,
+        outAddresses,
+        seenAddresses,
+        maxUniqueAddresses
+      );
+    }
+  }
+
+  int CountReadyStartupAppearanceAddresses() {
+    var readyCount = 0;
+    for (var i = 0; i < startupAppearanceWarmupAddressScratch.Count; i++) {
+      var address = startupAppearanceWarmupAddressScratch[i];
+      if (!TextureResidencyCache.IsReady(address, pump: true)) {
+        continue;
+      }
+
+      if (!TrimmedSpriteOffsetResolver.IsReady(address, pump: true)) {
+        continue;
+      }
+
+      readyCount += 1;
+    }
+
+    return readyCount;
+  }
+
+  static bool ShouldAllowImmediateStartupTrimmedMetadataLoad(bool pauseUntilReady) {
+#if UNITY_EDITOR
+    if (!Application.isEditor || !Application.isPlaying) return false;
+    return true;
+#else
+    return false;
+#endif
+  }
+
   void CollectPersistentEffectStartupAddresses(
     Dictionary<string, EffectData> effects,
     IReadOnlyList<string> effectKeys,
@@ -466,6 +894,7 @@ public class GearController : MonoBehaviour {
     EquippedItems.EnsureKnownForms();
     GetSavedGearState();
     RefreshGear();
+    QueueStartupAppearanceWarmup("load_gear", pauseUntilReady: !equippedStartupWarmupCompleted);
     PrimeEquippedAnimationStartsIfLoading();
     PrimeCoreCombatEffectWarmup("load_gear");
     MessageBus.Send("gearReady");
@@ -477,6 +906,7 @@ public class GearController : MonoBehaviour {
       Selection.activeObject = null;
     }
 #endif
+    StopStartupAppearanceWarmup();
     StopEquipWarmupQueue();
     ReleaseCoreCombatEffectWarmupPins();
     animationController?.Cleanup(!Application.isPlaying);
@@ -486,6 +916,7 @@ public class GearController : MonoBehaviour {
   }
 
   void OnDisable() {
+    StopStartupAppearanceWarmup();
     StopEquipWarmupQueue();
     effectResetToEmptyPending = false;
     animationController?.Cleanup(false);
@@ -715,12 +1146,14 @@ public class GearController : MonoBehaviour {
     pendingEquipWarmupPartPrefixes = equippedPartPrefixes != null
       ? new Dictionary<string, string>(equippedPartPrefixes, StringComparer.OrdinalIgnoreCase)
       : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (!equippedStartupWarmupCompleted) return;
     TryStartPendingEquipWarmup("queue_request");
   }
 
   void TryStartPendingEquipWarmup(string source) {
     if (!Application.isPlaying || !queueEquippedAnimationWarmup) return;
     if (pendingEquipWarmupPartPrefixes == null) return;
+    if (!equippedStartupWarmupCompleted && startupAppearanceWarmupRoutine != null) return;
     if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
       Debug.Log(
         "[GearController] DeferredEquipWarmup" +

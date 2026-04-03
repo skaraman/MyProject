@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [CreateAssetMenu(fileName = "ActiveContentRegistry", menuName = "Content Packs/Active Content Registry")]
 public sealed class ActiveContentRegistry : ScriptableObject {
@@ -257,6 +260,9 @@ public sealed class ActiveContentRegistry : ScriptableObject {
 public static class ActiveContentRegistryRuntime {
   const string ResourcePath = "ActiveContentRegistry";
   const string CoreStageRootAssetPath = "Assets/ContentStage/Core";
+  const string FormsStageRootAssetPath = "Assets/ContentStage/Forms";
+  const string GearsStageRootAssetPath = "Assets/ContentStage/Gears";
+  const string SlicesStageRootAssetPath = "Assets/ContentStage/Slices";
   static bool loaded;
   static ActiveContentRegistry registry;
   static int reloadVersion;
@@ -340,11 +346,95 @@ public static class ActiveContentRegistryRuntime {
     );
   }
 
+  public static string ResolveActiveContentAssetPath(string assetPath) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath) || !HasActiveExternalContent()) {
+      return normalizedAssetPath;
+    }
+
+    if (!normalizedAssetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) {
+      return normalizedAssetPath;
+    }
+
+    if (IsAlreadyStagedAssetPath(normalizedAssetPath)) {
+      return normalizedAssetPath;
+    }
+
+    var relativePath = normalizedAssetPath.Substring("Assets/".Length);
+    var activePackIds = EnumerateRuntimeActivePackIds();
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var packId = NormalizeAssetPath(activePackIds[i]);
+      if (string.IsNullOrWhiteSpace(packId) || string.Equals(packId, "Core", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      var stagedPath = BuildStageAssetPathForPack(packId, relativePath);
+      if (AssetExistsAtPath(stagedPath)) {
+        return stagedPath;
+      }
+    }
+
+    return ResolveCoreAssetPath(normalizedAssetPath);
+  }
+
+  static List<string> EnumerateRuntimeActivePackIds() {
+    var result = new List<string>();
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    var registryInstance = Registry;
+    var registryPackIds = registryInstance != null ? registryInstance.ActivePackIds : Array.Empty<string>();
+    for (var i = 0; i < registryPackIds.Count; i++) {
+      var normalized = NormalizeAssetPath(registryPackIds[i]);
+      if (string.IsNullOrWhiteSpace(normalized) || !seen.Add(normalized)) {
+        continue;
+      }
+
+      result.Add(normalized);
+    }
+
+    return result;
+  }
+
   static ActiveContentRegistry LoadRegistry() {
     if (loaded) return registry;
     loaded = true;
     registry = Resources.Load<ActiveContentRegistry>(ResourcePath);
     return registry;
+  }
+
+  static bool IsAlreadyStagedAssetPath(string assetPath) {
+    return string.Equals(assetPath, CoreStageRootAssetPath, StringComparison.OrdinalIgnoreCase) ||
+           assetPath.StartsWith(CoreStageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(assetPath, FormsStageRootAssetPath, StringComparison.OrdinalIgnoreCase) ||
+           assetPath.StartsWith(FormsStageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(assetPath, GearsStageRootAssetPath, StringComparison.OrdinalIgnoreCase) ||
+           assetPath.StartsWith(GearsStageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(assetPath, SlicesStageRootAssetPath, StringComparison.OrdinalIgnoreCase) ||
+           assetPath.StartsWith(SlicesStageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static string BuildStageAssetPathForPack(string packId, string relativePath) {
+    if (string.IsNullOrWhiteSpace(packId) || string.IsNullOrWhiteSpace(relativePath)) return "";
+    if (string.Equals(packId, "Core", StringComparison.OrdinalIgnoreCase)) {
+      return NormalizeAssetPath(CoreStageRootAssetPath + "/" + relativePath);
+    }
+
+    var stageRoot = packId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase)
+      ? FormsStageRootAssetPath + "/" + packId
+      : packId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)
+        ? GearsStageRootAssetPath + "/" + packId
+        : SlicesStageRootAssetPath + "/" + packId;
+    return NormalizeAssetPath(stageRoot + "/" + relativePath);
+  }
+
+  static bool AssetExistsAtPath(string assetPath) {
+    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+#if UNITY_EDITOR
+    return !string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(assetPath));
+#else
+    return false;
+#endif
   }
 
   static string NormalizeAssetPath(string assetPath) {

@@ -8,7 +8,6 @@ using UnityEditor.U2D.Sprites;
 using UnityEngine;
 
 public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
-  const string StandardMetadataKind = "standard";
   const string TrimmedMetadataKind = "trimmed";
   const string GroupedMetadataKind = "grouped";
   static bool pendingSpriteWithNormalsRefresh;
@@ -54,22 +53,6 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     public string name;
     public bool empty;
     public string sourceAtlasAssetPath;
-    public ImportPixelRect packedRect;
-  }
-
-  [Serializable]
-  sealed class StandardAtlasImportPayload {
-    public string metadataKind;
-    public string exportedAtlasAssetPath;
-    public float spritePixelsPerUnit;
-    public int spriteMeshType = -1;
-    public List<StandardSpriteImportPayload> sprites = new();
-  }
-
-  [Serializable]
-  sealed class StandardSpriteImportPayload {
-    public string name;
-    public bool empty;
     public ImportPixelRect packedRect;
   }
 
@@ -147,9 +130,11 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       }
 
       if (!deletedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
-      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(deletedAssetPath, ".png"));
-      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(deletedAssetPath, ".jpg"));
-      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(deletedAssetPath, ".jpeg"));
+      var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.ResolveRuntimeMetadataAssetPath(deletedAssetPath);
+      if (string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) continue;
+      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".png"));
+      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".jpg"));
+      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".jpeg"));
     }
   }
 
@@ -210,21 +195,12 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       return false;
     }
 
-    var metadataAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(Path.ChangeExtension(normalizedAtlasAssetPath, ".json"));
-    var metadataFullPath = Path.GetFullPath(metadataAssetPath);
-    if (!File.Exists(metadataFullPath)) return false;
+    var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.BuildRuntimeMetadataAssetPath(normalizedAtlasAssetPath);
+    if (string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) return false;
 
-    string json;
-    try {
-      json = File.ReadAllText(metadataFullPath);
-    }
-    catch {
-      return false;
-    }
-
-    return TryBuildTrimmedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition) ||
-           TryBuildGroupedImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition) ||
-           TryBuildStandardImportDefinition(normalizedAtlasAssetPath, metadataAssetPath, json, out definition);
+    var editorMetadataAssetPath = TrimmedAtlasExporterWindow.BuildEditorMetadataAssetPath(normalizedAtlasAssetPath);
+    return TryBuildImportDefinitionFromMetadataJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, editorMetadataAssetPath, out definition) ||
+           TryBuildImportDefinitionFromMetadataJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, runtimeMetadataAssetPath, out definition);
   }
 
   static bool TryBuildImportDefinitionForMetadataAsset(string metadataAssetPath, out GeneratedAtlasImportDefinition definition) {
@@ -234,14 +210,46 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       return false;
     }
 
-    var pngAtlasAssetPath = Path.ChangeExtension(metadataAssetPath, ".png");
+    var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.ResolveRuntimeMetadataAssetPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) return false;
+
+    var pngAtlasAssetPath = Path.ChangeExtension(runtimeMetadataAssetPath, ".png");
     if (TryBuildImportDefinition(pngAtlasAssetPath, out definition)) return true;
 
-    var jpgAtlasAssetPath = Path.ChangeExtension(metadataAssetPath, ".jpg");
+    var jpgAtlasAssetPath = Path.ChangeExtension(runtimeMetadataAssetPath, ".jpg");
     if (TryBuildImportDefinition(jpgAtlasAssetPath, out definition)) return true;
 
-    var jpegAtlasAssetPath = Path.ChangeExtension(metadataAssetPath, ".jpeg");
+    var jpegAtlasAssetPath = Path.ChangeExtension(runtimeMetadataAssetPath, ".jpeg");
     return TryBuildImportDefinition(jpegAtlasAssetPath, out definition);
+  }
+
+  static bool TryBuildImportDefinitionFromMetadataJson(
+    string atlasAssetPath,
+    string runtimeMetadataAssetPath,
+    string metadataReadAssetPath,
+    out GeneratedAtlasImportDefinition definition) {
+    definition = null;
+    if (!TryReadMetadataJson(metadataReadAssetPath, out var json)) return false;
+
+    return TryBuildTrimmedImportDefinition(atlasAssetPath, runtimeMetadataAssetPath, json, out definition) ||
+           TryBuildGroupedImportDefinition(atlasAssetPath, runtimeMetadataAssetPath, json, out definition);
+  }
+
+  static bool TryReadMetadataJson(string metadataAssetPath, out string json) {
+    json = "";
+    var normalizedMetadataAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return false;
+
+    var metadataFullPath = Path.GetFullPath(normalizedMetadataAssetPath);
+    if (!File.Exists(metadataFullPath)) return false;
+
+    try {
+      json = File.ReadAllText(metadataFullPath);
+      return !string.IsNullOrWhiteSpace(json);
+    }
+    catch {
+      return false;
+    }
   }
 
   static bool IsSupportedGeneratedAtlasTextureAssetPath(string assetPath) {
@@ -370,36 +378,6 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
 
     BuildSpriteMetadata(payload.sprites, definition.sprites);
     return !definition.sliceAtlas || definition.sprites.Count > 0;
-  }
-
-  static bool TryBuildStandardImportDefinition(string atlasAssetPath, string metadataAssetPath, string json, out GeneratedAtlasImportDefinition definition) {
-    definition = null;
-    if (string.IsNullOrWhiteSpace(json)) return false;
-    if (!GeneratedAtlasBuildSurrogateUtility.ShouldImportGroupedAtlasAsSingleSprite(atlasAssetPath)) return false;
-
-    StandardAtlasImportPayload payload;
-    try {
-      payload = JsonUtility.FromJson<StandardAtlasImportPayload>(json);
-    }
-    catch {
-      return false;
-    }
-
-    if (payload == null || payload.sprites == null) return false;
-    if (!string.Equals(payload.metadataKind, StandardMetadataKind, StringComparison.OrdinalIgnoreCase)) {
-      return false;
-    }
-
-    definition = new GeneratedAtlasImportDefinition {
-      atlasAssetPath = atlasAssetPath,
-      metadataAssetPath = metadataAssetPath,
-      sourceAtlasAssetPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(payload.exportedAtlasAssetPath),
-      sliceAtlas = false,
-      spritePixelsPerUnit = payload.spritePixelsPerUnit,
-      spriteMeshType = payload.spriteMeshType,
-      hasImporterSnapshot = payload.spritePixelsPerUnit > 0f && payload.spriteMeshType >= 0
-    };
-    return true;
   }
 
   static string ResolveGroupedSourceAtlasAssetPath(GroupedAtlasImportPayload payload) {
