@@ -230,12 +230,12 @@ public static class SpriteIndexBuilder {
 
   [MenuItem("Tools/Sprite Streaming/3) Build Active Content")]
   public static void BuildActiveContentMenu() {
-    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
+    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: false);
   }
 
   [MenuItem("Tools/Sprite Streaming/Advanced/Build Active Content (Clean)")]
   public static void BuildActiveContentCleanMenu() {
-    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
+    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: false);
   }
 
   [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Runtime Index")]
@@ -245,12 +245,12 @@ public static class SpriteIndexBuilder {
 
   [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Index + Addressables")]
   public static void RebuildRuntimeIndexAndBuildAddressablesMenu() {
-    RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
+    RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: false);
   }
 
   [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Index + Addressables (Clean)")]
   public static void RebuildRuntimeIndexAndBuildAddressablesCleanMenu() {
-    RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: true);
+    RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: false);
   }
 
   [MenuItem("Tools/Sprite Streaming/Advanced/Configure Addressables Defaults")]
@@ -266,7 +266,7 @@ public static class SpriteIndexBuilder {
 
   [MenuItem("Tools/Sprite Streaming/Advanced/Build Addressables Content")]
   public static void BuildAddressablesContentMenu() {
-    BuildAddressablesContent(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: true);
+    BuildAddressablesContent(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: false);
   }
 
   public static void RunEssentialPipelineSequentialMenu() {
@@ -301,7 +301,7 @@ public static class SpriteIndexBuilder {
         }
       }
       catch (Exception ex) {
-        Debug.LogError(stepLabel + " threw an exception. Aborting pipeline.\n" + ex);
+        Debug.LogError(stepLabel + " threw an exception. Aborting pipeline.\n" + ex.Message);
         aborted = true;
         return false;
       }
@@ -367,7 +367,7 @@ public static class SpriteIndexBuilder {
     return !aborted;
   }
 
-  public static bool RebuildRuntimeIndexAndBuildAddressables(bool logResult, bool cleanCachesBeforeBuild = false, bool useChunkedWarmup = true) {
+  public static bool RebuildRuntimeIndexAndBuildAddressables(bool logResult, bool cleanCachesBeforeBuild = false, bool useChunkedWarmup = false) {
     const string contextLabel = BuildContext.ManualAddressablesBuild;
     try {
       if (logResult) {
@@ -401,7 +401,7 @@ public static class SpriteIndexBuilder {
       return false;
     }
     catch (Exception ex) {
-      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Build failed with exception: " + ex);
+      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Build failed with exception: " + ex.Message);
       return false;
     }
     finally {
@@ -422,7 +422,7 @@ public static class SpriteIndexBuilder {
     string contextLabel,
     bool logResult,
     bool cleanCachesBeforeBuild,
-    bool useChunkedWarmup = true
+    bool useChunkedWarmup = false
   ) {
     var resolvedContextLabel = string.IsNullOrWhiteSpace(contextLabel) ? BuildContext.ManualAddressablesBuild : contextLabel.Trim();
     return BuildAddressablesContent(
@@ -437,7 +437,7 @@ public static class SpriteIndexBuilder {
     bool logResult,
     bool cleanCachesBeforeBuild,
     string contextLabel = BuildContext.ManualAddressablesBuild,
-    bool useChunkedWarmup = true
+    bool useChunkedWarmup = false
   ) {
     try {
       if (!EnsureEditorReadyForAddressablesBuild(contextLabel)) {
@@ -490,7 +490,7 @@ public static class SpriteIndexBuilder {
     }
     catch (Exception ex) {
       LogAddressablesBuildMemorySnapshot(contextLabel, "build_exception");
-      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Build failed with exception: " + ex);
+      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Build failed with exception: " + ex.Message);
       return false;
     }
   }
@@ -1067,14 +1067,19 @@ public static class SpriteIndexBuilder {
       changed = true;
     }
 
-    if (!settings.DisableVisibleSubAssetRepresentations) {
-      settings.DisableVisibleSubAssetRepresentations = true;
+    if (settings.DisableVisibleSubAssetRepresentations) {
+      settings.DisableVisibleSubAssetRepresentations = false;
+      changed = true;
+    }
+
+    if (settings.BuildAddressablesWithPlayerBuild != AddressableAssetSettings.PlayerBuildOption.DoNotBuildWithPlayer) {
+      settings.BuildAddressablesWithPlayerBuild = AddressableAssetSettings.PlayerBuildOption.DoNotBuildWithPlayer;
       changed = true;
     }
 
     if (!changed) {
       if (logResult) {
-        Debug.Log("[SpriteIndexBuilder] Addressables defaults already configured (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=True).");
+        Debug.Log("[SpriteIndexBuilder] Addressables defaults already configured (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=False, BuildAddressablesWithPlayer=False).");
       }
       return;
     }
@@ -1082,7 +1087,7 @@ public static class SpriteIndexBuilder {
     EditorUtility.SetDirty(settings);
     AssetDatabase.SaveAssets();
     if (logResult) {
-      Debug.Log("[SpriteIndexBuilder] Addressables defaults updated (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=True).");
+      Debug.Log("[SpriteIndexBuilder] Addressables defaults updated (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=False, BuildAddressablesWithPlayer=False).");
     }
   }
 
@@ -1714,13 +1719,13 @@ public static class SpriteIndexBuilder {
   static string ResolveSpriteAddress(BuildState state, SpriteRef spriteRef, string context, bool recordError = true) {
     if (string.IsNullOrWhiteSpace(spriteRef.guid)) {
       if (recordError) {
-        state.errors.Add("Missing GUID while resolving " + context + ".");
+        state.errors.Add("Missing GUID while resolving .");
       }
       return "";
     }
 
     if (!state.addressCacheByGuid.TryGetValue(spriteRef.guid, out var byFileId)) {
-      Debug.Log($"[SpriteIndexBuilder] ResolveSpriteAddress: Caching address map for GUID {spriteRef.guid} (Context: {context})");
+      Debug.Log($"[SpriteIndexBuilder] ResolveSpriteAddress: Caching address map for GUID {spriteRef.guid} )");
       byFileId = BuildAddressMapForGuid(state, spriteRef.guid, recordError);
       if (recordError || byFileId.Count > 0) {
         state.addressCacheByGuid[spriteRef.guid] = byFileId;
@@ -1743,7 +1748,7 @@ public static class SpriteIndexBuilder {
     if (!string.IsNullOrWhiteSpace(fallbackAddress)) return fallbackAddress;
 
     if (recordError) {
-      state.errors.Add("Could not resolve sprite fileID '" + spriteRef.fileId + "' for GUID '" + spriteRef.guid + "' (" + context + ").");
+      state.errors.Add("Could not resolve sprite fileID '" + spriteRef.fileId + "' for GUID '" + spriteRef.guid + "'.");
     }
     return "";
   }

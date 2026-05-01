@@ -443,8 +443,8 @@ public class SpriteWithNormals : MonoBehaviour {
       var colorWarmupAddress = ResolveWarmupAddress(pair.colorAddress, pair.RuntimeColorAddress);
       var priority = TextureResidencyCache.LoadPriority.Warmup;
       PrimeTrimmedMetadataWarmup(colorWarmupAddress);
-      WarmupAddress(pair.RuntimeColorAddress, priority);
-      WarmupAddress(pair.RuntimeNormalAddress, priority);
+      WarmupAddress(pair.StreamingColorAddress, priority);
+      WarmupAddress(pair.StreamingNormalAddress, priority);
     }
   }
 
@@ -452,9 +452,13 @@ public class SpriteWithNormals : MonoBehaviour {
   // color is available but the normal map is still pending, providing a hint for
   // callers that may choose a gentler fallback.
   public bool IsFrameReady(int frame, out bool colorReadyOnly, string categoryOverride = null) {
+    return GetFrameColdLoadState(frame, out colorReadyOnly, categoryOverride).IsCommitReady();
+  }
+
+  public SpriteColdLoadState GetFrameColdLoadState(int frame, out bool colorReadyOnly, string categoryOverride = null) {
     colorReadyOnly = false;
-    if (!Application.isPlaying) return true;
-    if (!enabled || !gameObject.activeInHierarchy || doNotRender) return true;
+    if (!Application.isPlaying) return SpriteColdLoadState.Ready;
+    if (!enabled || !gameObject.activeInHierarchy || doNotRender) return SpriteColdLoadState.Ready;
 
     var lookupLibraryName = libraryName ?? "";
     var lookupLabelPrefix = labelPrefix ?? "";
@@ -462,21 +466,34 @@ public class SpriteWithNormals : MonoBehaviour {
     var lookupFrame = isAnimation ? Mathf.Max(frame, 1) : 0;
 
     var lookupKey = new SpriteLookupKey(lookupLibraryName, lookupLabelPrefix, lookupCategory, lookupFrame);
+    if (IsExplicitEmptyLookup(lookupKey)) {
+      return SpriteColdLoadState.ExplicitEmpty;
+    }
+
     if (!TryResolvePairCached(lookupKey, out var pair, out var pending)) {
-      if (pending) return false;
-      return true;
+      return pending ? SpriteColdLoadState.Pending : SpriteColdLoadState.Missing;
     }
     pair = StripUnavailableRuntimeNormalAddress(pair, lookupKey);
-    if (!pair.HasColor) return true;
-    var colorWarmupAddress = ResolveWarmupAddress(pair.colorAddress, pair.RuntimeColorAddress);
-    PrimeTrimmedMetadataWarmup(colorWarmupAddress);
-    var ready = TextureResidencyCache.IsReady(colorWarmupAddress, pump: false);
-    if (ready && !IsTrimmedMetadataReady(colorWarmupAddress)) return false;
-    if (ready && pair.HasNormal &&
-        !TextureResidencyCache.IsReady(ResolveWarmupAddress(pair.normalAddress, pair.RuntimeNormalAddress), pump: false)) {
+    if (!pair.HasColor) return SpriteColdLoadState.Missing;
+    var colorRequestAddress = ResolveWarmupAddress(pair.colorAddress, pair.StreamingColorAddress);
+    PrimeTrimmedMetadataWarmup(colorRequestAddress);
+    var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
+    if (!colorState.IsCommitReady()) return colorState;
+
+    var metadataState = GetTrimmedMetadataState(colorRequestAddress, requestIfNeeded: true);
+    if (!metadataState.IsCommitReady()) return metadataState;
+
+    if (pair.HasNormal &&
+        TextureResidencyCache.GetRequestState(ResolveWarmupAddress(pair.normalAddress, pair.StreamingNormalAddress), pump: false) == SpriteColdLoadState.Pending) {
       colorReadyOnly = true;
     }
-    return ready;
+    return SpriteColdLoadState.Ready;
+  }
+
+  bool IsExplicitEmptyLookup(SpriteLookupKey lookupKey) {
+    if (HasBlankCategoryAndLabelPrefix(lookupKey)) return true;
+    if (!isAnimation && string.IsNullOrWhiteSpace(lookupKey.labelPrefix)) return true;
+    return string.Equals((lookupKey.labelPrefix ?? "").Trim(), "Empty", StringComparison.OrdinalIgnoreCase);
   }
 
   public bool TryGetFrameAddressPair(int frame, out SpriteAddressPair pair, string categoryOverride = null) {
@@ -813,9 +830,9 @@ public class SpriteWithNormals : MonoBehaviour {
 
     var colorPriority = ResolveActiveFrameLoadPriority();
 
-    var colorLease = TextureResidencyCache.AcquireAsync(pair.RuntimeColorAddress, colorPriority);
+    var colorLease = TextureResidencyCache.AcquireAsync(pair.StreamingColorAddress, colorPriority);
     if (colorLease == null) {
-      Debug.LogError($"[SpriteWithNormals] Failed to request color atlas '{pair.RuntimeColorAddress}' on {gameObject.name}");
+      Debug.LogError($"[SpriteWithNormals] Failed to request color atlas '{pair.StreamingColorAddress}' on {gameObject.name}");
       _pendingColorAddress = _pendingNormalAddress = "";
       _pendingColorSliceAddress = _pendingNormalSliceAddress = "";
       TryStartDeferredRequest();
@@ -825,13 +842,13 @@ public class SpriteWithNormals : MonoBehaviour {
 
     // Color drives visual frame readiness; keep normal map on warmup priority to reduce queue pressure.
     var normalPriority = TextureResidencyCache.LoadPriority.Warmup;
-    var normalLease = string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)
+    var normalLease = string.IsNullOrWhiteSpace(pair.StreamingNormalAddress)
       ? null
-      : TextureResidencyCache.AcquireAsync(pair.RuntimeNormalAddress, normalPriority);
+      : TextureResidencyCache.AcquireAsync(pair.StreamingNormalAddress, normalPriority);
 
-    if (!string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress) && normalLease == null)
-      Debug.LogError($"[SpriteWithNormals] Failed to request normal atlas '{pair.RuntimeNormalAddress}' on {gameObject.name}");
-    else if (!string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress))
+    if (!string.IsNullOrWhiteSpace(pair.StreamingNormalAddress) && normalLease == null)
+      Debug.LogError($"[SpriteWithNormals] Failed to request normal atlas '{pair.StreamingNormalAddress}' on {gameObject.name}");
+    else if (!string.IsNullOrWhiteSpace(pair.StreamingNormalAddress))
       LogSpriteFetch("load_requested_normal", "priority=" + normalPriority + " is_done=" + (normalLease != null && normalLease.IsDone ? 1 : 0));
 
     _pendingColorLease = colorLease;
@@ -839,7 +856,7 @@ public class SpriteWithNormals : MonoBehaviour {
     var requestVersion = ++_requestVersion;
     if (colorLease.IsDone) {
       if (ShouldWaitForPendingSpriteMapSupplement(colorLease, pair.colorAddress, normalLease, pair.normalAddress)) {
-        LogSpriteFetch("load_wait_editor_supplement", "request_version=" + requestVersion);
+        LogSpriteFetch("load_wait_sprite_supplement", "request_version=" + requestVersion);
         BeginPendingLoadRequest(requestVersion, pair);
         return;
       }
@@ -865,6 +882,20 @@ public class SpriteWithNormals : MonoBehaviour {
       LogSpriteFetch("use_lookup_miss_color", "address='" + (pair.colorAddress ?? "") + "' source='local+global'");
       return false;
     }
+
+    var colorRequestAddress = ResolveWarmupAddress(pair.colorAddress, pair.StreamingColorAddress);
+    var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
+    if (!colorState.IsCommitReady()) {
+      LogSpriteFetch("use_lookup_pending_color", "address='" + (colorRequestAddress ?? "") + "' state='" + colorState + "'");
+      return false;
+    }
+
+    var metadataState = GetTrimmedMetadataState(colorRequestAddress, requestIfNeeded: true);
+    if (!metadataState.IsCommitReady()) {
+      LogSpriteFetch("use_lookup_pending_metadata", "address='" + (colorRequestAddress ?? "") + "' state='" + metadataState + "'");
+      return false;
+    }
+
     LogSpriteFetch(
       "use_lookup_hit_color",
       "address='" + (pair.colorAddress ?? "") + "' sprite='" + colorSprite.name + "' source='" + sourceTag + "'"
@@ -931,6 +962,7 @@ public class SpriteWithNormals : MonoBehaviour {
 
     var colorSliceAddress = string.IsNullOrWhiteSpace(_targetColorSliceAddress) ? pair.colorAddress : _targetColorSliceAddress;
     var normalSliceAddress = string.IsNullOrWhiteSpace(_targetNormalSliceAddress) ? pair.normalAddress : _targetNormalSliceAddress;
+    var colorRequestAddress = ResolveWarmupAddress(colorSliceAddress, pair.StreamingColorAddress);
     var allowBlockingEditorSliceFallbackNow = allowBlockingEditorSliceFallback;
 #if UNITY_EDITOR
     if (!allowBlockingEditorSliceFallbackNow &&
@@ -946,21 +978,33 @@ public class SpriteWithNormals : MonoBehaviour {
     colorSprite ??= TryResolveEditorSliceFallback(colorSliceAddress, "color", allowBlockingEditorSliceFallbackNow);
 #endif
     if (colorSprite == null) {
+      var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
+      if (colorState == SpriteColdLoadState.Pending) {
+        return;
+      }
+      if (ShouldWaitForPendingSpriteMapSupplement(colorLease, colorSliceAddress)) {
+        if (_pendingLoadRequestVersion != requestVersion) {
+          BeginPendingLoadRequest(requestVersion, pair);
+        }
+        LogSpriteFetch("complete_wait_sprite_supplement", "request_version=" + requestVersion);
+        return;
+      }
 #if UNITY_EDITOR
       if (TryKeepPendingSliceResolve(colorLease, colorSliceAddress, allowBlockingEditorSliceFallbackNow, "color")) {
         return;
       }
 #endif
-      ClearPendingState();
-      ClearRenderedSprites();
-      LogSpriteFetch("complete_color_missing", "address='" + (colorSliceAddress ?? "") + "'");
+      CompleteColorResolveFailure("complete_color_missing", colorSliceAddress, ref colorLease, ref normalLease);
       Debug.LogError($"[SpriteWithNormals] Failed to resolve color sprite '{colorSliceAddress}' on {gameObject.name}");
-      ReleaseLease(ref colorLease);
-      ReleaseLease(ref normalLease);
-      TryStartDeferredRequest();
       return;
     }
     colorSprite = ResolveExpectedSliceSprite(colorSprite, colorSliceAddress, "color");
+    if (colorSprite == null) {
+      var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
+      if (colorState == SpriteColdLoadState.Pending) return;
+      CompleteColorResolveFailure("complete_color_mismatch", colorSliceAddress, ref colorLease, ref normalLease);
+      return;
+    }
     CacheLocalLoadedSprite(colorSliceAddress, colorSprite);
 
     var normalSprite = ResolveLeaseSprite(normalLease, normalSliceAddress);
@@ -977,9 +1021,19 @@ public class SpriteWithNormals : MonoBehaviour {
 #endif
     }
     normalSprite = ResolveExpectedSliceSprite(normalSprite, normalSliceAddress, "normal");
+    if (normalSprite == null && !string.IsNullOrWhiteSpace(normalSliceAddress)) {
+      var normalRequestAddress = ResolveWarmupAddress(normalSliceAddress, pair.StreamingNormalAddress);
+      if (TextureResidencyCache.GetRequestState(normalRequestAddress, pump: false) == SpriteColdLoadState.Pending) return;
+    }
     if (normalSprite != null) CacheLocalLoadedSprite(normalSliceAddress, normalSprite);
     if (normalLease != null && normalLease.IsDone && normalSprite == null && !string.IsNullOrWhiteSpace(normalSliceAddress))
       Debug.LogError($"[SpriteWithNormals] Failed to resolve normal sprite '{normalSliceAddress}' on {gameObject.name}");
+
+    var metadataState = GetTrimmedMetadataState(colorRequestAddress, requestIfNeeded: true);
+    if (metadataState == SpriteColdLoadState.Pending) {
+      return;
+    }
+
     LogSpriteFetch(
       "complete_apply",
       "color='" + (colorSprite != null ? colorSprite.name : "") + "' normal='" + (normalSprite != null ? normalSprite.name : "") + "'"
@@ -1049,6 +1103,7 @@ public class SpriteWithNormals : MonoBehaviour {
     var colorSprite = ResolveLeaseSprite(colorLease, pair.colorAddress);
     if (colorSprite == null) return false;
     colorSprite = ResolveExpectedSliceSprite(colorSprite, pair.colorAddress, "color");
+    if (colorSprite == null) return false;
     CacheLocalLoadedSprite(pair.colorAddress, colorSprite);
 
     var normalSprite = ResolveLeaseSprite(normalLease, pair.normalAddress);
@@ -1087,8 +1142,8 @@ public class SpriteWithNormals : MonoBehaviour {
       }
       warmupPair = StripUnavailableRuntimeNormalAddress(warmupPair, warmupKey);
       if (!AddressEquals(warmupPair.RuntimeColorAddress, currentPair.RuntimeColorAddress) || !AddressEquals(warmupPair.RuntimeNormalAddress, currentPair.RuntimeNormalAddress)) {
-        WarmupAddress(warmupPair.RuntimeColorAddress, TextureResidencyCache.LoadPriority.Warmup);
-        WarmupAddress(warmupPair.RuntimeNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
+        WarmupAddress(warmupPair.StreamingColorAddress, TextureResidencyCache.LoadPriority.Warmup);
+        WarmupAddress(warmupPair.StreamingNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
       }
     }
   }
@@ -1167,6 +1222,29 @@ public class SpriteWithNormals : MonoBehaviour {
   void ClearRenderedSprites() {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     if (_renderer != null) ApplySprites(null, null, "");
+  }
+
+  void CompleteColorResolveFailure(
+    string reason,
+    string colorSliceAddress,
+    ref TextureResidencyCache.Lease colorLease,
+    ref TextureResidencyCache.Lease normalLease
+  ) {
+    var keepCurrent = HasRenderedSprite();
+    ClearPendingState();
+    if (!keepCurrent) ClearRenderedSprites();
+    LogSpriteFetch(
+      reason,
+      "address='" + (colorSliceAddress ?? "") + "' keep_current=" + (keepCurrent ? 1 : 0)
+    );
+    ReleaseLease(ref colorLease);
+    ReleaseLease(ref normalLease);
+    TryStartDeferredRequest();
+  }
+
+  bool HasRenderedSprite() {
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    return _renderer != null && _renderer.sprite != null;
   }
 
   Sprite ResolveRenderedSprite(Sprite sourceSprite, bool useNormalFill) {
@@ -1318,7 +1396,12 @@ public class SpriteWithNormals : MonoBehaviour {
       return;
     }
 
-    if (!TryResolveTrimmedOffsetLocalUnits(_appliedColorSliceAddress, colorSprite, out var offsetLocalUnits)) {
+    var metadataState = ResolveTrimmedOffsetState(_appliedColorSliceAddress, colorSprite, out var offsetLocalUnits);
+    if (metadataState == SpriteColdLoadState.Pending) {
+      return;
+    }
+
+    if (metadataState == SpriteColdLoadState.Missing) {
       ClearAppliedTrimmedOffset("offset_unresolved", _appliedColorSliceAddress);
       return;
     }
@@ -1326,18 +1409,24 @@ public class SpriteWithNormals : MonoBehaviour {
     ApplyTrimmedOffsetLocal(offsetLocalUnits, colorSprite, _appliedColorSliceAddress);
   }
 
-  bool TryResolveTrimmedOffsetLocalUnits(string colorSliceAddress, Sprite colorSprite, out Vector3 offsetLocalUnits) {
+  SpriteColdLoadState ResolveTrimmedOffsetState(string colorSliceAddress, Sprite colorSprite, out Vector3 offsetLocalUnits) {
     offsetLocalUnits = Vector3.zero;
-    if (colorSprite == null || string.IsNullOrWhiteSpace(colorSliceAddress)) return false;
+    if (colorSprite == null || string.IsNullOrWhiteSpace(colorSliceAddress)) return SpriteColdLoadState.Missing;
+    var metadataState = GetTrimmedMetadataState(colorSliceAddress, requestIfNeeded: true);
+    if (!metadataState.IsCommitReady()) return metadataState;
     var flipX = _renderer != null && _renderer.flipX;
     var flipY = _renderer != null && _renderer.flipY;
-    return TrimmedSpriteOffsetResolver.TryGetExactLocalOffset(
+    if (!TrimmedSpriteOffsetResolver.TryGetExactLocalOffset(
       colorSliceAddress,
       colorSprite,
       out offsetLocalUnits,
       flipX,
       flipY,
-      OnTrimmedOffsetMetadataReady);
+      OnTrimmedOffsetMetadataReady)) {
+      return SpriteColdLoadState.Missing;
+    }
+
+    return SpriteColdLoadState.Ready;
   }
 
   void ApplyTrimmedOffsetLocal(Vector3 offsetLocalUnits, Sprite colorSprite, string colorSliceAddress) {
@@ -1693,7 +1782,7 @@ public class SpriteWithNormals : MonoBehaviour {
         return true;
       }
       allowBlockingEditorSliceFallback = true;
-      LogSpriteFetch("load_editor_supplement_wait_timeout", "request_version=" + _pendingLoadRequestVersion);
+      LogSpriteFetch("load_sprite_supplement_wait_timeout", "request_version=" + _pendingLoadRequestVersion);
     }
 
     CompleteLoadedSprites(
@@ -1820,7 +1909,7 @@ public class SpriteWithNormals : MonoBehaviour {
     if (!useTrimmedAtlasOffset) return;
     if (string.IsNullOrWhiteSpace(colorAddress)) return;
     TrackTrimmedMetadataWarmupCandidate(colorAddress);
-    TrimmedSpriteOffsetResolver.IsReady(
+    TrimmedSpriteOffsetResolver.GetMetadataState(
       colorAddress,
       pump: false,
       requestIfNeeded: true,
@@ -1829,10 +1918,19 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
   bool IsTrimmedMetadataReady(string colorAddress) {
-    if (!useTrimmedAtlasOffset) return true;
-    if (string.IsNullOrWhiteSpace(colorAddress)) return true;
+    return GetTrimmedMetadataState(colorAddress).IsCommitReady();
+  }
+
+  SpriteColdLoadState GetTrimmedMetadataState(string colorAddress, bool requestIfNeeded = false) {
+    if (!useTrimmedAtlasOffset) return SpriteColdLoadState.Ready;
+    if (string.IsNullOrWhiteSpace(colorAddress)) return SpriteColdLoadState.Ready;
     TrackTrimmedMetadataWarmupCandidate(colorAddress);
-    return TrimmedSpriteOffsetResolver.IsReady(colorAddress, pump: false);
+    return TrimmedSpriteOffsetResolver.GetMetadataState(
+      colorAddress,
+      pump: false,
+      requestIfNeeded: requestIfNeeded,
+      allowImmediateEditorLoad: requestIfNeeded && ShouldAllowImmediateTrimmedMetadataWarmup()
+    );
   }
 
   static bool ShouldAllowImmediateTrimmedMetadataWarmup() {
@@ -1945,6 +2043,10 @@ public class SpriteWithNormals : MonoBehaviour {
 
     colorSprite = ResolveExpectedSliceSprite(colorSprite, pair.colorAddress, "color");
     normalSprite = ResolveExpectedSliceSprite(normalSprite, pair.normalAddress, "normal");
+    if (colorSprite == null) {
+      sourceTag = "slice_mismatch";
+      return false;
+    }
     sourceTag = ResolveCacheSourceTag(colorFromLocal, normalFromLocal, pair.normalAddress);
     return true;
   }
@@ -2225,7 +2327,8 @@ public class SpriteWithNormals : MonoBehaviour {
 #endif
 
     WarnSliceMismatchOnce(sliceAddress, channel, loadedSprite.name, expectedSpriteName, corrected: false);
-    return loadedSprite;
+    _localLoadedSpriteByAddress.Remove(sliceAddress ?? "");
+    return null;
   }
 
   void WarnSliceMismatchOnce(string sliceAddress, string channel, string loadedName, string expectedName, bool corrected) {

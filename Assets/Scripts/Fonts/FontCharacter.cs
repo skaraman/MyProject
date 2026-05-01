@@ -48,6 +48,7 @@ public class FontCharacter : MonoBehaviour {
   private MethodInfo setCategoryAndLabelMethod;
   bool canRenderCurrentGlyph = true;
   bool waitingForGlyphReadyRetry;
+  SpriteColdLoadState glyphLoadState = SpriteColdLoadState.Ready;
   public bool CanRenderCurrentGlyph => canRenderCurrentGlyph;
 
   void Reset() {
@@ -58,13 +59,14 @@ public class FontCharacter : MonoBehaviour {
     CancelInvoke(nameof(RetryUpdateSprite));
     waitingForGlyphReadyRetry = false;
     canRenderCurrentGlyph = true;
+    glyphLoadState = SpriteColdLoadState.Ready;
   }
 
   [ForceUpdate]
   public void UpdateSprite() {
     CacheDependencies();
     if (!TryGetGlyphLabel(out var label)) {
-      UpdateRenderReadiness(false);
+      UpdateRenderReadiness(SpriteColdLoadState.Missing);
       return;
     }
 
@@ -72,7 +74,7 @@ public class FontCharacter : MonoBehaviour {
     ApplySpriteWithNormals(label);
     ApplySpriteResolver(label);
     RestoreRendererState(rendererState);
-    UpdateRenderReadiness(IsGlyphReadyForDisplay());
+    UpdateRenderReadiness(ResolveGlyphColdLoadState());
   }
 
   bool TryGetGlyphLabel(out string label) {
@@ -170,35 +172,51 @@ public class FontCharacter : MonoBehaviour {
     setCategoryAndLabelMethod.Invoke(spriteResolver, new object[] { font, label });
   }
 
-  bool IsGlyphReadyForDisplay() {
+  SpriteColdLoadState ResolveGlyphColdLoadState() {
     if (spriteRenderer == null || spriteRenderer.sprite == null) {
-      return false;
+      return SpriteColdLoadState.Pending;
     }
 
     if (!Application.isPlaying || spriteWithNormals == null) {
-      return true;
+      return SpriteColdLoadState.Ready;
     }
 
-    return spriteWithNormals.IsFrameReady(0, out _);
+    return spriteWithNormals.GetFrameColdLoadState(0, out _);
   }
 
-  void UpdateRenderReadiness(bool glyphReady) {
-    var readinessChanged = canRenderCurrentGlyph != glyphReady;
-    canRenderCurrentGlyph = glyphReady;
+  void UpdateRenderReadiness(SpriteColdLoadState nextState) {
+    var previousState = glyphLoadState;
+    glyphLoadState = nextState;
+    var glyphReady = nextState.IsCommitReady();
+    var canKeepVisibleWhilePending =
+      nextState == SpriteColdLoadState.Pending &&
+      spriteRenderer != null &&
+      spriteRenderer.sprite != null;
+    var nextCanRender = glyphReady || canKeepVisibleWhilePending;
+    var readinessChanged = canRenderCurrentGlyph != nextCanRender;
+    var glyphBecameReady = !previousState.IsCommitReady() && glyphReady;
+    canRenderCurrentGlyph = nextCanRender;
 
-    if (glyphReady) {
+    if (nextState == SpriteColdLoadState.Pending) {
+      QueueGlyphReadyRetry();
+    }
+    else if (glyphReady) {
       CancelInvoke(nameof(RetryUpdateSprite));
       waitingForGlyphReadyRetry = false;
     }
     else {
-      QueueGlyphReadyRetry();
+      CancelInvoke(nameof(RetryUpdateSprite));
+      waitingForGlyphReadyRetry = false;
     }
 
-    if (!readinessChanged) {
+    if (!readinessChanged && !glyphBecameReady) {
       return;
     }
 
     if (parentFontText != null) {
+      if (glyphBecameReady) {
+        parentFontText.NotifyGlyphMetricsReady();
+      }
       parentFontText.RefreshGlyphVisibility();
     }
   }

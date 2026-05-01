@@ -358,3 +358,13 @@ The working test for a valid episode pack is:
 - "These enemies should be globally available, those others should be slice-local."
 - "Audit the active packs after my content move and tell me what still depends on the full project tree."
 - "I changed the warm profiles and location prefab. Read the log and retune the pipeline."
+
+
+<!-- 1. Fix ContentPackPipeline.cs (The Source)
+In your loading/content pipeline, you must ensure that the pendingWarmGateRuntimeLoadQueue is not just populated, but actually drained and resolved before the gameplay scene is considered "Loaded." You need a completion callback from the Addressables handles in pendingLoads that triggers a final Pump() call.
+
+2. Implement a "Loading" state in FontText (The Consumer)
+Modify your FontText or SpriteWithNormals script to check if its required address is still in the pendingLoads or pendingWarmGateRuntimeLoadQueue. If it is, the component should remain invisible or show a placeholder until the resolver reports IsCommitReady().
+
+3. Check PumpDeferredRuntimeLoads implementation
+You should look at the code inside PumpDeferredRuntimeLoads. It needs to be robust enough to handle the case where an Addressable load is still Incomplete. If it's just checking if a handle exists rather than checking .IsDone, you'll get exactly this "partial rendering" behavior. -->

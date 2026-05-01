@@ -69,6 +69,13 @@ public static class TrimmedSpriteOffsetResolver {
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
     return pendingLoads.ContainsKey(atlasAssetPath) || pendingLocationChecks.ContainsKey(atlasAssetPath);
   }
+  /// <summary>
+  /// Returns true when both the warm gate queue and all async Addressables operations are drained.
+  /// Use this to verify the loading pipeline is fully idle before signaling "Loaded" state.
+  /// </summary>
+  public static bool IsWarmGateLoadIdle() {
+    return pendingWarmGateRuntimeLoadQueue.Count <= 0 && pendingLoads.Count <= 0 && pendingLocationChecks.Count <= 0;
+}
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
@@ -212,17 +219,34 @@ public static class TrimmedSpriteOffsetResolver {
     bool requestIfNeeded = false,
     bool allowImmediateEditorLoad = false
   ) {
-    if (!TryResolveWarmupOptionalOffsetCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) return true;
+    return GetMetadataState(atlasOrSliceAddress, pump, requestIfNeeded, allowImmediateEditorLoad).IsCommitReady();
+  }
+
+  public static SpriteColdLoadState GetMetadataState(
+    string atlasOrSliceAddress,
+    bool pump = false,
+    bool requestIfNeeded = false,
+    bool allowImmediateEditorLoad = false
+  ) {
+    if (!TryResolveWarmupOptionalOffsetCandidateAtlasPath(atlasOrSliceAddress, out var atlasAssetPath)) {
+      return SpriteColdLoadState.Ready;
+    }
 
     if (requestIfNeeded) {
       warmupEligibleAtlasPaths.Add(atlasAssetPath);
     }
     else if (!warmupEligibleAtlasPaths.Contains(atlasAssetPath)) {
-      return true;
+      return SpriteColdLoadState.Ready;
     }
 
-    if (loadedAtlasOffsets.ContainsKey(atlasAssetPath) || missingAtlasOffsets.Contains(atlasAssetPath)) {
-      return true;
+    if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) {
+      return SpriteColdLoadState.Ready;
+    }
+
+    if (missingAtlasOffsets.Contains(atlasAssetPath)) {
+      return SupportsWarmupOptionalOffsetMetadata(atlasAssetPath)
+        ? SpriteColdLoadState.Missing
+        : SpriteColdLoadState.Ready;
     }
 
     if (requestIfNeeded) {
@@ -233,7 +257,17 @@ public static class TrimmedSpriteOffsetResolver {
       PumpDeferredRuntimeLoads();
     }
 
-    return loadedAtlasOffsets.ContainsKey(atlasAssetPath) || missingAtlasOffsets.Contains(atlasAssetPath);
+    if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) {
+      return SpriteColdLoadState.Ready;
+    }
+
+    if (missingAtlasOffsets.Contains(atlasAssetPath)) {
+      return SupportsWarmupOptionalOffsetMetadata(atlasAssetPath)
+        ? SpriteColdLoadState.Missing
+        : SpriteColdLoadState.Ready;
+    }
+
+    return SpriteColdLoadState.Pending;
   }
 
   public static bool TryGetExactOffset(string sliceAddress, out Vector2 offsetPx, Action onReady = null) {
@@ -530,6 +564,10 @@ public static class TrimmedSpriteOffsetResolver {
       Addressables.Release(operation);
     }
 
+    // Completion callback triggers final pump cycle to drain any remaining queued items before Loaded state.
+    if (pendingLoads.Count <= 0 && pendingWarmGateRuntimeLoadQueue.Count > 0) {
+      PumpDeferredRuntimeLoads();
+    }
     NotifyPendingCallbacks(atlasAssetPath);
   }
 

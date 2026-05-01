@@ -4,6 +4,34 @@ using CustomInspector;
 using UnityEngine;
 
 public class FontText : MonoBehaviour {
+  readonly struct GlyphMetricCacheKey : IEquatable<GlyphMetricCacheKey> {
+    public readonly string font;
+    public readonly char character;
+
+    public GlyphMetricCacheKey(string font, char character) {
+      this.font = font ?? "";
+      this.character = character;
+    }
+
+    public bool Equals(GlyphMetricCacheKey other) {
+      return character == other.character &&
+             string.Equals(font, other.font, StringComparison.Ordinal);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is GlyphMetricCacheKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        return (StringComparer.Ordinal.GetHashCode(font ?? "") * 397) ^ character.GetHashCode();
+      }
+    }
+  }
+
+  static readonly Dictionary<GlyphMetricCacheKey, Vector2> glyphMetricsByFont = new();
+  static readonly Dictionary<string, float> glyphHeightByFont = new(StringComparer.Ordinal);
+
   public GameObject characterPrefab;
   [Button(nameof(Reset), label = "Reset Text", size = Size.small)]
   [Button(nameof(Generate), label = "Force Text", size = Size.small)]
@@ -42,6 +70,8 @@ public class FontText : MonoBehaviour {
   private string prevContent = "";
   private SpriteRenderer cachedHostRenderer;
   private ComponentPropagator cachedComponentPropagator;
+  private bool pendingRegenerate;
+  private bool isGenerating;
 
   void OnEnable() {
     if (characterPrefab == null) return;
@@ -49,7 +79,8 @@ public class FontText : MonoBehaviour {
   }
 
   void Update() {
-    if (content != prevContent) {
+    if (pendingRegenerate || content != prevContent) {
+      pendingRegenerate = false;
       prevContent = content;
       Generate();
     }
@@ -58,7 +89,13 @@ public class FontText : MonoBehaviour {
   [ForceUpdate]
   public void Generate() {
     if (characterPrefab == null) return;
+    if (isGenerating) {
+      pendingRegenerate = true;
+      return;
+    }
 
+    isGenerating = true;
+    try {
     CacheRuntimeReferences();
     Clear();
     width = 0;
@@ -95,6 +132,10 @@ public class FontText : MonoBehaviour {
     ApplyVisibleCharacterCountToGlyphs();
     prevContent = content;
     ForceGlyphPropagation();
+    }
+    finally {
+      isGenerating = false;
+    }
   }
 
   int ProcessSpaces(int startIndex) {
@@ -186,11 +227,14 @@ public class FontText : MonoBehaviour {
     fc.UpdateSprite();
 
     var sprite = sr.sprite;
-    if (sprite == null) return false;
+    if (sprite == null) {
+      return TryGetCachedGlyphMetrics(c, out charWidth, out charHeight);
+    }
 
     var scale = sr.transform.localScale;
     charWidth = Mathf.Abs(sprite.bounds.size.x * scale.x);
     charHeight = Mathf.Abs(sprite.bounds.size.y * scale.y);
+    CacheGlyphMetrics(c, charWidth, charHeight);
     return true;
   }
 
@@ -255,9 +299,8 @@ public class FontText : MonoBehaviour {
     var sr = obj.GetComponent<SpriteRenderer>();
     SyncGlyphRendererState(sr);
     if (!TryGetCharacterMetrics(fc, sr, c, out var charWidth, out var charHeight)) {
-      AddSpaceWidth(spaceWidth);
-      RecycleChar(obj);
-      return;
+      charWidth = ResolveFallbackGlyphWidth();
+      charHeight = ResolveFallbackGlyphHeight();
     }
 
     var advanceWidth = mono > 0 ? Mathf.Max(mono, charWidth) : charWidth;
@@ -337,6 +380,11 @@ public class FontText : MonoBehaviour {
     ApplyVisibleCharacterCountToGlyphs();
   }
 
+  public void NotifyGlyphMetricsReady() {
+    pendingRegenerate = true;
+    ApplyVisibleCharacterCountToGlyphs();
+  }
+
   void ApplyVisibleCharacterCountToGlyphs() {
     var revealAll = visibleContentCharacterCount < 0;
     for (var i = 0; i < activeCharRenderers.Count; i++) {
@@ -351,6 +399,44 @@ public class FontText : MonoBehaviour {
         glyphRenderer.enabled = shouldBeVisible;
       }
     }
+  }
+
+  void CacheGlyphMetrics(char character, float charWidth, float charHeight) {
+    if (charWidth > 0f) {
+      glyphMetricsByFont[new GlyphMetricCacheKey(font, character)] = new Vector2(charWidth, charHeight);
+    }
+
+    if (charHeight > 0f) {
+      glyphHeightByFont[font ?? ""] = Mathf.Max(ResolveFallbackGlyphHeight(), charHeight);
+    }
+  }
+
+  bool TryGetCachedGlyphMetrics(char character, out float charWidth, out float charHeight) {
+    if (glyphMetricsByFont.TryGetValue(new GlyphMetricCacheKey(font, character), out var metrics)) {
+      charWidth = metrics.x;
+      charHeight = metrics.y;
+      return charWidth > 0f;
+    }
+
+    charWidth = 0f;
+    charHeight = 0f;
+    return false;
+  }
+
+  float ResolveFallbackGlyphWidth() {
+    if (mono > 0f) {
+      return mono;
+    }
+
+    return Mathf.Max(spaceWidth, 0.5f);
+  }
+
+  float ResolveFallbackGlyphHeight() {
+    if (glyphHeightByFont.TryGetValue(font ?? "", out var cachedHeight) && cachedHeight > 0f) {
+      return cachedHeight;
+    }
+
+    return 0f;
   }
 
   void DoAlign() {

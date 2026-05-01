@@ -5,6 +5,7 @@ using UnityEngine;
 
 public class LocationManager : MonoBehaviour {
   const float OverlayLocationResolverBarrierTimeoutSeconds = 8.0f;
+  const float ActivationCapacityWaitTimeoutSeconds = 2.0f;
   const float ActivationWaitStateLogIntervalSeconds = 5.0f;
   const int ProtectedOverlayActivationMaxOutstandingDesktop = 24;
   const int ProtectedOverlayActivationMaxOutstandingMobile = 16;
@@ -122,6 +123,7 @@ public class LocationManager : MonoBehaviour {
   }
 
   public bool LoadLocation(string requestedLocationId, bool updateTrackerIfDifferent = true) {
+    var requestStartedAt = Time.realtimeSinceStartup;
     var resolvedId = LocationEnemyData.ResolveRequestedOrDefault(requestedLocationId);
     if (!LocationEnemyData.TryGetLocation(resolvedId, out var info) || info == null) {
       Debug.LogWarning("[LocationManager] Unable to resolve location '" + requestedLocationId + "'.");
@@ -164,7 +166,7 @@ public class LocationManager : MonoBehaviour {
       );
     }
 
-    ApplyLocationPrefab(activeLocation, changedLocation || refreshPendingLocationUnderOverlay);
+    ApplyLocationPrefab(activeLocation, changedLocation || refreshPendingLocationUnderOverlay, requestStartedAt);
     MessageBus.Send("LocationLoaded", activeLocation);
 
     if (logVerbose) {
@@ -206,7 +208,7 @@ public class LocationManager : MonoBehaviour {
     );
   }
 
-  void ApplyLocationPrefab(LocationInfo info, bool forceRefresh) {
+  void ApplyLocationPrefab(LocationInfo info, bool forceRefresh, float requestStartedAt = -1f) {
     if (info == null) {
       ClearLocationAndNotify();
       return;
@@ -219,7 +221,16 @@ public class LocationManager : MonoBehaviour {
       return;
     }
 
+    var prefabResolveStartedAt = Time.realtimeSinceStartup;
     var prefab = prefabData != null ? prefabData.ResolvePrefab() : null;
+    LogLocationLoadTiming(
+      "prefab_resolved",
+      info.id,
+      requestStartedAt,
+      prefabResolveStartedAt,
+      "prefab=" + (prefab != null ? prefab.name : "-") +
+      " force_refresh=" + (forceRefresh ? 1 : 0)
+    );
 
     if (prefab == null) {
       ClearLocationAndNotify();
@@ -227,6 +238,13 @@ public class LocationManager : MonoBehaviour {
     }
 
     if (!forceRefresh && activeLocationInstance != null) {
+      LogLocationLoadTiming(
+        "reuse_active_instance",
+        info.id,
+        requestStartedAt,
+        Time.realtimeSinceStartup,
+        "instance=" + activeLocationInstance.name
+      );
       MessageBus.Send("LocationLocationChanged", activeLocationInstance);
       return;
     }
@@ -380,17 +398,22 @@ public class LocationManager : MonoBehaviour {
       yield break;
     }
 
-    if (shouldWaitForBarrier && logVerbose) {
+    if (shouldWaitForBarrier) {
       var totalWaitSeconds = Time.realtimeSinceStartup - startedAt;
       var shardsReady = SpriteRuntimeResolver.AreShardsReady(barrierLibraries);
-      Debug.Log(
-        "[LocationManager] Activating deferred location id='" + locationId +
-        "' waited_s=" + totalWaitSeconds.ToString("0.000") +
+      LogLocationLoadTiming(
+        "resolver_barrier",
+        locationId,
+        startedAt,
+        startedAt,
+        "wait_ms=" + (totalWaitSeconds * 1000f).ToString("0.0") +
+        " libraries=" + (barrierLibraries != null ? barrierLibraries.Count : 0) +
         " shards_ready=" + (shardsReady ? 1 : 0) +
-        " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0)
+        " timed_out=" + (!shardsReady && totalWaitSeconds >= OverlayLocationResolverBarrierTimeoutSeconds ? 1 : 0)
       );
     }
 
+    var instantiateStartedAt = Time.realtimeSinceStartup;
     if (TryInstantiateStagedLocationPrefab(locationId, prefab, prefabData, parent, out var stagedInstance, out var stagePlans)) {
       activeLocationInstance = stagedInstance;
       MessageBus.Send("LocationLocationChanged", activeLocationInstance);
@@ -406,6 +429,17 @@ public class LocationManager : MonoBehaviour {
           " promoted_deferred=" + (promoteDeferredStages ? 1 : 0)
         );
       }
+      LogLocationLoadTiming(
+        "prefab_instantiated",
+        locationId,
+        instantiateStartedAt,
+        instantiateStartedAt,
+        "instantiate_ms=" + ((Time.realtimeSinceStartup - instantiateStartedAt) * 1000f).ToString("0.0") +
+        " stage_plans=" + (stagePlans != null ? stagePlans.Count : 0) +
+        " blocking_stages=" + blockingPlans.Count +
+        " deferred_stages=" + deferredPlans.Count +
+        " nodes=" + CountActivationNodes(stagePlans)
+      );
       if (blockingPlans.Count > 0) {
         yield return ActivateLocationStageChildren(activationGeneration, locationId, blockingPlans);
       }
@@ -428,9 +462,18 @@ public class LocationManager : MonoBehaviour {
       yield break;
     }
 
+    instantiateStartedAt = Time.realtimeSinceStartup;
     activeLocationInstance = InstantiateConfiguredLocationPrefab(locationId, prefab, prefabData, parent);
     pendingBlockingLocationActivationRoutine = null;
     MessageBus.Send("LocationLocationChanged", activeLocationInstance);
+    LogLocationLoadTiming(
+      "prefab_instantiated",
+      locationId,
+      instantiateStartedAt,
+      instantiateStartedAt,
+      "instantiate_ms=" + ((Time.realtimeSinceStartup - instantiateStartedAt) * 1000f).ToString("0.0") +
+      " staged=0"
+    );
   }
 
   bool TryInstantiateStagedLocationPrefab(
@@ -606,8 +649,16 @@ public class LocationManager : MonoBehaviour {
 
   IEnumerator ActivateLocationStageChildren(int activationGeneration, string locationId, List<ActivationStagePlan> stagePlans) {
     if (stagePlans == null || stagePlans.Count <= 0) yield break;
-    var logVerbose = ShouldLogVerboseLoadDebug();
     var activationsThisFrame = 0;
+    var activationStartedAt = Time.realtimeSinceStartup;
+    var bgMs = 0f;
+    var fgStaticMs = 0f;
+    var fgDynamicMs = 0f;
+    var fgDestructMs = 0f;
+    var otherMs = 0f;
+    var totalNodes = 0;
+    var blockingStages = 0;
+    var deferredStages = 0;
 
     for (var stageIndex = 0; stageIndex < stagePlans.Count; stageIndex++) {
       if (activationGeneration != pendingLocationActivationGeneration) yield break;
@@ -615,18 +666,14 @@ public class LocationManager : MonoBehaviour {
       if (stagePlan == null || stagePlan.root == null) continue;
       var stageRoot = stagePlan.root;
       var stageTarget = "stage_root:" + stageRoot.name;
+      var stageStartedAt = Time.realtimeSinceStartup;
+      if (stagePlan.BlocksReveal) blockingStages++;
+      else deferredStages++;
 
       yield return WaitForActivationCapacity(activationGeneration, locationId, stageTarget);
       if (activationGeneration != pendingLocationActivationGeneration) yield break;
 
       stageRoot.gameObject.SetActive(true);
-      if (logVerbose) {
-        Debug.Log(
-          "[LocationManager] Activating stage root id='" + locationId +
-          "' stage='" + stageRoot.name +
-          "' node_count=" + stagePlan.nodes.Count
-        );
-      }
       if (ShouldYieldAfterActivationStep(ref activationsThisFrame)) {
         yield return null;
       }
@@ -641,33 +688,37 @@ public class LocationManager : MonoBehaviour {
         if (activationGeneration != pendingLocationActivationGeneration) yield break;
 
         node.gameObject.SetActive(true);
-        if (logVerbose) {
-          var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
-          var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
-          var outstanding = Mathf.Max(queue.queuedCount + queue.inFlightCount + deferredPending, 0);
-          Debug.Log(
-            "[LocationManager] Activated staged node id='" + locationId +
-            "' stage='" + stageRoot.name +
-            "' node='" + nodePath +
-            "' queued=" + queue.queuedCount +
-            " in_flight=" + queue.inFlightCount +
-            " deferred=" + deferredPending +
-            " outstanding=" + outstanding +
-            " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0)
-          );
-        }
+        totalNodes++;
         if (ShouldYieldAfterActivationStep(ref activationsThisFrame)) {
           yield return null;
         }
       }
+
+      var stageMs = (Time.realtimeSinceStartup - stageStartedAt) * 1000f;
+      AccumulateStageActivationMs(stageRoot.name, stageMs, ref bgMs, ref fgStaticMs, ref fgDynamicMs, ref fgDestructMs, ref otherMs);
     }
 
-    if (logVerbose) {
-      Debug.Log(
-        "[LocationManager] Completed staged activation id='" + locationId +
-        "' stages=" + stagePlans.Count
-      );
-    }
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
+    LogLocationLoadTiming(
+      "stage_activation",
+      locationId,
+      activationStartedAt,
+      activationStartedAt,
+      "total_ms=" + ((Time.realtimeSinceStartup - activationStartedAt) * 1000f).ToString("0.0") +
+      " bg_ms=" + bgMs.ToString("0.0") +
+      " fg_static_ms=" + fgStaticMs.ToString("0.0") +
+      " fg_dynamic_ms=" + fgDynamicMs.ToString("0.0") +
+      " fg_destruct_ms=" + fgDestructMs.ToString("0.0") +
+      " other_ms=" + otherMs.ToString("0.0") +
+      " stages=" + stagePlans.Count +
+      " blocking_stages=" + blockingStages +
+      " deferred_stages=" + deferredStages +
+      " nodes=" + totalNodes +
+      " queued=" + queue.queuedCount +
+      " in_flight=" + queue.inFlightCount +
+      " deferred=" + deferredPending
+    );
   }
 
   IEnumerator ActivateDeferredLocationStageChildrenAfterReveal(
@@ -713,6 +764,7 @@ public class LocationManager : MonoBehaviour {
   }
 
   IEnumerator WaitForActivationCapacity(int activationGeneration, string locationId, string activationTarget) {
+    var startedAt = Time.realtimeSinceStartup;
     var nextLogAt = Time.realtimeSinceStartup + ActivationWaitStateLogIntervalSeconds;
     var logVerbose = ShouldLogVerboseLoadDebug();
     while (activationGeneration == pendingLocationActivationGeneration) {
@@ -723,6 +775,25 @@ public class LocationManager : MonoBehaviour {
             out var maxOutstanding,
             out var maxInFlight,
             out var resolverIdle)) {
+        yield break;
+      }
+
+      if (ActivationCapacityWaitTimeoutSeconds > 0f &&
+          Time.realtimeSinceStartup - startedAt >= ActivationCapacityWaitTimeoutSeconds) {
+        if (logVerbose) {
+          Debug.LogWarning(
+            "[LocationManager] Activation capacity timeout id='" + locationId +
+            "' target='" + activationTarget +
+            "' mode=" + ResolveActivationCapacityMode() +
+            " queued=" + queue.queuedCount +
+            " in_flight=" + queue.inFlightCount +
+            " deferred=" + deferredPending +
+            " outstanding=" + outstanding +
+            " max_outstanding=" + maxOutstanding +
+            " max_in_flight=" + maxInFlight +
+            " resolver_idle=" + (resolverIdle ? 1 : 0)
+          );
+        }
         yield break;
       }
 
@@ -760,7 +831,6 @@ public class LocationManager : MonoBehaviour {
     outstanding = Mathf.Max(queue.queuedCount + queue.inFlightCount + deferredPending, 0);
     ResolveActivationQueueThresholds(out maxOutstanding, out maxInFlight);
     resolverIdle = SpriteRuntimeResolver.IsWarmupIdle();
-    if (!resolverIdle) return false;
     if (outstanding > maxOutstanding) return false;
     if (queue.inFlightCount > maxInFlight) return false;
     return true;
@@ -815,6 +885,57 @@ public class LocationManager : MonoBehaviour {
     if (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive) return "protected_overlay";
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive) return "overlay";
     return "runtime";
+  }
+
+  void LogLocationLoadTiming(string stage, string locationId, float requestStartedAt, float stageStartedAt, string extraFields = "") {
+    if (!ShouldLogVerboseLoadDebug()) return;
+    var now = Time.realtimeSinceStartup;
+    Debug.Log(
+      "[LocationManager][LocationLoadTiming] stage=" + (string.IsNullOrWhiteSpace(stage) ? "-" : stage.Trim()) +
+      " location=" + (string.IsNullOrWhiteSpace(locationId) ? "-" : locationId.Trim()) +
+      " elapsed_ms=" + (requestStartedAt >= 0f ? ((now - requestStartedAt) * 1000f).ToString("0.0") : "-") +
+      " stage_ms=" + (stageStartedAt >= 0f ? ((now - stageStartedAt) * 1000f).ToString("0.0") : "-") +
+      " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
+      " overlay_protected=" + (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive ? 1 : 0) +
+      (string.IsNullOrWhiteSpace(extraFields) ? "" : " " + extraFields.Trim())
+    );
+  }
+
+  static int CountActivationNodes(List<ActivationStagePlan> stagePlans) {
+    if (stagePlans == null || stagePlans.Count <= 0) return 0;
+    var count = 0;
+    for (var i = 0; i < stagePlans.Count; i++) {
+      var plan = stagePlans[i];
+      if (plan == null || plan.nodes == null) continue;
+      count += plan.nodes.Count;
+    }
+    return count;
+  }
+
+  static void AccumulateStageActivationMs(
+    string stageName,
+    float stageMs,
+    ref float bgMs,
+    ref float fgStaticMs,
+    ref float fgDynamicMs,
+    ref float fgDestructMs,
+    ref float otherMs
+  ) {
+    if (string.Equals(stageName, "BG", StringComparison.OrdinalIgnoreCase)) {
+      bgMs += stageMs;
+    }
+    else if (string.Equals(stageName, "Static", StringComparison.OrdinalIgnoreCase)) {
+      fgStaticMs += stageMs;
+    }
+    else if (string.Equals(stageName, "Dynamic", StringComparison.OrdinalIgnoreCase)) {
+      fgDynamicMs += stageMs;
+    }
+    else if (string.Equals(stageName, "Destruct", StringComparison.OrdinalIgnoreCase)) {
+      fgDestructMs += stageMs;
+    }
+    else {
+      otherMs += stageMs;
+    }
   }
 
   GameObject InstantiateConfiguredLocationPrefab(

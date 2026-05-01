@@ -1507,8 +1507,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
   }
 
   void AddPairAddresses(SpriteAddressPair pair, bool markCritical) {
-    if (!AddReadyAddress(pair.RuntimeColorAddress, markCritical, markCritical)) return;
-    AddWarmAddress(pair.RuntimeNormalAddress, markHighPriority: false);
+    if (!AddReadyAddress(pair.StreamingColorAddress, markCritical, markCritical)) return;
+    AddWarmAddress(pair.StreamingNormalAddress, markHighPriority: false);
   }
 
   bool AddReadyAddress(string address, bool markCritical, bool markHighPriority) {
@@ -1596,8 +1596,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
 
     if (!target.IsAnimation) {
       if (TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) {
-        AddAtlasSeedAddress(staticPair.RuntimeColorAddress, seedSet);
-        AddAtlasSeedAddress(staticPair.RuntimeNormalAddress, seedSet);
+        AddAtlasSeedAddress(staticPair.StreamingColorAddress, seedSet);
+        AddAtlasSeedAddress(staticPair.StreamingNormalAddress, seedSet);
       }
       yield break;
     }
@@ -1626,8 +1626,8 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
         lastFrame = frame;
 
         if (TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) {
-          AddAtlasSeedAddress(addressPair.RuntimeColorAddress, seedSet);
-          AddAtlasSeedAddress(addressPair.RuntimeNormalAddress, seedSet);
+          AddAtlasSeedAddress(addressPair.StreamingColorAddress, seedSet);
+          AddAtlasSeedAddress(addressPair.StreamingNormalAddress, seedSet);
         }
 
         var sliceAction = NoteWarmPlanWork(budget, deadlineAt);
@@ -2266,8 +2266,9 @@ public sealed class StreamingWarmOrchestrator : MonoBehaviour, IStreamingWarmOrc
       if (Time.realtimeSinceStartup >= hardTimeoutAt) yield break;
       var label = labels[i];
       var isCritical = criticalReadyLabelSet.Contains(label);
-      // Visible sprite subasset catalog entries are disabled during builds, so
-      // label warmup must resolve the atlas asset locations directly.
+      // Build/runtime may include visible sprite subassets, but label warmup still
+      // resolves atlas asset locations directly to avoid exploding warm plans into
+      // every slice representation.
       var locHandle = Addressables.LoadResourceLocationsAsync(label);
       // TODO(smooth-first-play): If a critical label resolves a very large location list, split
       // the resulting address set into deterministic chunks and enqueue high-value chunks first.

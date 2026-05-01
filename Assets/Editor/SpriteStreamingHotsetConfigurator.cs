@@ -20,8 +20,26 @@ public static class SpriteStreamingHotsetConfigurator {
   }
 
   public static bool ApplyPerformanceHotset(bool rebuildRuntimeIndexFirst, bool saveAndRefreshAtEnd, bool logResult) {
+    return ApplyPerformanceHotset(
+      rebuildRuntimeIndexFirst,
+      saveAndRefreshAtEnd,
+      logResult,
+      syncLocationWarmAssets: true,
+      applyImporterSettings: true
+    );
+  }
+
+  public static bool ApplyPerformanceHotset(
+    bool rebuildRuntimeIndexFirst,
+    bool saveAndRefreshAtEnd,
+    bool logResult,
+    bool syncLocationWarmAssets,
+    bool applyImporterSettings
+  ) {
     try {
-      LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: false, saveAndRefresh: saveAndRefreshAtEnd);
+      if (syncLocationWarmAssets) {
+        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: false, saveAndRefresh: saveAndRefreshAtEnd);
+      }
 
       if (rebuildRuntimeIndexFirst) {
         EditorUtility.DisplayProgressBar("Sprite Streaming", "Rebuilding runtime index...", 0.1f);
@@ -49,8 +67,15 @@ public static class SpriteStreamingHotsetConfigurator {
         return false;
       }
 
-      EditorUtility.DisplayProgressBar("Sprite Streaming", "Applying texture importer settings...", 0.8f);
-      var changedTexturePaths = ApplyStreamingImporterSettings(hotsetTexturePaths);
+      HashSet<string> changedTexturePaths;
+      if (applyImporterSettings) {
+        EditorUtility.DisplayProgressBar("Sprite Streaming", "Applying texture importer settings...", 0.8f);
+        changedTexturePaths = ApplyStreamingImporterSettings(hotsetTexturePaths);
+      }
+      else {
+        changedTexturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      }
+
       if (saveAndRefreshAtEnd && changedTexturePaths.Count > 0) {
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -71,7 +96,9 @@ public static class SpriteStreamingHotsetConfigurator {
           " changedTextures=" + changedTexturePaths.Count +
           " changedGuids=" + changedGuids.Count +
           " sizeDeltaBucket=" + sizeBucket +
-          " rebuiltIndex=" + rebuildRuntimeIndexFirst
+          " rebuiltIndex=" + rebuildRuntimeIndexFirst +
+          " syncedWarmAssets=" + syncLocationWarmAssets +
+          " appliedImporters=" + applyImporterSettings
         );
       }
       return true;

@@ -326,8 +326,8 @@ public class LocationWarmProfile : ScriptableObject {
       var lookupFrame = target.IsAnimation ? 1 : 0;
       var categoryOverride = target.IsAnimation ? target.category : null;
       if (!target.TryGetFrameAddressPair(lookupFrame, out var pair, categoryOverride)) continue;
-      AddUniqueValue(outAddresses, pair.RuntimeColorAddress);
-      AddUniqueValue(outAddresses, pair.RuntimeNormalAddress);
+      AddUniqueValue(outAddresses, pair.StreamingColorAddress);
+      AddUniqueValue(outAddresses, pair.StreamingNormalAddress);
     }
   }
 

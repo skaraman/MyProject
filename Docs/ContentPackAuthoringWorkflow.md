@@ -17,6 +17,9 @@ Unity `Build` and `Build and Run` now run a preflight automatically before the p
 - audit staged content
 - rebuild the sprite runtime index
 
+Normal `Build` and `Build and Run` use the smart/incremental preflight path.
+Use `Tools > Content Pipeline > 2) Build Active Content (Clean)` only when you intentionally want the non-incremental fallback.
+
 Use `Build Active Content (Smart)` as the normal authoring step anyway. The build preflight is a safety net, not the primary daily workflow.
 
 ## Primary Workflow

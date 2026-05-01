@@ -12,6 +12,8 @@ public struct SpriteAddressPair {
 
   public bool HasColor => !string.IsNullOrWhiteSpace(RuntimeColorAddress);
   public bool HasNormal => !string.IsNullOrWhiteSpace(RuntimeNormalAddress);
+  public string StreamingColorAddress => !string.IsNullOrWhiteSpace(colorAddress) ? colorAddress : RuntimeColorAddress;
+  public string StreamingNormalAddress => !string.IsNullOrWhiteSpace(normalAddress) ? normalAddress : RuntimeNormalAddress;
   public string RuntimeColorAddress => !string.IsNullOrWhiteSpace(colorAtlasAddress) ? colorAtlasAddress : Normalize(colorAddress);
   public string RuntimeNormalAddress => !string.IsNullOrWhiteSpace(normalAtlasAddress) ? normalAtlasAddress : Normalize(normalAddress);
 

@@ -168,12 +168,36 @@
     "dotnet.testWindow.disableAutoDiscovery": true,
     "dotnet.testWindow.disableBuildOnRefresh": true,
     "dotnet.testWindow.disableBuildOnRun": true,
-    "chatgpt.openOnStartup": false,
+    "codexLocal.openOnStartup": false,
+    "codexLocal.commentCodeLensEnabled": false,
     "git.ignoreLimitWarning": true,
     "git.decorations.enabled": false,
     "git.autorefresh": false,
     "scm.diffDecorations": "none",
     "terminal.integrated.env.windows": {
         "MSBUILDDISABLENODEREUSE": "1"
-    }
+    },
+    "codexLocal.memory.enabled": true,
+    "codexLocal.memory.pythonCommand": "py -3.13",
+    "codexLocal.memory.palacePath": "C:\\Users\\semka\\.mempalace\\MyProject\\palace",
+    "codexLocal.memory.wing": "myproject",
+    "codexLocal.memory.conversationExportPath": "D:\\localDev\\AIChats\\MyProject",
+    "codexLocal.memory.conversationExtractMode": "general",
+    "codexLocal.memory.workspaceIncludePaths": [
+        "AGENTS.md",
+        "Docs",
+        "Assets/Scripts",
+        "Assets/Editor",
+        "ProjectSettings",
+        "Packages/manifest.json",
+        "Packages/packages-lock.json",
+        "mempalace.yaml"
+    ],
+    "codexLocal.harness.enabled": true,
+    "codexLocal.harness.profile": "reliability",
+    "codexLocal.harness.workflowMode": "auto",
+    "codexLocal.harness.maxExtraPasses": 2,
+    "codexLocal.harness.reviewConfidenceThreshold": 80,
+    "codexLocal.harness.readOnlyFanout": 1,
+    "codexLocal.harness.enableStopLoops": false
 }

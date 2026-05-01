@@ -676,11 +676,11 @@ public class GearController : MonoBehaviour {
       allowImmediateEditorLoad: ShouldAllowImmediateStartupTrimmedMetadataLoad(pauseUntilReady)
     );
 
-    var readyCount = CountReadyStartupAppearanceAddresses();
-    while (readyCount < startupAppearanceWarmupAddressScratch.Count &&
+    var readyCount = CountReadyStartupAppearanceSamples(out var totalReadySamples);
+    while (readyCount < totalReadySamples &&
            Time.realtimeSinceStartup - startedAt < waitTimeoutSeconds) {
       yield return null;
-      readyCount = CountReadyStartupAppearanceAddresses();
+      readyCount = CountReadyStartupAppearanceSamples(out totalReadySamples);
     }
 
     if (pausedAnimation) {
@@ -699,7 +699,7 @@ public class GearController : MonoBehaviour {
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " object=" + gameObject.name +
         " addresses=" + startupAppearanceWarmupAddressScratch.Count +
-        " ready=" + readyCount + "/" + startupAppearanceWarmupAddressScratch.Count +
+        " ready=" + readyCount + "/" + totalReadySamples +
         " priority=" + loadPriority +
         " paused=" + (pausedAnimation ? 1 : 0) +
         " elapsed_ms=" + ((Time.realtimeSinceStartup - startedAt) * 1000f).ToString("0.0")
@@ -826,22 +826,124 @@ public class GearController : MonoBehaviour {
     }
   }
 
-  int CountReadyStartupAppearanceAddresses() {
-    var readyCount = 0;
-    for (var i = 0; i < startupAppearanceWarmupAddressScratch.Count; i++) {
-      var address = startupAppearanceWarmupAddressScratch[i];
-      if (!TextureResidencyCache.IsReady(address, pump: true)) {
-        continue;
-      }
-
-      if (!TrimmedSpriteOffsetResolver.IsReady(address, pump: true)) {
-        continue;
-      }
-
-      readyCount += 1;
+  int CountReadyStartupAppearanceSamples(out int totalSampleCount) {
+    totalSampleCount = 0;
+    if (!TryResolveStartupAnimationWindow(out var category, out var startFrame, out var endFrame)) {
+      return 0;
     }
 
+    var readyCount = 0;
+    CountAnimationWindowReadiness(SkinObjects, category, startFrame, endFrame, ref readyCount, ref totalSampleCount);
+    CountAnimationWindowReadiness(GearObjects, category, startFrame, endFrame, ref readyCount, ref totalSampleCount);
     return readyCount;
+  }
+
+  public int CountBootstrapSkinStartupReadySamples(out int totalSampleCount) {
+    totalSampleCount = 0;
+    var readyCount = 0;
+    var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
+    CountPersistentStartupReadiness(SkinObjects, startupWarmFrames, ref readyCount, ref totalSampleCount);
+    CountPersistentStartupReadiness(GearObjects, startupWarmFrames, ref readyCount, ref totalSampleCount);
+    return readyCount;
+  }
+
+  void CountPersistentStartupReadiness(
+    GameObject[] objects,
+    int startupWarmFrames,
+    ref int readyCount,
+    ref int totalSampleCount
+  ) {
+    if (objects == null || objects.Length == 0) {
+      return;
+    }
+
+    for (var i = 0; i < objects.Length; i++) {
+      var go = objects[i];
+      if (go == null) continue;
+      var target = go.GetComponent<SpriteWithNormals>();
+      CountPersistentStartupReadiness(target, startupWarmFrames, ref readyCount, ref totalSampleCount);
+    }
+  }
+
+  void CountPersistentStartupReadiness(
+    SpriteWithNormals target,
+    int startupWarmFrames,
+    ref int readyCount,
+    ref int totalSampleCount
+  ) {
+    if (target == null || target.DoNotRender) {
+      return;
+    }
+
+    if (!target.IsAnimation) {
+      CountAnimationWindowReadiness(target, target.category, 0, 0, ref readyCount, ref totalSampleCount);
+      return;
+    }
+
+    var warmFrames = Mathf.Max(startupWarmFrames, 1);
+    foreach (var animationPair in Animations.Esperanza) {
+      var animationName = animationPair.Key;
+      var animationData = animationPair.Value;
+      if (animationData == null || string.IsNullOrWhiteSpace(animationName)) {
+        continue;
+      }
+
+      var category = ResolveEsperanzaAnimationCategory(animationName, animationData);
+      var clipStart = Mathf.Max(animationData.start, 1);
+      var clipEnd = Mathf.Min(Mathf.Max(animationData.end, clipStart), clipStart + warmFrames - 1);
+      CountAnimationWindowReadiness(target, category, clipStart, clipEnd, ref readyCount, ref totalSampleCount);
+    }
+  }
+
+  void CountAnimationWindowReadiness(
+    GameObject[] objects,
+    string category,
+    int startFrame,
+    int endFrame,
+    ref int readyCount,
+    ref int totalSampleCount
+  ) {
+    if (objects == null || objects.Length == 0) {
+      return;
+    }
+
+    for (var i = 0; i < objects.Length; i++) {
+      var go = objects[i];
+      if (go == null) continue;
+      var target = go.GetComponent<SpriteWithNormals>();
+      if (target == null || target.DoNotRender) continue;
+      CountAnimationWindowReadiness(target, category, startFrame, endFrame, ref readyCount, ref totalSampleCount);
+    }
+  }
+
+  static void CountAnimationWindowReadiness(
+    SpriteWithNormals target,
+    string category,
+    int startFrame,
+    int endFrame,
+    ref int readyCount,
+    ref int totalSampleCount
+  ) {
+    if (target == null || string.IsNullOrWhiteSpace(category)) {
+      return;
+    }
+
+    if (!target.IsAnimation) {
+      totalSampleCount += 1;
+      if (target.GetFrameColdLoadState(0, out _, category).IsCommitReady()) {
+        readyCount += 1;
+      }
+      return;
+    }
+
+    var minFrame = Mathf.Max(Mathf.Min(startFrame, endFrame), 1);
+    var maxFrame = Mathf.Max(Mathf.Max(startFrame, endFrame), minFrame);
+    for (var frame = minFrame; frame <= maxFrame; frame++) {
+      totalSampleCount += 1;
+      if (target.GetFrameColdLoadState(frame, out _, category).IsCommitReady()) {
+        readyCount += 1;
+      }
+    }
   }
 
   static bool ShouldAllowImmediateStartupTrimmedMetadataLoad(bool pauseUntilReady) {

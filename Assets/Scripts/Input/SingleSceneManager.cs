@@ -2181,6 +2181,21 @@ public class SingleSceneManager : MonoBehaviour {
     builder.Append(' ').Append(name).Append('=').Append(value ? 1 : 0);
   }
 
+  void LogGameplayLoadTiming(string stage, string result, float startedAt, string extraFields = "") {
+    if (!ShouldLogLoadFlowWarnings()) return;
+    var builder = BeginLoadFlowLog("[SingleSceneManager][LoadTiming]");
+    AppendLoadFlowField(builder, "stage", ResolveLoadFlowValue(stage));
+    AppendLoadFlowField(builder, "result", ResolveLoadFlowValue(result));
+    AppendLoadFlowFloat(builder, "elapsed_ms", startedAt >= 0f ? Mathf.Max(Time.realtimeSinceStartup - startedAt, 0f) * 1000f : 0f, "0.0");
+    AppendLoadFlowField(builder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
+    AppendLoadFlowField(builder, "current_section", ResolveCurrentSection().ToString());
+    AppendLoadFlowField(builder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
+    if (!string.IsNullOrWhiteSpace(extraFields)) {
+      builder.Append(' ').Append(extraFields.Trim());
+    }
+    Debug.Log(builder.ToString());
+  }
+
   static string ResolveLoadFlowValue(string value, string fallback = "-") {
     return string.IsNullOrWhiteSpace(value) ? fallback : value;
   }
@@ -2762,15 +2777,16 @@ public class SingleSceneManager : MonoBehaviour {
       enqueueBudgetPerFrame: 96,
       warmGateManaged: false
     );
-    yield return WaitForPlayerBootstrapAtlasReadiness(source);
+    yield return WaitForPlayerBootstrapReadiness(source, gear);
 
     if (ShouldLogLoadingProgressDebug()) {
+      var readyCount = CountReadyPlayerBootstrapSamples(gear, out var totalReadySamples);
       Debug.Log(
         "[SingleSceneManager][PlayerBootstrap] stage=prewarm_complete" +
         " source='" + (source ?? "") + "'" +
         " addresses=" + playerBootstrapWarmAddressScratch.Count +
-        " ready=" + CountReadyPlayerBootstrapAtlases() +
-        "/" + playerBootstrapWarmAddressScratch.Count
+        " ready=" + readyCount +
+        "/" + totalReadySamples
       );
     }
 
@@ -2778,17 +2794,19 @@ public class SingleSceneManager : MonoBehaviour {
     playerBootstrapWarmSeenAddressScratch.Clear();
   }
 
-  IEnumerator WaitForPlayerBootstrapAtlasReadiness(string source) {
+  IEnumerator WaitForPlayerBootstrapReadiness(string source, GearController gear) {
     if (playerBootstrapWarmAddressScratch.Count <= 0) {
       yield break;
     }
 
     var timeoutSeconds = 1.5f;
     var startedAt = Time.realtimeSinceStartup;
-    while (CountReadyPlayerBootstrapAtlases() < playerBootstrapWarmAddressScratch.Count &&
+    var readyCount = CountReadyPlayerBootstrapSamples(gear, out var totalSampleCount);
+    while (readyCount < totalSampleCount &&
            Time.realtimeSinceStartup - startedAt < timeoutSeconds) {
       SetLoadingStatusOverride("Preparing player");
       yield return null;
+      readyCount = CountReadyPlayerBootstrapSamples(gear, out totalSampleCount);
     }
     ClearLoadingStatusOverride();
 
@@ -2799,21 +2817,18 @@ public class SingleSceneManager : MonoBehaviour {
     Debug.Log(
       "[SingleSceneManager][PlayerBootstrap] stage=prewarm_wait_complete" +
       " source='" + (source ?? "") + "'" +
-      " ready=" + CountReadyPlayerBootstrapAtlases() +
-      "/" + playerBootstrapWarmAddressScratch.Count +
+      " ready=" + readyCount +
+      "/" + totalSampleCount +
       " elapsed_ms=" + ((Time.realtimeSinceStartup - startedAt) * 1000f).ToString("0.0")
     );
   }
 
-  int CountReadyPlayerBootstrapAtlases() {
-    var readyCount = 0;
-    for (var i = 0; i < playerBootstrapWarmAddressScratch.Count; i++) {
-      if (TextureResidencyCache.IsReady(playerBootstrapWarmAddressScratch[i], pump: true)) {
-        readyCount += 1;
-      }
+  int CountReadyPlayerBootstrapSamples(GearController gear, out int totalSampleCount) {
+    totalSampleCount = 0;
+    if (gear == null) {
+      return 0;
     }
-
-    return readyCount;
+    return gear.CountBootstrapSkinStartupReadySamples(out totalSampleCount);
   }
 
   string ResolveGameplayPlayerBootstrapAssetPath() {
@@ -4162,6 +4177,7 @@ public class SingleSceneManager : MonoBehaviour {
     float requiredRatio,
     Action<bool> onComplete
   ) {
+    var gateStartedAt = Time.realtimeSinceStartup;
     ResetBlockingProgressState();
     gameplayWarmGateStartedForLoad = false;
     gameplayWarmGateCompletedForLoad = false;
@@ -4176,6 +4192,14 @@ public class SingleSceneManager : MonoBehaviour {
       if (fallbackTransitionSeconds > 0f) {
         yield return FallbackTransitionDelay;
       }
+      LogGameplayLoadTiming(
+        "warm_gate",
+        "skipped",
+        gateStartedAt,
+        "context=" + context +
+        " use_scenario_warm_gate=" + (useScenarioWarmGate ? 1 : 0) +
+        " playing=" + (Application.isPlaying ? 1 : 0)
+      );
       onComplete?.Invoke(allowGameplayUnlock);
       yield break;
     }
@@ -4189,6 +4213,12 @@ public class SingleSceneManager : MonoBehaviour {
       if (fallbackTransitionSeconds > 0f) {
         yield return FallbackTransitionDelay;
       }
+      LogGameplayLoadTiming(
+        "warm_gate",
+        "missing_orchestrator",
+        gateStartedAt,
+        "context=" + context
+      );
       onComplete?.Invoke(allowGameplayUnlock);
       yield break;
     }
@@ -4220,6 +4250,13 @@ public class SingleSceneManager : MonoBehaviour {
       if (fallbackTransitionSeconds > 0f) {
         yield return FallbackTransitionDelay;
       }
+      LogGameplayLoadTiming(
+        "warm_gate",
+        "no_result",
+        gateStartedAt,
+        "context=" + context +
+        " orchestrator_running=" + (orchestrator.IsRunning ? 1 : 0)
+      );
       onComplete?.Invoke(allowGameplayUnlock);
       yield break;
     }
@@ -4237,6 +4274,19 @@ public class SingleSceneManager : MonoBehaviour {
       );
     }
     allowGameplayUnlock = warmResult.reachedReadyThreshold || warmResult.hardTimeoutBypassUsed;
+    LogGameplayLoadTiming(
+      "warm_gate",
+      allowGameplayUnlock ? "complete" : "blocked",
+      gateStartedAt,
+      "context=" + context +
+      " orchestrator_ms=" + warmResult.elapsedMs.ToString("0.0") +
+      " reached_ready=" + (warmResult.reachedReadyThreshold ? 1 : 0) +
+      " hard_bypass=" + (warmResult.hardTimeoutBypassUsed ? 1 : 0) +
+      " ready=" + warmResult.readyCount + "/" + warmResult.totalCount +
+      " critical=" + warmResult.criticalReadyCount + "/" + warmResult.criticalTotalCount +
+      " requested=" + warmResult.requestedAddressCount +
+      " failure=" + ResolveLoadFlowValue(warmResult.failureReason)
+    );
     onComplete?.Invoke(allowGameplayUnlock);
   }
 
@@ -4537,6 +4587,7 @@ public class SingleSceneManager : MonoBehaviour {
     bool warmAnimationsBeforeUnlock = false
   ) {
     if (!Application.isPlaying) yield break;
+    var preUnlockStartedAt = Time.realtimeSinceStartup;
     ResetPreUnlockResidentPins();
     if (!waitForStreamingIdleBeforeFadeOut) {
       var preUnlockBlockingDeadlineWithoutIdleWait = ResolvePreUnlockBlockingDeadline();
@@ -4555,6 +4606,17 @@ public class SingleSceneManager : MonoBehaviour {
       }
       SetLoadingStatusOverride("Finalizing reveal");
       CommitPreUnlockResidentPins("no_idle_wait");
+      var noIdleQueue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+      var noIdleDeferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
+      LogGameplayLoadTiming(
+        "pre_unlock",
+        "no_idle_wait",
+        preUnlockStartedAt,
+        "queued=" + noIdleQueue.queuedCount +
+        " in_flight=" + noIdleQueue.inFlightCount +
+        " deferred=" + noIdleDeferredPending +
+        " warmup_done=" + (warmAnimationsBeforeUnlock ? 1 : 0)
+      );
       yield break;
     }
     if (LoadingScreen != null && !LoadingScreen.activeSelf) {
@@ -4661,6 +4723,20 @@ public class SingleSceneManager : MonoBehaviour {
         }
         SetLoadingStatusOverride("Finalizing reveal");
         CommitPreUnlockResidentPins("stable_ready");
+        var stableDeferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
+        LogGameplayLoadTiming(
+          "pre_unlock",
+          "stable_ready",
+          preUnlockStartedAt,
+          "queued=" + queue.queuedCount +
+          " in_flight=" + queue.inFlightCount +
+          " deferred=" + stableDeferredPending +
+          " resolver_idle=" + (resolverIdle ? 1 : 0) +
+          " player_ready=" + (playerReady ? 1 : 0) +
+          " blocking_ready=" + (blockingReady ? 1 : 0) +
+          " stable_frames=" + stableFrames +
+          " warmup_done=" + (warmupDone ? 1 : 0)
+        );
         yield break;
       }
 
@@ -4695,6 +4771,19 @@ public class SingleSceneManager : MonoBehaviour {
           }
           SetLoadingStatusOverride("Finalizing reveal");
           CommitPreUnlockResidentPins("timeout_release");
+          LogGameplayLoadTiming(
+            "pre_unlock",
+            "timeout_release",
+            preUnlockStartedAt,
+            "queued=" + queue.queuedCount +
+            " in_flight=" + queue.inFlightCount +
+            " deferred=" + deferredPending +
+            " resolver_idle=" + (resolverIdle ? 1 : 0) +
+            " player_ready=" + (playerReady ? 1 : 0) +
+            " blocking_ready=" + (blockingReady ? 1 : 0) +
+            " stable_frames=" + stableFrames +
+            " warmup_done=" + (warmupDone ? 1 : 0)
+          );
           yield break;
         }
       }
@@ -4884,6 +4973,21 @@ public class SingleSceneManager : MonoBehaviour {
           ? Time.realtimeSinceStartup - stableStartedAt
           : 0f;
         if (stableFrames >= stableFramesRequired && stableElapsed >= stableSecondsRequired) {
+          LogGameplayLoadTiming(
+            "reveal_settle",
+            "exit",
+            startedAt,
+            "status=" + ResolveLoadFlowValue(statusDetail) +
+            " queued=" + queue.queuedCount +
+            " in_flight=" + queue.inFlightCount +
+            " deferred=" + deferredPending +
+            " resolver_idle=" + (resolverIdle ? 1 : 0) +
+            " player_ready=" + (playerReady ? 1 : 0) +
+            " ui_ready=" + (uiReady ? 1 : 0) +
+            " dialog_ready=" + (dialogReady ? 1 : 0) +
+            " location_activation_pending=" + (locationActivationPending ? 1 : 0) +
+            " location_deferred_pending=" + (locationDeferredPending ? 1 : 0)
+          );
           if (ShouldLogLoadFlowWarnings()) {
             Debug.Log(
               "[SingleSceneManager][RevealSettle] exit" +
@@ -4902,6 +5006,21 @@ public class SingleSceneManager : MonoBehaviour {
 
       var elapsed = Time.realtimeSinceStartup - startedAt;
       if (timeoutSeconds > 0f && elapsed >= timeoutSeconds) {
+        LogGameplayLoadTiming(
+          "reveal_settle",
+          "timeout",
+          startedAt,
+          "status=" + ResolveLoadFlowValue(statusDetail) +
+          " queued=" + queue.queuedCount +
+          " in_flight=" + queue.inFlightCount +
+          " deferred=" + deferredPending +
+          " resolver_idle=" + (resolverIdle ? 1 : 0) +
+          " player_ready=" + (playerReady ? 1 : 0) +
+          " ui_ready=" + (uiReady ? 1 : 0) +
+          " dialog_ready=" + (dialogReady ? 1 : 0) +
+          " location_activation_pending=" + (locationActivationPending ? 1 : 0) +
+          " location_deferred_pending=" + (locationDeferredPending ? 1 : 0)
+        );
         if (ShouldLogLoadFlowWarnings()) {
           Debug.LogWarning(
             "[SingleSceneManager][RevealSettle] timeout" +
@@ -5616,6 +5735,7 @@ public class SingleSceneManager : MonoBehaviour {
     if (!ShouldLogLoadingProgressDebug()) return;
     Debug.Log(
       "[SingleSceneManager][WarmScope] context=" + context +
+      " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
       " blocking_libraries=" + (criticalLibraries != null ? criticalLibraries.Count : 0) +
       " blocking_addresses=" + (criticalAddresses != null ? criticalAddresses.Count : 0) +
       " blocking_labels=" + (criticalLabels != null ? criticalLabels.Count : 0) +

@@ -1567,8 +1567,8 @@ public class AnimationController {
       if (!IsSpriteTargetEnabled(target)) continue;
       if (!target.TryGetFrameAddressPair(frame, out var pair, categoryName)) continue;
 
-      AddAppearancePinAddress(pair.RuntimeColorAddress, maxPinAddresses);
-      AddAppearancePinAddress(pair.RuntimeNormalAddress, maxPinAddresses);
+      AddAppearancePinAddress(pair.StreamingColorAddress, maxPinAddresses);
+      AddAppearancePinAddress(pair.StreamingNormalAddress, maxPinAddresses);
     }
   }
 
@@ -1699,26 +1699,26 @@ public class AnimationController {
     var loadingContextActive = SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning;
     var colorPriority = loadingContextActive ? TextureResidencyCache.LoadPriority.Warmup : TextureResidencyCache.LoadPriority.Immediate;
 
-    if (!string.IsNullOrWhiteSpace(pair.RuntimeColorAddress)) {
+    if (!string.IsNullOrWhiteSpace(pair.StreamingColorAddress)) {
       if (immediateBudget > 0) {
-        TextureResidencyCache.RequestLoad(pair.RuntimeColorAddress, colorPriority);
+        TextureResidencyCache.RequestLoad(pair.StreamingColorAddress, colorPriority);
         immediateBudget--;
       }
       else if (!loadingContextActive) {
         // If immediate budget is exhausted in gameplay, still enqueue as warmup.
-        TextureResidencyCache.RequestLoad(pair.RuntimeColorAddress, TextureResidencyCache.LoadPriority.Warmup);
+        TextureResidencyCache.RequestLoad(pair.StreamingColorAddress, TextureResidencyCache.LoadPriority.Warmup);
       }
     }
-    if (!string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)) {
+    if (!string.IsNullOrWhiteSpace(pair.StreamingNormalAddress)) {
       if (loadingContextActive) {
         if (immediateBudget > 0) {
-          TextureResidencyCache.RequestLoad(pair.RuntimeNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
+          TextureResidencyCache.RequestLoad(pair.StreamingNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
           immediateBudget--;
         }
       }
       else {
         // Keep normal maps warmup-priority to reduce immediate queue pressure.
-        TextureResidencyCache.RequestLoad(pair.RuntimeNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
+        TextureResidencyCache.RequestLoad(pair.StreamingNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
       }
     }
   }

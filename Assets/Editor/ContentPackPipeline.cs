@@ -191,7 +191,7 @@ public static class ContentPackPipeline {
     public string stageAssetPath;
   }
 
-  enum TransitionPipelineMode {
+  public enum TransitionPipelineMode {
     Smart = 0,
     Clean = 1
   }
@@ -344,6 +344,10 @@ public static class ContentPackPipeline {
   }
 
   public static bool PrepareSelectedPacksForRuntimeIndex(string contextLabel, bool logResult) {
+    return PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult, TransitionPipelineMode.Clean);
+  }
+
+  public static bool PrepareSelectedPacksForRuntimeIndex(string contextLabel, bool logResult, TransitionPipelineMode mode) {
     var selection = LoadOrCreateSelectionAsset(logResult);
     if (selection == null) {
       Debug.LogError("[ContentPackPipeline] Failed to load content pack selection asset.");
@@ -355,11 +359,7 @@ public static class ContentPackPipeline {
       return true;
     }
 
-    if (!RefreshExportedPackSetForStage(selection, "prepare_runtime_index:" + (contextLabel ?? ""), logResult)) {
-      return false;
-    }
-
-    if (!EnsureSelectedPackDirectories(selection, contextLabel, logResult)) {
+    if (!RefreshExportedPackSetForStage(selection, "prepare_runtime_index:" + (contextLabel ?? ""), logResult, mode, stats: null)) {
       return false;
     }
 
@@ -367,7 +367,11 @@ public static class ContentPackPipeline {
   }
 
   public static bool PrepareSelectedPacksForPlayerBuild(string contextLabel, bool logResult) {
-    if (!PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult)) {
+    return PrepareSelectedPacksForPlayerBuild(contextLabel, logResult, TransitionPipelineMode.Smart);
+  }
+
+  public static bool PrepareSelectedPacksForPlayerBuild(string contextLabel, bool logResult, TransitionPipelineMode mode) {
+    if (!PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult, mode)) {
       return false;
     }
     return AuditActivePacks(logResult);
@@ -396,9 +400,6 @@ public static class ContentPackPipeline {
     if (!RefreshExportedPackSetForStage(selection, "transition_stage", logResult, mode, summary.export)) {
       return false;
     }
-    if (!EnsureSelectedPackDirectories(selection, "transition_stage", logResult, mode, summary.export)) {
-      return false;
-    }
 
     summary.stageCompleted = StageActivePacksInternal(selection, logResult, "transition_stage");
     if (logResult) {
@@ -416,7 +417,7 @@ public static class ContentPackPipeline {
       "Content Pipeline Transition",
       logResult,
       cleanCachesBeforeBuild,
-      useChunkedWarmup: true
+      useChunkedWarmup: false
     );
   }
 
@@ -479,16 +480,12 @@ public static class ContentPackPipeline {
         RefreshExportedPackSetForStage(selection, "full_migration_pass", logResult, mode, summary.export))) return false;
 
       if (!RunStep("Stage active packs", () => {
-        if (!EnsureSelectedPackDirectories(selection, "full_migration_pass", logResult, mode, summary.export)) {
-          return false;
-        }
-
         summary.stageCompleted = StageActivePacksInternal(selection, logResult, "full_migration_pass");
         return summary.stageCompleted;
       })) return false;
 
       if (!RunStep("Audit legacy dependencies", () => {
-        summary.auditCompleted = AuditLegacyDependencies(logResult);
+        summary.auditCompleted = AuditLegacyDependencies(summary.analysis, logResult);
         return summary.auditCompleted;
       })) return false;
 
@@ -611,9 +608,6 @@ public static class ContentPackPipeline {
     if (!RefreshExportedPackSetForStage(selection, "manual_stage", logResult)) {
       return false;
     }
-    if (!EnsureSelectedPackDirectories(selection, "manual_stage", logResult)) {
-      return false;
-    }
     return StageActivePacksInternal(selection, logResult, "manual_stage");
   }
 
@@ -621,9 +615,6 @@ public static class ContentPackPipeline {
     var selection = LoadOrCreateSelectionAsset(logResult);
     if (selection == null) return false;
     if (!RefreshExportedPackSetForStage(selection, "stage_audit_rebuild_runtime_index", logResult)) {
-      return false;
-    }
-    if (!EnsureSelectedPackDirectories(selection, "stage_audit_rebuild_runtime_index", logResult)) {
       return false;
     }
     if (!StageActivePacksInternal(selection, logResult, "stage_audit_rebuild_runtime_index")) {
@@ -696,9 +687,6 @@ public static class ContentPackPipeline {
       }
 
       if (!RunStep(2, "Stage active packs", () => {
-        if (!EnsureSelectedPackDirectories(selection, contextLabel, logResult)) {
-          return false;
-        }
         return StageActivePacksInternal(selection, logResult, contextLabel);
       })) {
         return false;
@@ -3367,7 +3355,11 @@ public static class ContentPackPipeline {
   }
 
   static bool AuditLegacyDependencies(bool logResult) {
-    var report = AnalyzeOwnershipAndDuplicates(logResult);
+    return AuditLegacyDependencies(report: null, logResult);
+  }
+
+  static bool AuditLegacyDependencies(OwnershipAnalysisReport report, bool logResult) {
+    report ??= AnalyzeOwnershipAndDuplicates(logResult);
     var auditOk = AuditActivePacks(logResult);
     var analysisOk =
       report.legacyGeneratedReferenceCount <= 0 &&

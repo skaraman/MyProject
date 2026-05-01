@@ -2,15 +2,59 @@
 
 Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in after reveal.
 
-## Current Objective
+## Current Target
 
-1. Keep loading heartbeat gaps at `<= 2.0s`.
-2. Keep loading progress smooth and truthful.
-3. Finish reveal-critical work under black so gameplay appears stable on first frame.
-4. Continue moving toward dynamic smart loading driven by relevance and location context.
-5. Hold `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base` as the validated baseline before doing any further episode content work.
-6. Clean up repeated non-actionable debug logs now that the first slice is playable.
-7. Use the new content-pipeline transition workflow to move authority from legacy content roots into `../MyProjectContent`, keep `Assets/ContentStage` as the intentional runtime/editor mirror, and avoid regressing the active baseline.
+- First target is measurement, not another speculative optimization.
+- Load Game into `DomeCity` must identify one dominant elapsed-time owner before changing preload breadth or reveal gates.
+- Keep reveal honest: never show gameplay until player first frame, BG, FG/Static, spawn-critical enemies, gameplay UI shell, and dialog shell are ready.
+- Defer non-visible and non-critical tails when data proves they are holding reveal.
+- Baseline remains `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base`.
+
+## Current Diagnosis
+
+- The actual zone load is slow because multiple shared contracts can still hold black: location resolver barrier, staged prefab activation, warm-gate planning/enqueue, pre-unlock queue settle, and reveal settle.
+- Recent evidence showed `DomeCity` prefab resolution succeeds, then loading can park at `Activating location` with `pipeline_location_ready=0`.
+- 2026-04-25 `09:29:59Z` crash attempt did not reach gameplay loading. Unity crashed in `UnityEditor.Search.LMDBIndexStorage.GetDocuments`; generated `Library/Search` contained a `59.9 GB` LMDB index and was moved to `Crash/UnitySearch_LMDB_corrupt_20260425_092959`.
+- `UnitySearchCacheGuard` now moves generated `Library/Search` into `Crash/` when the cache or any single index file exceeds `2 GB`.
+- Current instrumentation now emits aggregate timing only:
+  `[LocationManager][LocationLoadTiming]` and `[SingleSceneManager][LoadTiming]`.
+
+## Loading Contract V2
+
+- Ordered reveal-critical path:
+  `request location -> resolve prefab -> resolver barrier -> instantiate staged prefab -> activate BG + FG/Static -> warm player/enemy/UI/dialog criticals -> pre-unlock settle -> reveal settle`.
+- Location activation capacity is only a throttle, not a readiness owner.
+- Resolver shard readiness belongs to the resolver barrier only.
+- Dynamic/destructible location content is background work unless explicitly promoted by measured first-frame need.
+- Warm-gate success is critical-ready first, ratio second.
+- Progress text must name the active owner: location, warm gate, pre-unlock, or reveal settle.
+
+## Measurement Protocol
+
+1. Run `Load Game` into `DomeCity`.
+2. Capture latest `Editor.log`.
+3. Compare:
+   - `[LocationManager][LocationLoadTiming] stage=prefab_resolved`
+   - `[LocationManager][LocationLoadTiming] stage=resolver_barrier`
+   - `[LocationManager][LocationLoadTiming] stage=prefab_instantiated`
+   - `[LocationManager][LocationLoadTiming] stage=stage_activation`
+   - `[SingleSceneManager][WarmScope]`
+   - `[SingleSceneManager][LoadTiming] stage=warm_gate`
+   - `[SingleSceneManager][LoadTiming] stage=pre_unlock`
+   - `[SingleSceneManager][LoadTiming] stage=reveal_settle`
+4. Name the largest elapsed owner and only then change the relevant contract.
+5. Repeat the same check for `Start Game` and compare against `Load Game`.
+
+## Decision Rules
+
+- If resolver barrier is slow: start resolver/library warmup earlier, before black is fully opaque.
+- If activation is slow: keep BG + FG/Static reveal-blocking and move Dynamic/Destruct to deferred activation.
+- If warm gate is slow: shrink critical warm scope to current room, player first frame, spawn-critical enemies, and dialog shell.
+- If pre-unlock is slow: reduce visible prefetch breadth and move animation-frame tails to deferred post-reveal warmup.
+- If reveal settle is slow: release on critical-ready plus bounded outstanding queue instead of full queue idle.
+- Do not accept a local fix until the log proves the issue is isolated.
+
+## Archived Ledger
 
 ## Transition Pipeline Status
 
@@ -141,6 +185,16 @@ Algorithm Attempts:
   Code areas: `TrimmedAtlasExporterWindow`, `EsperanzaGearGroupAtlasWindow`, `GeneratedAtlasImportPostprocessor`
   Result: `active`
   Notes: current worktree patch writes lean runtime atlas metadata plus full `.editor.json` sidecars, the import/rebind editor paths now prefer the sidecars so runtime metadata no longer needs to carry authoring-only fields, and `Assets/Editor/backup/strip_atlas_json_to_offsets.py` can scan all `.json` files under a folder, validate sprite-metadata payload shape, and batch-rewrite supported files down to sprite name plus offset `x/y` from either CLI or a basic folder-picker UI.
+- `ALG-010 ProtectedAtlasOwnerPrimaryLoad`
+  Goal: keep atlas-backed UI loads on the owning atlas address during protected startup/main-menu loading so direct subasset loads do not fall back to slice-key requests like `atlas.png[f1]`.
+  Code areas: `AddressableSpriteCache`
+  Result: `active`
+  Notes: staged Main Menu atlases already preserve multi-sprite import data in `.meta`, and zero-offset runtime atlas `.json` is intentionally absent there; the current worktree patch corrects the protected single-address load path to request the owner atlas instead of a slice-key address so `Esperanza`, flowers, skulls, and button sprites can resolve from direct atlas subassets again.
+- `ALG-011 MainMenuAtlasLogicalSlicePriority`
+  Goal: make built main-menu atlas resolution prefer runtime-index logical slice names like `s`, `e1`, `f1`, `skull1`, and `idle`, while still tolerating Unity internal atlas names as secondary data.
+  Code areas: `AddressableSpriteCache`
+  Result: `active`
+  Notes: current worktree patch now prefers runtime-index slice-key loads for atlas-backed direct subasset requests when sibling slice addresses exist, registers logical-name aliases into `spritesByName` from those sibling addresses, and adds targeted atlas-map diagnostics for `MainMenu` and `UI/Fonts` so incomplete runtime atlas-name translation can be confirmed directly from `Editor.log`.
 
 Iteration Rules:
 - Add a new dated evidence block after every playground rerun using exact timestamps from `Editor.log`.
@@ -192,6 +246,21 @@ Iteration Rules:
   - `dialog`: `86% -> 94%`
   - `finalizing reveal`: capped below release until the explicit `Ready` handoff
 - Pre-release percent is not auto-promoted to `99%`.
+
+## Cold-Load Contract Checkpoint - 2026-04-05
+
+- Shared sprite cold-load state is now `Ready`, `Pending`, `Missing`, or `ExplicitEmpty`.
+- Exact atlas-slice readiness now comes from exact request resolution, not from owner-atlas completion alone.
+- Trimmed metadata readiness now follows the same contract:
+  supported metadata that is still loading stays `Pending`, unsupported metadata families are treated as `Ready`, and only definitive failures become `Missing`.
+- `SpriteWithNormals` now preserves the last committed sprite, normal texture, trimmed offset, and visibility while a replacement request is still `Pending`.
+- `ExplicitEmpty` remains the only intentional clear path for sprite consumers during cold load.
+- Glyphs now keep the last committed glyph visible while a replacement glyph is `Pending`, and text layout keeps fallback or cached metrics so first-load races do not collapse lines.
+- Gear startup warmup and player bootstrap readiness now count commit-ready sprite samples through `SpriteWithNormals` instead of combining raw cache booleans at the manager layer.
+- Atlas-backed runtime UI and font slices now queue exact-slice supplements in player builds too, instead of leaving exact slice recovery as an editor-only overlay path.
+- Atlas-backed direct subasset primary loads now resolve one exact requested slice first, then let the shared supplement path fill additional requested slices; the cache no longer treats sibling slice union loads as a commit-safe primary path.
+- Next rerun evidence is still required for this checkpoint:
+  confirm no first-time zero-to-offset reveal before `[AnimationController][StartupSync] stage=ready`, no pending clears/collapse, and no false-ready counts during cold startup.
 
 ## Current Truth
 
@@ -423,3 +492,12 @@ Interpretation:
 - Esperanza grouped gear atlases are now being split into equipment-driven `Gear_*` packs discovered from grouped-atlas leaf folders.
 - Active pack resolution now targets `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base` instead of staging broad grouped gear atlas roots under `Core` or `Form_Base`.
 - The next validation focus is whether the packed Addressables sprite-slice risk drops once only the equipped `Gear_*` pack set is staged.
+- Main-menu atlas slice resolution now prefers runtime-index-backed slice loads for atlas-backed direct requests, which restored the decorative main-menu art path in build.
+- The remaining menu text issue was `FontText` dropping unresolved `Plate` glyphs during generation; glyph objects now stay in layout with cached/fallback metrics and request a relayout once their sprites finish loading.
+- 2026-04-24: build font disappearance isolated to false-ready exact atlas slices (`atlas.png[atlas_16]` receiving `atlas_0`/`atlas_18`). Exact slice consumers now reject mismatched subassets, cache supplements no longer alias wrong sprites to requested slice keys, and atlas-backed primary loads use the owner atlas address.
+- 2026-04-24: build menu art/text disappearance isolated to Addressables catalog subasset stripping. Runtime requests exact sprite slice keys, so the content pipeline now keeps visible subasset representations enabled for packed player builds.
+- 2026-04-25: remaining menu misses isolated to Addressables exact subasset keys resolving the wrong sprite (`a1 -> e2`, `f1 -> skull2`, `atlas_3 -> atlas_1`). Atlas-backed primary loads now always load the owner atlas and select by sprite name from the loaded sprite set.
+- 2026-04-25: follow-up build showed the older order-alias fix was overriding real loaded sprite names (`a1 -> s`, `f1 -> f13`, `atlas_3 -> atlas_0`). Runtime atlas aliasing now treats actual loaded sprite names as authoritative and only uses expected-order aliases for missing, non-conflicting names.
+- 2026-04-25: build-time bottleneck isolated to repeated Addressables builds. Player builds were using the global Addressables preference and rebuilding content for ~11m; content pipeline also ran two chunk warmup builds before the final build. Defaults now explicitly disable Addressables-on-player-build and use one Addressables build pass.
+- 2026-04-25: repeated main-menu popout traced to unsafe runtime atlas order aliases plus color replacement failures clearing already-rendered sprites. Atlas maps now reject positional aliases entirely; exact-slice misses queue/wait for runtime supplements, and failed async color resolves keep the current rendered sprite while logging the miss/mismatch.
+- 2026-04-25: Load Game stall isolated to `DomeCity` prefab loading successfully, then `pipeline_location_ready=0` at `Activating location`. Location activation capacity was incorrectly blocked on global resolver idle after the scoped resolver barrier already owned shard readiness; activation capacity now gates texture queue pressure only and times out instead of owning readiness.

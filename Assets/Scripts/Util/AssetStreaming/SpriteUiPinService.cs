@@ -125,8 +125,8 @@ public static class SpriteUiPinService {
         }
       }
       else if (target.TryGetFrameAddressPair(0, out var pair)) {
-        AddAddress(addressBuffer, pair.RuntimeColorAddress, addressSetBuffer);
-        AddAddress(addressBuffer, pair.RuntimeNormalAddress, addressSetBuffer);
+        AddAddress(addressBuffer, pair.StreamingColorAddress, addressSetBuffer);
+        AddAddress(addressBuffer, pair.StreamingNormalAddress, addressSetBuffer);
       }
 
       if (addressBuffer.Count <= 0) {
