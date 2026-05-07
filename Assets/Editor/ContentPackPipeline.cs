@@ -92,7 +92,6 @@ public static class ContentPackPipeline {
     public List<string> ownedLocations = new();
     public List<string> ownedEnemyTypes = new();
     public List<string> dialogIds = new();
-    public List<string> warmProfiles = new();
     public string exportedFromProject;
     public string sourceRevision;
   }
@@ -176,7 +175,6 @@ public static class ContentPackPipeline {
     public List<string> ownedLocations = new();
     public List<string> ownedEnemyTypes = new();
     public List<string> dialogIds = new();
-    public List<string> warmProfiles = new();
     public string defaultLocationId = "";
     public string snapshotRelativePath = "";
     public string dialogSnapshotRelativePath = "";
@@ -921,10 +919,6 @@ public static class ContentPackPipeline {
         return false;
       }
 
-      var syncedLocationPrefabs = LocationWarmProfileBootstrap.SyncLocationPrefabAddressables(logResult: false, saveAndRefresh: false);
-      var syncedPlayerPrefab = GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(logResult: false, saveAndRefresh: false);
-      var syncedProjectilePrefabs = ProjectileAddressablesBootstrap.SyncProjectileAddressables(logResult: false, saveAndRefresh: false);
-
       AssetDatabase.SaveAssets();
       ActiveContentRegistryRuntime.ForceReload();
       SpriteIndexBuilder.ClearCachedSpriteSliceEstimates("content_pack_stage:" + contextLabel);
@@ -941,9 +935,6 @@ public static class ContentPackPipeline {
           " active_packs=" + string.Join(", ", activePackIds) +
           " stage_link_changes=" + stageLinkChanges +
           " stage_link_reused=" + reusedStageLinks +
-          " location_prefab_sync=" + (syncedLocationPrefabs ? 1 : 0) +
-          " player_prefab_sync=" + (syncedPlayerPrefab ? 1 : 0) +
-          " projectile_prefab_sync=" + (syncedProjectilePrefabs ? 1 : 0) +
           " stage_root='" + StageRootAssetPath + "'"
         );
       }
@@ -1149,13 +1140,11 @@ public static class ContentPackPipeline {
     slice.seedRoots.Add("Assets/Prefabs/Locations/DomeCity.prefab");
     slice.seedRoots.Add("Assets/Prefabs/Enemies/Imp.prefab");
     slice.seedRoots.Add("Assets/Sprites/Characters/Enemies/Imp");
-    slice.seedRoots.Add("Assets/Resources/LocationWarmProfile_DomeCity.asset");
     slice.manualLibraryNames.Add("Dialog/DialogImp");
     slice.ownedRoots.AddRange(slice.seedRoots);
     slice.ownedLocations.Add(LocationEnemyData.DomeCityLocationId);
     slice.ownedEnemyTypes.Add("Imp");
     slice.dialogIds.Add(LocationEnemyData.DomeCityLocationId);
-    slice.warmProfiles.Add("LocationWarmProfile_DomeCity");
 
     var homebase = new PackDefinition {
       packId = HomebaseSlicePackId,
@@ -1547,7 +1536,6 @@ public static class ContentPackPipeline {
         ownedLocations = new List<string>(pack.ownedLocations),
         ownedEnemyTypes = new List<string>(pack.ownedEnemyTypes),
         dialogIds = new List<string>(pack.dialogIds),
-        warmProfiles = new List<string>(pack.warmProfiles),
         exportedFromProject = new DirectoryInfo(GetProjectRoot()).Name,
         sourceRevision = TryGetGitRevision()
       };
@@ -1693,7 +1681,6 @@ public static class ContentPackPipeline {
     var coreContentRoots = new List<string>();
     var locations = new List<LocationInfo>();
     var dialogs = new List<LocationDialogDefinition>();
-    var warmProfiles = new List<LocationWarmRegistryEntry>();
     var defaultLocationId = "";
 
     for (var i = 0; i < activePackIds.Count; i++) {
@@ -1729,7 +1716,6 @@ public static class ContentPackPipeline {
         dialogs.Add(dialogSnapshot);
       }
 
-      TryAddWarmProfiles(pack, locationSnapshot, warmProfiles);
     }
 
     registry.Configure(
@@ -1740,8 +1726,7 @@ public static class ContentPackPipeline {
       stagedSpriteLibraryRoots: stagedSpriteLibraryRoots,
       coreContentRoots: coreContentRoots,
       locations: locations,
-      dialogs: dialogs,
-      warmProfiles: warmProfiles
+      dialogs: dialogs
     );
 
     EditorUtility.SetDirty(registry);
@@ -1780,8 +1765,7 @@ public static class ContentPackPipeline {
       stagedSpriteLibraryRoots: Array.Empty<string>(),
       coreContentRoots: Array.Empty<string>(),
       locations: Array.Empty<LocationInfo>(),
-      dialogs: Array.Empty<LocationDialogDefinition>(),
-      warmProfiles: Array.Empty<LocationWarmRegistryEntry>()
+      dialogs: Array.Empty<LocationDialogDefinition>()
     );
 
     EditorUtility.SetDirty(registry);
@@ -1886,26 +1870,6 @@ public static class ContentPackPipeline {
 
     dialogInfo = new LocationDialogDefinition(json.locationId, speakers.ToArray());
     return true;
-  }
-
-  static void TryAddWarmProfiles(PackDefinition pack, LocationInfo locationSnapshot, List<LocationWarmRegistryEntry> output) {
-    if (pack == null || output == null || pack.warmProfiles == null) return;
-
-    for (var i = 0; i < pack.warmProfiles.Count; i++) {
-      var warmProfileName = pack.warmProfiles[i];
-      if (string.IsNullOrWhiteSpace(warmProfileName)) continue;
-
-      var assetPath = NormalizeAssetPath(pack.stageAssetRoot + "/Resources/" + warmProfileName + ".asset");
-      var profile = AssetDatabase.LoadAssetAtPath<LocationWarmProfile>(assetPath);
-      if (profile == null) continue;
-      var locationId = ResolvePackWarmProfileLocationId(pack, profile, locationSnapshot);
-      if (string.IsNullOrWhiteSpace(locationId)) continue;
-
-      output.Add(new LocationWarmRegistryEntry {
-        locationId = locationId,
-        profile = profile
-      });
-    }
   }
 
   static bool ValidateStagedContent(
@@ -2124,14 +2088,7 @@ public static class ContentPackPipeline {
         ValidateDialogSnapshot(pack, dialogSnapshot, errors);
       }
 
-      if (ownsLocations && (pack.warmProfiles == null || pack.warmProfiles.Count <= 0)) {
-        errors.Add(
-          "Active pack is missing warm profiles for its owned locations." +
-          " pack_id='" + pack.packId + "'"
-        );
-      }
 
-      ValidatePackWarmProfiles(pack, locationSnapshot, errors);
     }
 
     if (hasGameplayLocations && defaultLocationPackIds.Count <= 0) {
@@ -2147,45 +2104,6 @@ public static class ContentPackPipeline {
     }
 
     return errors;
-  }
-
-  static void ValidatePackWarmProfiles(PackDefinition pack, LocationInfo locationSnapshot, List<string> errors) {
-    if (pack == null || errors == null || pack.warmProfiles == null) return;
-
-    for (var i = 0; i < pack.warmProfiles.Count; i++) {
-      var warmProfileName = NormalizeToken(pack.warmProfiles[i]);
-      if (string.IsNullOrWhiteSpace(warmProfileName)) continue;
-
-      var assetPath = NormalizeAssetPath(pack.stageAssetRoot + "/Resources/" + warmProfileName + ".asset");
-      var profile = AssetDatabase.LoadAssetAtPath<LocationWarmProfile>(assetPath);
-      if (profile == null) {
-        errors.Add(
-          "Active pack is missing a staged warm profile asset." +
-          " pack_id='" + pack.packId + "'" +
-          " asset_path='" + assetPath + "'"
-        );
-        continue;
-      }
-
-      var resolvedLocationId = ResolvePackWarmProfileLocationId(pack, profile, locationSnapshot);
-      if (string.IsNullOrWhiteSpace(resolvedLocationId)) {
-        errors.Add(
-          "Unable to resolve a warm profile location id for the active pack." +
-          " pack_id='" + pack.packId + "'" +
-          " profile='" + warmProfileName + "'"
-        );
-        continue;
-      }
-
-      if (pack.ownedLocations != null && pack.ownedLocations.Count > 0 && !PackOwnsLocation(pack, resolvedLocationId)) {
-        errors.Add(
-          "Warm profile resolved to an unowned location." +
-          " pack_id='" + pack.packId + "'" +
-          " profile='" + warmProfileName + "'" +
-          " location_id='" + resolvedLocationId + "'"
-        );
-      }
-    }
   }
 
   static void ValidateDialogSnapshot(PackDefinition pack, LocationDialogDefinition dialogSnapshot, List<string> errors) {
@@ -2308,42 +2226,6 @@ public static class ContentPackPipeline {
       );
     }
   }
-
-  static string ResolvePackWarmProfileLocationId(
-    PackDefinition pack,
-    LocationWarmProfile profile,
-    LocationInfo locationSnapshot
-  ) {
-    var profileLocationId = NormalizeToken(profile != null ? profile.LocationId : "");
-    if (!string.IsNullOrWhiteSpace(profileLocationId)) {
-      return profileLocationId;
-    }
-
-    var snapshotLocationId = NormalizeToken(locationSnapshot != null ? locationSnapshot.id : "");
-    if (!string.IsNullOrWhiteSpace(snapshotLocationId)) {
-      return snapshotLocationId;
-    }
-
-    if (pack == null || pack.ownedLocations == null || pack.ownedLocations.Count <= 0) {
-      return "";
-    }
-
-    var resolvedLocationId = "";
-    for (var i = 0; i < pack.ownedLocations.Count; i++) {
-      var candidate = NormalizeToken(pack.ownedLocations[i]);
-      if (string.IsNullOrWhiteSpace(candidate)) continue;
-      if (string.IsNullOrWhiteSpace(resolvedLocationId)) {
-        resolvedLocationId = candidate;
-        continue;
-      }
-      if (!string.Equals(resolvedLocationId, candidate, StringComparison.OrdinalIgnoreCase)) {
-        return "";
-      }
-    }
-
-    return resolvedLocationId;
-  }
-
   static bool PackOwnsLocation(PackDefinition pack, string locationId) {
     var normalizedLocationId = NormalizeToken(locationId);
     if (pack == null || string.IsNullOrWhiteSpace(normalizedLocationId) || pack.ownedLocations == null) {
@@ -3446,9 +3328,6 @@ public static class ContentPackPipeline {
       }
       if (pack.dialogIds == null || pack.dialogIds.Count <= 0) {
         findings.Add("Slice has no dialog ownership declared. pack_id='" + pack.packId + "'");
-      }
-      if (pack.warmProfiles == null || pack.warmProfiles.Count <= 0) {
-        findings.Add("Slice has no warm profile ownership declared. pack_id='" + pack.packId + "'");
       }
     }
 

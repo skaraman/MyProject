@@ -24,7 +24,6 @@ public static class SpriteStreamingHotsetConfigurator {
       rebuildRuntimeIndexFirst,
       saveAndRefreshAtEnd,
       logResult,
-      syncLocationWarmAssets: true,
       applyImporterSettings: true
     );
   }
@@ -33,14 +32,9 @@ public static class SpriteStreamingHotsetConfigurator {
     bool rebuildRuntimeIndexFirst,
     bool saveAndRefreshAtEnd,
     bool logResult,
-    bool syncLocationWarmAssets,
     bool applyImporterSettings
   ) {
     try {
-      if (syncLocationWarmAssets) {
-        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: false, saveAndRefresh: saveAndRefreshAtEnd);
-      }
-
       if (rebuildRuntimeIndexFirst) {
         EditorUtility.DisplayProgressBar("Sprite Streaming", "Rebuilding runtime index...", 0.1f);
         var rebuildOk = SpriteIndexBuilder.RebuildRuntimeIndex(logResult: true, failOnError: false);
@@ -97,7 +91,6 @@ public static class SpriteStreamingHotsetConfigurator {
           " changedGuids=" + changedGuids.Count +
           " sizeDeltaBucket=" + sizeBucket +
           " rebuiltIndex=" + rebuildRuntimeIndexFirst +
-          " syncedWarmAssets=" + syncLocationWarmAssets +
           " appliedImporters=" + applyImporterSettings
         );
       }

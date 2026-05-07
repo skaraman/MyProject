@@ -2,6 +2,32 @@
 
 Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in after reveal.
 
+## Play Mode Loading Optimization (2026-05-02)
+
+### Root Cause Analysis
+
+**Problem**: `StartGame()` → [`RunScenarioWarmGate()`](Assets/Scripts/Input/SingleSceneManager.cs:4180) was hitting the 10s hard timeout in Play mode because:
+1. **Soft timeout too aggressive**: [`startWarmTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:181) = `2.0s` insufficient for disk I/O
+2. **Ratio still too high**: Even at `0.35` (35%), Play mode Addressables loading from HDD/SSD couldn't reach threshold within 2s soft timeout
+3. **Hard bypass delay**: System waited up to [`startWarmHardTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:182) = `10s` before forcing unlock when soft timeout failed
+
+**Diagnosis**: In Play mode, Addressables load from disk with no bundle cache. The 2s soft timeout caused the warm gate orchestrator to fail reaching even 35% readiness, triggering extended wait until 10s hard bypass.
+
+### Solution: Aggressive Lazy Loading v2
+
+1. **Increased soft timeout**: [`startWarmTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:181) from `2.0s` → `4.0s` (accommodates disk I/O without hitting hard bypass)
+2. **Reduced ratio threshold**: [`startWarmRequiredRatio`](Assets/Scripts/Input/SingleSceneManager.cs:183) from `0.35` → `0.10` (10% critical assets only - player, current room, spawn enemies)
+3. **Hard bypass retained**: [`startWarmHardTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:182) = `10s` (emergency release if 4s soft timeout fails)
+4. **Disabled visible prefetching**: [`prefetchVisibleSprites = false`](Assets/Scripts/Input/SingleSceneManager.cs:3881), [`warmAnimationsBeforeUnlock = false`](Assets/Scripts/Input/SingleSceneManager.cs:3881) in [`WaitForStreamingIdleBeforeUnlock()`](Assets/Scripts/Input/SingleSceneManager.cs:4591)
+5. **BuildScriptFastMode**: Already configured as Play Mode builder ([`SpriteAddressCatalogBuilder.cs:1060`](Assets/Editor/SpriteAddressCatalogBuilder.cs:1060))
+
+**Expected Impact**:
+- Gameplay unlock within 2-4 seconds (soft timeout) instead of 10s hard bypass
+- Critical assets (player, location, spawn enemies) still block reveal via [`IsBlockingScopeReady()`](Assets/Scripts/Input/SingleSceneManager.cs:1650)
+- Non-critical sprites load lazily post-reveal via deferred warmup
+
+## Current Target
+
 ## Current Target
 
 - First target is measurement, not another speculative optimization.
@@ -370,7 +396,7 @@ Interpretation:
 - Environment prefab retention follows the same `2`-environment bound.
 - `mainmenu` is never treated as an environment hot-cache slot.
 - Environment hot cache rotates only when a new gameplay location is remembered.
-- Environment hot cache is sourced from `LocationWarmProfile.CollectEnvironmentCacheLists(...)`.
+- Environment hot cache is sourced from the location loading pipeline and staged runtime sources.
 - Warm-gate and pre-unlock resident pins are temporary and should be released after gameplay reveal settles.
 - Enemy runtime residency remains dynamic and distance-based.
 - Session runtime assets that are not menu-global should still be clearable on main-menu return.
@@ -412,7 +438,7 @@ Interpretation:
 - Pre-unlock warmup is collect-only and does not drive live renderer playback.
 - Critical player, gear, nearby-threat, and core-effect work stays under the loading overlay / warm gate.
 - Enemy residency stays relevance-based rather than `pinAllSpawnedEnemies`.
-- Location warm content is prefab-driven through `LocationWarmProfile`.
+- Location warm content is prefab-driven through the location loading pipeline.
 - Grouped gear atlases keep atlas behavior without broad packed-build fan-out, but staged grouped gear atlases resolve sprite slices from Unity importer data while runtime `.json` stays offset-only.
 - Runtime `atlas.json` is authored offset data only. Build/runtime-index passes must not regenerate `packedRect` slice-definition metadata into runtime `atlas.json`, and zero-offset exports should not emit one.
 - Unsupported trimmed-metadata atlas families such as `_Bounces`, `Effects`, and `Expressions` are skipped instead of queued for guaranteed-fail metadata loads.

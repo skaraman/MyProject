@@ -228,50 +228,7 @@ public static class SpriteIndexBuilder {
     public int entryCount;
   }
 
-  [MenuItem("Tools/Sprite Streaming/3) Build Active Content")]
-  public static void BuildActiveContentMenu() {
-    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: false);
-  }
-
-  [MenuItem("Tools/Sprite Streaming/Advanced/Build Active Content (Clean)")]
-  public static void BuildActiveContentCleanMenu() {
-    RunFullBuildPipeline(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: false);
-  }
-
-  [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Runtime Index")]
-  public static void RebuildRuntimeIndexMenu() {
-    RebuildRuntimeIndex(logResult: true, failOnError: false);
-  }
-
-  [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Index + Addressables")]
-  public static void RebuildRuntimeIndexAndBuildAddressablesMenu() {
-    RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: false);
-  }
-
-  [MenuItem("Tools/Sprite Streaming/Advanced/Rebuild Index + Addressables (Clean)")]
-  public static void RebuildRuntimeIndexAndBuildAddressablesCleanMenu() {
-    RebuildRuntimeIndexAndBuildAddressables(logResult: true, cleanCachesBeforeBuild: true, useChunkedWarmup: false);
-  }
-
-  [MenuItem("Tools/Sprite Streaming/Advanced/Configure Addressables Defaults")]
-  public static void ConfigureAddressablesDefaultsMenu() {
-    var settings = AddressableAssetSettingsDefaultObject.GetSettings(true);
-    if (settings == null) {
-      Debug.LogError("[SpriteIndexBuilder] Addressables settings were not found.");
-      return;
-    }
-
-    ConfigureAddressablesBuilderDefaults(settings, logResult: true);
-  }
-
-  [MenuItem("Tools/Sprite Streaming/Advanced/Build Addressables Content")]
-  public static void BuildAddressablesContentMenu() {
-    BuildAddressablesContent(logResult: true, cleanCachesBeforeBuild: false, useChunkedWarmup: false);
-  }
-
-  public static void RunEssentialPipelineSequentialMenu() {
-    BuildActiveContentCleanMenu();
-  }
+  // Menu items moved to ContentPackPipeline.cs for unified workflow
 
   static bool RunFullBuildPipeline(bool logResult, bool cleanCachesBeforeBuild, bool useChunkedWarmup) {
     var pipelineLabel = cleanCachesBeforeBuild ? "Build Active Content (Clean)" : "Build Active Content";
@@ -320,10 +277,6 @@ public static class SpriteIndexBuilder {
         })) return false;
       }
 
-      if (!RunStep(stepIndex++, "Sync location profiles from prefabs", () => {
-        LocationWarmProfileBootstrap.SyncLocationWarmAssets(logResult: logResult, saveAndRefresh: false);
-        return true;
-      })) return false;
 
       if (!RunStep(stepIndex++, "Apply unified import flow", () => {
         return SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: false, logResult: logResult);
@@ -723,10 +676,7 @@ public static class SpriteIndexBuilder {
     EditorUtility.SetDirty(settings);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Clean Build Caches")]
-  public static void CleanAddressablesBuildCachesMenu() {
-    CleanAddressablesBuildCaches(logResult: true);
-  }
+  // Menu items moved to ContentPackPipeline.cs for unified workflow
 
   public static bool PrepareForPlayerBuild(bool logResult, bool failOnError) {
     if (logResult) {
@@ -735,6 +685,17 @@ public static class SpriteIndexBuilder {
       );
     }
     return RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.PlayerPrebuild, prepareSelectedPacks: false);
+  }
+
+  /// <summary>
+  /// Builds addressables for active content packs.
+  /// </summary>
+  public static bool BuildActiveContentMenu(bool logResult = true, bool cleanCachesBeforeBuild = false) {
+    return BuildAddressablesContentPrepared(
+      contextLabel: "Active Content Menu",
+      logResult: logResult,
+      cleanCachesBeforeBuild: cleanCachesBeforeBuild
+    );
   }
 
   static bool RebuildRuntimeIndexInternal(bool logResult, bool failOnError, string contextLabel, bool prepareSelectedPacks) {

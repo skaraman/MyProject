@@ -12,5 +12,28 @@
     "NewLineForElse": false,
     "NewLineForCatch": false,
     "NewLineForFinally": false
-  }
+  },
+  "RoslynExtensionsOptions": {
+    "MSBuildLoadProjectsOnDemand": true,
+    "MSBuildDebugLogEnabled": false,
+    "UseEditorConfig": true,
+    "EnableAnalyzersSupport": true,
+    "DocumentAnalysisTimeoutMs": 10000
+  },
+  "DiagnosticsOptions": {
+    "ShowAllErrors": true,
+    "ReportStyle": "Warning",
+    "DisableFormatOnSave": false,
+    "FormattingEnabled": true,
+    "EnableImportCompletion": true,
+    "EnableImportCompletionForNonRoslynProjects": true
+  },
+    "omnisharp.enableMsBuildLoadProjectsOnDemand": false,
+    "omnisharp.projectLoadTimeout": 300,
+    "omnisharp.useMSBuild": true,
+    "omnisharp.msbuildArgs": "-property:EnableCodeAnalysis=true -property:RunAnalyzersDuringBuild=true",
+    "omnisharp.enableRoslynAnalyzers": true,
+    "omnisharp.enableEditorCompletion": true,
+    "omnisharp.enableImportCompletion": true,
+    "omnisharp.runAutomaticGarbageCollection": true
 }

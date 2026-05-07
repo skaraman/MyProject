@@ -15,7 +15,6 @@ public sealed class ActiveContentRegistry : ScriptableObject {
   [SerializeField] List<string> coreContentRoots = new();
   [SerializeField] List<LocationInfo> locations = new();
   [SerializeField] List<LocationDialogDefinition> dialogs = new();
-  [SerializeField] List<LocationWarmRegistryEntry> warmProfiles = new();
 
   public bool ExternalContentActive => externalContentActive;
   public string DefaultLocationId => string.IsNullOrWhiteSpace(defaultLocationId) ? "" : defaultLocationId.Trim();
@@ -25,7 +24,6 @@ public sealed class ActiveContentRegistry : ScriptableObject {
   public IReadOnlyList<string> CoreContentRoots => coreContentRoots;
   public IReadOnlyList<LocationInfo> Locations => locations;
   public IReadOnlyList<LocationDialogDefinition> Dialogs => dialogs;
-  public IReadOnlyList<LocationWarmRegistryEntry> WarmProfiles => warmProfiles;
 
   public void Configure(
     bool externalContentActive,
@@ -35,8 +33,7 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     IList<string> stagedSpriteLibraryRoots,
     IList<string> coreContentRoots,
     IList<LocationInfo> locations,
-    IList<LocationDialogDefinition> dialogs,
-    IList<LocationWarmRegistryEntry> warmProfiles
+    IList<LocationDialogDefinition> dialogs
   ) {
     this.externalContentActive = externalContentActive;
     this.defaultLocationId = string.IsNullOrWhiteSpace(defaultLocationId) ? "" : defaultLocationId.Trim();
@@ -46,7 +43,6 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     CopyList(this.coreContentRoots, coreContentRoots, NormalizeAssetPath);
     CopyLocations(this.locations, locations);
     CopyDialogs(this.dialogs, dialogs);
-    CopyWarmProfiles(this.warmProfiles, warmProfiles);
   }
 
   public bool TryGetLocation(string locationId, out LocationInfo locationInfo) {
@@ -75,22 +71,6 @@ public sealed class ActiveContentRegistry : ScriptableObject {
       if (candidate == null) continue;
       if (!string.Equals(NormalizeToken(candidate.locationId), normalized, StringComparison.OrdinalIgnoreCase)) continue;
       locationDialog = candidate;
-      return true;
-    }
-
-    return false;
-  }
-
-  public bool TryGetWarmProfile(string locationId, out LocationWarmProfile profile) {
-    profile = null;
-    var normalized = NormalizeToken(locationId);
-    if (string.IsNullOrWhiteSpace(normalized) || warmProfiles == null || warmProfiles.Count <= 0) return false;
-
-    for (var i = 0; i < warmProfiles.Count; i++) {
-      var entry = warmProfiles[i];
-      if (!string.Equals(NormalizeToken(entry.locationId), normalized, StringComparison.OrdinalIgnoreCase)) continue;
-      if (entry.profile == null) return false;
-      profile = entry.profile;
       return true;
     }
 
@@ -129,21 +109,6 @@ public sealed class ActiveContentRegistry : ScriptableObject {
       var clone = CloneDialog(source[i]);
       if (clone == null) continue;
       target.Add(clone);
-    }
-  }
-
-  static void CopyWarmProfiles(List<LocationWarmRegistryEntry> target, IList<LocationWarmRegistryEntry> source) {
-    target.Clear();
-    if (source == null || source.Count <= 0) return;
-
-    for (var i = 0; i < source.Count; i++) {
-      var entry = source[i];
-      var normalizedLocationId = NormalizeToken(entry.locationId);
-      if (string.IsNullOrWhiteSpace(normalizedLocationId) || entry.profile == null) continue;
-      target.Add(new LocationWarmRegistryEntry {
-        locationId = normalizedLocationId,
-        profile = entry.profile
-      });
     }
   }
 
@@ -311,11 +276,6 @@ public static class ActiveContentRegistryRuntime {
 
     locationDialog = ActiveContentRegistry.CloneDialog(resolved);
     return locationDialog != null;
-  }
-
-  public static bool TryGetWarmProfile(string locationId, out LocationWarmProfile profile) {
-    profile = null;
-    return Registry != null && Registry.TryGetWarmProfile(locationId, out profile);
   }
 
   public static IReadOnlyList<string> GetStagedTextureRoots() {
