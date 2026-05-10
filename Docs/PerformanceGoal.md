@@ -42,6 +42,9 @@ Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in afte
 - Recent evidence showed `DomeCity` prefab resolution succeeds, then loading can park at `Activating location` with `pipeline_location_ready=0`.
 - 2026-04-25 `09:29:59Z` crash attempt did not reach gameplay loading. Unity crashed in `UnityEditor.Search.LMDBIndexStorage.GetDocuments`; generated `Library/Search` contained a `59.9 GB` LMDB index and was moved to `Crash/UnitySearch_LMDB_corrupt_20260425_092959`.
 - `UnitySearchCacheGuard` now moves generated `Library/Search` into `Crash/` when the cache or any single index file exceeds `2 GB`.
+- 2026-05-07 Mac run failed in `UnityEditor.Search.PropertyStringTableView.InitFileStream` because generated `Library/Search/propertyDatabase.db.st` was missing; guard now moves partial Search caches before Unity reuses them.
+- 2026-05-09 Mac content pipeline failed at staging because stage links used Windows `cmd.exe /c mklink /J`; staging now creates Unix symlinks on Mac/Linux and maps committed Windows external roots to sibling `../MyProjectContent`.
+- 2026-05-09 New Game reached staged content but `DomeCity.prefab` still had only the source Addressables entry; stage now syncs and validates active location prefab Addressables entries from pack snapshots.
 - Current instrumentation now emits aggregate timing only:
   `[LocationManager][LocationLoadTiming]` and `[SingleSceneManager][LoadTiming]`.
 
@@ -85,8 +88,8 @@ Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in afte
 ## Transition Pipeline Status
 
 - The editor pipeline now has two primary buttons:
-  - `Tools/Content Pipeline/1) Build Active Content (Smart)`
-  - `Tools/Content Pipeline/2) Build Active Content (Clean)`
+  - `Tools/Content Pipeline/1) Addition - Add New Packs From Assets/Sprites`
+  - `Tools/Content Pipeline/2) Reset - Repack From Assets/Sprites`
 - The editor pipeline now has a transition submenu for migration work:
   - analyze ownership/duplicates
   - export missing pack content
@@ -94,9 +97,9 @@ Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in afte
   - audit legacy dependencies
   - rebuild runtime index
   - build Addressables
-  - run a full migration pass in smart or clean mode
-- Smart mode now skips external export writes when the destination output already exists.
-- Clean mode now recreates/overwrites external outputs and keeps the cache-clean recovery path.
+  - run a full migration pass in addition or reset mode
+- Addition mode keeps current content packs as-is and adds new content packs from `Assets/Sprites`.
+- Reset mode resets content packs, repacks from `Assets/Sprites`, and logs packs that were reset but not repacked as `deleted_packs`.
 - `../MyProjectContent` is the authoritative exported pack destination.
 - `Assets/ContentStage` is the intentional runtime/editor mirror for active packs because it gives runtime stable, predictable asset paths.
 - Transition audit now reports:
@@ -527,3 +530,5 @@ Interpretation:
 - 2026-04-25: build-time bottleneck isolated to repeated Addressables builds. Player builds were using the global Addressables preference and rebuilding content for ~11m; content pipeline also ran two chunk warmup builds before the final build. Defaults now explicitly disable Addressables-on-player-build and use one Addressables build pass.
 - 2026-04-25: repeated main-menu popout traced to unsafe runtime atlas order aliases plus color replacement failures clearing already-rendered sprites. Atlas maps now reject positional aliases entirely; exact-slice misses queue/wait for runtime supplements, and failed async color resolves keep the current rendered sprite while logging the miss/mismatch.
 - 2026-04-25: Load Game stall isolated to `DomeCity` prefab loading successfully, then `pipeline_location_ready=0` at `Activating location`. Location activation capacity was incorrectly blocked on global resolver idle after the scoped resolver barrier already owned shard readiness; activation capacity now gates texture queue pressure only and times out instead of owning readiness.
+- 2026-05-10: Load Game could still park at `Activating location` because deferred location stages waited for the loading overlay to end while loading completion still counted deferred activation as blocking work. Deferred stages are now post-reveal background work again; only BG + FG/Static block reveal.
+- 2026-05-10: Unity Search could recreate a partial `Library/Search` after the one-shot guard checks, then throw when `propertyDatabase.db.st` was missing. `UnitySearchCacheGuard` now watches startup briefly and purges any partial Search cache that appears during that window.

@@ -197,6 +197,7 @@ public static class ContentPackPipeline {
   sealed class ExportSyncStats {
     public int packDirectoriesCreated;
     public int packDirectoriesRecreated;
+    public readonly List<string> deletedPackIds = new();
     public int assetPayloadsWritten;
     public int assetPayloadsSkipped;
     public int metaPayloadsWritten;
@@ -241,12 +242,12 @@ public static class ContentPackPipeline {
     }
   }
 
-  [MenuItem("Tools/Content Pipeline/1) Build Active Content (Smart)")]
+  [MenuItem("Tools/Content Pipeline/1) Addition - Add New Packs From Assets/Sprites")]
   public static void BuildActiveContentSmartMenu() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
   }
 
-  [MenuItem("Tools/Content Pipeline/2) Build Active Content (Clean)")]
+  [MenuItem("Tools/Content Pipeline/2) Reset - Repack From Assets/Sprites")]
   public static void BuildActiveContentCleanMenu() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
   }
@@ -281,12 +282,12 @@ public static class ContentPackPipeline {
     RunBuildAddressablesTransitionStep(logResult: true, cleanCachesBeforeBuild: false);
   }
 
-  [MenuItem("Tools/Content Pipeline/Transition/7) Full Migration Pass (Smart)")]
+  [MenuItem("Tools/Content Pipeline/Transition/7) Full Migration Pass (Addition)")]
   public static void FullMigrationPassSmartMenu() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
   }
 
-  [MenuItem("Tools/Content Pipeline/Transition/8) Full Migration Pass (Clean)")]
+  [MenuItem("Tools/Content Pipeline/Transition/8) Full Migration Pass (Reset)")]
   public static void FullMigrationPassCleanMenu() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
   }
@@ -553,6 +554,8 @@ public static class ContentPackPipeline {
     }
 
     try {
+      DeleteStalePackDirectories(externalRoot, packDefinitions, mode, stats);
+
       for (var i = 0; i < packDefinitions.Count; i++) {
         PreparePackDirectory(packDefinitions[i].externalRootPath, externalRoot, mode, stats);
       }
@@ -922,6 +925,7 @@ public static class ContentPackPipeline {
       AssetDatabase.SaveAssets();
       ActiveContentRegistryRuntime.ForceReload();
       SpriteIndexBuilder.ClearCachedSpriteSliceEstimates("content_pack_stage:" + contextLabel);
+      SyncGameplayPrefabAddressables(packById, activePackIds, logResult);
 
       if (!ValidateStagedContent(selection, packById, activePackIds)) {
         return false;
@@ -1905,6 +1909,92 @@ public static class ContentPackPipeline {
     return true;
   }
 
+  static void SyncGameplayPrefabAddressables(
+    Dictionary<string, PackDefinition> packById,
+    List<string> activePackIds,
+    bool logResult
+  ) {
+    GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(logResult, saveAndRefresh: false);
+    ProjectileAddressablesBootstrap.SyncProjectileAddressables(logResult, saveAndRefresh: false);
+    SyncLocationPrefabAddressables(packById, activePackIds, logResult);
+    AssetDatabase.SaveAssets();
+  }
+
+  static void SyncLocationPrefabAddressables(
+    Dictionary<string, PackDefinition> packById,
+    List<string> activePackIds,
+    bool logResult
+  ) {
+    var settings = AddressableAssetSettingsDefaultObject.GetSettings(true);
+    if (settings == null || settings.DefaultGroup == null || packById == null || activePackIds == null) {
+      return;
+    }
+
+    var syncedCount = 0;
+    var changed = false;
+    for (var i = 0; i < activePackIds.Count; i++) {
+      if (!packById.TryGetValue(activePackIds[i], out var pack) || pack == null) continue;
+      if (!TryReadLocationSnapshot(pack, out var locationSnapshot) || locationSnapshot == null) continue;
+
+      var prefabAssetPath = NormalizeAssetPath(locationSnapshot.locationPrefabData != null ? locationSnapshot.locationPrefabData.AssetPath : "");
+      if (string.IsNullOrWhiteSpace(prefabAssetPath)) continue;
+
+      var stagedPrefabAssetPath = BuildStageAssetPath(pack, prefabAssetPath);
+      if (string.IsNullOrWhiteSpace(stagedPrefabAssetPath) || !File.Exists(Path.GetFullPath(stagedPrefabAssetPath))) continue;
+
+      syncedCount++;
+      if (EnsureAddressableAssetEntry(settings, settings.DefaultGroup, stagedPrefabAssetPath)) {
+        changed = true;
+      }
+    }
+
+    if (logResult) {
+      Debug.Log(
+        "[ContentPackPipeline] Synced location prefab Addressables entries." +
+        " count=" + syncedCount +
+        " changed=" + changed
+      );
+    }
+  }
+
+  static bool EnsureAddressableAssetEntry(
+    AddressableAssetSettings settings,
+    AddressableAssetGroup group,
+    string assetPath
+  ) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    if (settings == null || group == null || string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
+
+    var guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
+    if (string.IsNullOrWhiteSpace(guid)) {
+      AssetDatabase.ImportAsset(normalizedAssetPath, ImportAssetOptions.ForceSynchronousImport);
+      guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
+    }
+    if (string.IsNullOrWhiteSpace(guid)) return false;
+
+    var changed = false;
+    var entry = settings.FindAssetEntry(guid);
+    if (entry == null) {
+      entry = settings.CreateOrMoveEntry(guid, group, false, false);
+      changed = entry != null;
+    }
+    if (entry == null) return changed;
+
+    if (!string.Equals(entry.address, normalizedAssetPath, StringComparison.Ordinal)) {
+      entry.SetAddress(normalizedAssetPath, false);
+      changed = true;
+    }
+
+    if (changed) {
+      if (entry.parentGroup != null) {
+        EditorUtility.SetDirty(entry.parentGroup);
+      }
+      EditorUtility.SetDirty(settings);
+    }
+
+    return changed;
+  }
+
   static List<string> CollectStageValidationErrors(Dictionary<string, PackDefinition> packById, List<string> activePackIds) {
     var errors = new List<string>();
     var stageRoots = BuildActiveStageRoots(packById, activePackIds);
@@ -2044,6 +2134,13 @@ public static class ContentPackPipeline {
               " location_id='" + (string.IsNullOrWhiteSpace(snapshotLocationId) ? "-" : snapshotLocationId) + "'" +
               " prefab_path='" + prefabAssetPath + "'" +
               " staged_prefab_path='" + stagedPrefabAssetPath + "'"
+            );
+          }
+          else {
+            ValidateAddressableAsset(
+              stagedPrefabAssetPath,
+              "location_prefab:" + (string.IsNullOrWhiteSpace(snapshotLocationId) ? pack.packId : snapshotLocationId),
+              errors
             );
           }
         }
@@ -2308,7 +2405,10 @@ public static class ContentPackPipeline {
   static void ValidateActivePackAddressable(string projectAssetPath, string label, List<string> activePackIds, List<string> errors) {
     var stagedAssetPath = ResolveStagedAssetPathForActivePacks(projectAssetPath, activePackIds);
     if (string.IsNullOrWhiteSpace(stagedAssetPath)) return;
+    ValidateAddressableAsset(stagedAssetPath, label, errors);
+  }
 
+  static void ValidateAddressableAsset(string stagedAssetPath, string label, List<string> errors) {
     var settings = AddressableAssetSettingsDefaultObject.GetSettings(false);
     if (settings == null) {
       errors?.Add("Addressables settings were not found while validating active-pack asset '" + label + "'.");
@@ -2673,7 +2773,7 @@ public static class ContentPackPipeline {
 
     DeleteStagePath(normalizedStageAssetPath);
     EnsureDirectoryFullPath(Path.GetDirectoryName(stageFullPath));
-    CreateJunction(stageFullPath, targetFullPath);
+    CreateStageLink(stageFullPath, targetFullPath);
     return true;
   }
 
@@ -2803,7 +2903,16 @@ public static class ContentPackPipeline {
     return (attributes & FileAttributes.ReparsePoint) != 0;
   }
 
-  static void CreateJunction(string stageFullPath, string targetFullPath) {
+  static void CreateStageLink(string stageFullPath, string targetFullPath) {
+    if (Application.platform == RuntimePlatform.WindowsEditor) {
+      CreateWindowsJunction(stageFullPath, targetFullPath);
+      return;
+    }
+
+    CreateUnixSymlink(stageFullPath, targetFullPath);
+  }
+
+  static void CreateWindowsJunction(string stageFullPath, string targetFullPath) {
     var startInfo = new ProcessStartInfo {
       FileName = "cmd.exe",
       Arguments = "/c mklink /J \"" + stageFullPath + "\" \"" + targetFullPath + "\"",
@@ -2823,6 +2932,34 @@ public static class ContentPackPipeline {
     var error = process.StandardError.ReadToEnd();
     throw new InvalidOperationException(
       "mklink /J failed." +
+      " stage='" + stageFullPath + "'" +
+      " target='" + targetFullPath + "'" +
+      " exit_code=" + process.ExitCode +
+      " output='" + output + "'" +
+      " error='" + error + "'"
+    );
+  }
+
+  static void CreateUnixSymlink(string stageFullPath, string targetFullPath) {
+    var startInfo = new ProcessStartInfo {
+      FileName = "/bin/ln",
+      Arguments = "-s \"" + targetFullPath + "\" \"" + stageFullPath + "\"",
+      CreateNoWindow = true,
+      UseShellExecute = false,
+      RedirectStandardError = true,
+      RedirectStandardOutput = true,
+      WorkingDirectory = GetProjectRoot()
+    };
+
+    using var process = Process.Start(startInfo);
+    process.WaitForExit();
+
+    if (process.ExitCode == 0) return;
+
+    var output = process.StandardOutput.ReadToEnd();
+    var error = process.StandardError.ReadToEnd();
+    throw new InvalidOperationException(
+      "ln -s failed." +
       " stage='" + stageFullPath + "'" +
       " target='" + targetFullPath + "'" +
       " exit_code=" + process.ExitCode +
@@ -3118,6 +3255,53 @@ public static class ContentPackPipeline {
     }
   }
 
+  static void DeleteStalePackDirectories(
+    string externalRoot,
+    List<PackDefinition> packDefinitions,
+    TransitionPipelineMode mode,
+    ExportSyncStats stats
+  ) {
+    if (mode != TransitionPipelineMode.Clean || string.IsNullOrWhiteSpace(externalRoot)) return;
+
+    var normalizedExternalRoot = NormalizeFullPath(externalRoot);
+    var expectedPackRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (packDefinitions != null) {
+      for (var i = 0; i < packDefinitions.Count; i++) {
+        var packRoot = packDefinitions[i]?.externalRootPath;
+        if (!string.IsNullOrWhiteSpace(packRoot)) {
+          expectedPackRoots.Add(NormalizeFullPath(packRoot));
+        }
+      }
+    }
+
+    DeleteStalePackDirectoriesInRoot(Path.Combine(normalizedExternalRoot, "Forms"), expectedPackRoots, "Form", stats);
+    DeleteStalePackDirectoriesInRoot(Path.Combine(normalizedExternalRoot, "Gears"), expectedPackRoots, "Gear", stats);
+    DeleteStalePackDirectoriesInRoot(Path.Combine(normalizedExternalRoot, "Slices"), expectedPackRoots, "Slice", stats);
+    DeleteStalePackDirectoriesInRoot(Path.Combine(normalizedExternalRoot, "Episodes"), expectedPackRoots, "Episode", stats);
+  }
+
+  static void DeleteStalePackDirectoriesInRoot(
+    string categoryRoot,
+    HashSet<string> expectedPackRoots,
+    string kind,
+    ExportSyncStats stats
+  ) {
+    var normalizedCategoryRoot = NormalizeFullPath(categoryRoot);
+    if (!Directory.Exists(normalizedCategoryRoot)) return;
+
+    var directories = Directory.GetDirectories(normalizedCategoryRoot);
+    Array.Sort(directories, StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < directories.Length; i++) {
+      var packRoot = NormalizeFullPath(directories[i]);
+      if (expectedPackRoots != null && expectedPackRoots.Contains(packRoot)) continue;
+
+      Directory.Delete(packRoot, recursive: true);
+      if (stats != null) {
+        stats.deletedPackIds.Add(kind + ":" + Path.GetFileName(packRoot));
+      }
+    }
+  }
+
   static void EnsureDirectoryAssetPath(string assetPath) {
     if (string.IsNullOrWhiteSpace(assetPath)) return;
     var fullPath = Path.GetFullPath(assetPath);
@@ -3184,7 +3368,21 @@ public static class ContentPackPipeline {
   }
 
   static string NormalizeFullPath(string value) {
-    return string.IsNullOrWhiteSpace(value) ? "" : Path.GetFullPath(value).Replace('\\', '/');
+    if (string.IsNullOrWhiteSpace(value)) return "";
+    var normalized = value.Trim().Replace('\\', '/');
+    if (Application.platform != RuntimePlatform.WindowsEditor && IsWindowsAbsolutePath(normalized)) {
+      var siblingRoot = Directory.GetParent(GetProjectRoot())?.FullName ?? GetProjectRoot();
+      normalized = Path.Combine(siblingRoot, Path.GetFileName(normalized));
+    }
+    return Path.GetFullPath(normalized).Replace('\\', '/');
+  }
+
+  static bool IsWindowsAbsolutePath(string value) {
+    return !string.IsNullOrWhiteSpace(value) &&
+           value.Length >= 3 &&
+           char.IsLetter(value[0]) &&
+           value[1] == ':' &&
+           value[2] == '/';
   }
 
   static string ToProjectAssetPath(string fullPath) {
@@ -3571,6 +3769,7 @@ public static class ContentPackPipeline {
     return
       " pack_dirs_created=" + stats.packDirectoriesCreated +
       " pack_dirs_recreated=" + stats.packDirectoriesRecreated +
+      " deleted_packs=" + (stats.deletedPackIds.Count <= 0 ? "-" : string.Join(", ", stats.deletedPackIds)) +
       " asset_writes=" + stats.assetPayloadsWritten +
       " asset_skips=" + stats.assetPayloadsSkipped +
       " meta_writes=" + stats.metaPayloadsWritten +
