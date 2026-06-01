@@ -574,7 +574,7 @@ public class LocationManager : MonoBehaviour {
   }
 
   static bool ShouldPromoteDeferredStagesDuringOverlay() {
-    return Application.isPlaying && SpriteStreamingLoadingState.IsLoadingOverlayActive;
+    return false;
   }
 
   static List<string> MergeLibraryLists(List<string> primary, List<string> secondary) {

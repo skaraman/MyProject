@@ -1420,7 +1420,6 @@ public class SingleSceneManager : MonoBehaviour {
     var shouldExpectEnemyWarmStage = ShouldExpectEnemyWarmStageForCurrentLocation();
     var archetypeCount = shouldExpectEnemyWarmStage ? ResolveCurrentLocationLoadingArchetypeCount() : 0;
     var enemyWarmInputsReady = !shouldExpectEnemyWarmStage || archetypeCount > 0;
-    var locationDeferredPending = LocationManager.HasPendingDeferredActivationWork;
     var dialogController = ResolveGameplayDialogController();
     var enemiesReady = gameplayWarmGateCompletedForLoad;
     var uiReadyForProgress = IsGameplayUiReadyForLoadingProgress();
@@ -1668,7 +1667,6 @@ public class SingleSceneManager : MonoBehaviour {
       out var blockingHardBypassUsed
     );
     var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
-    var locationDeferredPending = LocationManager.HasPendingDeferredActivationWork;
     if (hasBlockingProgress && (blockingTotalCount > 0 || blockingProgress > 0f)) {
       loadingProgressObservedWork = true;
     }
@@ -1726,7 +1724,6 @@ public class SingleSceneManager : MonoBehaviour {
       resolverIdle,
       playerReady,
       locationActivationPending,
-      locationDeferredPending,
       outstanding,
       hasOutstandingWork,
       completionSettled,
@@ -1782,7 +1779,6 @@ public class SingleSceneManager : MonoBehaviour {
     bool resolverIdle,
     bool playerReady,
     bool locationActivationPending,
-    bool locationDeferredPending,
     int outstanding,
     bool hasOutstandingWork,
     bool completionSettled,
@@ -4824,8 +4820,7 @@ public class SingleSceneManager : MonoBehaviour {
     bool playerReady,
     bool uiReady,
     bool dialogReady,
-    bool locationActivationPending,
-    bool locationDeferredPending
+    bool locationActivationPending
   ) {
     return queue.queuedCount <= 0 &&
            queue.inFlightCount <= 0 &&
@@ -4844,8 +4839,7 @@ public class SingleSceneManager : MonoBehaviour {
     bool playerReady,
     bool uiReady,
     bool dialogReady,
-    bool locationActivationPending,
-    bool locationDeferredPending
+    bool locationActivationPending
   ) {
     if (locationActivationPending) {
       return "Activating gameplay";
@@ -4956,8 +4950,7 @@ public class SingleSceneManager : MonoBehaviour {
         playerReady,
         uiReady,
         dialogReady,
-        locationActivationPending,
-        locationDeferredPending
+        locationActivationPending
       );
 
       SetLoadingStatusOverride(statusDetail);
@@ -4982,8 +4975,7 @@ public class SingleSceneManager : MonoBehaviour {
             playerReady,
             uiReady,
             dialogReady,
-            locationActivationPending,
-            locationDeferredPending
+            locationActivationPending
           )) {
         if (stableFrames <= 0) {
           stableStartedAt = Time.realtimeSinceStartup;

@@ -6,14 +6,22 @@ using UnityEngine;
 [InitializeOnLoad]
 public static class UnitySearchCacheGuard {
   const long MaxSearchCacheBytes = 2L * 1024L * 1024L * 1024L;
+  const double StartupWatchSeconds = 120d;
   const string SearchCacheRelativePath = "Library/Search";
   const string CrashFolderName = "Crash";
+  static readonly string[] RequiredSearchCacheFiles = {
+    "propertyDatabase.db.st"
+  };
+  static double watchUntil;
+  static double nextWatchAt;
 
   static bool s_PurgeScheduled = false;
 
   static UnitySearchCacheGuard() {
+    watchUntil = EditorApplication.timeSinceStartup + StartupWatchSeconds;
     RunStartupCheck();
     EditorApplication.delayCall += RunStartupCheck;
+    EditorApplication.update += WatchStartupSearchCache;
   }
 
   public static void PurgeSearchCacheMenu() {
@@ -24,8 +32,35 @@ public static class UnitySearchCacheGuard {
   static void RunStartupCheck() {
     if (s_PurgeScheduled) return;
     if (!TryGetSearchCacheSize(out var totalBytes, out var largestBytes)) return;
+    if (HasMissingRequiredFiles()) {
+      MoveSearchCache("missing_required_file");
+      return;
+    }
     if (totalBytes < MaxSearchCacheBytes && largestBytes < MaxSearchCacheBytes) return;
     MoveSearchCache("size_guard total_gb=" + ToGb(totalBytes) + " largest_gb=" + ToGb(largestBytes), totalBytes, largestBytes);
+  }
+
+  static void WatchStartupSearchCache() {
+    if (EditorApplication.timeSinceStartup < nextWatchAt) return;
+    nextWatchAt = EditorApplication.timeSinceStartup + 1d;
+    RunStartupCheck();
+    if (EditorApplication.timeSinceStartup < watchUntil) return;
+    EditorApplication.update -= WatchStartupSearchCache;
+  }
+
+  static bool HasMissingRequiredFiles() {
+    var searchPath = GetSearchCachePath();
+    if (!Directory.Exists(searchPath)) return false;
+
+    foreach (var relativePath in RequiredSearchCacheFiles) {
+      var fullPath = Path.Combine(searchPath, relativePath);
+      if (!File.Exists(fullPath)) {
+        Debug.LogWarning("[UnitySearchCacheGuard] Missing generated Unity Search cache file path='" + fullPath + "'");
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static bool TryGetSearchCacheSize(out long totalBytes, out long largestBytes) {
