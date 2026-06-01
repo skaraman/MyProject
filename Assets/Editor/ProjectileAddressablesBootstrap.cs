@@ -15,7 +15,6 @@ public static class ProjectileAddressablesBootstrap {
     EditorApplication.delayCall += () => EnsureProjectileAddressables(logResult: false, saveAndRefresh: false);
   }
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Sync Projectile Addressables")]
   public static void SyncProjectileAddressablesMenu() {
     EnsureProjectileAddressables(logResult: true, saveAndRefresh: true);
   }

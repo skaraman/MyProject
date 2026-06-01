@@ -14,7 +14,7 @@ public class OptimizedBatchSpriteProcessor : EditorWindow
     private DefaultAsset textureFolder;
     private bool showProgressBar = true;
 
-    [MenuItem("Tools/Optimized Batch Sprite Slicer")]
+    [MenuItem("Tools/Optimized Slice/Optimized Batch Sprite Slicer")]
     public static void ShowWindow()
     {
         GetWindow<OptimizedBatchSpriteProcessor>("Optimized Sprite Slicer");

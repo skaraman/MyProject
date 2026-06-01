@@ -7,11 +7,6 @@ namespace AllIn1SpriteShader
 	{
 		static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths, bool didDomainReload)
 		{
-			if (BuildPipeline.isBuildingPlayer)
-			{
-				return;
-			}
-
 			bool needToRefreshConfig = false;
 			for (int i = 0; i < importedAssets.Length; i++)
 			{

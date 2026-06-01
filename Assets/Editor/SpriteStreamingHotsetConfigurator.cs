@@ -14,7 +14,6 @@ public static class SpriteStreamingHotsetConfigurator {
   const int AutomaticTextureFormat = -1;
   static readonly Regex guidRegex = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Hotset")]
   public static void ApplyPerformanceHotsetMenu() {
     ApplyPerformanceHotset(rebuildRuntimeIndexFirst: true, saveAndRefreshAtEnd: true, logResult: true);
   }
@@ -105,7 +104,6 @@ public static class SpriteStreamingHotsetConfigurator {
     }
   }
 
-  [MenuItem("Tools/Sprite Streaming/Advanced/Apply Unified Import Flow")]
   public static void ApplyUnifiedImportFlowMenu() {
     ApplyUnifiedImportFlow(saveAndRefreshAtEnd: true, logResult: true);
   }
@@ -326,20 +324,23 @@ public static class SpriteStreamingHotsetConfigurator {
     var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     var pathByNamepart = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-    var sourceRoot = NormalizePath(SpriteStreamingConfig.SourceRootFolder);
-    if (string.IsNullOrWhiteSpace(sourceRoot) || !Directory.Exists(sourceRoot)) return map;
+    var roots = ContentPackPipeline.GetSpriteLibrarySearchRoots();
+    for (var rootIndex = 0; rootIndex < roots.Count; rootIndex++) {
+      var sourceRoot = NormalizePath(roots[rootIndex]);
+      if (string.IsNullOrWhiteSpace(sourceRoot) || !Directory.Exists(sourceRoot)) continue;
 
-    var files = Directory.GetFiles(sourceRoot, "*.spriteLib", SearchOption.AllDirectories);
-    Array.Sort(files, StringComparer.Ordinal);
+      var files = Directory.GetFiles(sourceRoot, "*.spriteLib", SearchOption.AllDirectories);
+      Array.Sort(files, StringComparer.Ordinal);
 
-    for (var i = 0; i < files.Length; i++) {
-      var path = NormalizePath(files[i]);
-      var relative = path.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)
-        ? path.Substring(sourceRoot.Length + 1)
-        : path;
-      var key = RemoveExtension(relative);
-      if (string.IsNullOrWhiteSpace(key)) continue;
-      pathByNamepart[key] = path;
+      for (var i = 0; i < files.Length; i++) {
+        var path = NormalizePath(files[i]);
+        var relative = path.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)
+          ? path.Substring(sourceRoot.Length + 1)
+          : path;
+        var key = RemoveExtension(relative);
+        if (string.IsNullOrWhiteSpace(key)) continue;
+        pathByNamepart[key] = path;
+      }
     }
 
     foreach (var pair in pathByNamepart) {
@@ -439,19 +440,37 @@ public static class SpriteStreamingHotsetConfigurator {
 
   static HashSet<string> CollectSourceRootTextureAssetPaths() {
     var texturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    var sourceRoot = NormalizePath(SpriteStreamingConfig.TextureSourceRootFolder);
-    if (string.IsNullOrWhiteSpace(sourceRoot)) return texturePaths;
+    var textureRoots = ContentPackPipeline.GetTextureSearchRoots();
+    if (textureRoots == null || textureRoots.Count <= 0) return texturePaths;
+    var spriteLibraryRoots = ContentPackPipeline.GetSpriteLibrarySearchRoots();
 
-    var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { sourceRoot });
-    for (var i = 0; i < guids.Length; i++) {
-      var path = NormalizePath(AssetDatabase.GUIDToAssetPath(guids[i]));
-      if (!string.IsNullOrWhiteSpace(path)) {
-        if (path.StartsWith(NormalizePath(SpriteStreamingConfig.SourceRootFolder) + "/", StringComparison.OrdinalIgnoreCase)) continue;
+    for (var rootIndex = 0; rootIndex < textureRoots.Count; rootIndex++) {
+      var sourceRoot = NormalizePath(textureRoots[rootIndex]);
+      if (string.IsNullOrWhiteSpace(sourceRoot)) continue;
+
+      var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { sourceRoot });
+      for (var i = 0; i < guids.Length; i++) {
+        var path = NormalizePath(AssetDatabase.GUIDToAssetPath(guids[i]));
+        if (string.IsNullOrWhiteSpace(path) || IsUnderAnyRoot(path, spriteLibraryRoots)) continue;
         texturePaths.Add(path);
       }
     }
 
     return texturePaths;
+  }
+
+  static bool IsUnderAnyRoot(string path, IReadOnlyList<string> roots) {
+    if (string.IsNullOrWhiteSpace(path) || roots == null) return false;
+    var normalizedPath = NormalizePath(path);
+    for (var i = 0; i < roots.Count; i++) {
+      var root = NormalizePath(roots[i]);
+      if (string.IsNullOrWhiteSpace(root)) continue;
+      if (string.Equals(normalizedPath, root, StringComparison.OrdinalIgnoreCase) ||
+          normalizedPath.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static bool TryResolveShardPath(

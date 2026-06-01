@@ -99,11 +99,7 @@ public sealed class ContentPackSelection : ScriptableObject {
   }
 
   static string NormalizePackId(string value) {
-    var normalized = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
-    if (string.Equals(normalized, ContentPackPipeline.LegacySlicePackId, StringComparison.OrdinalIgnoreCase)) {
-      return ContentPackPipeline.SlicePackId;
-    }
-    return normalized;
+    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
   }
 
   bool EnsureDefaultSliceFocus() {

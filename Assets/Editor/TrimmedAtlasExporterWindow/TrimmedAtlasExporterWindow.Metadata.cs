@@ -1,0 +1,107 @@
+﻿#if UNITY_EDITOR
+using System;
+using System.IO;
+using UnityEditor;
+using UnityEngine;
+
+public sealed partial class TrimmedAtlasExporterWindow {
+  string WriteMetadataJson(string exportedAtlasAssetPath, TrimmedAtlasExport exportData) {
+    var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(exportedAtlasAssetPath);
+    var editorMetadataAssetPath = BuildEditorMetadataAssetPath(exportedAtlasAssetPath);
+    var runtimeMetadata = BuildRuntimeMetadata(exportData);
+    if (HasRuntimeOffsetMetadata(runtimeMetadata)) {
+      WriteMetadataPayload(runtimeMetadataAssetPath, JsonUtility.ToJson(runtimeMetadata, true));
+    }
+    else {
+      DeleteMetadataAsset(runtimeMetadataAssetPath);
+      Debug.Log(
+        "[TrimAtlasExport] Skipped runtime offset metadata because all exported offsets resolved to zero." +
+        " atlas='" + exportedAtlasAssetPath + "'" +
+        " sprite_count=" + (exportData?.sprites?.Count ?? 0));
+    }
+    WriteMetadataPayload(editorMetadataAssetPath, JsonUtility.ToJson(exportData, true));
+    return runtimeMetadataAssetPath;
+  }
+
+  static RuntimeTrimmedAtlasExport BuildRuntimeMetadata(TrimmedAtlasExport exportData) {
+    var runtimeMetadata = new RuntimeTrimmedAtlasExport();
+    if (exportData?.sprites == null || exportData.sprites.Count <= 0) return runtimeMetadata;
+
+    runtimeMetadata.sprites.Capacity = exportData.sprites.Count;
+    for (var i = 0; i < exportData.sprites.Count; i++) {
+      var sprite = exportData.sprites[i];
+      if (sprite == null || string.IsNullOrWhiteSpace(sprite.name)) continue;
+      if (!HasMeaningfulRuntimeOffset(sprite.offsetFromCellCenterPx)) continue;
+      runtimeMetadata.sprites.Add(new RuntimeTrimmedSpriteMetadata {
+        name = sprite.name,
+        offsetFromCellCenterPx = sprite.offsetFromCellCenterPx
+      });
+    }
+    return runtimeMetadata;
+  }
+
+  static bool HasRuntimeOffsetMetadata(RuntimeTrimmedAtlasExport runtimeMetadata) {
+    return runtimeMetadata?.sprites != null && runtimeMetadata.sprites.Count > 0;
+  }
+
+  static bool HasMeaningfulRuntimeOffset(PixelPoint offset) {
+    return Mathf.Abs(offset.x) > 0.001f || Mathf.Abs(offset.y) > 0.001f;
+  }
+
+  static void WriteMetadataPayload(string metadataAssetPath, string jsonText) {
+    var normalizedAssetPath = NormalizeAssetPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
+
+    var metadataFullPath = Path.GetFullPath(normalizedAssetPath);
+    Directory.CreateDirectory(Path.GetDirectoryName(metadataFullPath) ?? "");
+    File.WriteAllText(metadataFullPath, jsonText ?? "");
+  }
+
+  static void CopySourceImporterSnapshot(string sourceAtlasAssetPath, TrimmedAtlasExport exportData) {
+    if (exportData == null) return;
+    GetSourceImporterSnapshot(sourceAtlasAssetPath, out exportData.spritePixelsPerUnit, out exportData.spriteMeshType);
+  }
+
+  internal static void GetSourceImporterSnapshot(string sourceAtlasAssetPath, out float spritePixelsPerUnit, out int spriteMeshType) {
+    spritePixelsPerUnit = 100f;
+    spriteMeshType = (int)SpriteMeshType.Tight;
+    if (string.IsNullOrWhiteSpace(sourceAtlasAssetPath)) return;
+
+    var sourceImporter = AssetImporter.GetAtPath(sourceAtlasAssetPath) as TextureImporter;
+    if (sourceImporter == null) return;
+
+    spritePixelsPerUnit = sourceImporter.spritePixelsPerUnit;
+    var sourceSettings = new TextureImporterSettings();
+    sourceImporter.ReadTextureSettings(sourceSettings);
+    spriteMeshType = (int)sourceSettings.spriteMeshType;
+  }
+
+  internal static bool ApplyImporterSnapshot(TextureImporter targetImporter, float spritePixelsPerUnit, int spriteMeshType) {
+    if (targetImporter == null) return false;
+
+    var changed = false;
+    if (spritePixelsPerUnit > 0f && !Mathf.Approximately(targetImporter.spritePixelsPerUnit, spritePixelsPerUnit)) {
+      targetImporter.spritePixelsPerUnit = spritePixelsPerUnit;
+      changed = true;
+    }
+
+    var targetSettings = new TextureImporterSettings();
+    targetImporter.ReadTextureSettings(targetSettings);
+    var resolvedSpriteMeshType = Enum.IsDefined(typeof(SpriteMeshType), spriteMeshType)
+      ? (SpriteMeshType)spriteMeshType
+      : SpriteMeshType.Tight;
+    if (targetSettings.spriteMeshType != resolvedSpriteMeshType) {
+      targetSettings.spriteMeshType = resolvedSpriteMeshType;
+      targetImporter.SetTextureSettings(targetSettings);
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  internal static bool CopySourceImporterSettings(string sourceAtlasAssetPath, TextureImporter targetImporter) {
+    GetSourceImporterSnapshot(sourceAtlasAssetPath, out var spritePixelsPerUnit, out var spriteMeshType);
+    return ApplyImporterSnapshot(targetImporter, spritePixelsPerUnit, spriteMeshType);
+  }
+}
+#endif

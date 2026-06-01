@@ -63,7 +63,7 @@ namespace AllIn1SpriteShader
 
 		private static void ConfigureShaders()
 		{
-			if (BuildPipeline.isBuildingPlayer)
+			if (AssetDatabase.IsAssetImportWorkerProcess())
 			{
 				return;
 			}
@@ -83,18 +83,12 @@ namespace AllIn1SpriteShader
 				SessionState.SetInt(LIT_SHADER_UNITY_VERSION_KEY, (int)unityVersion);
 				SessionState.SetInt(LIT_SHADER_FIRST_TIME_PROJECT, 1);
 
-				bool litShaderChanged = ConfigureShader(SPRITE_LIT_SHADER_NAME);
-				bool litTransparentShaderChanged = ConfigureShader(SPRITE_LIT_TRANSPARENT_SHADER_NAME);
-
-				if (litShaderChanged || litTransparentShaderChanged)
-				{
-					AssetDatabase.SaveAssets();
-					AssetDatabase.Refresh();
-				}
+				ConfigureShader(SPRITE_LIT_SHADER_NAME);
+				ConfigureShader(SPRITE_LIT_TRANSPARENT_SHADER_NAME);
 			}
 		}
 
-		private static bool ConfigureShader(string shaderName)
+		private static void ConfigureShader(string shaderName)
 		{
 			string pipelineSufix = string.Empty;
 
@@ -161,28 +155,15 @@ namespace AllIn1SpriteShader
 
 				string newShaderStr = File.ReadAllText(Path.Combine(currentFolder, shaderTemplatePath));
 				newShaderStr = newShaderStr.Replace($"Shader \"AllIn1SpriteShader/{shaderName}_BetterShader\"", $"Shader \"AllIn1SpriteShader/{shaderName}\"");
-				newShaderStr = EditorUtils.UnifyEOL(newShaderStr);
 
-				string finalShaderFullPath = Path.Combine(currentFolder, finalShaderPath);
+				File.WriteAllText(Path.Combine(currentFolder, finalShaderPath), EditorUtils.UnifyEOL(newShaderStr));
 
-				if (File.Exists(finalShaderFullPath))
-				{
-					string currentShaderStr = File.ReadAllText(finalShaderFullPath);
-					currentShaderStr = EditorUtils.UnifyEOL(currentShaderStr);
-
-					if (string.Equals(currentShaderStr, newShaderStr, StringComparison.Ordinal))
-					{
-						return false;
-					}
-				}
-
-				File.WriteAllText(finalShaderFullPath, newShaderStr);
-				return true;
+				AssetDatabase.SaveAssets();
+				AssetDatabase.Refresh();
 			}
 			catch (Exception e)
 			{
 				Debug.LogError("Shader not found: " + e);
-				return false;
 			}
 		}
 

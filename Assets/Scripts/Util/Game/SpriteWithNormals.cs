@@ -2188,6 +2188,14 @@ public class SpriteWithNormals : MonoBehaviour {
   }
 
   SpriteAddressPair StripUnavailableRuntimeNormalAddress(SpriteAddressPair pair, SpriteLookupKey lookupKey) {
+    if (!string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress) &&
+        (pair.RuntimeNormalAddress.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+         pair.RuntimeNormalAddress.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))) {
+      pair.normalAddress = "";
+      pair.normalAtlasAddress = "";
+      pair.normalSpriteName = "";
+    }
+
 #if UNITY_EDITOR
     if (!Application.isPlaying || !Application.isEditor) return pair;
     if (string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)) return pair;

@@ -7,7 +7,7 @@ namespace AllIn1SpriteShader
 {
     public class AllIn1ShaderWindow : EditorWindow
     {
-        private const string versionString = "4.661";
+        private const string versionString = "4.68";
         [MenuItem("Tools/AllIn1/SpriteShaderWindow")]
         public static void ShowAllIn1ShaderWindowWindow()
         {

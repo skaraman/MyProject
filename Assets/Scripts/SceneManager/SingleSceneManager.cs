@@ -173,11 +173,11 @@ public class SingleSceneManager : MonoBehaviour {
   [SerializeField, HideInInspector] GameObject debugLocationPrefab;
   [SerializeField, ShowIf(nameof(debugMode))] string debugLocationId = "";
   const bool useScenarioWarmGate = true;
-  const float startWarmTimeoutSeconds = 2.0f;
-  const float startWarmHardTimeoutSeconds = 25.0f;
-  const float startWarmRequiredRatio = 0.97f;
-  const float loadSaveWarmRequiredRatioCap = 0.72f;
-  const float loadSaveWarmRequiredRatioFloor = 0.62f;
+  const float startWarmTimeoutSeconds = 4.0f;
+  const float startWarmHardTimeoutSeconds = 10.0f;
+  const float startWarmRequiredRatio = 0.35f;
+  const float loadSaveWarmRequiredRatioCap = 0.45f;
+  const float loadSaveWarmRequiredRatioFloor = 0.25f;
   const int warmGateCriticalEnemyCount = 3;
   const float warmGateCriticalEnemyDistance = 25f;
   const bool warmGatePreloadCorePlayerEffects = true;
@@ -239,25 +239,24 @@ public class SingleSceneManager : MonoBehaviour {
   const float fadeFromBlackSeconds = 2.0f;
   const float loadingCircleSpinSpeedDegreesPerSecond = 360f;
   static readonly bool waitForStreamingIdleBeforeFadeOut = true;
-  const float streamingIdleMinimumWaitSeconds = 3.0f;
-  const float streamingIdleTimeoutSeconds = 20.0f;
+  const float streamingIdleMinimumWaitSeconds = 0.25f;
+  const float streamingIdleTimeoutSeconds = 6.0f;
   const bool allowStreamingIdleTimeoutBypass = false;
   const int streamingIdleStableFrames = 2;
-  const int streamingIdleAllowedQueued = 0;
-  const int streamingIdleAllowedInFlight = 0;
+  const int streamingIdleAllowedQueued = 32;
+  const int streamingIdleAllowedInFlight = 4;
   const int streamingBlockingReadyMaxOutstandingDesktop = 384;
   const int streamingBlockingReadyMaxOutstandingMobile = 256;
   const int streamingBlockingReadyMaxInFlightDesktop = 48;
   const int streamingBlockingReadyMaxInFlightMobile = 32;
-  const bool enforceZeroOutstandingBeforeUnlock = true;
+  const bool enforceZeroOutstandingBeforeUnlock = false;
   const float loadingPercentRisePerSecond = 55f;
   const bool enablePreUnlockVisibleSpritePrefetch = true;
-  // Increase this if animations are choppy immediately after unlock (e.g. to 12 or 24).
-  const int preUnlockPrefetchAnimationFrames = 6;
-  const int preUnlockPrefetchLookAheadFrames = 6;
-  const int preUnlockPrefetchMaxAddresses = 12288;
-  const int preUnlockPrefetchMinAddresses = 512;
-  const int preUnlockPrefetchEnqueueBudgetPerFrame = 200;
+  const int preUnlockPrefetchAnimationFrames = 3;
+  const int preUnlockPrefetchLookAheadFrames = 3;
+  const int preUnlockPrefetchMaxAddresses = 3072;
+  const int preUnlockPrefetchMinAddresses = 256;
+  const int preUnlockPrefetchEnqueueBudgetPerFrame = 120;
   const int preUnlockPrefetchFrameJumpClamp = 4;
   const float preUnlockTargetCacheRefreshSeconds = 0.5f;
   const bool preUnlockPrefetchExpandAtlasSiblings = true;
@@ -267,10 +266,10 @@ public class SingleSceneManager : MonoBehaviour {
   const int preUnlockPlayerAnimationStarts = 64;
   const int preUnlockEnemyAnimationStartsPerController = 24;
   const bool enablePreUnlockAnimationPlaybackWarmup = true;
-  const int preUnlockAnimationPlaybackPasses = 2;
-  const int preUnlockAnimationFramePreloadPasses = 3;
-  const bool preUnlockReprefetchVisibleSpritesAfterAnimationWarmup = true;
-  const float preUnlockWarmupQueueSettleTimeoutSeconds = 2.0f;
+  const int preUnlockAnimationPlaybackPasses = 1;
+  const int preUnlockAnimationFramePreloadPasses = 1;
+  const bool preUnlockReprefetchVisibleSpritesAfterAnimationWarmup = false;
+  const float preUnlockWarmupQueueSettleTimeoutSeconds = 0.5f;
   const float preUnlockBlockingBudgetSeconds = 1.25f;
   static readonly bool enablePreUnlockResidentPinning = true;
   const int preUnlockResidentPinMaxAddresses = 2048;
@@ -818,7 +817,6 @@ public class SingleSceneManager : MonoBehaviour {
     persistentAtlasSeenAddressScratch.Clear();
 
     AddPersistentAtlasAddress(ResolveEsperanzaExpressionAtlasAddress(".png"));
-    AddPersistentAtlasAddress(ResolveEsperanzaExpressionAtlasAddress(".jpg"));
     if (persistentAtlasAddressScratch.Count <= 0) {
       persistentAtlasAddressScratch.Clear();
       persistentAtlasSeenAddressScratch.Clear();
@@ -1297,7 +1295,7 @@ public class SingleSceneManager : MonoBehaviour {
     return 0.55f;
   }
 
-  float ResolveGameplayUiStageProgress(GameplayDialogController dialogController, bool uiReady, bool locationDeferredPending) {
+  float ResolveGameplayUiStageProgress(GameplayDialogController dialogController, bool uiReady) {
     if (uiReady) {
       return 1f;
     }
@@ -1314,7 +1312,7 @@ public class SingleSceneManager : MonoBehaviour {
 
     if (dialogController != null && gameplayUiActive) {
       progress = 0.8f;
-      if (dialogController.HasResolvedUiReferencesForLoadingProgress && !locationDeferredPending) {
+      if (dialogController.HasResolvedUiReferencesForLoadingProgress) {
         progress = 0.95f;
       }
     }
@@ -1425,7 +1423,7 @@ public class SingleSceneManager : MonoBehaviour {
     var locationDeferredPending = LocationManager.HasPendingDeferredActivationWork;
     var dialogController = ResolveGameplayDialogController();
     var enemiesReady = gameplayWarmGateCompletedForLoad;
-    var uiReadyForProgress = IsGameplayUiReadyForLoadingProgress() && !locationDeferredPending;
+    var uiReadyForProgress = IsGameplayUiReadyForLoadingProgress();
     var dialogReadyForProgress = dialogController != null && dialogController.IsReadyForLoadingProgress;
 
     AdvanceOptimalGameplayLoadingStageForLoad(
@@ -1475,7 +1473,7 @@ public class SingleSceneManager : MonoBehaviour {
           ResolveStagedLoadingProgress(
             OptimalLoadingProgressEnemiesFloor,
             OptimalLoadingProgressUiFloor,
-            ResolveGameplayUiStageProgress(dialogController, uiReadyForProgress, locationDeferredPending)
+            ResolveGameplayUiStageProgress(dialogController, uiReadyForProgress)
           ),
           OptimalLoadingProgressUiFloor,
           "Preparing UI"
@@ -1677,12 +1675,11 @@ public class SingleSceneManager : MonoBehaviour {
 
     var blockingReady = hasBlockingProgress &&
       IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue) &&
-      !locationActivationPending &&
-      !locationDeferredPending;
+      !locationActivationPending;
 
     var hasOutstandingWork = hasBlockingProgress
       ? !blockingReady
-      : (remainingWork > 0 || !resolverIdle || !playerReady || locationActivationPending || locationDeferredPending);
+      : (remainingWork > 0 || !resolverIdle || !playerReady || locationActivationPending);
     if (hasOutstandingWork) {
       loadingProgressIdleStartedAt = -1f;
     }
@@ -1803,7 +1800,7 @@ public class SingleSceneManager : MonoBehaviour {
     if (hasBlockingProgress && blockingProgress < 0.999f) {
       return "Warming critical";
     }
-    if (locationActivationPending || locationDeferredPending) {
+    if (locationActivationPending) {
       return "Activating location";
     }
     if (!playerReady) {
@@ -2131,6 +2128,89 @@ public class SingleSceneManager : MonoBehaviour {
     if (!string.IsNullOrWhiteSpace(extraFields)) {
       builder.Append(' ').Append(extraFields.Trim());
     }
+    Debug.Log(builder.ToString());
+  }
+
+  void LogWarmGateConfig(WarmGateMode context, float requestedTimeoutSeconds, float requestedRatio, WarmRequest request, GearController playerController, EnemyController[] activeEnemies) {
+    if (!ShouldLogLoadFlowWarnings()) return;
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var deferred = TextureResidencyCache.GetDeferredSnapshot();
+    var builder = BeginLoadFlowLog("[SingleSceneManager][WarmGateConfig]");
+    AppendLoadFlowField(builder, "context", context.ToString());
+    AppendLoadFlowFloat(builder, "requested_timeout_s", requestedTimeoutSeconds);
+    AppendLoadFlowFloat(builder, "actual_timeout_s", request.timeoutSeconds);
+    AppendLoadFlowFloat(builder, "hard_timeout_s", request.hardTimeoutSeconds);
+    AppendLoadFlowFloat(builder, "requested_ratio", requestedRatio);
+    AppendLoadFlowFloat(builder, "actual_ratio", request.requiredReadyRatio);
+    AppendLoadFlowBool(builder, "allow_hard_bypass", request.allowHardTimeoutBypass);
+    AppendLoadFlowBool(builder, "allow_critical_soft_timeout", request.allowCriticalReadySoftTimeout);
+    AppendLoadFlowBool(builder, "player_present", playerController != null);
+    AppendLoadFlowInt(builder, "active_enemies", activeEnemies != null ? activeEnemies.Length : 0);
+    AppendLoadFlowInt(builder, "critical_enemies", request.criticalEnemyControllers != null ? request.criticalEnemyControllers.Length : 0);
+    AppendLoadFlowInt(builder, "enemy_archetypes", request.enemyArchetypePrefabsByType != null ? request.enemyArchetypePrefabsByType.Count : 0);
+    AppendLoadFlowInt(builder, "critical_libraries", request.extraCriticalLibraries != null ? request.extraCriticalLibraries.Count : 0);
+    AppendLoadFlowInt(builder, "critical_addresses", request.extraCriticalAddresses != null ? request.extraCriticalAddresses.Count : 0);
+    AppendLoadFlowInt(builder, "critical_labels", request.extraCriticalLabels != null ? request.extraCriticalLabels.Count : 0);
+    AppendLoadFlowInt(builder, "critical_asset_addresses", request.extraCriticalAssetAddresses != null ? request.extraCriticalAssetAddresses.Count : 0);
+    AppendLoadFlowInt(builder, "critical_asset_labels", request.extraCriticalAssetLabels != null ? request.extraCriticalAssetLabels.Count : 0);
+    AppendLoadFlowInt(builder, "warm_libraries", request.extraWarmLibraries != null ? request.extraWarmLibraries.Count : 0);
+    AppendLoadFlowInt(builder, "warm_addresses", request.extraWarmAddresses != null ? request.extraWarmAddresses.Count : 0);
+    AppendLoadFlowInt(builder, "warm_labels", request.extraWarmLabels != null ? request.extraWarmLabels.Count : 0);
+    AppendLoadFlowInt(builder, "warm_asset_addresses", request.extraWarmAssetAddresses != null ? request.extraWarmAssetAddresses.Count : 0);
+    AppendLoadFlowInt(builder, "warm_asset_labels", request.extraWarmAssetLabels != null ? request.extraWarmAssetLabels.Count : 0);
+    AppendLoadFlowInt(builder, "critical_player_effects", request.criticalPlayerEffectKeys != null ? request.criticalPlayerEffectKeys.Count : 0);
+    AppendLoadFlowInt(builder, "queue_queued", queue.queuedCount);
+    AppendLoadFlowInt(builder, "queue_in_flight", queue.inFlightCount);
+    AppendLoadFlowInt(builder, "deferred_pending", deferred.pendingCount);
+    Debug.Log(builder.ToString());
+  }
+
+  string BuildPreUnlockThresholdFields() {
+    ResolveBlockingReadyQueueThresholds(out var maxOutstanding, out var maxInFlight);
+    return
+      " min_wait_s=" + streamingIdleMinimumWaitSeconds.ToString("0.000") +
+      " timeout_s=" + streamingIdleTimeoutSeconds.ToString("0.000") +
+      " stable_required=" + Mathf.Max(streamingIdleStableFrames, 1) +
+      " allowed_queued=" + Mathf.Max(streamingIdleAllowedQueued, 0) +
+      " allowed_in_flight=" + Mathf.Max(streamingIdleAllowedInFlight, 0) +
+      " blocking_max_outstanding=" + maxOutstanding +
+      " blocking_max_in_flight=" + maxInFlight;
+  }
+
+  void LogPreUnlockConfig(string stage, bool prefetchVisibleSprites, bool warmAnimationsBeforeUnlock, float deadline) {
+    if (!ShouldLogLoadFlowWarnings()) return;
+    ResolveBlockingReadyQueueThresholds(out var maxOutstanding, out var maxInFlight);
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var deferred = TextureResidencyCache.GetDeferredSnapshot();
+    var builder = BeginLoadFlowLog("[SingleSceneManager][PreUnlockConfig]");
+    AppendLoadFlowField(builder, "stage", ResolveLoadFlowValue(stage));
+    AppendLoadFlowBool(builder, "prefetch_visible", prefetchVisibleSprites);
+    AppendLoadFlowBool(builder, "warm_animations", warmAnimationsBeforeUnlock);
+    AppendLoadFlowFloat(builder, "blocking_budget_s", preUnlockBlockingBudgetSeconds);
+    AppendLoadFlowField(builder, "deadline_remaining_s", float.IsInfinity(deadline) ? "inf" : Mathf.Max(deadline - Time.realtimeSinceStartup, 0f).ToString("0.000"));
+    AppendLoadFlowFloat(builder, "min_wait_s", streamingIdleMinimumWaitSeconds);
+    AppendLoadFlowFloat(builder, "timeout_s", streamingIdleTimeoutSeconds);
+    AppendLoadFlowInt(builder, "stable_required", Mathf.Max(streamingIdleStableFrames, 1));
+    AppendLoadFlowInt(builder, "allowed_queued", Mathf.Max(streamingIdleAllowedQueued, 0));
+    AppendLoadFlowInt(builder, "allowed_in_flight", Mathf.Max(streamingIdleAllowedInFlight, 0));
+    AppendLoadFlowInt(builder, "blocking_max_outstanding", maxOutstanding);
+    AppendLoadFlowInt(builder, "blocking_max_in_flight", maxInFlight);
+    AppendLoadFlowBool(builder, "enforce_zero_outstanding", enforceZeroOutstandingBeforeUnlock);
+    AppendLoadFlowInt(builder, "prefetch_frames", preUnlockPrefetchAnimationFrames);
+    AppendLoadFlowInt(builder, "prefetch_lookahead", preUnlockPrefetchLookAheadFrames);
+    AppendLoadFlowInt(builder, "prefetch_max_addresses", preUnlockPrefetchMaxAddresses);
+    AppendLoadFlowInt(builder, "prefetch_min_addresses", preUnlockPrefetchMinAddresses);
+    AppendLoadFlowInt(builder, "prefetch_enqueue_budget", preUnlockPrefetchEnqueueBudgetPerFrame);
+    AppendLoadFlowInt(builder, "playback_passes", preUnlockAnimationPlaybackPasses);
+    AppendLoadFlowInt(builder, "frame_preload_passes", preUnlockAnimationFramePreloadPasses);
+    AppendLoadFlowBool(builder, "reprefetch_after_animation", preUnlockReprefetchVisibleSpritesAfterAnimationWarmup);
+    AppendLoadFlowInt(builder, "queue_queued", queue.queuedCount);
+    AppendLoadFlowInt(builder, "queue_in_flight", queue.inFlightCount);
+    AppendLoadFlowInt(builder, "deferred_pending", deferred.pendingCount);
+    AppendLoadFlowBool(builder, "resolver_idle", SpriteRuntimeResolver.IsWarmupIdle());
+    AppendLoadFlowBool(builder, "player_ready", IsPlayerFirstFrameReady());
+    AppendLoadFlowBool(builder, "location_activation_pending", LocationManager.HasPendingBlockingActivationWork);
+    AppendLoadFlowBool(builder, "location_deferred_pending", LocationManager.HasPendingDeferredActivationWork);
     Debug.Log(builder.ToString());
   }
 
@@ -4145,6 +4225,7 @@ public class SingleSceneManager : MonoBehaviour {
     var playerController = ResolvePlayerGearController();
     var activeEnemies = ResolveActiveEnemyControllers();
     var request = BuildWarmRequest(context, timeoutSeconds, requiredRatio, playerController, activeEnemies);
+    LogWarmGateConfig(context, timeoutSeconds, requiredRatio, request, playerController, activeEnemies);
     var orchestrator = StreamingWarmOrchestrator.Instance;
     if (orchestrator == null) {
       gameplayWarmGateCompletedForLoad = true;
@@ -4553,7 +4634,8 @@ public class SingleSceneManager : MonoBehaviour {
         "queued=" + noIdleQueue.queuedCount +
         " in_flight=" + noIdleQueue.inFlightCount +
         " deferred=" + noIdleDeferredPending +
-        " warmup_done=" + (warmAnimationsBeforeUnlock ? 1 : 0)
+        " warmup_done=" + (warmAnimationsBeforeUnlock ? 1 : 0) +
+        BuildPreUnlockThresholdFields()
       );
       yield break;
     }
@@ -4563,6 +4645,7 @@ public class SingleSceneManager : MonoBehaviour {
     SetLoadingBlackscreenHold(true);
     EnsureLoadingProgressForPhase();
     var preUnlockBlockingDeadline = ResolvePreUnlockBlockingDeadline();
+    LogPreUnlockConfig("begin", prefetchVisibleSprites, warmAnimationsBeforeUnlock, preUnlockBlockingDeadline);
     if (prefetchVisibleSprites) {
       if (TryGetRemainingPreUnlockBlockingBudget(preUnlockBlockingDeadline, out _)) {
         yield return RunPreUnlockStepWithBudget(
@@ -4607,9 +4690,8 @@ public class SingleSceneManager : MonoBehaviour {
       var locationDeferredPending = LocationManager.HasPendingDeferredActivationWork;
       var blockingReady = hasBlockingProgress
         ? IsBlockingScopeReady(resolverIdle, playerReady, blockingCriticalReady, blockingHardBypassUsed, queue) &&
-          !locationActivationPending &&
-          !locationDeferredPending
-        : (queueIdle && resolverIdle && playerReady && !locationActivationPending && !locationDeferredPending);
+          !locationActivationPending
+        : (queueIdle && resolverIdle && playerReady && !locationActivationPending);
 
       if (minimumWaitReached && blockingReady) {
         stableFrames++;
@@ -4673,7 +4755,8 @@ public class SingleSceneManager : MonoBehaviour {
           " player_ready=" + (playerReady ? 1 : 0) +
           " blocking_ready=" + (blockingReady ? 1 : 0) +
           " stable_frames=" + stableFrames +
-          " warmup_done=" + (warmupDone ? 1 : 0)
+          " warmup_done=" + (warmupDone ? 1 : 0) +
+          BuildPreUnlockThresholdFields()
         );
         yield break;
       }
@@ -4686,8 +4769,7 @@ public class SingleSceneManager : MonoBehaviour {
           !allowStreamingIdleTimeoutBypass &&
           !hasBlockingProgress &&
           queueFullyDrained &&
-          !locationActivationPending &&
-          !locationDeferredPending;
+          !locationActivationPending;
         if (allowStreamingIdleTimeoutBypass || forcedByBlockingReady || forcedByLegacyDrain) {
           if (warmAnimationsBeforeUnlock && !warmupDone) {
             warmupDone = true;
@@ -4720,7 +4802,8 @@ public class SingleSceneManager : MonoBehaviour {
             " player_ready=" + (playerReady ? 1 : 0) +
             " blocking_ready=" + (blockingReady ? 1 : 0) +
             " stable_frames=" + stableFrames +
-            " warmup_done=" + (warmupDone ? 1 : 0)
+            " warmup_done=" + (warmupDone ? 1 : 0) +
+            BuildPreUnlockThresholdFields()
           );
           yield break;
         }
@@ -4751,8 +4834,7 @@ public class SingleSceneManager : MonoBehaviour {
            playerReady &&
            uiReady &&
            dialogReady &&
-           !locationActivationPending &&
-           !locationDeferredPending;
+           !locationActivationPending;
   }
 
   string ResolveRevealSettleStatusDetail(
@@ -4765,7 +4847,7 @@ public class SingleSceneManager : MonoBehaviour {
     bool locationActivationPending,
     bool locationDeferredPending
   ) {
-    if (locationActivationPending || locationDeferredPending) {
+    if (locationActivationPending) {
       return "Activating gameplay";
     }
     if (!playerReady) {
@@ -4865,7 +4947,7 @@ public class SingleSceneManager : MonoBehaviour {
       var playerReady = IsPlayerFirstFrameReady();
       var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
       var locationDeferredPending = LocationManager.HasPendingDeferredActivationWork;
-      var uiReady = IsGameplayUiReadyForLoadingProgress() && !locationDeferredPending;
+      var uiReady = IsGameplayUiReadyForLoadingProgress();
       var dialogReady = IsGameplayDialogReadyForLoadingProgress();
       var statusDetail = ResolveRevealSettleStatusDetail(
         queue,
@@ -5625,11 +5707,14 @@ public class SingleSceneManager : MonoBehaviour {
   }
 
   float ResolveRequiredWarmRatio(WarmGateMode context, float configuredRatio, EnemyController[] activeEnemies) {
-    var ratio = Mathf.Clamp(configuredRatio, 0.5f, 0.99f);
-    if (context != WarmGateMode.LoadSave) return ratio;
+    var ratio = Mathf.Clamp(configuredRatio, 0.1f, 0.99f);
+    if (context != WarmGateMode.LoadSave) {
+      LogWarmRatioTuning(context, configuredRatio, ratio, ratio, ratio, activeEnemies, "non_loadsave");
+      return ratio;
+    }
 
-    var cap = Mathf.Clamp(Mathf.Max(loadSaveWarmRequiredRatioCap, 0.95f), 0.5f, 0.99f);
-    var floor = Mathf.Clamp(Mathf.Max(loadSaveWarmRequiredRatioFloor, 0.9f), 0.5f, 0.99f);
+    var cap = Mathf.Clamp(loadSaveWarmRequiredRatioCap, 0.1f, 0.99f);
+    var floor = Mathf.Clamp(loadSaveWarmRequiredRatioFloor, 0.1f, 0.99f);
     ratio = Mathf.Min(ratio, cap);
     if (SystemInfo.systemMemorySize <= 8192) {
       ratio -= 0.03f;
@@ -5651,7 +5736,26 @@ public class SingleSceneManager : MonoBehaviour {
       ratio -= 0.02f;
     }
 
-    return Mathf.Clamp(ratio, floor, 0.99f);
+    var tunedRatio = Mathf.Clamp(ratio, floor, 0.99f);
+    LogWarmRatioTuning(context, configuredRatio, tunedRatio, floor, cap, activeEnemies, "loadsave");
+    return tunedRatio;
+  }
+
+  void LogWarmRatioTuning(WarmGateMode context, float configuredRatio, float tunedRatio, float floor, float cap, EnemyController[] activeEnemies, string reason) {
+    if (!ShouldLogLoadFlowWarnings()) return;
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var builder = BeginLoadFlowLog("[SingleSceneManager][WarmRatio]");
+    AppendLoadFlowField(builder, "context", context.ToString());
+    AppendLoadFlowField(builder, "reason", ResolveLoadFlowValue(reason));
+    AppendLoadFlowFloat(builder, "configured_ratio", configuredRatio);
+    AppendLoadFlowFloat(builder, "tuned_ratio", tunedRatio);
+    AppendLoadFlowFloat(builder, "floor", floor);
+    AppendLoadFlowFloat(builder, "cap", cap);
+    AppendLoadFlowInt(builder, "memory_mb", SystemInfo.systemMemorySize);
+    AppendLoadFlowInt(builder, "active_enemies", activeEnemies != null ? activeEnemies.Length : 0);
+    AppendLoadFlowInt(builder, "queue_queued", queue.queuedCount);
+    AppendLoadFlowInt(builder, "queue_in_flight", queue.inFlightCount);
+    Debug.Log(builder.ToString());
   }
 
   void LogWarmRequestScope(

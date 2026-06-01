@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7855390966740999027}
   - component: {fileID: 5005102722621950854}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveSlotMask
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -84,8 +84,8 @@ SpriteMask:
   m_MaskAlphaCutoff: 0
   m_FrontSortingLayerID: -1228231999
   m_BackSortingLayerID: -1228231999
-  m_FrontSortingLayer: 3
-  m_BackSortingLayer: 3
+  m_FrontSortingLayer: 4
+  m_BackSortingLayer: 4
   m_FrontSortingOrder: 98
   m_BackSortingOrder: 0
   m_IsCustomRangeActive: 1
@@ -106,7 +106,7 @@ GameObject:
   - component: {fileID: 2625488155959767604}
   - component: {fileID: 7355880654655894303}
   - component: {fileID: 3250525508653419758}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveNumber
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -217,7 +217,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 2
   m_MaskInteraction: 1
   m_Sprite: {fileID: 3167565764150125117, guid: 74c5d6d35cbd91247825f06a8efd2345, type: 3}
@@ -247,10 +247,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -289,7 +289,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _Alpha
-    propHash: 432
+    propHash: 433
     sequences:
     - from: 0.5
       to: 0.5
@@ -329,7 +329,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0.33962262, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -368,7 +368,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.34117648, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -439,7 +439,7 @@ GameObject:
   - component: {fileID: 6996190053230830811}
   - component: {fileID: 4662810021201597171}
   - component: {fileID: 3875172071244776357}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -609,7 +609,7 @@ GameObject:
   - component: {fileID: 6548747441430415160}
   - component: {fileID: 4575941670434788795}
   - component: {fileID: 2810591261244634755}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Backing
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -677,7 +677,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 2
   m_MaskInteraction: 0
   m_Sprite: {fileID: -997972493423046422, guid: 9ad5cb843ffed1b4389439ca4e1a53f1, type: 3}
@@ -707,7 +707,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 0
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -730,7 +730,7 @@ GameObject:
   - component: {fileID: 6509122806838422166}
   - component: {fileID: 5978562483174270452}
   - component: {fileID: 9124778829365669498}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -871,10 +871,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -913,7 +913,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -953,7 +953,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -992,7 +992,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -1063,7 +1063,7 @@ GameObject:
   - component: {fileID: 3829329247948220260}
   - component: {fileID: 8460804692049695812}
   - component: {fileID: 3460726156478526812}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1222,6 +1222,38 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cam: {fileID: 0}
+--- !u!1 &849954246218876129
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8631001441378600797}
+  m_Layer: 5
+  m_Name: Delete
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8631001441378600797
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 849954246218876129}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7689897682813716566}
+  m_Father: {fileID: 3562603091643538311}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1003680173806944141
 GameObject:
   m_ObjectHideFlags: 0
@@ -1237,7 +1269,7 @@ GameObject:
   - component: {fileID: 9146182465114966269}
   - component: {fileID: 6994468670633895565}
   - component: {fileID: 8771654922259835903}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1411,7 +1443,7 @@ GameObject:
   - component: {fileID: 3598036097613292879}
   - component: {fileID: 449027147781415386}
   - component: {fileID: 8305918350017415627}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1552,10 +1584,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -1594,7 +1626,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -1634,7 +1666,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -1673,7 +1705,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -1744,7 +1776,7 @@ GameObject:
   - component: {fileID: 4162271949684072962}
   - component: {fileID: 1742275275962733268}
   - component: {fileID: 7711564425149226161}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1885,10 +1917,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -1927,7 +1959,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -1967,7 +1999,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -2006,7 +2038,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -2077,7 +2109,7 @@ GameObject:
   - component: {fileID: 1207715614170420515}
   - component: {fileID: 5409337505268247681}
   - component: {fileID: 8869260945793162485}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2218,10 +2250,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -2260,7 +2292,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -2300,7 +2332,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -2339,7 +2371,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -2410,7 +2442,7 @@ GameObject:
   - component: {fileID: 7180805757853882435}
   - component: {fileID: 7774356196755043642}
   - component: {fileID: 2029938580610385723}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2551,10 +2583,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -2593,7 +2625,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -2633,7 +2665,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -2672,7 +2704,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -2743,7 +2775,7 @@ GameObject:
   - component: {fileID: 3805042351938717429}
   - component: {fileID: 7059392976149072422}
   - component: {fileID: 631780207079657706}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2884,10 +2916,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -2926,7 +2958,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -2966,7 +2998,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -3005,7 +3037,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -3076,7 +3108,7 @@ GameObject:
   - component: {fileID: 7432836986886366558}
   - component: {fileID: 8458108629698573019}
   - component: {fileID: 2627059012823719822}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveNumber
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3187,7 +3219,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 2
   m_MaskInteraction: 1
   m_Sprite: {fileID: -1424352229175844325, guid: 74c5d6d35cbd91247825f06a8efd2345, type: 3}
@@ -3217,10 +3249,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -3259,7 +3291,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _Alpha
-    propHash: 432
+    propHash: 433
     sequences:
     - from: 0.5
       to: 0.5
@@ -3299,7 +3331,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0.33962262, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -3338,7 +3370,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.34117648, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -3409,7 +3441,7 @@ GameObject:
   - component: {fileID: 2357324270051391796}
   - component: {fileID: 6440450517061487070}
   - component: {fileID: 4790312494752207780}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3550,10 +3582,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -3592,7 +3624,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -3632,7 +3664,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -3671,7 +3703,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -3742,7 +3774,7 @@ GameObject:
   - component: {fileID: 8000337294107309775}
   - component: {fileID: 5961100663724586222}
   - component: {fileID: 7233607857185197949}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3883,10 +3915,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -3925,7 +3957,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -3965,7 +3997,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -4004,7 +4036,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -4075,7 +4107,7 @@ GameObject:
   - component: {fileID: 6977520502164867657}
   - component: {fileID: 7580979567043234605}
   - component: {fileID: 5480773629369573865}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4216,10 +4248,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -4258,7 +4290,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -4298,7 +4330,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -4337,7 +4369,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -4404,7 +4436,7 @@ GameObject:
   - component: {fileID: 8852186643175229166}
   - component: {fileID: 4675294035530133498}
   - component: {fileID: 2371605534810693102}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Avatar
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4472,7 +4504,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: 21300000, guid: 5a1a805cbcbafbc42a397dd4c32bc61e, type: 3}
@@ -4522,7 +4554,7 @@ GameObject:
   - component: {fileID: 8788092477157586596}
   - component: {fileID: 7483082274570326631}
   - component: {fileID: 306637440350144145}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4663,10 +4695,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -4705,7 +4737,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -4745,7 +4777,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -4784,7 +4816,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -4855,7 +4887,7 @@ GameObject:
   - component: {fileID: 6281845914119984470}
   - component: {fileID: 4919165145790609816}
   - component: {fileID: 8952670300420813932}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4996,10 +5028,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -5038,7 +5070,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -5078,7 +5110,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -5117,7 +5149,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -5188,7 +5220,7 @@ GameObject:
   - component: {fileID: 7080745970768376186}
   - component: {fileID: 814899482602654833}
   - component: {fileID: 754271665026551963}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5362,7 +5394,7 @@ GameObject:
   - component: {fileID: 531508509877966648}
   - component: {fileID: 8577976324967606154}
   - component: {fileID: 1581992790293351015}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5536,7 +5568,7 @@ GameObject:
   - component: {fileID: 3844727524163332906}
   - component: {fileID: 2050313252990083285}
   - component: {fileID: 4394318000721130616}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveNumber
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5647,7 +5679,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 2
   m_MaskInteraction: 1
   m_Sprite: {fileID: 7141514654658448321, guid: 74c5d6d35cbd91247825f06a8efd2345, type: 3}
@@ -5677,10 +5709,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -5719,7 +5751,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _Alpha
-    propHash: 432
+    propHash: 433
     sequences:
     - from: 0.5
       to: 0.5
@@ -5759,7 +5791,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0.33962262, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -5798,7 +5830,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.34117648, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -5867,7 +5899,7 @@ GameObject:
   - component: {fileID: 8878039331579736785}
   - component: {fileID: 8722409891547881636}
   - component: {fileID: 1259435065366283840}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5931,6 +5963,7 @@ MonoBehaviour:
   offsetY: 0
   justifyX: left
   justifyY: bottom
+  lineDirection: auto
 --- !u!212 &8878039331579736785
 SpriteRenderer:
   serializedVersion: 2
@@ -5977,7 +6010,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 5
   m_MaskInteraction: 1
   m_Sprite: {fileID: 0}
@@ -6007,10 +6040,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -6049,7 +6082,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 1
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -6089,7 +6122,7 @@ MonoBehaviour:
     isDone: 1
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -6128,7 +6161,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 1
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -6210,7 +6243,7 @@ GameObject:
   - component: {fileID: 2673257814018484635}
   - component: {fileID: 5376377727885071607}
   - component: {fileID: 3952503460291756580}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6351,10 +6384,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -6393,7 +6426,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -6433,7 +6466,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -6472,7 +6505,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -6543,7 +6576,7 @@ GameObject:
   - component: {fileID: 1508998209548835214}
   - component: {fileID: 6796274174093333175}
   - component: {fileID: 7092725973774546145}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6717,7 +6750,7 @@ GameObject:
   - component: {fileID: 1070883359774622736}
   - component: {fileID: 8442344212341128997}
   - component: {fileID: 1749700223838502461}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6858,10 +6891,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -6900,7 +6933,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -6940,7 +6973,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -6979,7 +7012,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -7050,7 +7083,7 @@ GameObject:
   - component: {fileID: 2050430985642444654}
   - component: {fileID: 8222843184062760469}
   - component: {fileID: 5166546016556438978}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveNumber
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7161,7 +7194,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 2
   m_MaskInteraction: 1
   m_Sprite: {fileID: 5680673976619871293, guid: 74c5d6d35cbd91247825f06a8efd2345, type: 3}
@@ -7191,10 +7224,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -7233,7 +7266,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _Alpha
-    propHash: 432
+    propHash: 433
     sequences:
     - from: 0.5
       to: 0.5
@@ -7273,7 +7306,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0.33962262, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -7312,7 +7345,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.34117648, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -7379,7 +7412,7 @@ GameObject:
   - component: {fileID: 7034319380410981343}
   - component: {fileID: 1357308434681706066}
   - component: {fileID: 7868213339429632002}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Aqua
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7447,7 +7480,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: -2850093654693141264, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
@@ -7491,7 +7524,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6788763149368291291}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Forms
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7519,6 +7552,120 @@ Transform:
   - {fileID: 8656213880097347569}
   m_Father: {fileID: 3562603091643538311}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &3421539601274361889
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7689897682813716566}
+  - component: {fileID: 7979720255803442797}
+  - component: {fileID: 8988168923919132538}
+  m_Layer: 5
+  m_Name: Delete
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7689897682813716566
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3421539601274361889}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 8.68, y: 1.37, z: 0}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8631001441378600797}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!212 &7979720255803442797
+SpriteRenderer:
+  serializedVersion: 2
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3421539601274361889}
+  m_Enabled: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 7ef34f26b8117334c8ecd9c27a45e2c6, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 0
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: -1228231999
+  m_SortingLayer: 4
+  m_SortingOrder: 98
+  m_MaskInteraction: 0
+  m_Sprite: {fileID: -1070572574, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_FlipX: 0
+  m_FlipY: 0
+  m_DrawMode: 0
+  m_Size: {x: 2.56, y: 2.56}
+  m_AdaptiveModeThreshold: 0.5
+  m_SpriteTileMode: 0
+  m_WasSpriteAssigned: 1
+  m_SpriteSortPoint: 0
+--- !u!114 &8988168923919132538
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3421539601274361889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations: []
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &3553035053557960922
 GameObject:
   m_ObjectHideFlags: 0
@@ -7534,7 +7681,7 @@ GameObject:
   - component: {fileID: 1880667369119408554}
   - component: {fileID: 3013405149762251301}
   - component: {fileID: 1618826038019504724}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7708,7 +7855,7 @@ GameObject:
   - component: {fileID: 7209773322351182747}
   - component: {fileID: 3984807320119763980}
   - component: {fileID: 737844305862306523}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7882,7 +8029,7 @@ GameObject:
   - component: {fileID: 2177113680538835028}
   - component: {fileID: 6359164770476560974}
   - component: {fileID: 8476037203551674722}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8023,10 +8170,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -8065,7 +8212,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -8105,7 +8252,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -8144,7 +8291,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -8211,7 +8358,7 @@ GameObject:
   - component: {fileID: 982121735720340939}
   - component: {fileID: 8006438541381302351}
   - component: {fileID: 8337984830098801134}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Bolt
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8279,7 +8426,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: 4335250483284255847, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
@@ -8325,7 +8472,7 @@ GameObject:
   - component: {fileID: 528574547031330477}
   - component: {fileID: 7325239367960845483}
   - component: {fileID: 6881841578282099663}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Cold
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8393,7 +8540,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: -983156657889264743, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
@@ -8439,7 +8586,7 @@ GameObject:
   - component: {fileID: 3201497471150327709}
   - component: {fileID: 8910477551931885907}
   - component: {fileID: 8163783609648444075}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Base
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8507,7 +8654,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: -1070572574, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
@@ -8554,7 +8701,7 @@ GameObject:
   - component: {fileID: 7701976810582793329}
   - component: {fileID: 8460124564866974881}
   - component: {fileID: 3629061533487948951}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveSlot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8576,6 +8723,7 @@ Transform:
   m_Children:
   - {fileID: 7855390966740999027}
   - {fileID: 6548747441430415160}
+  - {fileID: 8631001441378600797}
   - {fileID: 4703344737054893523}
   - {fileID: 8852186643175229166}
   - {fileID: 6788763149368291291}
@@ -8607,6 +8755,7 @@ MonoBehaviour:
   PlaytimeText: {fileID: 3520892024625173777}
   LevelText: {fileID: 2324159431148398861}
   LocationText: {fileID: 5307664823501435040}
+  enableDebugLogs: 0
 --- !u!114 &8460124564866974881
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8678,7 +8827,7 @@ GameObject:
   - component: {fileID: 8656213880097347569}
   - component: {fileID: 736714507180660615}
   - component: {fileID: 1573246959856610066}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Dark
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8746,7 +8895,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: -199644854353079308, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
@@ -8796,7 +8945,7 @@ GameObject:
   - component: {fileID: 673011727740127218}
   - component: {fileID: 7155580209294921989}
   - component: {fileID: 3000439233652237320}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8966,7 +9115,7 @@ GameObject:
   - component: {fileID: 3074943501138015013}
   - component: {fileID: 1988950300544624671}
   - component: {fileID: 7069810574770448191}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Fire
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9034,7 +9183,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 4
   m_MaskInteraction: 1
   m_Sprite: {fileID: -217455086581007235, guid: 33aa4c73fb386fa409bc21ed73caa828, type: 3}
@@ -9084,7 +9233,7 @@ GameObject:
   - component: {fileID: 5820445015985563601}
   - component: {fileID: 4578525796951532923}
   - component: {fileID: 2290248802392698884}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9225,10 +9374,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -9267,7 +9416,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -9307,7 +9456,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -9346,7 +9495,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -9417,7 +9566,7 @@ GameObject:
   - component: {fileID: 8067168121791806016}
   - component: {fileID: 2855990126548938285}
   - component: {fileID: 4094521707634147669}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9558,10 +9707,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -9600,7 +9749,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -9640,7 +9789,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -9679,7 +9828,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -9750,7 +9899,7 @@ GameObject:
   - component: {fileID: 7711627723346990291}
   - component: {fileID: 6668862303637101024}
   - component: {fileID: 6116828014319682798}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9924,7 +10073,7 @@ GameObject:
   - component: {fileID: 2134625758262227017}
   - component: {fileID: 2760931072018410645}
   - component: {fileID: 3621489018787318042}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10065,10 +10214,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -10107,7 +10256,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -10147,7 +10296,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -10186,7 +10335,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -10255,7 +10404,7 @@ GameObject:
   - component: {fileID: 9065049437578717518}
   - component: {fileID: 1979157991799201111}
   - component: {fileID: 1602041053021318467}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10315,6 +10464,7 @@ MonoBehaviour:
   offsetY: 0
   justifyX: left
   justifyY: bottom
+  lineDirection: auto
 --- !u!212 &9065049437578717518
 SpriteRenderer:
   serializedVersion: 2
@@ -10361,7 +10511,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 5
   m_MaskInteraction: 1
   m_Sprite: {fileID: 0}
@@ -10391,10 +10541,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -10433,7 +10583,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 1
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -10473,7 +10623,7 @@ MonoBehaviour:
     isDone: 1
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -10512,7 +10662,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 1
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -10592,7 +10742,7 @@ GameObject:
   - component: {fileID: 2548259326998234525}
   - component: {fileID: 7327930637057701548}
   - component: {fileID: 3095082364484598637}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10646,6 +10796,7 @@ MonoBehaviour:
   offsetY: 0
   justifyX: left
   justifyY: bottom
+  lineDirection: auto
 --- !u!212 &2548259326998234525
 SpriteRenderer:
   serializedVersion: 2
@@ -10692,7 +10843,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 5
   m_MaskInteraction: 1
   m_Sprite: {fileID: 0}
@@ -10722,10 +10873,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -10764,7 +10915,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 1
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -10804,7 +10955,7 @@ MonoBehaviour:
     isDone: 1
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -10843,7 +10994,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 1
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -10925,7 +11076,7 @@ GameObject:
   - component: {fileID: 5468133942384252325}
   - component: {fileID: 9144938401005242243}
   - component: {fileID: 2010537690738659246}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11066,10 +11217,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -11108,7 +11259,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -11148,7 +11299,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -11187,7 +11338,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -11258,7 +11409,7 @@ GameObject:
   - component: {fileID: 6022826398998620563}
   - component: {fileID: 8565413460540779920}
   - component: {fileID: 4815630730084344547}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11399,10 +11550,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -11441,7 +11592,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -11481,7 +11632,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -11520,7 +11671,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -11591,7 +11742,7 @@ GameObject:
   - component: {fileID: 2921486951907403453}
   - component: {fileID: 4371429773156023761}
   - component: {fileID: 7292767154389050507}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11732,10 +11883,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -11774,7 +11925,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -11814,7 +11965,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -11853,7 +12004,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -11924,7 +12075,7 @@ GameObject:
   - component: {fileID: 5465551199092473494}
   - component: {fileID: 3807124542724812507}
   - component: {fileID: 862370577259719146}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -12098,7 +12249,7 @@ GameObject:
   - component: {fileID: 4670628738664920432}
   - component: {fileID: 7251970169360856163}
   - component: {fileID: 9209864172025682339}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -12239,10 +12390,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -12281,7 +12432,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -12321,7 +12472,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -12360,7 +12511,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -12429,7 +12580,7 @@ GameObject:
   - component: {fileID: 601418094794994935}
   - component: {fileID: 7345086469128348413}
   - component: {fileID: 5345441524540704969}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: SaveNumber
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -12480,6 +12631,7 @@ MonoBehaviour:
   offsetY: 0
   justifyX: left
   justifyY: bottom
+  lineDirection: auto
 --- !u!212 &601418094794994935
 SpriteRenderer:
   serializedVersion: 2
@@ -12526,7 +12678,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: -1228231999
-  m_SortingLayer: 3
+  m_SortingLayer: 4
   m_SortingOrder: 3
   m_MaskInteraction: 1
   m_Sprite: {fileID: 0}
@@ -12556,10 +12708,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -12598,7 +12750,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 1
   - prop: _Alpha
-    propHash: 432
+    propHash: 433
     sequences:
     - from: 0.5
       to: 0.5
@@ -12638,7 +12790,7 @@ MonoBehaviour:
     isDone: 1
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0.33962262, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -12677,7 +12829,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 1
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 0.34117648, g: 0, b: 0, a: 1}
       to: {r: 0.34117648, g: 0, b: 0, a: 1}
@@ -12876,7 +13028,7 @@ GameObject:
   - component: {fileID: 3774566140381847396}
   - component: {fileID: 4382129779656510800}
   - component: {fileID: 3472399115633589550}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -13050,7 +13202,7 @@ GameObject:
   - component: {fileID: 8103013615942894470}
   - component: {fileID: 8115603221644191104}
   - component: {fileID: 3690708478742788302}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: PlayTime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -13224,7 +13376,7 @@ GameObject:
   - component: {fileID: 429188158540870198}
   - component: {fileID: 2448205842545487989}
   - component: {fileID: 2555446209418010047}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -13365,10 +13517,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -13407,7 +13559,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -13447,7 +13599,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -13486,7 +13638,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -13557,7 +13709,7 @@ GameObject:
   - component: {fileID: 2377907481766387168}
   - component: {fileID: 4176356857735949932}
   - component: {fileID: 4008303318532479552}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Location
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -13698,10 +13850,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -13740,7 +13892,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -13780,7 +13932,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -13819,7 +13971,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}
@@ -13890,7 +14042,7 @@ GameObject:
   - component: {fileID: 5521799227209073832}
   - component: {fileID: 4312289028483002449}
   - component: {fileID: 727816393108933957}
-  m_Layer: 8
+  m_Layer: 5
   m_Name: Level
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -14031,10 +14183,10 @@ MonoBehaviour:
   keywordToggles:
   - keyword: OUTBASE_ON
     enabled: 1
-    keywordHash: 1557
+    keywordHash: 1674
   floatAnimations:
   - prop: _OutlineAlpha
-    propHash: 454
+    propHash: 455
     sequences:
     - from: 1
       to: 1
@@ -14073,7 +14225,7 @@ MonoBehaviour:
     staticValue: 0
     isDone: 0
   - prop: _OutlineWidth
-    propHash: 456
+    propHash: 457
     sequences:
     - from: 0.02
       to: 0.02
@@ -14113,7 +14265,7 @@ MonoBehaviour:
     isDone: 0
   colorAnimations:
   - prop: _OutlineColor
-    propHash: 453
+    propHash: 454
     sequences:
     - from: {r: 0, g: 0, b: 0, a: 1}
       to: {r: 0, g: 0, b: 0, a: 1}
@@ -14152,7 +14304,7 @@ MonoBehaviour:
     staticValue: {r: 0, g: 0, b: 0, a: 0}
     isDone: 0
   - prop: _Color
-    propHash: 231
+    propHash: 57
     sequences:
     - from: {r: 1, g: 0.7795247, b: 0, a: 1}
       to: {r: 1, g: 0.78039217, b: 0, a: 1}

@@ -1,0 +1,95 @@
+﻿using CustomInspector.Extensions;
+using System;
+using System.Diagnostics;
+using UnityEngine;
+
+
+namespace CustomInspector
+{
+    /// <summary>
+    /// Prints an error if value is null.
+    /// You can add not allowed values like "1" or "forbiddenString"
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field)]
+    [Conditional("UNITY_EDITOR")]
+    public class ForceFillAttribute : ComparablePropertyAttribute
+    {
+        /// <summary>
+        /// The height in the inspector of the errormessage
+        /// </summary>
+        public const float errorSize = 35;
+
+        public readonly string[] notAllowed = null;
+
+        /// <summary>
+        /// This message will appear, if field value is not correct (instead of the default message: "Value of {current_value} is not valid)".
+        /// </summary>
+        public string errorMessage = null;
+        /// <summary>
+        /// Will only test field in play mode
+        /// </summary>
+        public bool onlyTestInPlayMode = false;
+        /// <summary>
+        /// Use only on components of prefabs:
+        /// Will only test, when current prefab is instantiated in a scene.
+        /// When viewing prefabs in prefab-isolation-mode or in the project-window, the check is skipped.
+        /// </summary>
+        public bool skipOnPrefabIsolation = false;
+
+        /// <summary>
+        /// Define additional forbidden values. 'Null' is always forbidden
+        /// </summary>
+        public ForceFillAttribute(params string[] notAllowed)
+        {
+            order = -10;
+            this.notAllowed = notAllowed;
+        }
+
+        protected override object[] GetParameters() => new[] { notAllowed };
+    }
+    /// <summary>
+    /// A helper class to test in the editor, if all fields in the inspector are filled
+    /// </summary>
+    public static class ForceFill
+    {
+        /// <summary>
+        /// Prints an Error, if any field in Class has Attribute [ForceFill] and is null (to check if everything got filled in the inspector)
+        /// <para>It prints found fields' names and the transforms hierarchy of the Monobehaviour</para>
+        /// <para>This function is conditional: It wont cut performance in build</para>
+        /// </summary>
+        [Conditional("UNITY_EDITOR")]
+        public static void CheckForceFilled(this MonoBehaviour @object)
+            => @object.CheckFilled(attributeType: typeof(ForceFillAttribute));
+
+        /// <summary>
+        /// Prints an Error, if any field in Class has Attribute [ForceFill] and is null (to check if everything got filled in the inspector)
+        /// <para>It prints found fields' names and the scriptables path in project</para>
+        /// <para>This function is conditional: It wont cut performance in build</para>
+        /// </summary>
+        [Conditional("UNITY_EDITOR")]
+        public static void CheckForceFilled(this ScriptableObject @object)
+        {
+            string path = "unknown path";
+#if UNITY_EDITOR
+            if (@object != null)
+            {
+                path = UnityEditor.AssetDatabase.GetAssetPath(@object);
+                if (string.IsNullOrEmpty(path))
+                    path = "runtime-created instance";
+            }
+            else
+                path = "null-object";
+#endif
+            @object.CheckFilled(path, attributeType: typeof(ForceFillAttribute));
+        }
+
+        /// <summary>
+        /// Prints an Error, if any field in Class has Attribute [ForceFill] and is null (to check if everything got filled in the inspector)
+        /// <para>It prints found fields' names and the given owners hierarchy</para>
+        /// <para>This function is conditional: It wont cut performance in build</para>
+        /// </summary>
+        [Conditional("UNITY_EDITOR")]
+        public static void CheckForceFilled(this object @object, Transform owner)
+            => @object.CheckFilled(owner, typeof(ForceFillAttribute));
+    }
+}

@@ -6,27 +6,47 @@ Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in afte
 
 ### Root Cause Analysis
 
-**Problem**: `StartGame()` → [`RunScenarioWarmGate()`](Assets/Scripts/Input/SingleSceneManager.cs:4180) was hitting the 10s hard timeout in Play mode because:
-1. **Soft timeout too aggressive**: [`startWarmTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:181) = `2.0s` insufficient for disk I/O
-2. **Ratio still too high**: Even at `0.35` (35%), Play mode Addressables loading from HDD/SSD couldn't reach threshold within 2s soft timeout
-3. **Hard bypass delay**: System waited up to [`startWarmHardTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:182) = `10s` before forcing unlock when soft timeout failed
+**Problem**: `StartGame()` warm gating was hitting the hard timeout in Play mode because:
+1. **Soft timeout too aggressive**: [`startWarmTimeoutSeconds`](Assets/Scripts/SceneManager/SingleSceneManager.cs:176) = `2.0s` insufficient for disk I/O
+2. **Ratio too high**: [`startWarmRequiredRatio`](Assets/Scripts/SceneManager/SingleSceneManager.cs:178) = `0.97` treated non-critical warm tails as reveal blockers
+3. **Hard bypass delay**: System waited up to [`startWarmHardTimeoutSeconds`](Assets/Scripts/SceneManager/SingleSceneManager.cs:177) = `10s` before forcing unlock when soft timeout failed
 
-**Diagnosis**: In Play mode, Addressables load from disk with no bundle cache. The 2s soft timeout caused the warm gate orchestrator to fail reaching even 35% readiness, triggering extended wait until 10s hard bypass.
+**Diagnosis**: Play mode Addressables load from disk with no bundle cache. Critical readiness is the reveal contract; broad ratio, full queue idle, deferred activation, and large animation tails should not own reveal.
 
 ### Solution: Aggressive Lazy Loading v2
 
-1. **Increased soft timeout**: [`startWarmTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:181) from `2.0s` → `4.0s` (accommodates disk I/O without hitting hard bypass)
-2. **Reduced ratio threshold**: [`startWarmRequiredRatio`](Assets/Scripts/Input/SingleSceneManager.cs:183) from `0.35` → `0.10` (10% critical assets only - player, current room, spawn enemies)
-3. **Hard bypass retained**: [`startWarmHardTimeoutSeconds`](Assets/Scripts/Input/SingleSceneManager.cs:182) = `10s` (emergency release if 4s soft timeout fails)
-4. **Disabled visible prefetching**: [`prefetchVisibleSprites = false`](Assets/Scripts/Input/SingleSceneManager.cs:3881), [`warmAnimationsBeforeUnlock = false`](Assets/Scripts/Input/SingleSceneManager.cs:3881) in [`WaitForStreamingIdleBeforeUnlock()`](Assets/Scripts/Input/SingleSceneManager.cs:4591)
+1. **Increased soft timeout**: [`startWarmTimeoutSeconds`](Assets/Scripts/SceneManager/SingleSceneManager.cs:176) from `2.0s` to `4.0s`
+2. **Reduced ratio threshold**: [`startWarmRequiredRatio`](Assets/Scripts/SceneManager/SingleSceneManager.cs:178) from `0.97` to `0.35`
+3. **Hard bypass retained**: [`startWarmHardTimeoutSeconds`](Assets/Scripts/SceneManager/SingleSceneManager.cs:177) = `10s`
+4. **Shrunk pre-unlock work**: [`WaitForStreamingIdleBeforeUnlock()`](Assets/Scripts/SceneManager/SingleSceneManager.cs:4527) now uses bounded queue release and smaller visible/animation warmup caps
 5. **BuildScriptFastMode**: Already configured as Play Mode builder ([`SpriteAddressCatalogBuilder.cs:1060`](Assets/Editor/SpriteAddressCatalogBuilder.cs:1060))
 
 **Expected Impact**:
 - Gameplay unlock within 2-4 seconds (soft timeout) instead of 10s hard bypass
-- Critical assets (player, location, spawn enemies) still block reveal via [`IsBlockingScopeReady()`](Assets/Scripts/Input/SingleSceneManager.cs:1650)
+- Critical assets (player, location, spawn enemies) still block reveal via [`IsBlockingScopeReady()`](Assets/Scripts/SceneManager/SingleSceneManager.cs:1590)
 - Non-critical sprites load lazily post-reveal via deferred warmup
 
-## Current Target
+## Recent Progress
+
+- 2026-05-13: Play Mode and BuildAndRun both load and play from active content packs.
+- `../MyProjectContent` is now the authoritative content source.
+- `Assets/ContentStage` remains the only project-local runtime/editor mirror.
+- Primary content builds stage existing external packs, audit them, rebuild the runtime index, apply hotsets, and build Addressables.
+- Project-local duplicate sprite payloads under `Assets/Sprites` are being retired after matching external pack copies are verified.
+- Legacy transition menu entries and old slice-id migration mapping have been removed from the editor pipeline.
+- 2026-05-15: runtime-index GUID address-map caching now caches empty probe results, removing the repeated `ResolveSpriteAddress: Caching address map` flood.
+- 2026-05-15: external-enabled sprite library and texture discovery now uses staged active pack roots only, not the full `Assets/Sprites` tree.
+- 2026-05-15: reveal release now uses critical-ready plus bounded queue thresholds; deferred location activation no longer blocks reveal.
+- 2026-05-15: pre-unlock warmup is capped to smaller first-frame windows, and active gear staging now filters to equipped body-part leaf packs.
+- 2026-05-16: Core export now explicitly owns scene-only runtime UI libraries (`MainMenu/MainMenu`, `Items/Items`, `Dialog/DialogUI`, `UI/CharUI`, `UI/MapMenus`, `UI/SelectMenus`) so staged runtime indexes can resolve Play-mode UI sprite rows from external packs.
+- 2026-05-16: Added `Assets/ContentManifest.json` and Play-mode content preflight so stale authoring/content-packing state fails with an actionable Content Pipeline error before runtime sprite lookup errors.
+- 2026-05-31: Split `ContentPackPipeline` into focused editor partials under `Assets/Editor/ContentPackPipeline` without changing the loading/staging contracts.
+- 2026-05-31: Reorganized `Assets/Scripts/Util/AssetStreaming` into focused addressing, atlas metadata, configuration, diagnostics, runtime residency, resolver, texture cache, and warm orchestration folders while preserving script `.meta` GUIDs.
+- 2026-05-31: Resolved compiler warning CS0618 in `ProfilerWindowInterface.cs` by wrapping the `EntityId` to `int` conversion inside a `#pragma warning disable CS0618` block.
+- 2026-05-31: Root-caused `InvalidKeyException Key=atlas/atlas_13` to stale runtime-index rows that violated the staged-content contract. Runtime shards now validate and emit staged slice addresses like `Assets/.../atlas.png[spriteName]`, external-enabled discovery stays on staged active roots, and the residency cache rejects unsupported relative atlas keys before Addressables.
+- 2026-05-31: Root-caused the 40+ minute `Build Active Content (Smart)` stall to runtime-index rebuild resolving large Esperanza gear libraries through inactive/local gear GUIDs. The builder now builds a small active texture GUID index from staged `.meta` files, filters `.spriteLib` rows to active staged texture GUIDs before resolver work, and only loads sprite subassets for active staged textures.
+- 2026-05-31: Restored scene-only Core UI libraries (`Dialog/DialogUI`, `Items/Items`, `MainMenu/MainMenu`, `UI/CharUI`, `UI/MapMenus`, `UI/SelectMenus`) as explicit Core-owned libraries so scene references are exported and staged with active Core content instead of failing the runtime-index rebuild.
+- 2026-05-31: Resolved the Build asset version error (Import Error Code: 4) caused by AllIn1ShaderImporter attempting to rewrite shaders inside background Asset Import Worker processes, by adding an AssetDatabase.IsAssetImportWorkerProcess() guard to avoid redundant shader writes.
 
 ## Current Target
 
@@ -82,22 +102,14 @@ Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in afte
 
 ## Archived Ledger
 
-## Transition Pipeline Status
+## Content Pack Pipeline Status
 
 - The editor pipeline now has two primary buttons:
-  - `Tools/Content Pipeline/1) Build Active Content (Smart)`
-  - `Tools/Content Pipeline/2) Build Active Content (Clean)`
-- The editor pipeline now has a transition submenu for migration work:
-  - analyze ownership/duplicates
-  - export missing pack content
-  - stage active packs
-  - audit legacy dependencies
-  - rebuild runtime index
-  - build Addressables
-  - run a full migration pass in smart or clean mode
-- Smart mode now skips external export writes when the destination output already exists.
-- Clean mode now recreates/overwrites external outputs and keeps the cache-clean recovery path.
-- `../MyProjectContent` is the authoritative exported pack destination.
+  - `Tools/Content Pack/1) Build Active Content (Smart)`
+  - `Tools/Content Pack/2) Build Active Content (Clean)`
+- Smart mode stages active external packs and builds Addressables without rewriting source content.
+- Clean mode keeps the cache-clean recovery path.
+- `../MyProjectContent` is the authoritative content source.
 - `Assets/ContentStage` is the intentional runtime/editor mirror for active packs because it gives runtime stable, predictable asset paths.
 - Transition audit now reports:
   - legacy `Assets/Generated` references
@@ -105,12 +117,9 @@ Ship smooth 60 FPS gameplay with fast, honest loading and no visible pop-in afte
   - staged content dependencies that still point outside stage roots
   - staged code references as informational output instead of content leaks
   - pack-ownership findings across `Core`, `Form`, `Slice`, and `Episode`
-- The active migration target remains removal of bad duplication across:
-  - `Assets/Sprites`
-  - `Assets/Generated`
-  - `../MyProjectContent`
-- The stage mirror in `Assets/ContentStage` is intentional and is not counted as migration debt.
-- `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base` remains the runtime validation baseline while the migration continues.
+- The remaining cleanup target is removal of `Assets/Generated` references and non-identical sprite-library overlaps.
+- The stage mirror in `Assets/ContentStage` is intentional.
+- `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base` remains the runtime validation baseline.
 - Placeholder packs are now exempt from ownership warnings during transition analysis and are logged as informational deferrals instead.
 - The prior staged dependency blocker was narrowed to script references from staged prefabs.
   Those references are now tracked as informational code dependencies instead of content-leak failures.
@@ -239,7 +248,7 @@ Iteration Rules:
 
 ## Checkpoint - 2026-04-03 Clean Build Validation
 
-- `Tools/Content Pipeline/Transition/8) Full Migration Pass (Clean)` and `Tools/Content Pipeline/2) Build Active Content (Clean)` now stand up the reduced-pack baseline without blocking the gameplay load path.
+- `Tools/Content Pack/2) Build Active Content (Clean)` now stands up the reduced-pack baseline without blocking the gameplay load path.
 - `2026-04-03T06:14:52.362Z`: `[SingleSceneManager][LoadingStatus] percent=86 detail='Preparing UI'` while `current_location=DomeCity` and the run stayed on the staged external-content path.
 - `2026-04-03T06:14:59.686Z`: `[SingleSceneManager][RevealHandoff] stage=streaming_idle_complete`
 - `2026-04-03T06:15:03.577Z`: `[SingleSceneManager][RevealSettle] exit elapsed_s=3.876 stable_s=3.259 stable_frames=4`
@@ -460,7 +469,7 @@ Interpretation:
 
 ## Immediate Next Steps
 
-1. Verify `Prepare Active Packs` / `Build Active Content (Clean)` no longer generates `standard` runtime atlas metadata or any packed-rect upgrade path for staged atlases.
+1. Verify `Build Active Content (Smart)` / `Build Active Content (Clean)` no longer generates `standard` runtime atlas metadata or any packed-rect upgrade path for staged atlases.
 2. Build and run the player, then confirm Main Menu `Esperanza`, skull, flower, and button sprites resolve through direct atlas sprite loading with no `metadata_synthesized_atlas` failures.
 3. Confirm zero-offset atlas families such as Main Menu no longer emit runtime `atlas.json`, while authored grouped/trimmed atlases with non-zero offsets still retain their offset payloads.
 4. Re-run `Start New Game` and `Load Game` after that invariant is stable and confirm whether `[SingleSceneManager][LoadingHeartbeatGap]` falls to `<= 2.0s`.
@@ -512,8 +521,8 @@ Interpretation:
 
 ## Transition Checkpoint
 
-- `Full Migration Pass (Clean)` no longer fails step 4 purely because duplicate sprite assets still exist across legacy and external roots.
-- Duplicate counts remain a tracked transition metric and stay visible in `[ContentPackPipeline] [TransitionSummary]`.
+- `Build Active Content (Clean)` now stages authoritative external packs directly.
+- Exact duplicate local sprite payloads under `Assets/Sprites` were removed once matching external copies were verified by SHA-256.
 - Hard blockers remain: legacy `Assets/Generated` references, staged project-tree content leaks, ownership violations, and active-pack audit failures.
 - Esperanza grouped gear atlases are now being split into equipment-driven `Gear_*` packs discovered from grouped-atlas leaf folders.
 - Active pack resolution now targets `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base` instead of staging broad grouped gear atlas roots under `Core` or `Form_Base`.
