@@ -155,6 +155,9 @@ public static class RuntimeAssetCache {
       expectsCriticalSources: HasAnySource(criticalAddresses) || HasAnySource(criticalLabels)
     );
     trackedRequests[trackedId] = tracker;
+    if (ShouldLogDebug()) {
+      Debug.Log($"[RuntimeAssetCache] BeginTrackedWarmup: id={trackedId}, reason='{reason}', expectsCritical={tracker.expectsCriticalSources}");
+    }
     runner.StartCoroutine(
       ResolveWarmupSourcesRoutine(
         criticalAddresses,
@@ -300,6 +303,9 @@ public static class RuntimeAssetCache {
     TrackedWarmRequest tracker,
     string reason = ""
   ) {
+    if (ShouldLogDebug()) {
+      Debug.Log($"[RuntimeAssetCache] ResolveWarmupSourcesRoutine START for tracker={tracker?.id}");
+    }
     var seenSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     yield return ResolveSourceList(criticalAddresses, isLabel: false, markCritical: true, scope, tracker, seenSources, reason);
     yield return ResolveSourceList(criticalLabels, isLabel: true, markCritical: true, scope, tracker, seenSources, reason);
@@ -307,7 +313,12 @@ public static class RuntimeAssetCache {
     yield return ResolveSourceList(warmLabels, isLabel: true, markCritical: false, scope, tracker, seenSources, reason);
 
     if (tracker != null) {
-      if (tracker.cancelled) yield break;
+      if (tracker.cancelled) {
+        if (ShouldLogDebug()) {
+          Debug.Log($"[RuntimeAssetCache] ResolveWarmupSourcesRoutine CANCELLED for tracker={tracker.id}");
+        }
+        yield break;
+      }
       tracker.prepared = true;
       if (ShouldLogDebug()) {
         Debug.Log(
@@ -349,6 +360,9 @@ public static class RuntimeAssetCache {
     TrackedWarmRequest tracker,
     string reason
   ) {
+    if (ShouldLogDebug()) {
+      Debug.Log($"[RuntimeAssetCache] ResolveSourceRoutine: source='{source}', isLabel={isLabel}, tracker={tracker?.id}");
+    }
     var queueHits = 0;
     var queueEnqueues = 0;
     var alreadyPending = 0;
@@ -362,6 +376,10 @@ public static class RuntimeAssetCache {
       handle = Addressables.LoadResourceLocationsAsync(source);
       while (!handle.IsDone) {
         yield return null;
+      }
+
+      if (ShouldLogDebug()) {
+        Debug.Log($"[RuntimeAssetCache] ResolveSourceRoutine handle done: source='{source}', status={handle.Status}, count={(handle.Status == AsyncOperationStatus.Succeeded ? handle.Result?.Count : 0)}");
       }
 
       if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null) {
@@ -443,14 +461,25 @@ public static class RuntimeAssetCache {
   }
 
   static RuntimeAssetWarmSnapshot BuildTrackedSnapshot(TrackedWarmRequest tracker) {
+    var logSnapshotKeys = ShouldLogSnapshotKeys();
     var readyCount = 0;
     foreach (var key in tracker.allKeys) {
-      if (IsEntryReady(key)) readyCount++;
+      var ready = IsEntryReady(key);
+      var failed = IsEntryFailed(key);
+      if (ready || failed) readyCount++;
+      if (logSnapshotKeys) {
+        Debug.Log($"[RuntimeAssetCache][DebugSnapshot] id={tracker.id} allKey='{key}' ready={ready} failed={failed}");
+      }
     }
 
     var criticalReadyCount = 0;
     foreach (var key in tracker.criticalKeys) {
-      if (IsEntryReady(key)) criticalReadyCount++;
+      var ready = IsEntryReady(key);
+      var failed = IsEntryFailed(key);
+      if (ready || failed) criticalReadyCount++;
+      if (logSnapshotKeys) {
+        Debug.Log($"[RuntimeAssetCache][DebugSnapshot] id={tracker.id} criticalKey='{key}' ready={ready} failed={failed}");
+      }
     }
 
     var criticalTotalCount = tracker.criticalKeys.Count;
@@ -693,6 +722,11 @@ public static class RuntimeAssetCache {
     return entry.isLoaded && entry.loadedAsset != null;
   }
 
+  static bool IsEntryFailed(string key) {
+    if (!entriesByKey.TryGetValue(key, out var entry) || entry == null) return false;
+    return entry.failed;
+  }
+
   static void ReleaseEntry(CacheEntry entry, string reason = "") {
     if (entry == null) return;
     RecordRuntimeAssetTraceRelease(entry, reason);
@@ -714,6 +748,9 @@ public static class RuntimeAssetCache {
     var go = new GameObject("RuntimeAssetCacheRunner") { hideFlags = HideFlags.HideAndDontSave };
     UnityEngine.Object.DontDestroyOnLoad(go);
     runner = go.AddComponent<RuntimeAssetCacheRunner>();
+    if (ShouldLogDebug()) {
+      Debug.Log("[RuntimeAssetCache] Created RuntimeAssetCacheRunner game object.");
+    }
   }
 
   static int ResolveStartBudgetPerFrame() {
@@ -764,6 +801,10 @@ public static class RuntimeAssetCache {
     if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
     if (!SpriteStreamingRuntimeSettings.EnableDiagnostics) return false;
     return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  static bool ShouldLogSnapshotKeys() {
+    return ShouldLogDebug() && SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs;
   }
 }
 

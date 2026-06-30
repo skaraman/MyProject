@@ -31,6 +31,7 @@ public static partial class ContentPackPipeline {
     var stageCodeDependencies = CollectStageCodeDependencies(packById, activePackIds);
     var packPolicyErrors = CollectActivePackPolicyValidationErrors(packById, activePackIds);
     var gameplayCoreErrors = CollectGameplayCoreValidationErrors(selection, activePackIds);
+    var materialAddressableErrors = CollectRuntimeMaterialAddressableValidationErrors(selection);
     var generatedReferenceCount = CountLegacyGeneratedReferences();
 
     var summary = new StringBuilder();
@@ -45,6 +46,7 @@ public static partial class ContentPackPipeline {
     summary.Append(" stage_code_refs=").Append(stageCodeDependencies.Count);
     summary.Append(" pack_policy_errors=").Append(packPolicyErrors.Count);
     summary.Append(" gameplay_core_errors=").Append(gameplayCoreErrors.Count);
+    summary.Append(" material_addressable_errors=").Append(materialAddressableErrors.Count);
     Debug.Log(summary.ToString());
 
     if (stageCodeDependencies.Count > 0) {
@@ -63,7 +65,7 @@ public static partial class ContentPackPipeline {
         " pack_id='" + pack.packId + "'" +
         " external_exists=" + Directory.Exists(pack.externalRootPath) +
         " manifest_exists=" + File.Exists(Path.Combine(pack.externalRootPath, ManifestFileName)) +
-        " stage_exists=" + Directory.Exists(Path.GetFullPath(pack.stageAssetRoot)) +
+        " stage_exists=" + Directory.Exists(GetPhysicalPath(pack.stageAssetRoot)) +
         " stage_root='" + pack.stageAssetRoot + "'"
       );
     }
@@ -80,11 +82,18 @@ public static partial class ContentPackPipeline {
       LogErrors("audit_gameplay_core_validation", gameplayCoreErrors);
     }
 
+    if (materialAddressableErrors.Count > 0) {
+      LogErrors("audit_runtime_material_addressables", materialAddressableErrors);
+    }
+
     if (generatedReferenceCount > 0 && logResult) {
       Debug.LogWarning("[ContentPackPipeline] Audit found legacy Assets/Generated references. count=" + generatedReferenceCount);
     }
 
-    return stageErrors.Count <= 0 && packPolicyErrors.Count <= 0 && gameplayCoreErrors.Count <= 0;
+    return stageErrors.Count <= 0 &&
+           packPolicyErrors.Count <= 0 &&
+           gameplayCoreErrors.Count <= 0 &&
+           materialAddressableErrors.Count <= 0;
   }
 
   static bool ValidateStagedContent(
@@ -96,6 +105,7 @@ public static partial class ContentPackPipeline {
     var stageCodeDependencies = CollectStageCodeDependencies(packById, activePackIds);
     var packPolicyErrors = CollectActivePackPolicyValidationErrors(packById, activePackIds);
     var gameplayCoreErrors = CollectGameplayCoreValidationErrors(selection, activePackIds);
+    var materialAddressableErrors = CollectRuntimeMaterialAddressableValidationErrors(selection);
 
     if (stageErrors.Count > 0) {
       LogErrors("stage_validation", stageErrors);
@@ -113,7 +123,14 @@ public static partial class ContentPackPipeline {
       LogErrors("stage_gameplay_core_validation", gameplayCoreErrors);
     }
 
-    if (stageErrors.Count > 0 || packPolicyErrors.Count > 0 || gameplayCoreErrors.Count > 0) {
+    if (materialAddressableErrors.Count > 0) {
+      LogErrors("stage_runtime_material_addressables", materialAddressableErrors);
+    }
+
+    if (stageErrors.Count > 0 ||
+        packPolicyErrors.Count > 0 ||
+        gameplayCoreErrors.Count > 0 ||
+        materialAddressableErrors.Count > 0) {
       return false;
     }
 
@@ -133,6 +150,54 @@ public static partial class ContentPackPipeline {
     }
 
     return errors;
+  }
+
+  static List<string> CollectRuntimeMaterialAddressableValidationErrors(ContentPackSelection selection) {
+    var errors = new List<string>();
+    if (selection == null || !selection.ExternalContentEnabled) {
+      return errors;
+    }
+
+    var settings = AddressableAssetSettingsDefaultObject.GetSettings(false);
+    if (settings == null) {
+      errors.Add("Addressables settings were not found while validating runtime materials.");
+      return errors;
+    }
+
+    var materialAssetPaths = RuntimeMaterialAddressablesBootstrap.CollectRuntimeMaterialAssetPaths();
+    for (var i = 0; i < materialAssetPaths.Count; i++) {
+      ValidateRuntimeMaterialAddressable(settings, materialAssetPaths[i], errors);
+    }
+
+    return errors;
+  }
+
+  static void ValidateRuntimeMaterialAddressable(
+    AddressableAssetSettings settings,
+    string materialAssetPath,
+    List<string> errors
+  ) {
+    var normalizedAssetPath = NormalizeAssetPath(materialAssetPath);
+    if (settings == null || string.IsNullOrWhiteSpace(normalizedAssetPath) || errors == null) return;
+
+    if (!RuntimeMaterialAddressablesBootstrap.TryResolveGuid(normalizedAssetPath, out var guid)) {
+      errors.Add("Missing GUID for runtime material. material_path='" + normalizedAssetPath + "'");
+      return;
+    }
+
+    var entry = settings.FindAssetEntry(guid);
+    if (entry == null) {
+      errors.Add("Missing Addressables entry for runtime material. material_path='" + normalizedAssetPath + "'");
+      return;
+    }
+
+    if (!string.Equals(entry.address, normalizedAssetPath, StringComparison.Ordinal)) {
+      errors.Add(
+        "Addressables entry address mismatch for runtime material." +
+        " material_path='" + normalizedAssetPath + "'" +
+        " address='" + entry.address + "'"
+      );
+    }
   }
 
   static List<string> CollectStageCodeDependencies(Dictionary<string, PackDefinition> packById, List<string> activePackIds) {
@@ -162,6 +227,9 @@ public static partial class ContentPackPipeline {
     }
 
     ValidateGameplayCoreAssetExists(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath, "player_prefab", errors);
+    ValidateGameplayCoreAssetExists(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath, "player_gear_material", errors);
+    ValidateGameplayCoreAssetExists(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath, "player_hair_material", errors);
+    ValidateGameplayCoreAssetExists(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath, "player_body_material", errors);
 
     foreach (var projectile in Projectiles.EnumerateAll()) {
       var projectileAssetPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
@@ -174,6 +242,10 @@ public static partial class ContentPackPipeline {
     }
 
     ValidateGameplayCoreAddressable(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath, "player_prefab", errors);
+    ValidateGameplayCoreAddressable(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath, "player_gear_material", errors);
+    ValidateGameplayCoreAddressable(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath, "player_hair_material", errors);
+    ValidateGameplayCoreAddressable(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath, "player_body_material", errors);
+    ValidateGameplayCorePlayerMaterialReferences(activePackIds, errors);
 
     foreach (var projectile in Projectiles.EnumerateAll()) {
       var projectileAssetPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
@@ -252,7 +324,7 @@ public static partial class ContentPackPipeline {
         }
         else {
           var stagedPrefabAssetPath = BuildStageAssetPath(pack, prefabAssetPath);
-          if (string.IsNullOrWhiteSpace(stagedPrefabAssetPath) || !File.Exists(Path.GetFullPath(stagedPrefabAssetPath))) {
+          if (string.IsNullOrWhiteSpace(stagedPrefabAssetPath) || !File.Exists(GetPhysicalPath(stagedPrefabAssetPath))) {
             errors.Add(
               "Location snapshot prefab is missing from the staged pack." +
               " pack_id='" + pack.packId + "'" +
@@ -458,7 +530,7 @@ public static partial class ContentPackPipeline {
 
   static void ValidateGameplayCoreAssetExists(string projectAssetPath, string label, List<string> errors) {
     var stagedAssetPath = BuildCoreStageAssetPath(projectAssetPath);
-    if (string.IsNullOrWhiteSpace(stagedAssetPath) || !File.Exists(Path.GetFullPath(stagedAssetPath))) {
+    if (string.IsNullOrWhiteSpace(stagedAssetPath) || !File.Exists(GetPhysicalPath(stagedAssetPath))) {
       errors?.Add(
         "Missing staged gameplay core asset." +
         " label='" + label + "'" +
@@ -479,7 +551,7 @@ public static partial class ContentPackPipeline {
     }
 
     var guid = AssetDatabase.AssetPathToGUID(stagedAssetPath);
-    if (string.IsNullOrWhiteSpace(guid)) {
+    if (string.IsNullOrWhiteSpace(guid) && !RuntimeMaterialAddressablesBootstrap.TryResolveGuid(stagedAssetPath, out guid)) {
       errors?.Add(
         "Missing GUID for staged gameplay core asset." +
         " label='" + label + "'" +
@@ -510,7 +582,7 @@ public static partial class ContentPackPipeline {
 
   static void ValidateActivePackAssetExists(string projectAssetPath, string label, List<string> activePackIds, List<string> errors) {
     var stagedAssetPath = ResolveStagedAssetPathForActivePacks(projectAssetPath, activePackIds);
-    if (string.IsNullOrWhiteSpace(stagedAssetPath) || !File.Exists(Path.GetFullPath(stagedAssetPath))) {
+    if (string.IsNullOrWhiteSpace(stagedAssetPath) || !File.Exists(GetPhysicalPath(stagedAssetPath))) {
       errors?.Add(
         "Missing staged active-pack asset." +
         " label='" + label + "'" +
@@ -560,6 +632,162 @@ public static partial class ContentPackPipeline {
     }
   }
 
+  static void ValidateGameplayCorePlayerMaterialReferences(List<string> activePackIds, List<string> errors) {
+    var stagedPrefabPath = BuildCoreStageAssetPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath);
+    if (string.IsNullOrWhiteSpace(stagedPrefabPath) || errors == null) return;
+
+    var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(stagedPrefabPath);
+    if (prefab == null) {
+      errors.Add("Unable to load staged player prefab for material validation. staged_path='" + stagedPrefabPath + "'");
+      return;
+    }
+
+    var controller = prefab.GetComponentInChildren<GearController>(true);
+    if (controller == null) {
+      errors.Add("Staged player prefab is missing GearController. staged_path='" + stagedPrefabPath + "'");
+      return;
+    }
+
+    ValidateGearControllerMaterialField(
+      controller,
+      "esperanzaGearMaterial",
+      BuildCoreStageAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath),
+      errors
+    );
+    ValidateGearControllerMaterialField(
+      controller,
+      "esperanzaHairMaterial",
+      BuildCoreStageAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath),
+      errors
+    );
+    ValidateGearControllerMaterialField(
+      controller,
+      "esperanzaBodyMaterial",
+      BuildCoreStageAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath),
+      errors
+    );
+    ValidateStagedPrefabRendererMaterialReferences(stagedPrefabPath, prefab, activePackIds, errors);
+  }
+
+  static void ValidateGearControllerMaterialField(
+    GearController controller,
+    string fieldName,
+    string expectedStagedMaterialPath,
+    List<string> errors
+  ) {
+    if (controller == null || string.IsNullOrWhiteSpace(fieldName) || errors == null) return;
+
+    var serializedObject = new SerializedObject(controller);
+    var materialProperty = serializedObject.FindProperty(fieldName);
+    if (materialProperty == null) {
+      errors.Add(
+        "GearController material field is missing from serialization." +
+        " object='" + BuildTransformPath(controller.transform) + "'" +
+        " field='" + fieldName + "'"
+      );
+      return;
+    }
+
+    var material = materialProperty.objectReferenceValue as Material;
+    var materialPath = NormalizeAssetPath(material != null ? AssetDatabase.GetAssetPath(material) : "");
+    var expectedPath = NormalizeAssetPath(expectedStagedMaterialPath);
+    if (material == null || string.IsNullOrWhiteSpace(materialPath)) {
+      errors.Add(
+        "GearController material field is unassigned." +
+        " object='" + BuildTransformPath(controller.transform) + "'" +
+        " field='" + fieldName + "'" +
+        " expected='" + expectedPath + "'"
+      );
+      return;
+    }
+
+    if (!string.Equals(materialPath, expectedPath, StringComparison.OrdinalIgnoreCase)) {
+      errors.Add(
+        "GearController material field does not reference the staged content-pack material." +
+        " object='" + BuildTransformPath(controller.transform) + "'" +
+        " field='" + fieldName + "'" +
+        " material_path='" + materialPath + "'" +
+        " expected='" + expectedPath + "'"
+      );
+    }
+  }
+
+  static void ValidateStagedPrefabRendererMaterialReferences(
+    string stagedPrefabPath,
+    GameObject prefab,
+    List<string> activePackIds,
+    List<string> errors
+  ) {
+    if (prefab == null || errors == null) return;
+
+    var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true);
+    for (var rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++) {
+      var renderer = renderers[rendererIndex];
+      if (renderer == null) continue;
+
+      var materials = renderer.sharedMaterials;
+      for (var materialIndex = 0; materialIndex < materials.Length; materialIndex++) {
+        var material = materials[materialIndex];
+        var materialPath = NormalizeAssetPath(material != null ? AssetDatabase.GetAssetPath(material) : "");
+        if (material == null || string.IsNullOrWhiteSpace(materialPath)) {
+          errors.Add(
+            "Staged player renderer has an unassigned or built-in material." +
+            " prefab='" + stagedPrefabPath + "'" +
+            " object='" + BuildTransformPath(renderer.transform) + "'" +
+            " slot=" + materialIndex
+          );
+          continue;
+        }
+
+        if (IsMaterialPathInActiveStage(materialPath, activePackIds)) {
+          continue;
+        }
+
+        errors.Add(
+          "Staged player renderer material does not reference an active content-pack material." +
+          " prefab='" + stagedPrefabPath + "'" +
+          " object='" + BuildTransformPath(renderer.transform) + "'" +
+          " slot=" + materialIndex +
+          " material_path='" + materialPath + "'"
+        );
+      }
+    }
+  }
+
+  static bool IsMaterialPathInActiveStage(string materialPath, List<string> activePackIds) {
+    var normalizedMaterialPath = NormalizeAssetPath(materialPath);
+    if (string.IsNullOrWhiteSpace(normalizedMaterialPath) ||
+        activePackIds == null ||
+        activePackIds.Count <= 0) {
+      return false;
+    }
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var stageRoot = NormalizeAssetPath(GetStageAssetRoot(activePackIds[i]));
+      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
+      if (string.Equals(normalizedMaterialPath, stageRoot, StringComparison.OrdinalIgnoreCase) ||
+          normalizedMaterialPath.StartsWith(stageRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static string BuildTransformPath(Transform transform) {
+    if (transform == null) return "";
+
+    var parts = new List<string>();
+    var current = transform;
+    while (current != null) {
+      parts.Add(current.name);
+      current = current.parent;
+    }
+
+    parts.Reverse();
+    return string.Join("/", parts);
+  }
+
   static string BuildCoreStageAssetPath(string projectAssetPath) {
     var normalizedProjectPath = NormalizeAssetPath(projectAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedProjectPath) ||
@@ -584,7 +812,7 @@ public static partial class ContentPackPipeline {
       var stageRoot = GetStageAssetRoot(activePackIds[i]);
       if (string.IsNullOrWhiteSpace(stageRoot)) continue;
       var stagedAssetPath = NormalizeAssetPath(stageRoot + "/" + relativePath);
-      if (File.Exists(Path.GetFullPath(stagedAssetPath))) {
+      if (File.Exists(GetPhysicalPath(stagedAssetPath))) {
         return stagedAssetPath;
       }
     }
@@ -624,7 +852,7 @@ public static partial class ContentPackPipeline {
 
   static void ValidateStagedRoot(string stagedAssetPath, HashSet<string> stageRoots, List<string> errors) {
     if (string.IsNullOrWhiteSpace(stagedAssetPath) || stageRoots == null || errors == null) return;
-    if (!File.Exists(Path.GetFullPath(stagedAssetPath))) return;
+    if (!File.Exists(GetPhysicalPath(stagedAssetPath))) return;
 
     var dependencies = AssetDatabase.GetDependencies(new[] { stagedAssetPath }, true);
     for (var i = 0; i < dependencies.Length; i++) {
@@ -644,7 +872,7 @@ public static partial class ContentPackPipeline {
 
   static void CollectCodeDependenciesForStagedRoot(string stagedAssetPath, HashSet<string> stageRoots, List<string> output) {
     if (string.IsNullOrWhiteSpace(stagedAssetPath) || stageRoots == null || output == null) return;
-    if (!File.Exists(Path.GetFullPath(stagedAssetPath))) return;
+    if (!File.Exists(GetPhysicalPath(stagedAssetPath))) return;
 
     var dependencies = AssetDatabase.GetDependencies(new[] { stagedAssetPath }, true);
     for (var i = 0; i < dependencies.Length; i++) {

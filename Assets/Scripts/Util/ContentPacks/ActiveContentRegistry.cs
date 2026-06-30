@@ -224,10 +224,10 @@ public sealed class ActiveContentRegistry : ScriptableObject {
 
 public static class ActiveContentRegistryRuntime {
   const string ResourcePath = "ActiveContentRegistry";
-  const string CoreStageRootAssetPath = "Assets/ContentStage/Core";
-  const string FormsStageRootAssetPath = "Assets/ContentStage/Forms";
-  const string GearsStageRootAssetPath = "Assets/ContentStage/Gears";
-  const string SlicesStageRootAssetPath = "Assets/ContentStage/Slices";
+  const string CoreStageRootAssetPath = "Packages/com.skaraman.myprojectcontent/Core";
+  const string FormsStageRootAssetPath = "Packages/com.skaraman.myprojectcontent/Forms";
+  const string GearsStageRootAssetPath = "Packages/com.skaraman.myprojectcontent/Gears";
+  const string SlicesStageRootAssetPath = "Packages/com.skaraman.myprojectcontent/Slices";
   static bool loaded;
   static ActiveContentRegistry registry;
   static int reloadVersion;

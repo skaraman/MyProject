@@ -11,10 +11,7 @@ Material:
   m_Shader: {fileID: 4800000, guid: 202ffec9202f22e478034613d6beb49c, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - BLURISHD_ON
-  - POSTERIZEOUTLINE_ON
-  - SHADOW_ON
+  m_ValidKeywords: []
   m_InvalidKeywords:
   - _BLURHD_ON
   - _GLOWAFFECTLIGHT_ON
@@ -96,10 +93,10 @@ Material:
     - _AlphaRoundThreshold: 0.386
     - _BillboardY: 0
     - _BlurHD: 1
-    - _BlurIntensity: 0.5
-    - _Brightness: -1
+    - _BlurIntensity: 0
+    - _Brightness: 0
     - _ChromAberrAlpha: 1
-    - _ChromAberrAmount: 0.021
+    - _ChromAberrAmount: 0
     - _ClipUvDown: 0
     - _ClipUvLeft: 0
     - _ClipUvRight: 0
@@ -109,16 +106,16 @@ Material:
     - _ColorChangeTolerance2: 0.25
     - _ColorChangeTolerance3: 0.25
     - _ColorMask: 15
-    - _ColorRampBlend: 1
+    - _ColorRampBlend: 0
     - _ColorRampLuminosity: 0
     - _ColorRampOutline: 0
-    - _ColorSwapBlend: 1
+    - _ColorSwapBlend: 0
     - _ColorSwapBlueLuminosity: 0.5
     - _ColorSwapGreenLuminosity: 0.5
     - _ColorSwapRedLuminosity: 0.5
     - _Contrast: 0
     - _CullingOption: 0
-    - _DistortAmount: 0.05
+    - _DistortAmount: 0
     - _DistortTexXSpeed: 1
     - _DistortTexYSpeed: 0.9
     - _EditorDrawers: 0
@@ -133,14 +130,14 @@ Material:
     - _GhostBlend: 1
     - _GhostColorBoost: 1
     - _GhostTransparency: 0
-    - _GlitchAmount: 16.3
+    - _GlitchAmount: 0
     - _GlitchSize: 2.96
     - _GlitchSpeed: 20
-    - _Glow: 10
+    - _Glow: 0
     - _GlowAffectLight: 1
     - _GlowGlobal: 1
     - _GlowTexUsed: 0
-    - _GradBlend: 0.495
+    - _GradBlend: 0
     - _GradBoostX: 1.02
     - _GradBoostY: 1.05
     - _GradIsRadial: 0
@@ -149,14 +146,14 @@ Material:
     - _GrassRadialBend: 0.1
     - _GrassSpeed: 2
     - _GrassWind: 20
-    - _GreyscaleBlend: 1
+    - _GreyscaleBlend: 0
     - _GreyscaleLuminosity: 0
     - _GreyscaleOutline: 0
     - _HandDrawnAmount: 10
     - _HandDrawnSpeed: 5
-    - _HitEffectBlend: 0.775
+    - _HitEffectBlend: 0
     - _HitEffectGlow: 1
-    - _HologramBlend: 1
+    - _HologramBlend: 0
     - _HologramFlickerAlpha: 0
     - _HologramFlickerFreq: 0.2
     - _HologramMaxAlpha: 0.75
@@ -182,7 +179,7 @@ Material:
     - _MotionBlurDist: 0.73
     - _MyDstMode: 10
     - _MySrcMode: 5
-    - _NegativeAmount: 1
+    - _NegativeAmount: 0
     - _NormalStrength: 1
     - _OffsetUvX: 0
     - _OffsetUvY: 0
@@ -202,7 +199,7 @@ Material:
     - _OutlineTexXSpeed: 10
     - _OutlineTexYSpeed: 0
     - _OutlineWidth: 0.02
-    - _OverlayBlend: 0.536
+    - _OverlayBlend: 0
     - _OverlayGlow: 1.7
     - _OverlayTextureScrollXSpeed: -0
     - _OverlayTextureScrollYSpeed: 0.1
@@ -210,7 +207,7 @@ Material:
     - _PixelateSize: 512
     - _PosterizeGamma: 4.19
     - _PosterizeNumColors: 2.6
-    - _PosterizeOutline: 1
+    - _PosterizeOutline: 0
     - _RadialClip: 45
     - _RadialClip2: 0
     - _RadialStartAngle: 90
@@ -219,7 +216,7 @@ Material:
     - _RotateUvAmount: 0
     - _RoundWaveSpeed: 2
     - _RoundWaveStrength: 0.7
-    - _ShadowAlpha: 1
+    - _ShadowAlpha: 0
     - _ShadowX: -0.002
     - _ShadowY: 0.006
     - _ShakeUvSpeed: 2.5

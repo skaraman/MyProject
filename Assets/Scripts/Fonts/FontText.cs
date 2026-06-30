@@ -178,6 +178,7 @@ public class FontText : MonoBehaviour {
   GameObject GetCharFromPool() {
     var obj = charPool.Count > 0 ? charPool.Pop() : Instantiate(characterPrefab);
     obj.transform.SetParent(transform, false);
+    obj.transform.SetAsLastSibling();
     obj.SetActive(true);
     return obj;
   }
@@ -225,6 +226,10 @@ public class FontText : MonoBehaviour {
     fc.font = font;
     fc.character = c;
     fc.UpdateSprite();
+
+    if (!fc.IsReadyAndMatches(c, font)) {
+      return TryGetCachedGlyphMetrics(c, out charWidth, out charHeight);
+    }
 
     var sprite = sr.sprite;
     if (sprite == null) {
@@ -381,7 +386,9 @@ public class FontText : MonoBehaviour {
   }
 
   public void NotifyGlyphMetricsReady() {
-    pendingRegenerate = true;
+    if (!isGenerating) {
+      pendingRegenerate = true;
+    }
     ApplyVisibleCharacterCountToGlyphs();
   }
 
@@ -395,8 +402,12 @@ public class FontText : MonoBehaviour {
       var shouldBeVisible = (revealAll ||
         (i < activeCharSourceIndices.Count && activeCharSourceIndices[i] < visibleContentCharacterCount)) &&
         canRenderGlyph;
-      if (glyphRenderer.enabled != shouldBeVisible) {
-        glyphRenderer.enabled = shouldBeVisible;
+      if (glyphCharacter != null) {
+        glyphCharacter.SetVisibility(shouldBeVisible);
+      } else {
+        if (glyphRenderer.enabled != shouldBeVisible) {
+          glyphRenderer.enabled = shouldBeVisible;
+        }
       }
     }
   }

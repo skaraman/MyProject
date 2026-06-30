@@ -86,6 +86,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
   }
 
   sealed class SourceAtlasExportBatch {
+    public string sourceFolderPath;
     public string primarySourcePath;
     public string outputName;
     public bool groupedNumericSiblings;
@@ -111,7 +112,14 @@ public sealed partial class TrimmedAtlasExporterWindow {
   sealed class PendingTrimmedAtlasExport {
     public string sourceAtlasAssetPath;
     public string exportedAtlasAssetPath;
+    public string runtimeMetadataAssetPath;
+    public string editorImportMetadataJson;
     public TrimmedAtlasExport exportData;
+  }
+
+  sealed class PendingTrimmedSourceCleanup {
+    public SourceAtlasExportBatch batch;
+    public string exportedAtlasAssetPath;
   }
 
   [Serializable]

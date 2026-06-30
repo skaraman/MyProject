@@ -1,145 +1,116 @@
 # Content Pack Authoring Workflow
 
-## Purpose
+1. Create or update images under `Assets/Sprites`.
+2. If the image needs trimmed offsets, run the whitespace removal or trim/offset authoring tool before packing.
+3. If the image belongs to a Sprite Library, update the `.spriteLib` category and label.
+4. If categories or labels need to move between Sprite Libraries, open `Tools\SpriteLibraryMultiEditor.py`.
+5. If the image is a direct sliced `.png`, confirm the Unity sprite slice label is stable.
+6. Open `Tools\ContentPackIterationUI.py`.
+7. Create or edit the target pack.
+8. Add each source asset with its own target folder.
+9. Save the pack manifest.
+10. Hand off to `Docs/ContentPackIterationPlan.md` to run Addressables packing.
 
-Use this document when adding or changing gameplay content under the content-pack structure.
+## Whitespace And Offset Tools
 
-Default rule:
+Use whitespace removal when transparent padding is authoring noise rather than intentional layout.
 
-- use `Tools > Content Pack > 1) Build Active Content (Smart)` for normal day-to-day changes
-- use `Tools > Content Pack > 2) Build Active Content (Clean)` only when output looks stale or structurally wrong
-
-## Build Safety Net
-
-Unity `Build` and `Build and Run` now run a preflight automatically before the player build:
-
-- prepare staged active packs
-- audit staged content
-- rebuild the sprite runtime index
-
-Normal `Build` and `Build and Run` use the smart/incremental preflight path.
-Use `Tools > Content Pack > 2) Build Active Content (Clean)` only when you intentionally want the non-incremental fallback.
-
-Use `Build Active Content (Smart)` as the normal authoring step anyway. The build preflight is a safety net, not the primary daily workflow.
-
-## Primary Workflow
-
-After most content changes:
-
-1. Drop or update source art under `Assets/Sprites/Characters` or `Assets/Sprites/Environments`.
-2. Update `Assets/ContentManifest.json` so new game content is declared before tooling runs.
-   Core locations (`MainMenu`, `Homebase`/`Safehouse`) are always loaded and do not belong in the manifest.
-3. Run the relevant Sprite Streaming authoring tool if the source requires atlas/offset processing.
-4. Ensure the relevant pack is active or selected for the test you want to run.
-5. Run `Tools > Content Pack > 1) Build Active Content (Smart)`.
-6. Test in play mode or `Build and Run`.
-
-Use this clean fallback only when needed:
-
-1. Run `Tools > Content Pack > 2) Build Active Content (Clean)`.
-2. Re-test.
-
-## When To Use Which Tool
-
-### Esperanza Animations
-
-Use:
-
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
-
-Use authoring tools first only if you changed atlas authoring output:
+Use trim/offset export when runtime placement must preserve the visual origin after trimming:
 
 - `Tools > Authoring > Trim Atlas + Export Offsets`
 
-### Gear Items
+Use grouped gear atlas authoring when changing Esperanza gear source atlases:
 
-If you changed grouped gear atlas source content:
+- `Tools > Authoring > Group Atlases`
+- add the exact source atlas PNG assets that belong in one batch
+- set the target output folder
+- set the grouped output base name
+- analyze the selection, then export
 
-- `Tools > Authoring > Group Esperanza Gear Atlases`
+Rules:
 
-Then run:
+- runtime `atlas.json` is optional
+- runtime `atlas.json` contains only `SpriteWithNormals` offset data
+- do not regenerate packed-rect slice-definition metadata into runtime `atlas.json`
+- zero-offset grouped or trimmed atlas exports should not emit runtime `atlas.json`
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+## Pack Source Examples
 
-Notes:
+Sprite Library source:
 
-- active runtime content should only include the equipped `Gear_*` packs you want to test
-- if a gear item is inactive, it may be pruned from the runtime index and that is expected
+- source type: `Sprite Library`
+- asset path: `Assets/Sprites/SpriteLibraries/UI/Fonts.spriteLib`
+- category: `Plate`
+- label: `A`
+- target folder: `Core/Sprites/SpriteLibraries/UI`
 
-### Effects
+Direct Sprite Slice source:
 
-If the effect uses ordinary sprite assets:
+- source type: `Sprite Slice`
+- asset path: `Assets/Sprites/Characters/Enemies/Imp/Run/atlas.png`
+- label: `run_0`
+- target folder: `Slices/Slice_DomeCity_Imp_Base/Sprites/Characters/Enemies/Imp/Run`
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+## Sprite Library Multi Editor
 
-If the effect required trimmed atlas authoring:
+Run:
 
-- `Tools > Authoring > Trim Atlas + Export Offsets`
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+```powershell
+python .\Tools\SpriteLibraryMultiEditor.py Assets\Sprites\SpriteLibraries
+```
 
-### Locations
+Use this when rebuilding form libraries or moving labels between existing `.spriteLib` files:
 
-After adding or changing location-owned content:
+- open multiple `.spriteLib` files or folders at once
+- drag a category onto a library to copy or merge that category
+- drag a category onto another category to copy or merge labels
+- drag a label onto a category to copy that label and sprite reference
+- drag a label onto a library to copy it into a matching category, creating the category if needed
+- enable `Move` before dropping when the source category or label should be removed after copy
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+## Ownership Guidance
 
-If you need to reset selection to the current baseline slice:
+Core source images are shared runtime content:
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+- global UI that is not tied to a form
+- fonts
+- main menu and select menu art
+- shared player bootstrap art that is not tied to a form
 
-Then run:
+Form source images are form-specific combat content:
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+- form UI and form menu/icon art
+- form item and gear icon art
+- form-specific Esperanza movement and expression payloads
+- form-specific character attack animation payloads
+- form effects
+- form projectile visuals
+- form-specific prefabs and materials
 
-### Enemies
+Gear source images are equipped visual payload only:
 
-After adding or changing enemy-owned content:
+- one gear pack per `Gear_<Form>_<GearCode>_<Leaf>`
+- grouped gear atlas data comes from Unity importer data and offset metadata
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+Slice source images are one stageable gameplay unit:
 
-## Debug Steps
+- location art
+- slice-local enemy art
+- slice-local encounter art
+- slice-local dialog or portrait art
 
-Use the normal Smart build when checking pack staging and runtime index output:
+Episode packs do not own image source payloads. They compose slices.
 
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+## Handoff Checklist
 
-The Smart build is the main verification step because it:
+Before packing:
 
-1. stages active packs
-2. audits active packs
-3. rebuilds the sprite runtime index
+- source image exists under `Assets/Sprites`
+- whitespace cleanup or offset export has already run if needed
+- Sprite Library category and label are correct, or direct `.png` slice label is correct
+- `Tools\ContentPackIterationUI.py` has a saved pack manifest
+- every source row has a target folder
 
-It does not export project-local source art. Use `Build Active Content` when artist-authored files under `Assets/Sprites` need to move into `D:\localDev\Unity\MyProjectContent`.
+Next step:
 
-Play mode runs a content preflight. If source art, authored sprite libraries, external packs, or the runtime index are out of sync, the Console error should say whether to update `Assets/ContentManifest.json`, run authoring, or run `Tools > Content Pack > 1) Build Active Content (Smart)`.
-
-## Authoring Rules
-
-- runtime sprite loading assumes sprites belong to atlases when appropriate
-- runtime `atlas.json` is optional and contains only `SpriteWithNormals` offset data
-- runtime `atlas.json` should only exist when authored trim/group workflows produced real non-zero offsets
-- no tool should regenerate packed-rect slice-definition metadata into runtime `atlas.json`
-
-## Quick Reference
-
-### Normal change
-
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
-
-### Stale or suspicious output
-
-- `Tools > Content Pack > 2) Build Active Content (Clean)`
-
-### Atlas trim/offset authoring changed
-
-- `Tools > Authoring > Trim Atlas + Export Offsets`
-- then `Tools > Content Pack > 1) Build Active Content (Smart)`
-
-### Esperanza grouped gear atlas source changed
-
-- `Tools > Authoring > Group Esperanza Gear Atlases`
-- then `Tools > Content Pack > 1) Build Active Content (Smart)`
-
-### Need to verify pack staging/index
-
-- `Tools > Content Pack > 1) Build Active Content (Smart)`
+- run the Python Smart packing workflow in `Docs/ContentPackIterationPlan.md`

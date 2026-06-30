@@ -138,6 +138,8 @@ public static partial class TextureResidencyCache {
     entry.atlasDirectFallbackAttempted = false;
     entry.requestedSpriteNameHint = "";
     entry.requestedSpriteNameConflict = false;
+    entry.parsedGroupedMetadata = null;
+    entry.parsedMetadataAtlasMetadata = null;
     ClearPendingLoadFinalize(entry);
     ClearQueuedFlag(entry);
   }
@@ -184,6 +186,10 @@ public static partial class TextureResidencyCache {
       return true;
     }
 
+    if (TryCreateSpriteLazily(entry, normalizedName, out sprite)) {
+      return true;
+    }
+
     if (!entry.spriteMapMaterialized) return false;
     if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(normalizedName, out var numericLabelValue)) return false;
     return TryGetSpriteByNumericLabelWithoutMaterialization(entry, numericLabelValue, out sprite);
@@ -192,6 +198,10 @@ public static partial class TextureResidencyCache {
   static bool TryGetSpriteByNumericLabelWithoutMaterialization(CacheEntry entry, string numericLabelValue, out Sprite sprite) {
     sprite = null;
     if (entry == null || string.IsNullOrWhiteSpace(numericLabelValue)) return false;
+
+    if (TryCreateSpriteByNumericLabelLazily(entry, numericLabelValue, out sprite)) {
+      return true;
+    }
 
     Sprite match = null;
     foreach (var pair in entry.spritesByName) {
@@ -220,6 +230,10 @@ public static partial class TextureResidencyCache {
       return true;
     }
 
+    if (TryCreateSpriteLazily(entry, normalizedName, out sprite)) {
+      return true;
+    }
+
     if (!entry.spriteMapMaterialized && TryEnsureEntrySpriteMapMaterialized(entry)) {
       if (entry.spritesByName.TryGetValue(normalizedName, out sprite) && sprite != null) {
         return true;
@@ -227,6 +241,11 @@ public static partial class TextureResidencyCache {
     }
 
     if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(normalizedName, out var numericLabelValue)) return false;
+
+    if (TryCreateSpriteByNumericLabelLazily(entry, numericLabelValue, out sprite)) {
+      return true;
+    }
+
     return TryGetSpriteByNumericLabel(entry, numericLabelValue, out sprite);
   }
 
@@ -253,6 +272,119 @@ public static partial class TextureResidencyCache {
 
     sprite = match;
     return sprite != null;
+  }
+
+  static bool TryCreateSpriteLazily(CacheEntry entry, string spriteName, out Sprite sprite) {
+    sprite = null;
+    if (entry == null || string.IsNullOrWhiteSpace(spriteName)) return false;
+
+    var normalizedName = spriteName.Trim();
+    if (entry.parsedGroupedMetadata != null && entry.groupedAtlasTextureHandle.IsValid()) {
+      var texture = entry.groupedAtlasTextureHandle.Result;
+      if (texture == null) return false;
+      var payload = entry.parsedGroupedMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), normalizedName, StringComparison.Ordinal));
+      if (payload != null) {
+        var pixelsPerUnit = entry.parsedGroupedMetadata.spritePixelsPerUnit > 0f ? entry.parsedGroupedMetadata.spritePixelsPerUnit : 100f;
+        var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedGroupedMetadata.spriteMeshType, SpriteMeshType.FullRect);
+        sprite = GeneratedAtlasSpriteSynthesisUtility.CreateSpriteFromPayload(texture, payload, pixelsPerUnit, meshType);
+        if (sprite != null) {
+          entry.spritesByName[normalizedName] = sprite;
+          entry.generatedSprites.Add(sprite);
+          return true;
+        }
+      }
+    }
+
+    if (entry.parsedMetadataAtlasMetadata != null && entry.metadataAtlasTextureHandle.IsValid()) {
+      var texture = entry.metadataAtlasTextureHandle.Result;
+      if (texture == null) return false;
+      var payload = entry.parsedMetadataAtlasMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), normalizedName, StringComparison.Ordinal));
+      if (payload != null) {
+        var pixelsPerUnit = entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit > 0f ? entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit : 100f;
+        var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedMetadataAtlasMetadata.spriteMeshType, SpriteMeshType.FullRect);
+        sprite = GeneratedAtlasSpriteSynthesisUtility.CreateSpriteFromPayload(texture, payload, pixelsPerUnit, meshType);
+        if (sprite != null) {
+          entry.spritesByName[normalizedName] = sprite;
+          entry.generatedSprites.Add(sprite);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  static bool TryCreateSpriteByNumericLabelLazily(CacheEntry entry, string numericLabelValue, out Sprite sprite) {
+    sprite = null;
+    if (entry == null || string.IsNullOrWhiteSpace(numericLabelValue)) return false;
+
+    if (entry.parsedGroupedMetadata != null && entry.groupedAtlasTextureHandle.IsValid()) {
+      var texture = entry.groupedAtlasTextureHandle.Result;
+      if (texture == null) return false;
+
+      GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload match = null;
+      for (var i = 0; i < entry.parsedGroupedMetadata.sprites.Count; i++) {
+        var s = entry.parsedGroupedMetadata.sprites[i];
+        if (s == null || string.IsNullOrWhiteSpace(s.name)) continue;
+        if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(s.name, out var candidateNumericValue)) continue;
+        if (!string.Equals(candidateNumericValue, numericLabelValue, StringComparison.Ordinal)) continue;
+
+        if (match != null && match != s) {
+          return false;
+        }
+        match = s;
+      }
+
+      if (match != null) {
+        var normalizedName = match.name.Trim();
+        if (entry.spritesByName.TryGetValue(normalizedName, out sprite) && sprite != null) {
+          return true;
+        }
+        var pixelsPerUnit = entry.parsedGroupedMetadata.spritePixelsPerUnit > 0f ? entry.parsedGroupedMetadata.spritePixelsPerUnit : 100f;
+        var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedGroupedMetadata.spriteMeshType, SpriteMeshType.FullRect);
+        sprite = GeneratedAtlasSpriteSynthesisUtility.CreateSpriteFromPayload(texture, match, pixelsPerUnit, meshType);
+        if (sprite != null) {
+          entry.spritesByName[normalizedName] = sprite;
+          entry.generatedSprites.Add(sprite);
+          return true;
+        }
+      }
+    }
+
+    if (entry.parsedMetadataAtlasMetadata != null && entry.metadataAtlasTextureHandle.IsValid()) {
+      var texture = entry.metadataAtlasTextureHandle.Result;
+      if (texture == null) return false;
+
+      GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload match = null;
+      for (var i = 0; i < entry.parsedMetadataAtlasMetadata.sprites.Count; i++) {
+        var s = entry.parsedMetadataAtlasMetadata.sprites[i];
+        if (s == null || string.IsNullOrWhiteSpace(s.name)) continue;
+        if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(s.name, out var candidateNumericValue)) continue;
+        if (!string.Equals(candidateNumericValue, numericLabelValue, StringComparison.Ordinal)) continue;
+
+        if (match != null && match != s) {
+          return false;
+        }
+        match = s;
+      }
+
+      if (match != null) {
+        var normalizedName = match.name.Trim();
+        if (entry.spritesByName.TryGetValue(normalizedName, out sprite) && sprite != null) {
+          return true;
+        }
+        var pixelsPerUnit = entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit > 0f ? entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit : 100f;
+        var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedMetadataAtlasMetadata.spriteMeshType, SpriteMeshType.FullRect);
+        sprite = GeneratedAtlasSpriteSynthesisUtility.CreateSpriteFromPayload(texture, match, pixelsPerUnit, meshType);
+        if (sprite != null) {
+          entry.spritesByName[normalizedName] = sprite;
+          entry.generatedSprites.Add(sprite);
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   static bool TryResolveRequestOwnerAddress(

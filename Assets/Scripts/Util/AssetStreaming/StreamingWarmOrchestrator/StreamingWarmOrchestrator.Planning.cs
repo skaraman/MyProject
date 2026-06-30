@@ -161,53 +161,19 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
     if (!includeResolvedAddressSweeps) yield break;
 
-    yield return CollectAtlasSeedAddressesForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, playerCriticalAtlasSeedAddresses, budget, deadlineAt);
+    yield return CollectAtlasSeedAddressesForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, playerWarmAtlasSeedAddresses, budget, deadlineAt, allowInactive: true, isPlayer: true);
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-    yield return CollectAtlasSeedAddressesForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, playerWarmAtlasSeedAddresses, budget, deadlineAt);
+    yield return CollectAtlasSeedAddressesForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, playerWarmAtlasSeedAddresses, budget, deadlineAt, allowInactive: true, isPlayer: true);
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-    yield return CollectAnimationStartsForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, markCritical: true, budget: budget, deadlineAt: deadlineAt);
+    yield return CollectAnimationStartsForObjects(controller.SkinObjects, playerAnimationManifest, warmFrames, markCritical: false, budget: budget, deadlineAt: deadlineAt, allowInactive: true, isPlayer: true);
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-    yield return CollectAnimationStartsForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, markCritical: false, budget: budget, deadlineAt: deadlineAt);
+    yield return CollectAnimationStartsForObjects(controller.GearObjects, playerAnimationManifest, warmFrames, markCritical: false, budget: budget, deadlineAt: deadlineAt, allowInactive: true, isPlayer: true);
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     if (!includeEffects || controller.effectNode == null) yield break;
 
     var criticalEffectKeySet = BuildNormalizedTokenSet(criticalPlayerEffectKeys);
-    if (criticalEffectKeySet != null && criticalEffectKeySet.Count > 0) {
-      yield return CollectEffectStartsForTarget(
-        controller.effectNode,
-        Effects.Esperanza,
-        effectWarmFrames,
-        markCritical: true,
-        budget: budget,
-        deadlineAt: deadlineAt,
-        allowInactive: false,
-        includedEffectKeys: criticalEffectKeySet
-      );
-      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-      yield return CollectEffectStartsForTarget(
-        controller.effectNode,
-        Effects.Things,
-        effectWarmFrames,
-        markCritical: true,
-        budget: budget,
-        deadlineAt: deadlineAt,
-        allowInactive: false,
-        includedEffectKeys: criticalEffectKeySet
-      );
-      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-      yield return CollectEffectStartsForTarget(
-        controller.effectNode,
-        Effects.Imp,
-        effectWarmFrames,
-        markCritical: true,
-        budget: budget,
-        deadlineAt: deadlineAt,
-        allowInactive: false,
-        includedEffectKeys: criticalEffectKeySet
-      );
-      if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-    }
+    if (criticalEffectKeySet == null || criticalEffectKeySet.Count <= 0) yield break;
 
     yield return CollectEffectStartsForTarget(
       controller.effectNode,
@@ -216,8 +182,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       markCritical: false,
       budget: budget,
       deadlineAt: deadlineAt,
-      allowInactive: false,
-      excludedEffectKeys: criticalEffectKeySet
+      allowInactive: true,
+      includedEffectKeys: criticalEffectKeySet
     );
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
     yield return CollectEffectStartsForTarget(
@@ -227,8 +193,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       markCritical: false,
       budget: budget,
       deadlineAt: deadlineAt,
-      allowInactive: false,
-      excludedEffectKeys: criticalEffectKeySet
+      allowInactive: true,
+      includedEffectKeys: criticalEffectKeySet
     );
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
     yield return CollectEffectStartsForTarget(
@@ -238,8 +204,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       markCritical: false,
       budget: budget,
       deadlineAt: deadlineAt,
-      allowInactive: false,
-      excludedEffectKeys: criticalEffectKeySet
+      allowInactive: true,
+      includedEffectKeys: criticalEffectKeySet
     );
   }
 
@@ -272,7 +238,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
     if (!includeResolvedAddressSweeps) yield break;
 
-    yield return CollectAnimationStartsForObjects(controller.spriteObjects, enemyAnimations, warmFrames, markCritical, budget, deadlineAt);
+    yield return CollectAnimationStartsForObjects(controller.spriteObjects, enemyAnimations, warmFrames, markCritical, budget, deadlineAt, allowInactive: true);
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     if (includeEffects && controller.effectNode != null) {
@@ -282,7 +248,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
         effectWarmFrames,
         markCritical,
         budget,
-        deadlineAt
+        deadlineAt,
+        allowInactive: true
       );
     }
   }
@@ -356,7 +323,9 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     int warmFrames,
     bool markCritical,
     WarmPlanSliceBudget budget,
-    float deadlineAt
+    float deadlineAt,
+    bool allowInactive = false,
+    bool isPlayer = false
   ) {
     if (objects == null || objects.Length == 0) yield break;
     if (animations == null || animations.Count == 0) yield break;
@@ -368,8 +337,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
-      if (!IsTargetWarmable(target)) continue;
-      yield return CollectAnimationStartsForTarget(target, animations, clampedWarmFrames, markCritical, budget, deadlineAt);
+      if (!IsTargetWarmable(target, allowInactive)) continue;
+      yield return CollectAnimationStartsForTarget(target, animations, clampedWarmFrames, markCritical, budget, deadlineAt, allowInactive, isPlayer);
     }
   }
 
@@ -380,7 +349,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     bool markCritical,
     WarmPlanSliceBudget budget,
     float deadlineAt,
-    bool allowInactive = false
+    bool allowInactive = false,
+    bool isPlayer = false
   ) {
     if (!IsTargetWarmable(target, allowInactive)) yield break;
     if (animations == null || animations.Count == 0) yield break;
@@ -397,11 +367,23 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var animationName = pair.Key;
       var anim = pair.Value;
       if (anim == null || string.IsNullOrWhiteSpace(animationName)) continue;
+      if (isPlayer && !IsCorePlayerWarmAnimation(animationName)) continue;
 
       var category = ResolveAnimationCategory(animationName, anim);
       var clipStart = Mathf.Max(anim.start, 1);
       var clipEnd = Mathf.Max(anim.end, clipStart);
-      var frameEnd = Mathf.Min(clipEnd, clipStart + Mathf.Max(warmFrames, 1) - 1);
+
+      var targetWarmFrames = warmFrames;
+      if (isPlayer) {
+        bool isLocomotion = string.Equals(animationName, "Breathe", StringComparison.Ordinal) ||
+                            string.Equals(animationName, "Walk", StringComparison.Ordinal) ||
+                            string.Equals(animationName, "Stance", StringComparison.Ordinal);
+        if (isLocomotion) {
+          targetWarmFrames = 8;
+        }
+      }
+
+      var frameEnd = Mathf.Min(clipEnd, clipStart + Mathf.Max(targetWarmFrames, 1) - 1);
       for (var frame = clipStart; frame <= frameEnd; frame++) {
         if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
         if (TryGetFrameAddressPairBudgeted(target, frame, out var addressPair, category)) {
@@ -549,7 +531,9 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     int warmFrames,
     HashSet<string> seedSet,
     WarmPlanSliceBudget budget,
-    float deadlineAt
+    float deadlineAt,
+    bool allowInactive = false,
+    bool isPlayer = false
   ) {
     if (objects == null || objects.Length == 0) yield break;
     if (animations == null || animations.Count == 0) yield break;
@@ -562,8 +546,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
-      if (!IsTargetWarmable(target)) continue;
-      yield return CollectAtlasSeedAddressesForTarget(target, animations, clampedWarmFrames, seedSet, budget, deadlineAt);
+      if (!IsTargetWarmable(target, allowInactive)) continue;
+      yield return CollectAtlasSeedAddressesForTarget(target, animations, clampedWarmFrames, seedSet, budget, deadlineAt, allowInactive, isPlayer);
     }
   }
 
@@ -573,12 +557,13 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     int warmFrames,
     HashSet<string> seedSet,
     WarmPlanSliceBudget budget,
-    float deadlineAt
+    float deadlineAt,
+    bool allowInactive = false,
+    bool isPlayer = false
   ) {
-    if (!IsTargetWarmable(target)) yield break;
+    if (!IsTargetWarmable(target, allowInactive)) yield break;
     if (animations == null || animations.Count == 0 || seedSet == null) yield break;
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
-    var requestedSamples = Mathf.Clamp(Mathf.Max(warmFrames, 1), 1, 3);
 
     if (!target.IsAnimation) {
       if (TryGetFrameAddressPairBudgeted(target, 0, out var staticPair, categoryOverride: null)) {
@@ -593,6 +578,18 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var animationName = pair.Key;
       var anim = pair.Value;
       if (anim == null || string.IsNullOrWhiteSpace(animationName)) continue;
+      if (isPlayer && !IsCorePlayerWarmAnimation(animationName)) continue;
+
+      var targetWarmFrames = warmFrames;
+      if (isPlayer) {
+        bool isLocomotion = string.Equals(animationName, "Breathe", StringComparison.Ordinal) ||
+                            string.Equals(animationName, "Walk", StringComparison.Ordinal) ||
+                            string.Equals(animationName, "Stance", StringComparison.Ordinal);
+        if (isLocomotion) {
+          targetWarmFrames = 8;
+        }
+      }
+      var requestedSamples = Mathf.Clamp(Mathf.Max(targetWarmFrames, 1), 1, 3);
 
       var category = ResolveAnimationCategory(animationName, anim);
       var clipStart = Mathf.Max(anim.start, 1);
@@ -638,11 +635,6 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) yield break;
 
     var budget = new WarmPlanSliceBudget(WarmPlanSliceBudgetSeconds, WarmPlanSliceWorkItemBudget);
-    yield return ExpandAtlasSeedSet(playerCriticalAtlasSeedAddresses, markHighPriority: false, budget: budget, deadlineAt: deadlineAt);
-    if (HasReachedWarmAddressCap() || HasWarmPlanDeadlineElapsed(deadlineAt)) {
-      LogAtlasSeedExpansionSummary(context, budget, deadlineHit: HasWarmPlanDeadlineElapsed(deadlineAt), debugLogs: debugLogs);
-      yield break;
-    }
     yield return ExpandAtlasSeedSet(playerWarmAtlasSeedAddresses, markHighPriority: false, budget: budget, deadlineAt: deadlineAt);
     LogAtlasSeedExpansionSummary(context, budget, deadlineHit: HasWarmPlanDeadlineElapsed(deadlineAt), debugLogs: debugLogs);
   }
@@ -747,7 +739,6 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       " work_items=" + (budget != null ? budget.TotalWorkItems : 0) +
       " max_slice_ms=" + ((budget != null ? budget.MaxObservedSliceSeconds : 0f) * 1000f).ToString("0.0") +
       " deadline_hit=" + (deadlineHit ? 1 : 0) +
-      " seed_critical=" + playerCriticalAtlasSeedAddresses.Count +
       " seed_warm=" + playerWarmAtlasSeedAddresses.Count
     );
   }
@@ -799,6 +790,17 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     if (allowInactive && !target.enabled) return false;
     if (target.DoNotRender) return false;
     return true;
+  }
+
+  static bool IsCorePlayerWarmAnimation(string animationName) {
+    if (string.IsNullOrWhiteSpace(animationName)) return false;
+    var keys = GearController.CorePlayerWarmAnimationKeys;
+    for (var i = 0; i < keys.Length; i++) {
+      if (string.Equals(animationName, keys[i], StringComparison.Ordinal)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static string ResolveAnimationCategory(string animationName, AnimData anim) {

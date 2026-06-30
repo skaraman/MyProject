@@ -10,14 +10,11 @@ using UnityEngine;
 
 public static partial class SpriteIndexBuilder {
 
-  static Dictionary<string, SpriteRef> ParseLibraryRows(
-    string path,
-    List<string> errors,
-    Dictionary<string, string> activeTextureAssetPathByGuid = null
-  ) {
+  static Dictionary<string, SpriteRef> ParseLibraryRows(string path, List<string> errors) {
     // Keep row keys case-sensitive so color/normal joins require exact label/category case.
     var rows = new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
-    if (!File.Exists(path)) {
+    var physicalPath = ContentPackPipeline.GetPhysicalPath(path);
+    if (!File.Exists(physicalPath)) {
       errors.Add("Missing sprite library file '" + path + "'.");
       return rows;
     }
@@ -43,19 +40,12 @@ public static partial class SpriteIndexBuilder {
         return;
       }
 
-      var spriteRef = currentSpriteRef.Value;
-      if (activeTextureAssetPathByGuid != null &&
-          !activeTextureAssetPathByGuid.ContainsKey(spriteRef.guid ?? "")) {
-        ClearLabel();
-        return;
-      }
-
       var key = currentCategory + "\u001f" + currentLabel;
-      rows[key] = spriteRef;
+      rows[key] = currentSpriteRef.Value;
       ClearLabel();
     }
 
-    foreach (var rawLine in File.ReadLines(path)) {
+    foreach (var rawLine in File.ReadLines(physicalPath)) {
       var line = rawLine ?? "";
 
       if (line.StartsWith("  - m_Name:", StringComparison.Ordinal)) {
@@ -111,10 +101,6 @@ public static partial class SpriteIndexBuilder {
       return address;
     }
 
-    if (recordError) {
-      Debug.LogWarning($"[SpriteIndexBuilder] ResolveSpriteAddress: Failed to resolve FileID {spriteRef.fileId} in GUID {spriteRef.guid}. Context: {context}. Map size: {byFileId.Count}.");
-    }
-
     var targetUnsigned = unchecked((ulong)spriteRef.fileId);
     foreach (var pair in byFileId) {
       if (unchecked((ulong)pair.Key) != targetUnsigned) continue;
@@ -124,6 +110,15 @@ public static partial class SpriteIndexBuilder {
     var fallbackAddress = TryResolveSpriteAddressFromContext(byFileId, context);
     if (!string.IsNullOrWhiteSpace(fallbackAddress)) {
       return fallbackAddress;
+    }
+
+    fallbackAddress = TryResolveActiveSpriteAddressByFileId(state, spriteRef.fileId, context);
+    if (!string.IsNullOrWhiteSpace(fallbackAddress)) {
+      return fallbackAddress;
+    }
+
+    if (recordError) {
+      Debug.LogWarning($"[SpriteIndexBuilder] ResolveSpriteAddress: Failed to resolve FileID {spriteRef.fileId} in GUID {spriteRef.guid}. Context: {context}. Map size: {byFileId.Count}.");
     }
 
     if (recordError) {
@@ -247,6 +242,8 @@ public static partial class SpriteIndexBuilder {
       }
     }
 
+    AddMetaSpriteAddressMap(state, guid, map);
+
     // Check runtimeTextureAssetPathBySourceAssetPath for remapped paths
     if (state.runtimeTextureAssetPathBySourceAssetPath.TryGetValue(assetPath, out var remappedPath)) {
       var remappedGuid = AssetDatabase.AssetPathToGUID(remappedPath);
@@ -259,10 +256,24 @@ public static partial class SpriteIndexBuilder {
     return map;
   }
 
+  static void AddMetaSpriteAddressMap(BuildState state, string guid, Dictionary<long, string> map) {
+    if (state == null || map == null || string.IsNullOrWhiteSpace(guid)) return;
+    if (!state.activeSpriteAddressByFileIdByGuid.TryGetValue(guid, out var metaMap)) return;
+
+    foreach (var pair in metaMap) {
+      if (map.ContainsKey(pair.Key)) continue;
+      if (string.IsNullOrWhiteSpace(pair.Value)) continue;
+      map[pair.Key] = pair.Value;
+    }
+  }
+
   static bool IsRuntimeTextureAssetPath(string assetPath) {
     var normalizedPath = NormalizePath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedPath)) return false;
-    if (!normalizedPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return false;
+    if (!normalizedPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) &&
+        !normalizedPath.StartsWith("Packages/com.skaraman.myprojectcontent/", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
 
     var extension = Path.GetExtension(normalizedPath);
     return string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) ||
@@ -308,6 +319,150 @@ public static partial class SpriteIndexBuilder {
       if (string.Equals(addrLeaf, candidate, StringComparison.OrdinalIgnoreCase)) return pair.Value;
     }
     return "";
+  }
+
+  static string TryResolveActiveSpriteAddressByFileId(BuildState state, long fileId, string context) {
+    if (state == null) return "";
+    BuildActiveTextureGuidIndex(state);
+    if (!state.activeSpriteAddressesByFileId.TryGetValue(fileId, out var candidates) || candidates.Count == 0) {
+      return "";
+    }
+
+    if (candidates.Count == 1) {
+      MarkActiveTextureAddress(state, candidates[0]);
+      return candidates[0];
+    }
+
+    var tokens = ExtractContextTokens(context);
+    var bestScore = 0;
+    var bestCount = 0;
+    string bestAddress = "";
+    for (var i = 0; i < candidates.Count; i++) {
+      var score = ScoreSpriteAddressForContext(candidates[i], tokens, context);
+      if (score > bestScore) {
+        bestScore = score;
+        bestCount = 1;
+        bestAddress = candidates[i];
+      }
+      else if (score == bestScore && score > 0) {
+        bestCount++;
+      }
+    }
+
+    if (bestScore <= 0 || bestCount != 1 || string.IsNullOrWhiteSpace(bestAddress)) {
+      return "";
+    }
+
+    MarkActiveTextureAddress(state, bestAddress);
+    return bestAddress;
+  }
+
+  static List<string> ExtractContextTokens(string context) {
+    var result = new List<string>();
+    if (string.IsNullOrWhiteSpace(context)) return result;
+
+    var spaceIdx = context.IndexOf(' ');
+    var prefix = spaceIdx > 0 ? context.Substring(0, spaceIdx) : context;
+    var colonIdx = prefix.IndexOf(':');
+    var pathPart = colonIdx >= 0 ? prefix.Substring(0, colonIdx) : prefix;
+    AddContextTokens(result, pathPart);
+    if (colonIdx >= 0 && colonIdx < prefix.Length - 1) {
+      AddContextTokens(result, prefix.Substring(colonIdx + 1));
+    }
+    return result;
+  }
+
+  static void AddContextTokens(List<string> result, string value) {
+    if (result == null || string.IsNullOrWhiteSpace(value)) return;
+
+    var start = 0;
+    for (var i = 0; i <= value.Length; i++) {
+      if (i < value.Length && char.IsLetterOrDigit(value[i])) continue;
+      AddContextToken(result, value.Substring(start, i - start));
+      start = i + 1;
+    }
+  }
+
+  static void AddContextToken(List<string> result, string token) {
+    var normalized = (token ?? "").Trim().ToLowerInvariant();
+    if (!IsContextTokenUseful(normalized)) return;
+
+    AddUniqueContextToken(result, normalized);
+    if (normalized.Length > 3 && normalized.EndsWith("s", StringComparison.Ordinal)) {
+      AddUniqueContextToken(result, normalized.Substring(0, normalized.Length - 1));
+    }
+  }
+
+  static bool IsContextTokenUseful(string normalized) {
+    if (string.IsNullOrWhiteSpace(normalized) || normalized.Length < 2) return false;
+    return !string.Equals(normalized, "core", StringComparison.Ordinal) &&
+           !string.Equals(normalized, "sprite", StringComparison.Ordinal) &&
+           !string.Equals(normalized, "sprites", StringComparison.Ordinal) &&
+           !string.Equals(normalized, "spritelibraries", StringComparison.Ordinal) &&
+           !string.Equals(normalized, "color", StringComparison.Ordinal) &&
+           !string.Equals(normalized, "normal", StringComparison.Ordinal);
+  }
+
+  static void AddUniqueContextToken(List<string> result, string normalized) {
+    if (result == null || string.IsNullOrWhiteSpace(normalized)) return;
+    for (var i = 0; i < result.Count; i++) {
+      if (string.Equals(result[i], normalized, StringComparison.Ordinal)) return;
+    }
+    result.Add(normalized);
+  }
+
+  static int ScoreSpriteAddressForContext(string address, List<string> tokens, string context) {
+    if (tokens == null || tokens.Count == 0 || string.IsNullOrWhiteSpace(address)) return 0;
+
+    var atlasPath = NormalizePath(address).ToLowerInvariant();
+    var spriteName = "";
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(address, out var parsedAtlasPath, out var parsedSpriteName)) {
+      atlasPath = NormalizePath(parsedAtlasPath).ToLowerInvariant();
+      spriteName = (parsedSpriteName ?? "").Trim().ToLowerInvariant();
+    }
+
+    var score = 0;
+    for (var i = 0; i < tokens.Count; i++) {
+      var token = tokens[i];
+      if (atlasPath.Contains("/" + token + "/", StringComparison.Ordinal)) {
+        score += 12;
+      }
+      else if (atlasPath.Contains(token, StringComparison.Ordinal)) {
+        score += 3;
+      }
+
+      if (string.Equals(spriteName, token, StringComparison.Ordinal)) {
+        score += 6;
+      }
+      else if (!string.IsNullOrWhiteSpace(spriteName) && spriteName.Contains(token, StringComparison.Ordinal)) {
+        score += 1;
+      }
+    }
+
+    var extension = Path.GetExtension(atlasPath);
+    if (!string.IsNullOrWhiteSpace(context) &&
+        context.Contains("(color)", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) {
+      score += 2;
+    }
+    else if (!string.IsNullOrWhiteSpace(context) &&
+             context.Contains("(normal)", StringComparison.OrdinalIgnoreCase) &&
+             (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase))) {
+      score += 2;
+    }
+
+    return score;
+  }
+
+  static void MarkActiveTextureAddress(BuildState state, string sliceAddress) {
+    if (state == null || string.IsNullOrWhiteSpace(sliceAddress)) return;
+    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out _)) return;
+
+    atlasAssetPath = NormalizePath(atlasAssetPath);
+    if (IsActiveRuntimeTextureAssetPath(atlasAssetPath)) {
+      state.activeTextureAssetPaths.Add(atlasAssetPath);
+    }
   }
 
   static bool TryResolveDerivedNormalAddress(BuildState state, string colorAddress, out string normalAddress) {

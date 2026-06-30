@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -103,6 +103,10 @@ public class GameplayInput : MonoBehaviour {
   }
 
   bool _IsPressed(object o) {
+    if (SpriteStreamingLoadingState.IsLoadingOverlayActive) {
+      Debug.Log("[GameplayInput] Input blocked during loading overlay.");
+      return false;
+    }
     return InputMessageValue.IsPressed(o);
   }
 
@@ -130,6 +134,9 @@ public class GameplayInput : MonoBehaviour {
     TryResolvePlayerReferences();
     if (erb == null || gearController == null) return;
     _CameraFollow();
+    if (SpriteStreamingLoadingState.IsLoadingOverlayActive) {
+      return;
+    }
     var moveInput = _ResolveMoveInput();
     _UpdateRunSprint(moveInput);
     _TickStanceTimer();
@@ -564,14 +571,19 @@ public class GameplayInput : MonoBehaviour {
     if (string.IsNullOrWhiteSpace(mappedAttackAnimation)) {
       _LogAttackFlow("missing_map", actionKey: actionKey, note: "resolve returned null/empty");
       _LogAttackGate("missing_map", gearController != null ? gearController.CurrentAnimation : "", actionKey);
+      _LogPostRevealAttackProbe("missing_map", actionKey, mappedAttackAnimation, hasPlayedResult: true, played: false);
       return;
     }
+    _LogPostRevealAttackProbe("execute_start", actionKey, mappedAttackAnimation, hasPlayedResult: false, played: false);
     PunchLeftTraceGate.OpenFromClick(
       actionKey,
       mappedAttackAnimation,
       gearController != null ? gearController.CurrentAnimation : ""
     );
-    if (_IsBlockingActionPlaybackActive(mappedAttackAnimation)) return;
+    if (_IsBlockingActionPlaybackActive(mappedAttackAnimation)) {
+      _LogPostRevealAttackProbe("gate_blocked", actionKey, mappedAttackAnimation, hasPlayedResult: true, played: false);
+      return;
+    }
 
     if (isJumping) {
       _TryBoostJumpForAirAttack();
@@ -587,10 +599,68 @@ public class GameplayInput : MonoBehaviour {
       played,
       gearController != null ? gearController.CurrentAnimation : ""
     );
+    _LogPostRevealAttackProbe("play_result", actionKey, mappedAttackAnimation, hasPlayedResult: true, played: played);
     _LogAttackFlow("play_result", actionKey: actionKey, mappedAnimation: mappedAttackAnimation, note: "played=" + (played ? 1 : 0));
     if (!played) {
       _LogAttackGate("play_rejected", gearController != null ? gearController.CurrentAnimation : "", mappedAttackAnimation);
     }
+  }
+
+  void _LogPostRevealAttackProbe(
+    string stage,
+    string actionKey,
+    string mappedAnimation,
+    bool hasPlayedResult,
+    bool played
+  ) {
+    if (!SingleSceneManager.ShouldLogGameplayPostRevealInputTrace()) return;
+    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
+    var deferred = TextureResidencyCache.GetDeferredSnapshot();
+    var controller = gearController != null ? gearController.Controller : null;
+    var current = gearController != null ? gearController.CurrentAnimation : "";
+    var resolvedAnimation = "-";
+    var category = "-";
+    var startFrame = -1;
+    var readinessEndFrame = -1;
+    var enabledTargetCount = -1;
+    var firstFrameReady = false;
+    var readinessWindowReady = false;
+    var hasReadiness = controller != null &&
+                       controller.TryGetAnimationReadinessForDiagnostics(
+                         mappedAnimation,
+                         out resolvedAnimation,
+                         out category,
+                         out startFrame,
+                         out readinessEndFrame,
+                         out enabledTargetCount,
+                         out firstFrameReady,
+                         out readinessWindowReady
+                       );
+    Debug.Log(
+      "[GameplayInput][PostRevealAttack] stage='" + (stage ?? "") +
+      "' action='" + (actionKey ?? "") +
+      "' mapped='" + (mappedAnimation ?? "") +
+      "' resolved='" + (hasReadiness ? resolvedAnimation : "-") +
+      "' category='" + (hasReadiness ? category : "-") +
+      "' current='" + (current ?? "") +
+      "' played=" + (hasPlayedResult ? (played ? 1 : 0) : -1) +
+      " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
+      " overlay_protected=" + (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive ? 1 : 0) +
+      " reveal_age_s=" + SingleSceneManager.GameplayRevealInputTraceAgeSeconds.ToString("0.000") +
+      " active_input_map='" + SingleSceneManager.ActiveInputMap +
+      "' reveal_critical_ready=" + (SingleSceneManager.IsCriticalScopeReadyForRevealStatic() ? 1 : 0) +
+      " controller_present=" + (controller != null ? 1 : 0) +
+      " controller_playing=" + (controller != null && controller.IsPlaying ? 1 : 0) +
+      " start_frame=" + (hasReadiness ? startFrame : -1) +
+      " readiness_end_frame=" + (hasReadiness ? readinessEndFrame : -1) +
+      " enabled_targets=" + (hasReadiness ? enabledTargetCount : -1) +
+      " first_frame_ready=" + (hasReadiness && firstFrameReady ? 1 : 0) +
+      " readiness_window_ready=" + (hasReadiness && readinessWindowReady ? 1 : 0) +
+      " queue_queued=" + queue.queuedCount +
+      " queue_in_flight=" + queue.inFlightCount +
+      " deferred_pending=" + deferred.pendingCount +
+      " resolver_idle=" + (SpriteRuntimeResolver.IsWarmupIdle() ? 1 : 0)
+    );
   }
 
   void _ExecuteSuperAttackAction(string superActionKey, int fallbackAttackIndex) {

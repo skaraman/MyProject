@@ -345,6 +345,14 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     return _material != null;
   }
 
+  public bool UseMaterialBase(Material material) {
+    if (material == null) return false;
+    if (!TryResolveRenderer()) return false;
+    _renderer.sharedMaterial = material;
+    _material = null;
+    return !Application.isPlaying || TryResolveMaterial();
+  }
+
   static bool TryGetStaticFloatValue(FloatAnimation anim, out float value) {
     value = 0f;
     if (anim == null || anim.sequences == null || anim.sequences.Count == 0) return false;

@@ -24,6 +24,7 @@ public static partial class HierarchyCaretMemory
   private static Type resolvedAccessOwnerType;
   private static bool useWindowDirectAccess;
   private static MethodInfo entityIdToObjectMethod;
+  private static MethodInfo instanceIdToObjectMethod;
   private static object lastHierarchyWindowInstance;
   private static Type newHierarchyWindowTypeCache;
   private static PropertyInfo newHierarchyViewProperty;

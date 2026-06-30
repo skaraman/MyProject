@@ -144,7 +144,7 @@ public static partial class ContentPackPipeline {
   }
 
   static bool RefreshExportedPackSetForStage(ContentPackSelection selection, string contextLabel, bool logResult) {
-    return RefreshExportedPackSetForStage(selection, contextLabel, logResult, TransitionPipelineMode.Clean, stats: null);
+    return RefreshExportedPackSetForStage(selection, contextLabel, logResult, TransitionPipelineMode.Smart, stats: null);
   }
 
   static bool RefreshExportedPackSetForStage(
@@ -216,17 +216,17 @@ public static partial class ContentPackPipeline {
     var packDefinitions = BuildPackDefinitions(externalRoot);
     var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
     var selectedPackIds = selection.GetNormalizedActivePackIds();
-    var activePackIds = ResolveConcreteActivePackIds(selectedPackIds, packById);
-    if (activePackIds.Count <= 0) {
-      WriteInactiveRegistryAsset(logResult);
-      return true;
-    }
-
     for (var i = 0; i < selectedPackIds.Count; i++) {
       if (!packById.TryGetValue(selectedPackIds[i], out var pack)) {
         Debug.LogError("[ContentPackPipeline] Unknown selected pack id '" + selectedPackIds[i] + "'.");
         return false;
       }
+    }
+
+    var activePackIds = ResolveConcreteActivePackIds(selectedPackIds, packById);
+    if (activePackIds.Count <= 0) {
+      WriteInactiveRegistryAsset(logResult);
+      return true;
     }
 
     for (var i = 0; i < selectedPackIds.Count; i++) {
@@ -249,6 +249,7 @@ public static partial class ContentPackPipeline {
       EnsureDirectoryAssetPath(StageFormsAssetPath);
       EnsureDirectoryAssetPath(StageGearsAssetPath);
       EnsureDirectoryAssetPath(StageSlicesAssetPath);
+      EnsureDirectoryAssetPath(StageEpisodesAssetPath);
       stageLinkChanges += RemoveInactiveStageLinks(activePackIds);
 
       for (var i = 0; i < activePackIds.Count; i++) {
@@ -272,8 +273,19 @@ public static partial class ContentPackPipeline {
       }
 
       AssetDatabase.SaveAssets();
+      AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
       ActiveContentRegistryRuntime.ForceReload();
       SpriteIndexBuilder.ClearCachedSpriteSliceEstimates("content_pack_stage:" + contextLabel);
+
+      var runtimeAddressablesChanged =
+        GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(logResult: false, saveAndRefresh: false) |
+        ProjectileAddressablesBootstrap.SyncProjectileAddressables(logResult: false, saveAndRefresh: false) |
+        LocationAddressablesBootstrap.SyncLocationAddressables(logResult: false, saveAndRefresh: false) |
+        RuntimeMaterialAddressablesBootstrap.SyncRuntimeMaterialAddressables(logResult: false, saveAndRefresh: false);
+      if (runtimeAddressablesChanged) {
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+      }
 
       if (!ValidateStagedContent(selection, packById, activePackIds)) {
         return false;
@@ -362,7 +374,7 @@ public static partial class ContentPackPipeline {
   }
 
   static bool EnsureSelectedPackDirectories(ContentPackSelection selection, string contextLabel, bool logResult) {
-    return EnsureSelectedPackDirectories(selection, contextLabel, logResult, TransitionPipelineMode.Clean, stats: null);
+    return EnsureSelectedPackDirectories(selection, contextLabel, logResult, TransitionPipelineMode.Smart, stats: null);
   }
 
   static bool EnsureSelectedPackDirectories(
@@ -416,25 +428,13 @@ public static partial class ContentPackPipeline {
         continue;
       }
 
-      var legacyPath = ResolveLegacyExternalPackPath(externalRoot, pack.packId);
       Debug.LogWarning(
         "[ContentPackPipeline] Active pack export is missing." +
         " context='" + contextLabel + "'" +
         " pack_id='" + pack.packId + "'" +
-        " expected_path='" + pack.externalRootPath + "'" +
-        " legacy_path='" + legacyPath + "'"
+        " expected_path='" + pack.externalRootPath + "'"
       );
     }
-  }
-
-  static string ResolveLegacyExternalPackPath(string externalRoot, string packId) {
-    if (!string.Equals(packId, SlicePackId, StringComparison.OrdinalIgnoreCase)) {
-      return "-";
-    }
-
-    var normalizedRoot = NormalizeFullPath(externalRoot);
-    var legacyPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Slices", LegacySlicePackId));
-    return Directory.Exists(legacyPath) ? legacyPath : "-";
   }
 
   static void AppendStageSearchRoots(List<string> output, bool includeSpriteLibraries, bool includeTextures) {
@@ -481,7 +481,11 @@ public static partial class ContentPackPipeline {
       return StageGearsAssetPath + "/" + normalizedPackId;
     }
 
-    return StageSlicesAssetPath + "/" + normalizedPackId;
+    if (normalizedPackId.StartsWith("Episode_", StringComparison.OrdinalIgnoreCase)) {
+      return StageEpisodesAssetPath + "/" + normalizedPackId;
+    }
+
+    return StageRootAssetPath + "/" + normalizedPackId;
   }
 
   static int RemoveInactiveStageLinks(List<string> activePackIds) {
@@ -490,9 +494,31 @@ public static partial class ContentPackPipeline {
     EnsureDirectoryAssetPath(StageFormsAssetPath);
     EnsureDirectoryAssetPath(StageGearsAssetPath);
     EnsureDirectoryAssetPath(StageSlicesAssetPath);
+    EnsureDirectoryAssetPath(StageEpisodesAssetPath);
 
     if (RemoveStageLinkIfInactive(StageCoreAssetPath, activePackIds.Contains(CorePackId, StringComparer.OrdinalIgnoreCase))) {
       removedCount++;
+    }
+
+    var knownStageFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+      Path.GetFileName(StageCoreAssetPath),
+      Path.GetFileName(StageFormsAssetPath),
+      Path.GetFileName(StageGearsAssetPath),
+      Path.GetFileName(StageSlicesAssetPath),
+      Path.GetFileName(StageEpisodesAssetPath)
+    };
+    var existingPackDirectories = Directory.Exists(Path.GetFullPath(StageRootAssetPath))
+      ? Directory.GetDirectories(Path.GetFullPath(StageRootAssetPath))
+      : Array.Empty<string>();
+
+    for (var i = 0; i < existingPackDirectories.Length; i++) {
+      var assetPath = ToProjectAssetPath(existingPackDirectories[i]);
+      var packId = Path.GetFileName(assetPath);
+      if (knownStageFolders.Contains(packId)) continue;
+      var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
+      if (RemoveStageLinkIfInactive(assetPath, keep)) {
+        removedCount++;
+      }
     }
 
     var existingSliceDirectories = Directory.Exists(Path.GetFullPath(StageSlicesAssetPath))
@@ -527,6 +553,19 @@ public static partial class ContentPackPipeline {
 
     for (var i = 0; i < existingGearDirectories.Length; i++) {
       var assetPath = ToProjectAssetPath(existingGearDirectories[i]);
+      var packId = Path.GetFileName(assetPath);
+      var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
+      if (RemoveStageLinkIfInactive(assetPath, keep)) {
+        removedCount++;
+      }
+    }
+
+    var existingEpisodeDirectories = Directory.Exists(Path.GetFullPath(StageEpisodesAssetPath))
+      ? Directory.GetDirectories(Path.GetFullPath(StageEpisodesAssetPath))
+      : Array.Empty<string>();
+
+    for (var i = 0; i < existingEpisodeDirectories.Length; i++) {
+      var assetPath = ToProjectAssetPath(existingEpisodeDirectories[i]);
       var packId = Path.GetFileName(assetPath);
       var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
       if (RemoveStageLinkIfInactive(assetPath, keep)) {

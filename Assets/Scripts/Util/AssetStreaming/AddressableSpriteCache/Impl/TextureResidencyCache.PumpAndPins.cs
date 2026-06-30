@@ -170,7 +170,7 @@ public static partial class TextureResidencyCache {
         }
         var lease = AcquireAsyncNormalized(
           desiredAddress,
-          desiredAddress,
+          NormalizeAddress(desiredAddress),
           priority,
           runPumpAndMaintain: false,
           sourceTag: "UpdateOwnerPins",

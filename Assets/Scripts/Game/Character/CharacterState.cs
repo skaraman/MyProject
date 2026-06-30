@@ -15,6 +15,9 @@ public class CharacterState : MonoBehaviour {
   private readonly List<string> cachedKeys = new();
 
   static bool ShouldLogLoadStateDebug() {
+    if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
+      return false;
+    }
     return Application.isEditor || Debug.isDebugBuild;
   }
 

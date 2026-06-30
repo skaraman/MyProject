@@ -46,8 +46,6 @@ public sealed class ContentPackSelection : ScriptableObject {
       }
     }
 
-    changed |= EnsureDefaultSliceFocus();
-
     return changed;
   }
 
@@ -80,11 +78,6 @@ public sealed class ContentPackSelection : ScriptableObject {
     var result = new List<string>();
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    if (externalContentEnabled) {
-      seen.Add(ContentPackPipeline.CorePackId);
-      result.Add(ContentPackPipeline.CorePackId);
-    }
-
     for (var i = 0; i < activePackIds.Count; i++) {
       var normalized = NormalizePackId(activePackIds[i]);
       if (string.IsNullOrWhiteSpace(normalized) || !seen.Add(normalized)) continue;
@@ -100,16 +93,6 @@ public sealed class ContentPackSelection : ScriptableObject {
 
   static string NormalizePackId(string value) {
     return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
-  }
-
-  bool EnsureDefaultSliceFocus() {
-    if (activePackIds != null && activePackIds.Count > 0) {
-      return false;
-    }
-
-    activePackIds ??= new List<string>();
-    activePackIds.Add(ContentPackPipeline.SlicePackId);
-    return true;
   }
 
   static bool ArePackIdListsEqual(IReadOnlyList<string> left, IReadOnlyList<string> right) {

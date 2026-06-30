@@ -198,6 +198,12 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.BuildRuntimeMetadataAssetPath(normalizedAtlasAssetPath);
     if (string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) return false;
 
+    if (GeneratedAtlasImportMetadataStore.TryRead(normalizedAtlasAssetPath, out var importerJson)) {
+      if (TryBuildImportDefinitionFromJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, importerJson, out definition)) {
+        return true;
+      }
+    }
+
     var editorMetadataAssetPath = TrimmedAtlasExporterWindow.BuildEditorMetadataAssetPath(normalizedAtlasAssetPath);
     return TryBuildImportDefinitionFromMetadataJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, editorMetadataAssetPath, out definition) ||
            TryBuildImportDefinitionFromMetadataJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, runtimeMetadataAssetPath, out definition);
@@ -231,6 +237,15 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     definition = null;
     if (!TryReadMetadataJson(metadataReadAssetPath, out var json)) return false;
 
+    return TryBuildImportDefinitionFromJson(atlasAssetPath, runtimeMetadataAssetPath, json, out definition);
+  }
+
+  static bool TryBuildImportDefinitionFromJson(
+    string atlasAssetPath,
+    string runtimeMetadataAssetPath,
+    string json,
+    out GeneratedAtlasImportDefinition definition) {
+    definition = null;
     return TryBuildTrimmedImportDefinition(atlasAssetPath, runtimeMetadataAssetPath, json, out definition) ||
            TryBuildGroupedImportDefinition(atlasAssetPath, runtimeMetadataAssetPath, json, out definition);
   }

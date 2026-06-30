@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -12,11 +12,11 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEditor;
 #endif
 
-static class GeneratedAtlasSpriteSynthesisUtility {
+public static class GeneratedAtlasSpriteSynthesisUtility {
   const string GroupedMetadataKind = "grouped";
 
   [Serializable]
-  sealed class ImportPixelRect {
+  public sealed class ImportPixelRect {
     public int x;
     public int y;
     public int width;
@@ -24,7 +24,7 @@ static class GeneratedAtlasSpriteSynthesisUtility {
   }
 
   [Serializable]
-  sealed class AtlasImportPayload {
+  public sealed class AtlasImportPayload {
     public string metadataKind;
     public float spritePixelsPerUnit;
     public int spriteMeshType = -1;
@@ -32,10 +32,14 @@ static class GeneratedAtlasSpriteSynthesisUtility {
   }
 
   [Serializable]
-  sealed class AtlasSpriteImportPayload {
+  public sealed class AtlasSpriteImportPayload {
     public string name;
     public bool empty;
     public ImportPixelRect packedRect;
+  }
+
+  public static bool TryParseMetadata(TextAsset metadataAsset, out AtlasImportPayload payload) {
+    return TryParseMetadataPayload(metadataAsset, out payload);
   }
 
   static bool TryParseMetadataPayload(TextAsset metadataAsset, out AtlasImportPayload payload) {
@@ -53,7 +57,11 @@ static class GeneratedAtlasSpriteSynthesisUtility {
     return payload != null && payload.sprites != null && payload.sprites.Count > 0;
   }
 
-  static Sprite CreateSpriteFromPayload(
+  public static SpriteMeshType ResolveMeshType(int spriteMeshType, SpriteMeshType fallbackMeshType) {
+    return ResolveSpriteMeshType(spriteMeshType, fallbackMeshType);
+  }
+
+  public static Sprite CreateSpriteFromPayload(
     Texture2D atlasTexture,
     AtlasSpriteImportPayload spritePayload,
     float pixelsPerUnit,

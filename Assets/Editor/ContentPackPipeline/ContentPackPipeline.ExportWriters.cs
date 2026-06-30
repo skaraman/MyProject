@@ -52,7 +52,7 @@ public static partial class ContentPackPipeline {
         continue;
       }
 
-      var relativePath = assetPath.Substring("Assets/".Length);
+      var relativePath = ResolveExportRelativePath(pack, assetPath);
       result[assetPath] = new AssignedAsset {
         assetPath = assetPath,
         originalGuid = originalGuid,
@@ -183,18 +183,23 @@ public static partial class ContentPackPipeline {
   ) {
     var sourceFullPath = Path.GetFullPath(sourceAssetPath);
     EnsureDirectoryFullPath(Path.GetDirectoryName(targetFullPath));
-    if (mode == TransitionPipelineMode.Smart && File.Exists(targetFullPath)) {
-      if (stats != null) {
+    if (ShouldRewriteTextFile(sourceFullPath)) {
+      var text = File.ReadAllText(sourceFullPath);
+      var rewrittenText = RewriteGuids(text, guidMap);
+      if (WriteTextIfChanged(targetFullPath, rewrittenText, mode)) {
+        if (stats != null) {
+          stats.assetPayloadsWritten++;
+        }
+      }
+      else if (stats != null) {
         stats.assetPayloadsSkipped++;
       }
       return;
     }
 
-    if (ShouldRewriteTextFile(sourceFullPath)) {
-      var text = File.ReadAllText(sourceFullPath);
-      File.WriteAllText(targetFullPath, RewriteGuids(text, guidMap), new UTF8Encoding(false));
+    if (mode == TransitionPipelineMode.Smart && File.Exists(targetFullPath)) {
       if (stats != null) {
-        stats.assetPayloadsWritten++;
+        stats.assetPayloadsSkipped++;
       }
       return;
     }
@@ -203,6 +208,32 @@ public static partial class ContentPackPipeline {
     if (stats != null) {
       stats.assetPayloadsWritten++;
     }
+  }
+
+  static string ResolveExportRelativePath(PackDefinition pack, string assetPath) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    if (pack != null &&
+        pack.targetRelativePathByAssetPath != null &&
+        pack.targetRelativePathByAssetPath.TryGetValue(normalizedAssetPath, out var relativePath) &&
+        !string.IsNullOrWhiteSpace(relativePath)) {
+      return NormalizeAssetPath(relativePath);
+    }
+
+    return normalizedAssetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
+      ? normalizedAssetPath.Substring("Assets/".Length)
+      : normalizedAssetPath;
+  }
+
+  static bool WriteTextIfChanged(string targetFullPath, string text, TransitionPipelineMode mode) {
+    if (mode == TransitionPipelineMode.Smart && File.Exists(targetFullPath)) {
+      var existingText = File.ReadAllText(targetFullPath);
+      if (string.Equals(existingText, text ?? "", StringComparison.Ordinal)) {
+        return false;
+      }
+    }
+
+    File.WriteAllText(targetFullPath, text ?? "", new UTF8Encoding(false));
+    return true;
   }
 
   static void CopyMetaPayload(
@@ -218,17 +249,15 @@ public static partial class ContentPackPipeline {
     }
 
     var targetMetaFullPath = targetFullPath + ".meta";
-    if (mode == TransitionPipelineMode.Smart && File.Exists(targetMetaFullPath)) {
-      if (stats != null) {
-        stats.metaPayloadsSkipped++;
-      }
-      return;
-    }
-
     var metaText = File.ReadAllText(sourceMetaFullPath);
-    File.WriteAllText(targetMetaFullPath, RewriteGuids(metaText, guidMap), new UTF8Encoding(false));
-    if (stats != null) {
-      stats.metaPayloadsWritten++;
+    var rewrittenMetaText = RewriteGuids(metaText, guidMap);
+    if (WriteTextIfChanged(targetMetaFullPath, rewrittenMetaText, mode)) {
+      if (stats != null) {
+        stats.metaPayloadsWritten++;
+      }
+    }
+    else if (stats != null) {
+      stats.metaPayloadsSkipped++;
     }
   }
 
@@ -253,11 +282,6 @@ public static partial class ContentPackPipeline {
     try {
       if (string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) {
         WriteEsperanzaSnapshot(pack, mode, stats);
-        return;
-      }
-
-      if (string.Equals(pack.packId, SlicePackId, StringComparison.OrdinalIgnoreCase)) {
-        WriteDomeCitySnapshots(pack, mode, stats);
       }
     }
     catch (Exception ex) {
@@ -276,11 +300,11 @@ public static partial class ContentPackPipeline {
       var manifest = new ContentPackManifestJson {
         packId = pack.packId,
         kind = pack.kind,
-        dependencies = new List<string>(pack.requiredPackIds),
         ownedRoots = new List<string>(pack.ownedRoots),
         ownedLocations = new List<string>(pack.ownedLocations),
         ownedEnemyTypes = new List<string>(pack.ownedEnemyTypes),
         dialogIds = new List<string>(pack.dialogIds),
+        authoringSources = CloneAuthoringSources(pack.authoringSources),
         exportedFromProject = new DirectoryInfo(GetProjectRoot()).Name,
         sourceRevision = TryGetGitRevision()
       };
@@ -295,6 +319,24 @@ public static partial class ContentPackPipeline {
         " error='" + ex.Message + "'"
       );
     }
+  }
+
+  static List<ContentPackAuthoringSourceJson> CloneAuthoringSources(List<ContentPackAuthoringSourceJson> sources) {
+    var result = new List<ContentPackAuthoringSourceJson>();
+    if (sources == null) return result;
+
+    for (var i = 0; i < sources.Count; i++) {
+      var source = sources[i];
+      if (source == null) continue;
+      result.Add(new ContentPackAuthoringSourceJson {
+        sourceType = NormalizeToken(source.sourceType),
+        assetPath = NormalizeAssetPath(source.assetPath),
+        label = NormalizeToken(source.label),
+        targetFolder = NormalizePackTargetFolder(source.targetFolder)
+      });
+    }
+
+    return result;
   }
 
   static void WriteEsperanzaSnapshot(PackDefinition pack, TransitionPipelineMode mode, ExportSyncStats stats) {

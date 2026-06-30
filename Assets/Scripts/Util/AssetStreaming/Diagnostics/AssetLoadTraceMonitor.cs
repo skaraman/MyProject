@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -15,30 +14,6 @@ public static class AssetLoadTraceMonitor {
   const float FlushIntervalSeconds = 1f;
   const int FlushLineThreshold = 32;
   const int MaxBufferedChars = 64 * 1024;
-
-  sealed class TrackedAsset {
-    public ulong instanceId;
-    public string assetType;
-    public string objectName;
-    public string assetPath;
-    public string scenePath;
-    public long firstSeenUtcTicks;
-    public float firstSeenRealtime;
-    public int firstSeenFrame;
-    public long currentBytes;
-    public long maxBytes;
-    public int lastSeenSweepId;
-  }
-
-  readonly struct ScanSpec {
-    public readonly Type assetType;
-    public readonly string label;
-
-    public ScanSpec(Type assetType, string label) {
-      this.assetType = assetType;
-      this.label = label ?? "";
-    }
-  }
 
   readonly struct MemorySnapshot {
     public readonly long monoUsedBytes;
@@ -74,56 +49,40 @@ public static class AssetLoadTraceMonitor {
     }
   }
 
-  static readonly ScanSpec[] scanSpecs = {
-    new(typeof(Texture), "Texture"),
-    new(typeof(Material), "Material"),
-    new(typeof(Mesh), "Mesh"),
-    new(typeof(AudioClip), "AudioClip"),
-    new(typeof(TextAsset), "TextAsset"),
-    new(typeof(Font), "Font"),
-    new(typeof(Shader), "Shader"),
-    new(typeof(AnimationClip), "AnimationClip"),
-    new(typeof(RuntimeAnimatorController), "RuntimeAnimatorController")
-  };
-
-  static readonly Dictionary<ulong, TrackedAsset> trackedAssets = new();
-  static readonly List<ulong> staleAssetIds = new(64);
   static readonly StringBuilder bufferBuilder = new(MaxBufferedChars);
   static readonly StringBuilder rowBuilder = new(2048);
   static readonly string headerLine =
     "kind,utc_iso,realtime_s,delta_ms,frame,source,stage,address,asset_type,object_name,instance_id,object_bytes,tracked_active_count,tracked_active_bytes,texture_resident_bytes,texture_queue_queued,texture_queue_inflight,texture_deferred_pending,texture_deferred_flushed,texture_deferred_total,texture_deferred_promoted,texture_session_expected,texture_session_scheduled,texture_session_completed,runtime_queue_queued,runtime_queue_inflight,runtime_queue_preparing,runtime_queue_loaded,loading_overlay_active,warm_gate_running,mono_used_bytes,mono_heap_bytes,gc_total_bytes,gc_gen0_count,gc_gen1_count,gc_gen2_count,total_alloc_bytes,total_reserved_bytes,total_unused_reserved_bytes,scene_path,asset_path,detail,error";
+  static readonly string inventoryHeaderLine =
+    "utc_iso,reason,asset_type,object_name,instance_id,object_bytes,persistent,hide_flags,scene_path,asset_path";
 
   static StreamWriter writer;
   static string tracePath = "";
   static string traceDirectory = "";
   static string traceFileStem = "";
+  static string inventoryPath = "";
   static int traceFileIndex;
   static int currentFileLineCount;
   static bool initializationFailed;
+  static bool inventoryWritten;
   static int pendingLineCount;
   static float nextFlushAt;
-  static int scanIndex;
-  static int sweepId;
-  static long trackedAssetBytes;
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
     CloseWriter();
-    trackedAssets.Clear();
-    staleAssetIds.Clear();
     bufferBuilder.Clear();
     rowBuilder.Clear();
     tracePath = "";
     traceDirectory = "";
     traceFileStem = "";
+    inventoryPath = "";
     traceFileIndex = 0;
     currentFileLineCount = 0;
     initializationFailed = false;
+    inventoryWritten = false;
     pendingLineCount = 0;
     nextFlushAt = 0f;
-    scanIndex = 0;
-    sweepId = 0;
-    trackedAssetBytes = 0L;
   }
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -137,11 +96,12 @@ public static class AssetLoadTraceMonitor {
     get {
       if (!Application.isPlaying) return false;
       if (!Application.isEditor && !Debug.isDebugBuild) return false;
-      return SpriteStreamingRuntimeSettings.EnableDiagnostics || SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs;
+      return SpriteStreamingRuntimeSettings.EnableDiagnostics;
     }
   }
 
   public static string CurrentTracePath => tracePath;
+  public static string CurrentInventoryPath => inventoryPath;
 
   public static void RecordEvent(
     string source,
@@ -185,22 +145,22 @@ public static class AssetLoadTraceMonitor {
     if (writer == null) return;
 
     var now = Time.unscaledTime;
-
-    if (ShouldRunDiscoveryScanThisFrame()) {
-      ScanNextType();
-    }
     MaybeFlush(now);
-  }
-
-  static bool ShouldRunDiscoveryScanThisFrame() {
-    if (StreamingWarmOrchestrator.IsWarmGateRunning) return false;
-    if (SpriteStreamingLoadingState.IsLoadingOverlayActive) return false;
-    return true;
   }
 
   internal static void Shutdown(string reason) {
     if (writer == null) return;
     try {
+      var inventoryDetail = WriteLoadedAssetInventory(reason);
+      if (!string.IsNullOrWhiteSpace(inventoryDetail)) {
+        AppendRow(
+          kind: "snapshot",
+          source: "AssetLoadTraceMonitor",
+          stage: "asset_inventory",
+          detail: inventoryDetail
+        );
+      }
+
       AppendRow(
         kind: "snapshot",
         source: "AssetLoadTraceMonitor",
@@ -214,6 +174,100 @@ public static class AssetLoadTraceMonitor {
     finally {
       CloseWriter();
     }
+  }
+
+  static string WriteLoadedAssetInventory(string reason) {
+    if (inventoryWritten) return "";
+    inventoryWritten = true;
+
+    var startedAt = Time.realtimeSinceStartup;
+    var normalizedReason = NormalizeToken(reason);
+    var capturedAt = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+    var directory = string.IsNullOrWhiteSpace(traceDirectory)
+      ? Path.Combine(Application.persistentDataPath, "Diagnostics")
+      : traceDirectory;
+
+    try {
+      Directory.CreateDirectory(directory);
+      inventoryPath = Path.Combine(
+        directory,
+        "loaded-asset-inventory-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".csv"
+      );
+
+      var scannedCount = 0;
+      var writtenCount = 0;
+      var totalBytes = 0L;
+      var objects = Resources.FindObjectsOfTypeAll<UnityEngine.Object>();
+      using (var inventoryWriter = new StreamWriter(inventoryPath, false, new UTF8Encoding(false), 8192)) {
+        inventoryWriter.WriteLine(inventoryHeaderLine);
+        if (objects != null) {
+          for (var i = 0; i < objects.Length; i++) {
+            var obj = objects[i];
+            scannedCount++;
+            if (!ShouldWriteInventoryAsset(obj, out var objectBytes, out var assetPath)) continue;
+
+            totalBytes += objectBytes;
+            WriteInventoryRow(inventoryWriter, capturedAt, normalizedReason, obj, objectBytes, assetPath);
+            writtenCount++;
+          }
+        }
+      }
+
+      var elapsedMs = Mathf.Max((Time.realtimeSinceStartup - startedAt) * 1000f, 0f);
+      return
+        "path=" + inventoryPath +
+        " scanned=" + scannedCount +
+        " written=" + writtenCount +
+        " bytes=" + totalBytes +
+        " elapsed_ms=" + elapsedMs.ToString("0.000", CultureInfo.InvariantCulture);
+    }
+    catch (Exception ex) {
+      inventoryPath = "";
+      return "inventory_error=" + NormalizeToken(ex.Message);
+    }
+  }
+
+  static bool ShouldWriteInventoryAsset(UnityEngine.Object obj, out long objectBytes, out string assetPath) {
+    objectBytes = 0L;
+    assetPath = "";
+    if (obj == null) return false;
+    if (obj is Component) return false;
+#if UNITY_EDITOR
+    if (obj is MonoScript) return false;
+#endif
+    if (obj is GameObject go && go.scene.IsValid() && go.scene.isLoaded) {
+      return false;
+    }
+
+    objectBytes = ResolveObjectBytes(obj, long.MinValue);
+    assetPath = ResolveAssetPath(obj);
+    if (objectBytes > 0L) return true;
+    if (!string.IsNullOrWhiteSpace(assetPath)) return true;
+    return IsPersistentAsset(obj);
+  }
+
+  static void WriteInventoryRow(
+    StreamWriter inventoryWriter,
+    string capturedAt,
+    string reason,
+    UnityEngine.Object asset,
+    long objectBytes,
+    string assetPath
+  ) {
+    if (inventoryWriter == null || asset == null) return;
+
+    rowBuilder.Clear();
+    AppendStringField(rowBuilder, capturedAt, isFirst: true);
+    AppendStringField(rowBuilder, reason);
+    AppendStringField(rowBuilder, ResolveAssetType(asset, ""));
+    AppendStringField(rowBuilder, ResolveObjectName(asset));
+    AppendULongField(rowBuilder, ObjectEntityId.GetRawValue(asset));
+    AppendLongField(rowBuilder, objectBytes);
+    AppendIntField(rowBuilder, IsPersistentAsset(asset) ? 1 : 0);
+    AppendStringField(rowBuilder, asset.hideFlags.ToString());
+    AppendStringField(rowBuilder, ResolveScenePath(asset));
+    AppendStringField(rowBuilder, assetPath);
+    inventoryWriter.WriteLine(rowBuilder.ToString());
   }
 
   static void EnsureInitialized() {
@@ -233,7 +287,7 @@ public static class AssetLoadTraceMonitor {
         stage: "start",
         detail:
           "path=" + tracePath +
-          " scan_types=" + scanSpecs.Length +
+          " discovery=shutdown_inventory" +
           " max_lines_per_file=" + MaxLinesPerFile
       );
     }
@@ -280,184 +334,6 @@ public static class AssetLoadTraceMonitor {
   static void WriteHeader() {
     bufferBuilder.AppendLine(headerLine);
     currentFileLineCount++;
-  }
-
-  static void ScanNextType() {
-    if (scanSpecs.Length <= 0) return;
-    if (scanIndex == 0) {
-      sweepId = sweepId == int.MaxValue ? 1 : sweepId + 1;
-    }
-
-    var spec = scanSpecs[scanIndex];
-    ScanLoadedObjects(spec);
-
-    scanIndex++;
-    if (scanIndex < scanSpecs.Length) return;
-
-    scanIndex = 0;
-    ReleaseStaleTrackedAssets();
-  }
-
-  static void ScanLoadedObjects(ScanSpec spec) {
-    if (spec.assetType == null) return;
-    UnityEngine.Object[] objects;
-    try {
-      objects = Resources.FindObjectsOfTypeAll(spec.assetType);
-    }
-    catch (Exception ex) {
-      AppendRow(
-        kind: "event",
-        source: "Discovery",
-        stage: "scan_error",
-        assetTypeOverride: spec.label,
-        detail: "scan_type=" + spec.label,
-        error: ex.Message
-      );
-      return;
-    }
-
-    if (objects == null || objects.Length <= 0) return;
-    for (var i = 0; i < objects.Length; i++) {
-      var obj = objects[i];
-      if (!ShouldTrackDiscoveredAsset(obj)) continue;
-      TrackDiscoveredAsset(spec, obj);
-    }
-  }
-
-  static void TrackDiscoveredAsset(ScanSpec spec, UnityEngine.Object obj) {
-    if (obj == null) return;
-
-    var objectBytes = ResolveObjectBytes(obj, long.MinValue);
-    var assetPath = ResolveAssetPath(obj);
-    if (objectBytes <= 0 && string.IsNullOrWhiteSpace(assetPath) && !(obj is GameObject)) return;
-
-    var instanceId = ObjectEntityId.GetRawValue(obj);
-    var scenePath = ResolveScenePath(obj);
-    var objectName = ResolveObjectName(obj);
-    var assetType = obj.GetType().Name;
-
-    if (!trackedAssets.TryGetValue(instanceId, out var tracked) || tracked == null) {
-      tracked = new TrackedAsset {
-        instanceId = instanceId,
-        assetType = assetType,
-        objectName = objectName,
-        assetPath = assetPath,
-        scenePath = scenePath,
-        firstSeenUtcTicks = DateTime.UtcNow.Ticks,
-        firstSeenRealtime = Time.realtimeSinceStartup,
-        firstSeenFrame = Time.frameCount,
-        currentBytes = Math.Max(objectBytes, 0L),
-        maxBytes = Math.Max(objectBytes, 0L),
-        lastSeenSweepId = sweepId
-      };
-      trackedAssets[instanceId] = tracked;
-      trackedAssetBytes += tracked.currentBytes;
-
-      AppendRow(
-        kind: "event",
-        source: "Discovery",
-        stage: "discover",
-        asset: obj,
-        objectBytesOverride: objectBytes,
-        scenePathOverride: scenePath,
-        assetPathOverride: assetPath,
-        detail: BuildDiscoveryDetail(spec.label, obj)
-      );
-      return;
-    }
-
-    tracked.lastSeenSweepId = sweepId;
-    tracked.assetType = assetType;
-    tracked.objectName = objectName;
-    if (!string.IsNullOrWhiteSpace(scenePath)) tracked.scenePath = scenePath;
-    if (!string.IsNullOrWhiteSpace(assetPath)) tracked.assetPath = assetPath;
-
-    var clampedBytes = Math.Max(objectBytes, 0L);
-    var delta = clampedBytes - tracked.currentBytes;
-    tracked.currentBytes = clampedBytes;
-    if (tracked.currentBytes > tracked.maxBytes) {
-      tracked.maxBytes = tracked.currentBytes;
-    }
-    trackedAssetBytes += delta;
-    if (trackedAssetBytes < 0L) trackedAssetBytes = 0L;
-  }
-
-  static void ReleaseStaleTrackedAssets() {
-    staleAssetIds.Clear();
-    foreach (var pair in trackedAssets) {
-      var tracked = pair.Value;
-      if (tracked == null) continue;
-      if (tracked.lastSeenSweepId == sweepId) continue;
-      staleAssetIds.Add(pair.Key);
-    }
-
-    for (var i = 0; i < staleAssetIds.Count; i++) {
-      var instanceId = staleAssetIds[i];
-      if (!trackedAssets.TryGetValue(instanceId, out var tracked) || tracked == null) continue;
-
-      AppendRow(
-        kind: "event",
-        source: "Discovery",
-        stage: "release",
-        assetTypeOverride: tracked.assetType,
-        objectNameOverride: tracked.objectName,
-        objectBytesOverride: tracked.currentBytes,
-        scenePathOverride: tracked.scenePath,
-        assetPathOverride: tracked.assetPath,
-        detail: BuildReleaseDetail(tracked)
-      );
-
-      trackedAssetBytes -= tracked.currentBytes;
-      if (trackedAssetBytes < 0L) trackedAssetBytes = 0L;
-      trackedAssets.Remove(instanceId);
-    }
-
-    staleAssetIds.Clear();
-  }
-
-  static bool ShouldTrackDiscoveredAsset(UnityEngine.Object obj) {
-    if (obj == null) return false;
-    if (obj is Component) return false;
-#if UNITY_EDITOR
-    if (obj is MonoScript) return false;
-#endif
-    if (obj is GameObject go && go.scene.IsValid() && go.scene.isLoaded) {
-      return false;
-    }
-
-    var assetPath = ResolveAssetPath(obj);
-    if (!string.IsNullOrWhiteSpace(assetPath)) {
-      if (assetPath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)) {
-        return false;
-      }
-      if (assetPath.StartsWith("Packages\\", StringComparison.OrdinalIgnoreCase)) {
-        return false;
-      }
-      if (assetPath.StartsWith("Library/", StringComparison.OrdinalIgnoreCase)) {
-        return false;
-      }
-      if (assetPath.StartsWith("Library\\", StringComparison.OrdinalIgnoreCase)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  static string BuildDiscoveryDetail(string scanLabel, UnityEngine.Object obj) {
-    return
-      "scan_type=" + NormalizeToken(scanLabel) +
-      " hide_flags=" + obj.hideFlags +
-      " persistent=" + (IsPersistentAsset(obj) ? 1 : 0);
-  }
-
-  static string BuildReleaseDetail(TrackedAsset tracked) {
-    if (tracked == null) return "";
-    var lifetimeSeconds = Mathf.Max(Time.realtimeSinceStartup - tracked.firstSeenRealtime, 0f);
-    return
-      "first_seen_frame=" + tracked.firstSeenFrame +
-      " lifetime_s=" + lifetimeSeconds.ToString("0.000", CultureInfo.InvariantCulture) +
-      " max_bytes=" + tracked.maxBytes;
   }
 
   static void AppendRow(
@@ -508,8 +384,8 @@ public static class AssetLoadTraceMonitor {
     AppendStringField(rowBuilder, objectName);
     AppendULongField(rowBuilder, instanceId);
     AppendLongField(rowBuilder, objectBytes);
-    AppendIntField(rowBuilder, trackedAssets.Count);
-    AppendLongField(rowBuilder, trackedAssetBytes);
+    AppendIntField(rowBuilder, 0);
+    AppendLongField(rowBuilder, 0L);
     AppendLongField(rowBuilder, TextureResidencyCache.EstimatedResidentBytes);
     AppendIntField(rowBuilder, textureQueue.queuedCount);
     AppendIntField(rowBuilder, textureQueue.inFlightCount);
@@ -611,7 +487,12 @@ public static class AssetLoadTraceMonitor {
   static bool IsPersistentAsset(UnityEngine.Object asset) {
     if (asset == null) return false;
 #if UNITY_EDITOR
-    return EditorUtility.IsPersistent(asset);
+    try {
+      return EditorUtility.IsPersistent(asset);
+    }
+    catch {
+      return false;
+    }
 #else
     if (asset is GameObject go) return !go.scene.IsValid();
     return true;

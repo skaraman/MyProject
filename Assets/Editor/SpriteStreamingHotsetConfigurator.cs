@@ -327,19 +327,21 @@ public static class SpriteStreamingHotsetConfigurator {
     var roots = ContentPackPipeline.GetSpriteLibrarySearchRoots();
     for (var rootIndex = 0; rootIndex < roots.Count; rootIndex++) {
       var sourceRoot = NormalizePath(roots[rootIndex]);
-      if (string.IsNullOrWhiteSpace(sourceRoot) || !Directory.Exists(sourceRoot)) continue;
+      var physicalRoot = ContentPackPipeline.GetPhysicalPath(sourceRoot);
+      if (string.IsNullOrWhiteSpace(physicalRoot) || !Directory.Exists(physicalRoot)) continue;
 
-      var files = Directory.GetFiles(sourceRoot, "*.spriteLib", SearchOption.AllDirectories);
+      var files = Directory.GetFiles(physicalRoot, "*.spriteLib", SearchOption.AllDirectories);
       Array.Sort(files, StringComparer.Ordinal);
 
       for (var i = 0; i < files.Length; i++) {
-        var path = NormalizePath(files[i]);
-        var relative = path.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)
-          ? path.Substring(sourceRoot.Length + 1)
-          : path;
+        var physicalPath = NormalizePath(files[i]);
+        var projectPath = ContentPackPipeline.ToProjectAssetPath(physicalPath);
+        var relative = projectPath.StartsWith(sourceRoot + "/", StringComparison.OrdinalIgnoreCase)
+          ? projectPath.Substring(sourceRoot.Length + 1)
+          : projectPath;
         var key = RemoveExtension(relative);
         if (string.IsNullOrWhiteSpace(key)) continue;
-        pathByNamepart[key] = path;
+        pathByNamepart[key] = projectPath;
       }
     }
 
@@ -426,10 +428,10 @@ public static class SpriteStreamingHotsetConfigurator {
         var colorAssetPath = ExtractAssetPathFromAddress(Unescape(cols[3]));
         var normalAssetPath = ExtractAssetPathFromAddress(Unescape(cols[4]));
 
-        if (!string.IsNullOrWhiteSpace(colorAssetPath) && File.Exists(colorAssetPath)) {
+        if (!string.IsNullOrWhiteSpace(colorAssetPath) && File.Exists(ContentPackPipeline.GetPhysicalPath(colorAssetPath))) {
           texturePaths.Add(colorAssetPath);
         }
-        if (!string.IsNullOrWhiteSpace(normalAssetPath) && File.Exists(normalAssetPath)) {
+        if (!string.IsNullOrWhiteSpace(normalAssetPath) && File.Exists(ContentPackPipeline.GetPhysicalPath(normalAssetPath))) {
           texturePaths.Add(normalAssetPath);
         }
       }
@@ -648,7 +650,7 @@ public static class SpriteStreamingHotsetConfigurator {
     if (bracket > 0 && normalized.EndsWith("]", StringComparison.Ordinal)) {
       normalized = normalized.Substring(0, bracket);
     }
-    return normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ? normalized : "";
+    return (normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) || normalized.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)) ? normalized : "";
   }
 
   static bool TryReadScalar(string trimmedLine, string fieldName, out string value) {

@@ -180,6 +180,8 @@ public static partial class SpriteIndexBuilder {
     public readonly Dictionary<string, AtlasMetadataKind> atlasMetadataKindByPath = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, AddressableAssetGroup> textureGroupsByName = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, string> activeTextureAssetPathByGuid = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, Dictionary<long, string>> activeSpriteAddressByFileIdByGuid = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<long, List<string>> activeSpriteAddressesByFileId = new();
     public int schemaRepairs;
     public readonly HashSet<string> runtimeAmbiguityWarnings = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, int> syntheticTextureLabelCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -257,7 +259,7 @@ public static partial class SpriteIndexBuilder {
     public int entryCount;
   }
 
-  // Menu items moved to ContentPackPipeline.cs for unified workflow
+  // Content pack builds are driven by Tools/ContentPackIterationUI.py.
 
   static bool RunFullBuildPipeline(bool logResult, bool cleanCachesBeforeBuild, bool useChunkedWarmup) {
     var pipelineLabel = cleanCachesBeforeBuild ? "Build Active Content (Clean)" : "Build Active Content";
@@ -435,6 +437,15 @@ public static partial class SpriteIndexBuilder {
       }
 
       ConfigureAddressablesBuilderDefaults(settings, logResult: false);
+      var runtimeAddressablesChanged =
+        GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(logResult: false, saveAndRefresh: false) |
+        ProjectileAddressablesBootstrap.SyncProjectileAddressables(logResult: false, saveAndRefresh: false) |
+        LocationAddressablesBootstrap.SyncLocationAddressables(logResult: false, saveAndRefresh: false) |
+        RuntimeMaterialAddressablesBootstrap.SyncRuntimeMaterialAddressables(logResult: false, saveAndRefresh: false);
+      if (runtimeAddressablesChanged && logResult) {
+        Debug.Log("[SpriteIndexBuilder] [" + contextLabel + "] Synced runtime prefab/material Addressables entries before build.");
+      }
+
       AssetDatabase.SaveAssets();
       AssetDatabase.Refresh();
       LogAddressablesBuildMemorySnapshot(contextLabel, "after_refresh");

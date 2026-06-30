@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 
 public static class SpriteStreamingConfig {
-  public const string SourceRootFolder = "Assets/Sprites/SpriteLibraries";
-  public const string TextureSourceRootFolder = "Assets/Sprites";
+  public const string SourceRootFolder = "Packages/com.skaraman.myprojectcontent/Core/Sprites/SpriteLibraries";
+  public const string TextureSourceRootFolder = "Packages/com.skaraman.myprojectcontent/Core/Sprites";
   public const string GroupedAtlasBuildSurrogateRootFolder = "Assets/Generated/SpriteStreamingBuildSurrogates";
   public const string RuntimeIndexFolder = "Assets/Sprites/SpriteLibraries/RuntimeIndex";
   public const string ManifestAssetPath = "Assets/Sprites/SpriteLibraries/SpriteIndexManifest.bytes";
@@ -18,7 +18,7 @@ public static class SpriteStreamingConfig {
 }
 
 public static class GeneratedAtlasBuildSurrogateUtility {
-  const string ContentStageRootFolder = "Assets/ContentStage";
+  const string ContentStageRootFolder = "Packages/com.skaraman.myprojectcontent";
   static readonly string[] MetadataExcludedFolderNames = Array.Empty<string>();
   static readonly HashSet<string> MetadataExcludedFolderNameSet = new(MetadataExcludedFolderNames, StringComparer.OrdinalIgnoreCase);
 

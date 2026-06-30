@@ -15,23 +15,22 @@ using Process = System.Diagnostics.Process;
 using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 public static partial class ContentPackPipeline {
-  public const string DefaultExternalRoot = @"d:\localDev\Unity\MyProjectContent";
+  public const string ContentPackageName = "com.skaraman.myprojectcontent";
+  public const string DefaultExternalRootFolderName = "MyProjectContent";
+  public static string DefaultExternalRootFallback => ResolveDefaultExternalRootFallback();
+  public static string DefaultExternalRoot => ResolveDefaultExternalRoot();
   public const string CorePackId = "Core";
-  public const string BaseFormPackId = "Form_Base";
-  public const string SlicePackId = "Slice_DomeCity_Imp_Base";
-  public const string HomebaseSlicePackId = "Slice_Homebase_Placeholder";
-  public const string SunkenCaveSlicePackId = "Slice_SunkenCave_Placeholder";
-  public const string EpisodePackId = "Episode_01";
-  public const string LegacySlicePackId = "Slice_DomeCity_Imp";
 
   public const string SelectionAssetPath = "Assets/Editor/ContentPackSelection.asset";
   public const string ActiveRegistryAssetPath = "Assets/Resources/ActiveContentRegistry.asset";
-  public const string StageRootAssetPath = "Assets/ContentStage";
-  public const string StageCoreAssetPath = "Assets/ContentStage/Core";
-  public const string StageFormsAssetPath = "Assets/ContentStage/Forms";
-  public const string StageGearsAssetPath = "Assets/ContentStage/Gears";
-  public const string StageSlicesAssetPath = "Assets/ContentStage/Slices";
-  const string EsperanzaGroupedGearRoot = "Assets/Sprites/Characters/Esperanza/GroupedGearAtlases";
+  public const string StageRootAssetPath = "Packages/" + ContentPackageName;
+  public const string StageCoreAssetPath = StageRootAssetPath + "/Core";
+  public const string StageFormsAssetPath = StageRootAssetPath + "/Forms";
+  public const string StageGearsAssetPath = StageRootAssetPath + "/Gears";
+  public const string StageSlicesAssetPath = StageRootAssetPath + "/Slices";
+  public const string StageEpisodesAssetPath = StageRootAssetPath + "/Episodes";
+  const string EsperanzaGroupedGearRoot = StageGearsAssetPath;
+  const string AllIn1ShaderRoot = "Assets/Plugins/AllIn1SpriteShader/Shaders";
 
   const string ManifestFileName = "ContentPackManifest.json";
   const string PackDataFolderName = "_PackData";
@@ -40,6 +39,7 @@ public static partial class ContentPackPipeline {
   const string DomeCityDialogSnapshotFileName = "dialog_DomeCity.json";
 
   static readonly Regex GuidRegex = new(@"guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
+  static readonly Regex ContentPackageDependencyRegex = new("\"" + ContentPackageName + "\"\\s*:\\s*\"file:([^\"]+)\"", RegexOptions.Compiled);
   static readonly Regex LibraryNameRegex = new(@"^\s*libraryName:\s*(.+?)\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
   static readonly Regex PortraitLibraryNameRegex = new(@"^\s*portraitLibraryName:\s*(.*?)\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
   static readonly Regex LocalIncludeRegex = new(@"^\s*#include(?:_with_pragmas)?\s+""([^""]+)""", RegexOptions.Compiled | RegexOptions.Multiline);
@@ -84,16 +84,42 @@ public static partial class ContentPackPipeline {
   };
 
   [Serializable]
+  sealed class ContentManifestJson {
+    public List<ContentManifestSliceJson> slices = new();
+    public List<ContentManifestEpisodeJson> episodes = new();
+  }
+
+  [Serializable]
+  sealed class ContentManifestSliceJson {
+    public string id;
+    public List<string> packs = new();
+  }
+
+  [Serializable]
+  sealed class ContentManifestEpisodeJson {
+    public string id;
+    public List<string> slices = new();
+  }
+
+  [Serializable]
   sealed class ContentPackManifestJson {
     public string packId;
     public string kind;
-    public List<string> dependencies = new();
     public List<string> ownedRoots = new();
     public List<string> ownedLocations = new();
     public List<string> ownedEnemyTypes = new();
     public List<string> dialogIds = new();
+    public List<ContentPackAuthoringSourceJson> authoringSources = new();
     public string exportedFromProject;
     public string sourceRevision;
+  }
+
+  [Serializable]
+  sealed class ContentPackAuthoringSourceJson {
+    public string sourceType;
+    public string assetPath;
+    public string label;
+    public string targetFolder;
   }
 
   [Serializable]
@@ -170,11 +196,13 @@ public static partial class ContentPackPipeline {
     public List<string> seedRoots = new();
     public List<string> manualLibraryNames = new();
     public List<string> assetDependencies = new();
-    public List<string> requiredPackIds = new();
     public List<string> ownedRoots = new();
     public List<string> ownedLocations = new();
     public List<string> ownedEnemyTypes = new();
     public List<string> dialogIds = new();
+    public List<ContentPackAuthoringSourceJson> authoringSources = new();
+    public Dictionary<string, string> targetRelativePathByAssetPath = new(StringComparer.OrdinalIgnoreCase);
+    public bool loadedManifest;
     public string defaultLocationId = "";
     public string snapshotRelativePath = "";
     public string dialogSnapshotRelativePath = "";

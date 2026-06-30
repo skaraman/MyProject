@@ -164,31 +164,39 @@ public class LocationPrefabData {
     var startedAt = Time.realtimeSinceStartup;
 
     // Load the prefab asset, not an instance. LocationManager owns instantiation and staged child activation.
-    var loadHandle = Addressables.LoadAssetAsync<GameObject>(address);
-    var loadedPrefab = loadHandle.WaitForCompletion();
+    try {
+      var loadHandle = Addressables.LoadAssetAsync<GameObject>(address);
+      var loadedPrefab = loadHandle.WaitForCompletion();
 
-    if (loadHandle.Status == AsyncOperationStatus.Succeeded && loadedPrefab != null) {
-      RememberCachedPrefab(address, loadHandle, loadedPrefab);
-      var loadSeconds = Time.realtimeSinceStartup - startedAt;
-      Debug.Log(
-        "[LocationPrefabData] Loaded addressable prefab address='" + address +
-        "' load_s=" + loadSeconds.ToString("0.0000") +
-        " child_count=" + loadedPrefab.transform.childCount
+      if (loadHandle.Status == AsyncOperationStatus.Succeeded && loadedPrefab != null) {
+        RememberCachedPrefab(address, loadHandle, loadedPrefab);
+        var loadSeconds = Time.realtimeSinceStartup - startedAt;
+        Debug.Log(
+          "[LocationPrefabData] Loaded addressable prefab address='" + address +
+          "' load_s=" + loadSeconds.ToString("0.0000") +
+          " child_count=" + loadedPrefab.transform.childCount
+        );
+        return loadedPrefab;
+      }
+
+      var status = loadHandle.Status.ToString();
+      var errorMessage = loadHandle.OperationException != null ? loadHandle.OperationException.Message : "none";
+      if (loadHandle.IsValid()) {
+        Addressables.Release(loadHandle);
+      }
+
+      Debug.LogError(
+        "[LocationPrefabData] Failed to load addressable prefab address='" + address +
+        "' status=" + status +
+        " error='" + errorMessage + "'"
       );
-      return loadedPrefab;
     }
-
-    var status = loadHandle.Status.ToString();
-    var errorMessage = loadHandle.OperationException != null ? loadHandle.OperationException.Message : "none";
-    if (loadHandle.IsValid()) {
-      Addressables.Release(loadHandle);
+    catch (Exception ex) {
+      Debug.LogError(
+        "[LocationPrefabData] Exception loading addressable prefab address='" + address +
+        "' error='" + ex.Message + "'"
+      );
     }
-
-    Debug.LogError(
-      "[LocationPrefabData] Failed to load addressable prefab address='" + address +
-      "' status=" + status +
-      " error='" + errorMessage + "'"
-    );
     return null;
   }
 }

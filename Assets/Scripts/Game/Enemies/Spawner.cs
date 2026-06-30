@@ -29,6 +29,7 @@ public class Spawner : MonoBehaviour {
   readonly Dictionary<GameObject, Pool> activeInstancePools = new();
   readonly List<SpawnRuleState> activeSpawnRules = new();
   readonly List<SpawnRuleState> spawnCandidateScratch = new();
+  readonly List<HurtBox2D> hurtBoxScratch = new();
 
   private List<Action> actions = new();
   string pendingSpawnLocationId = "";
@@ -225,6 +226,11 @@ public class Spawner : MonoBehaviour {
     return SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning;
   }
 
+  static bool ShouldLogGameplaySpawnDebug() {
+    return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
+  }
+
   void Update() {
     if (!canSpawn) return;
     if (LocationData == null || LocationData.spawnInterval <= 0f) return;
@@ -290,7 +296,16 @@ public class Spawner : MonoBehaviour {
     var y = transform.position.y;
     var x = rightSide ? worldRight + offset : worldLeft - offset;
     var spawnPosition = new Vector3(x, y, transform.position.z);
-    Debug.Log($"[OffscreenSpawner] rightSide={rightSide}, worldLeft={worldLeft}, worldRight={worldRight}, offset={offset}, spawn={spawnPosition}");
+    if (ShouldLogGameplaySpawnDebug()) {
+      Debug.Log(
+        "[OffscreenSpawner]" +
+        " right_side=" + (rightSide ? 1 : 0) +
+        " world_left=" + worldLeft +
+        " world_right=" + worldRight +
+        " offset=" + offset +
+        " spawn=" + spawnPosition
+      );
+    }
     return spawnPosition;
   }
 
@@ -507,17 +522,19 @@ public class Spawner : MonoBehaviour {
     }
   }
 
-  static void DisableEnemyHurtBoxLaunchRandomOnHit(GameObject enemyObject) {
+  void DisableEnemyHurtBoxLaunchRandomOnHit(GameObject enemyObject) {
     if (enemyObject == null) {
       return;
     }
 
-    var hurtBoxes = enemyObject.GetComponentsInChildren<HurtBox2D>(includeInactive: true);
-    for (var i = 0; i < hurtBoxes.Length; i++) {
-      var hurtBox = hurtBoxes[i];
+    hurtBoxScratch.Clear();
+    enemyObject.GetComponentsInChildren<HurtBox2D>(true, hurtBoxScratch);
+    for (var i = 0; i < hurtBoxScratch.Count; i++) {
+      var hurtBox = hurtBoxScratch[i];
       if (hurtBox == null) continue;
       hurtBox.launchRandomOnHit = false;
     }
+    hurtBoxScratch.Clear();
   }
 
   static List<DemonStatModifier> CloneStatBonuses(IList<DemonStatModifier> source) {

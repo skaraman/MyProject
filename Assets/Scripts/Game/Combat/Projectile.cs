@@ -67,6 +67,12 @@ public class Projectile : MonoBehaviour {
   private static readonly Dictionary<string, AnimData> EmptyAnimations = new();
   private static readonly Dictionary<string, Dictionary<string, string>> EmptyInterrupts = new();
   private static readonly Dictionary<string, Dictionary<string, List<HBox>>> EmptyHBoxData = new();
+  private readonly GameObject[] spriteTargetObjects = new GameObject[1];
+  private readonly GameObject[] hBoxTargetObjects = new GameObject[1];
+  private readonly Dictionary<string, Dictionary<string, List<HBox>>> runtimeHBoxData = new();
+  private readonly Dictionary<string, List<HBox>> runtimeHBoxSequences = new();
+  private SpriteWithNormals configuredSpriteTarget;
+  private PolygonCollider2D configuredHitboxCollider;
 
   public string PoolKey => poolKey;
 
@@ -312,13 +318,11 @@ public class Projectile : MonoBehaviour {
 
   private void InitializeAnimationController() {
     if (animationControllerInitialized) return;
-    var spriteObjects = spriteTarget != null ? new[] { spriteTarget.gameObject } : null;
-    var hBoxObjects = hitboxCollider != null ? new[] { hitboxCollider.gameObject } : null;
     animationController.Initialize(
       transform,
-      spriteObjects,
+      ResolveSpriteTargetObjects(),
       null,
-      hBoxObjects,
+      ResolveHBoxTargetObjects(),
       EmptyAnimations,
       EmptyInterrupts,
       null,
@@ -326,6 +330,8 @@ public class Projectile : MonoBehaviour {
       "",
       false
     );
+    configuredSpriteTarget = spriteTarget;
+    configuredHitboxCollider = hitboxCollider;
     animationControllerInitialized = true;
   }
 
@@ -333,22 +339,41 @@ public class Projectile : MonoBehaviour {
     if (!animationControllerInitialized) {
       InitializeAnimationController();
     }
-    animationController.SetSpriteObjects(spriteTarget != null ? new[] { spriteTarget.gameObject } : null);
-    animationController.SetHBoxObjects(hitboxCollider != null ? new[] { hitboxCollider.gameObject } : null);
-    var hboxes = BuildHBoxData(animationKey) ?? EmptyHBoxData;
+    if (configuredSpriteTarget != spriteTarget) {
+      animationController.SetSpriteObjects(ResolveSpriteTargetObjects());
+      configuredSpriteTarget = spriteTarget;
+    }
+    if (configuredHitboxCollider != hitboxCollider) {
+      animationController.SetHBoxObjects(ResolveHBoxTargetObjects());
+      configuredHitboxCollider = hitboxCollider;
+    }
+    var hboxes = ResolveHBoxData(animationKey);
     animationController.ConfigureData(animationData ?? EmptyAnimations, EmptyInterrupts, null, hboxes);
   }
 
-  private Dictionary<string, Dictionary<string, List<HBox>>> BuildHBoxData(string animationKey) {
-    if (hitboxCollider == null || string.IsNullOrEmpty(animationKey)) return null;
+  GameObject[] ResolveSpriteTargetObjects() {
+    if (spriteTarget == null) return null;
+    spriteTargetObjects[0] = spriteTarget.gameObject;
+    return spriteTargetObjects;
+  }
+
+  GameObject[] ResolveHBoxTargetObjects() {
+    if (hitboxCollider == null) return null;
+    hBoxTargetObjects[0] = hitboxCollider.gameObject;
+    return hBoxTargetObjects;
+  }
+
+  private Dictionary<string, Dictionary<string, List<HBox>>> ResolveHBoxData(string animationKey) {
+    runtimeHBoxData.Clear();
+    runtimeHBoxSequences.Clear();
+    if (hitboxCollider == null || string.IsNullOrEmpty(animationKey)) return EmptyHBoxData;
     if (!HBoxes.EffectHit.TryGetValue(animationKey, out var sequence) || sequence == null || sequence.Count == 0) {
-      return null;
+      return EmptyHBoxData;
     }
-    return new Dictionary<string, Dictionary<string, List<HBox>>> {
-      [hitboxCollider.gameObject.name] = new Dictionary<string, List<HBox>> {
-        [animationKey] = sequence
-      }
-    };
+
+    runtimeHBoxSequences[animationKey] = sequence;
+    runtimeHBoxData[hitboxCollider.gameObject.name] = runtimeHBoxSequences;
+    return runtimeHBoxData;
   }
 
   private void ResetLifetime() {

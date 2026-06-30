@@ -25,13 +25,16 @@ public static partial class SpriteIndexBuilder {
     var scannedRootCount = 0;
     for (var rootIndex = 0; rootIndex < textureRoots.Count; rootIndex++) {
       var root = NormalizePath(textureRoots[rootIndex]);
-      if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
+      var physicalRoot = ContentPackPipeline.GetPhysicalPath(root);
+      if (string.IsNullOrWhiteSpace(physicalRoot) || !Directory.Exists(physicalRoot)) continue;
       scannedRootCount++;
 
-      var metaFiles = Directory.GetFiles(root, "*.meta", SearchOption.AllDirectories);
+      var metaFiles = Directory.GetFiles(physicalRoot, "*.meta", SearchOption.AllDirectories);
       Array.Sort(metaFiles, StringComparer.Ordinal);
       for (var i = 0; i < metaFiles.Length; i++) {
-        AddActiveTextureGuidIndexEntry(state, NormalizePath(metaFiles[i]));
+        var physicalMetaPath = NormalizePath(metaFiles[i]);
+        var projectMetaPath = ContentPackPipeline.ToProjectAssetPath(physicalMetaPath);
+        AddActiveTextureGuidIndexEntry(state, projectMetaPath, physicalMetaPath);
       }
     }
 
@@ -39,22 +42,39 @@ public static partial class SpriteIndexBuilder {
       Debug.Log(
         "[SpriteIndexBuilder] Active texture GUID index built." +
         " roots=" + scannedRootCount +
-        " texture_guids=" + state.activeTextureAssetPathByGuid.Count
+        " texture_guids=" + state.activeTextureAssetPathByGuid.Count +
+        " sprite_guid_maps=" + state.activeSpriteAddressByFileIdByGuid.Count +
+        " sprite_file_ids=" + state.activeSpriteAddressesByFileId.Count
       );
     }
   }
 
-  static void AddActiveTextureGuidIndexEntry(BuildState state, string metaPath) {
-    if (state == null || string.IsNullOrWhiteSpace(metaPath)) return;
-    if (!metaPath.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) return;
+  static void AddActiveTextureGuidIndexEntry(BuildState state, string projectMetaPath, string physicalMetaPath) {
+    if (state == null || string.IsNullOrWhiteSpace(projectMetaPath)) return;
+    if (!projectMetaPath.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) return;
 
-    var assetPath = metaPath.Substring(0, metaPath.Length - ".meta".Length);
+    var assetPath = projectMetaPath.Substring(0, projectMetaPath.Length - ".meta".Length);
     if (!IsActiveRuntimeTextureAssetPath(assetPath)) return;
 
-    var guid = ReadGuidFromMeta(metaPath);
+    var guid = ReadGuidFromMeta(physicalMetaPath);
     if (string.IsNullOrWhiteSpace(guid)) return;
     if (!state.activeTextureAssetPathByGuid.ContainsKey(guid)) {
       state.activeTextureAssetPathByGuid[guid] = assetPath;
+    }
+
+    var spriteNamesByFileId = ReadSpriteNamesByFileIdFromMeta(physicalMetaPath);
+    Dictionary<long, string> addressByFileId = null;
+    if (spriteNamesByFileId.Count > 0 && !state.activeSpriteAddressByFileIdByGuid.TryGetValue(guid, out addressByFileId)) {
+      addressByFileId = new Dictionary<long, string>();
+      state.activeSpriteAddressByFileIdByGuid[guid] = addressByFileId;
+    }
+
+    foreach (var pair in spriteNamesByFileId) {
+      var address = SpriteSliceAddressUtility.BuildSliceAddress(assetPath, pair.Value);
+      if (!string.IsNullOrWhiteSpace(address) && addressByFileId != null) {
+        addressByFileId[pair.Key] = address;
+      }
+      AddActiveSpriteAddress(state, pair.Key, address);
     }
   }
 
@@ -78,6 +98,56 @@ public static partial class SpriteIndexBuilder {
   }
 
   // ─── Addressable group management ────────────────────────────────────────
+
+  static Dictionary<long, string> ReadSpriteNamesByFileIdFromMeta(string metaPath) {
+    var result = new Dictionary<long, string>();
+    if (string.IsNullOrWhiteSpace(metaPath) || !File.Exists(metaPath)) return result;
+
+    try {
+      var insideNameFileIdTable = false;
+      foreach (var rawLine in File.ReadLines(metaPath)) {
+        var line = rawLine ?? "";
+        var trimmed = line.Trim();
+        if (!insideNameFileIdTable) {
+          if (string.Equals(trimmed, "nameFileIdTable:", StringComparison.Ordinal)) {
+            insideNameFileIdTable = true;
+          }
+          continue;
+        }
+
+        if (trimmed.Length == 0) continue;
+        if (!line.StartsWith("      ", StringComparison.Ordinal)) break;
+
+        var separator = trimmed.LastIndexOf(':');
+        if (separator <= 0 || separator >= trimmed.Length - 1) continue;
+
+        var spriteName = DecodeScalar(trimmed.Substring(0, separator));
+        var fileIdText = trimmed.Substring(separator + 1).Trim();
+        if (string.IsNullOrWhiteSpace(spriteName)) continue;
+        if (!long.TryParse(fileIdText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fileId)) continue;
+
+        result[fileId] = spriteName;
+      }
+    }
+    catch {
+      return result;
+    }
+
+    return result;
+  }
+
+  static void AddActiveSpriteAddress(BuildState state, long fileId, string address) {
+    if (state == null || string.IsNullOrWhiteSpace(address)) return;
+    if (!state.activeSpriteAddressesByFileId.TryGetValue(fileId, out var addresses)) {
+      addresses = new List<string>();
+      state.activeSpriteAddressesByFileId[fileId] = addresses;
+    }
+
+    for (var i = 0; i < addresses.Count; i++) {
+      if (string.Equals(addresses[i], address, StringComparison.OrdinalIgnoreCase)) return;
+    }
+    addresses.Add(address);
+  }
 
   static AddressableAssetGroup EnsureAddressableGroup(
     AddressableAssetSettings settings,

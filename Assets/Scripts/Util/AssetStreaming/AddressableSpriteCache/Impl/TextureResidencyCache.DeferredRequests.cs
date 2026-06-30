@@ -298,7 +298,8 @@ public static partial class TextureResidencyCache {
     LoadPriority priority,
     bool pinEntry,
     bool runPumpAndMaintain,
-    bool warmGateManaged
+    bool warmGateManaged,
+    string sourceTag = null
   ) {
     if (entry == null) return;
     // If the entry is already done (cached), we count it towards the session progress immediately.
@@ -307,15 +308,22 @@ public static partial class TextureResidencyCache {
     }
 
     entry.lastAccessTicks = frameAccessTicks != 0 ? frameAccessTicks : DateTime.UtcNow.Ticks;
+    if (!string.IsNullOrEmpty(sourceTag)) {
+      entry.sourceTag = sourceTag;
+    }
     if (warmGateManaged &&
-        TryPromoteDeferredRequest(entry.address, priority, out var promotedPriority, out _)) {
+        TryPromoteDeferredRequest(entry.address, priority, out var promotedPriority, out _, out var promotedSourceTag)) {
       priority = promotedPriority;
+      if (!string.IsNullOrEmpty(promotedSourceTag)) {
+        sourceTag = promotedSourceTag;
+        entry.sourceTag = promotedSourceTag;
+      }
     }
 
     if (pinEntry) entry.pinCount++;
 
-    if (!warmGateManaged && ShouldDeferNonManagedWarmGateRequest(entry)) {
-      EnqueueDeferredRequest(entry.address, priority, pinEntry);
+    if (!warmGateManaged && ShouldDeferNonManagedWarmGateRequest(entry, priority, pinEntry)) {
+      EnqueueDeferredRequest(entry.address, priority, pinEntry, sourceTag);
       if (!runPumpAndMaintain) return;
       Pump();
       return;
@@ -327,23 +335,26 @@ public static partial class TextureResidencyCache {
     MaintainBudget();
   }
 
-  static bool ShouldDeferNonManagedWarmGateRequest(CacheEntry entry) {
+  static bool ShouldDeferNonManagedWarmGateRequest(CacheEntry entry, LoadPriority priority, bool pinEntry) {
     if (entry == null) return false;
     if (entry.isDone || entry.loadStarted || entry.isEvicted || entry.isQueued) return false;
     if (!SpriteStreamingLoadingState.IsLoadingOverlayActive) return false;
-    if (StreamingWarmOrchestrator.IsWarmGateRunning) return true;
-    // Keep arbitration active while overlay is still up and deferred backlog is draining.
-    // This prevents a one-frame queue explosion when warm gate flips off.
-    return deferredRequests.Count > 0;
+    // Only defer while warm gate is actively running. Once it ends, pre-unlock
+    // controls drain rate via queue thresholds and flush budgets prevent
+    // one-frame explosions. Deferring longer creates a deadlock: pre-unlock
+    // waits for outstanding to drop, outstanding includes deferred_pending,
+    // and deferred never flushes while the protected overlay is still up.
+    return StreamingWarmOrchestrator.IsWarmGateRunning;
   }
 
-  static void EnqueueDeferredRequest(string normalizedAddress, LoadPriority priority, bool pinEntry) {
+  static void EnqueueDeferredRequest(string normalizedAddress, LoadPriority priority, bool pinEntry, string sourceTag = null) {
     if (string.IsNullOrWhiteSpace(normalizedAddress)) return;
     deferredRequestCount++;
     if (!deferredRequests.TryGetValue(normalizedAddress, out var state)) {
       state = new DeferredRequestState {
         priority = priority,
-        pinEntry = pinEntry
+        pinEntry = pinEntry,
+        sourceTag = sourceTag
       };
       deferredRequests[normalizedAddress] = state;
       deferredTotalCount++;
@@ -356,6 +367,9 @@ public static partial class TextureResidencyCache {
     var priorityChanged = mergedPriority != state.priority;
     state.priority = mergedPriority;
     state.pinEntry = mergedPinEntry;
+    if (!string.IsNullOrEmpty(sourceTag)) {
+      state.sourceTag = sourceTag;
+    }
     deferredRequests[normalizedAddress] = state;
 
     if (priorityChanged) {
@@ -367,10 +381,12 @@ public static partial class TextureResidencyCache {
     string normalizedAddress,
     LoadPriority requestedPriority,
     out LoadPriority effectivePriority,
-    out bool deferredPinEntry
+    out bool deferredPinEntry,
+    out string deferredSourceTag
   ) {
     effectivePriority = requestedPriority;
     deferredPinEntry = false;
+    deferredSourceTag = null;
     if (string.IsNullOrWhiteSpace(normalizedAddress)) return false;
     if (!deferredRequests.TryGetValue(normalizedAddress, out var deferredState)) return false;
 
@@ -380,6 +396,7 @@ public static partial class TextureResidencyCache {
       effectivePriority = deferredState.priority;
     }
     deferredPinEntry = deferredState.pinEntry;
+    deferredSourceTag = deferredState.sourceTag;
     return true;
   }
 
@@ -408,7 +425,7 @@ public static partial class TextureResidencyCache {
       sourcePriority = LoadPriority.Warmup;
       return true;
     }
-    if (deferredBackgroundQueue.Count > 0) {
+    if (!IsProtectedLoadingScreenStreamingContextActive() && deferredBackgroundQueue.Count > 0) {
       normalizedAddress = deferredBackgroundQueue.Dequeue();
       sourcePriority = LoadPriority.Background;
       return true;
@@ -421,6 +438,9 @@ public static partial class TextureResidencyCache {
 
   static void FlushDeferredRequestsIntoMainQueues() {
     if (StreamingWarmOrchestrator.IsWarmGateRunning) return;
+    if (IsProtectedLoadingScreenStreamingContextActive()) return;
+    // Deferred requests are long-tail work. First-frame readiness ignores this
+    // count, so keep it deferred while the protected overlay is active.
     if (deferredRequests.Count <= 0) {
       if (deferredImmediateQueue.Count > 0 || deferredWarmupQueue.Count > 0 || deferredBackgroundQueue.Count > 0) {
         deferredImmediateQueue.Clear();
@@ -459,6 +479,9 @@ public static partial class TextureResidencyCache {
 
       deferredRequests.Remove(normalizedAddress);
       var entry = ResolveEntryForLoad(normalizedAddress, out _);
+      if (!string.IsNullOrEmpty(deferredState.sourceTag)) {
+        entry.sourceTag = deferredState.sourceTag;
+      }
       EnqueueLoad(entry, deferredState.priority);
       deferredFlushedThisFrame++;
     }

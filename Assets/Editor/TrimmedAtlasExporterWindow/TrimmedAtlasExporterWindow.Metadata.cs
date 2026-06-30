@@ -19,8 +19,12 @@ public sealed partial class TrimmedAtlasExporterWindow {
         " atlas='" + exportedAtlasAssetPath + "'" +
         " sprite_count=" + (exportData?.sprites?.Count ?? 0));
     }
-    WriteMetadataPayload(editorMetadataAssetPath, JsonUtility.ToJson(exportData, true));
+    DeleteMetadataAsset(editorMetadataAssetPath);
     return runtimeMetadataAssetPath;
+  }
+
+  static string BuildEditorImportMetadataJson(TrimmedAtlasExport exportData) {
+    return exportData == null ? "" : JsonUtility.ToJson(exportData, true);
   }
 
   static RuntimeTrimmedAtlasExport BuildRuntimeMetadata(TrimmedAtlasExport exportData) {

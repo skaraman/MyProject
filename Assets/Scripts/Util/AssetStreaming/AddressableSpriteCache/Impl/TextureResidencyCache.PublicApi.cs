@@ -175,7 +175,7 @@ public static partial class TextureResidencyCache {
     if (string.IsNullOrEmpty(normalizedAddress)) return null;
     var sourceTag = ShouldLogRequestFrameDiagnostics()
       ? BuildRequestDiagSourceTag(callerMemberName, callerFilePath, callerLineNumber)
-      : null;
+      : "";
     return AcquireAsyncNormalized(
       address,
       normalizedAddress,
@@ -200,7 +200,7 @@ public static partial class TextureResidencyCache {
     TrackEntryRequestedSpriteHint(entry, requestedAddress);
     RecordLookup(hit);
     RecordGameplayColdAtlasMiss(normalizedAddress, hit);
-    QueueEntryForLoad(entry, priority, pinEntry: true, runPumpAndMaintain, warmGateManaged);
+    QueueEntryForLoad(entry, priority, pinEntry: true, runPumpAndMaintain, warmGateManaged, sourceTag);
     TryExpandAtlasOnSliceRequest(requestedAddress, priority, runPumpAndMaintain);
     return AcquireLease(entry);
   }
@@ -218,7 +218,7 @@ public static partial class TextureResidencyCache {
     var requestDiagnosticsEnabled = ShouldLogRequestFrameDiagnostics();
     var sourceTag = requestDiagnosticsEnabled
       ? BuildRequestDiagSourceTag(callerMemberName, callerFilePath, callerLineNumber)
-      : null;
+      : "";
     if (requestDiagnosticsEnabled) {
       RecordRequestForFrame(isAcquire: false, sourceTag: sourceTag);
     }
@@ -229,7 +229,7 @@ public static partial class TextureResidencyCache {
     RecordLookup(hit);
     RecordGameplayColdAtlasMiss(normalizedAddress, hit);
     var runPumpAndMaintain = ShouldRunInlinePumpAfterRequest(priority);
-    QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain, warmGateManaged);
+    QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain, warmGateManaged, sourceTag);
     TryExpandAtlasOnSliceRequest(address, priority, runPumpAndMaintain);
   }
 
@@ -246,7 +246,7 @@ public static partial class TextureResidencyCache {
     var requestDiagnosticsEnabled = ShouldLogRequestFrameDiagnostics();
     var sourceTag = requestDiagnosticsEnabled
       ? BuildRequestDiagSourceTag(callerMemberName, callerFilePath, callerLineNumber)
-      : null;
+      : "";
 
     foreach (var address in addresses) {
       var normalizedAddress = NormalizeAddress(address);
@@ -260,7 +260,7 @@ public static partial class TextureResidencyCache {
       TrackEntryRequestedSpriteHint(entry, address);
       RecordLookup(hit);
       RecordGameplayColdAtlasMiss(normalizedAddress, hit);
-      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged);
+      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged, sourceTag: sourceTag);
       if (allowAtlasExpansion) {
         TryExpandAtlasOnSliceRequest(address, priority, runPumpAndMaintain: false);
       }
@@ -284,11 +284,8 @@ public static partial class TextureResidencyCache {
     var requestDiagnosticsEnabled = ShouldLogRequestFrameDiagnostics();
     var sourceTag = requestDiagnosticsEnabled
       ? BuildRequestDiagSourceTag(callerMemberName, callerFilePath, callerLineNumber)
-      : null;
+      : "";
 
-    // Keep per-frame enqueues in the 50-200 window suggested by AGENTS guidance.
-    // Callers must pre-rank addresses (player current/next first, nearest enemies next) so
-    // throttling preserves deterministic first-play frame continuity under queue pressure.
     enqueueBudgetPerFrame = ResolveAdaptiveEnqueueBudgetPerFrame(enqueueBudgetPerFrame);
     var remainingThisFrame = enqueueBudgetPerFrame;
 
@@ -304,7 +301,7 @@ public static partial class TextureResidencyCache {
       TrackEntryRequestedSpriteHint(entry, address);
       RecordLookup(hit);
       RecordGameplayColdAtlasMiss(normalizedAddress, hit);
-      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged);
+      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged, sourceTag: sourceTag);
       if (allowAtlasExpansion) {
         TryExpandAtlasOnSliceRequest(address, priority, runPumpAndMaintain: false);
       }
@@ -343,7 +340,7 @@ public static partial class TextureResidencyCache {
     var requestDiagnosticsEnabled = ShouldLogRequestFrameDiagnostics();
     var sourceTag = requestDiagnosticsEnabled
       ? BuildRequestDiagSourceTag(callerMemberName, callerFilePath, callerLineNumber)
-      : null;
+      : "";
 
     enqueueBudgetPerFrame = ResolveAdaptiveEnqueueBudgetPerFrame(enqueueBudgetPerFrame);
     var remainingThisFrame = enqueueBudgetPerFrame;
@@ -361,7 +358,7 @@ public static partial class TextureResidencyCache {
       TrackEntryRequestedSpriteHint(entry, address);
       RecordLookup(hit);
       RecordGameplayColdAtlasMiss(normalizedAddress, hit);
-      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged);
+      QueueEntryForLoad(entry, priority, pinEntry: false, runPumpAndMaintain: false, warmGateManaged: warmGateManaged, sourceTag: sourceTag);
       if (allowAtlasExpansion) {
         TryExpandAtlasOnSliceRequest(address, priority, runPumpAndMaintain: false);
       }
@@ -443,5 +440,72 @@ public static partial class TextureResidencyCache {
     return GetRequestState(atlasAddress, pump) == SpriteColdLoadState.Ready;
   }
 
+  public static string GetQueueSourceBreakdown() {
+    var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    var deferredCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+    foreach (var pair in cache) {
+      var entry = pair.Value;
+      if (entry == null) continue;
+      if (entry.isQueued || (entry.loadStarted && !entry.isDone)) {
+        var src = string.IsNullOrEmpty(entry.sourceTag) ? "Unknown" : entry.sourceTag;
+        counts[src] = counts.TryGetValue(src, out var c) ? c + 1 : 1;
+      }
+    }
+
+    foreach (var pair in deferredRequests) {
+      var state = pair.Value;
+      var src = string.IsNullOrEmpty(state.sourceTag) ? "Unknown" : state.sourceTag;
+      deferredCounts[src] = deferredCounts.TryGetValue(src, out var c) ? c + 1 : 1;
+    }
+
+    var sb = new StringBuilder();
+    sb.AppendLine("=== TextureResidencyCache Source Breakdown ===");
+    sb.AppendLine($"Total Queued/InFlight: {queuedEntryCount} (InFlight: {inFlightLoads})");
+    foreach (var pair in counts) {
+      sb.AppendLine($"  Source: '{pair.Key}' -> {pair.Value} active/queued");
+    }
+    sb.AppendLine($"Total Deferred: {deferredRequests.Count}");
+    foreach (var pair in deferredCounts) {
+      sb.AppendLine($"  Source: '{pair.Key}' -> {pair.Value} deferred");
+    }
+    return sb.ToString();
+  }
+
+  public static void LogRequestDiagnosticsSummary() {
+    var sb = new StringBuilder();
+    sb.AppendLine("=== TextureResidencyCache Detailed Diagnostics ===");
+    sb.AppendLine($"Resident Bytes: {residentBytes} | Active Loads: {inFlightLoads} | Queued: {queuedEntryCount}");
+    sb.AppendLine($"Deferred Request Count: {deferredRequests.Count}");
+    
+    sb.AppendLine("Pending/Active Cache Entries:");
+    var count = 0;
+    foreach (var pair in cache) {
+      var entry = pair.Value;
+      if (entry == null) continue;
+      if (entry.isQueued || (entry.loadStarted && !entry.isDone)) {
+        sb.AppendLine($"  Address: '{entry.address}' | Priority: {entry.queuedPriority} | Done: {entry.isDone} | Success: {entry.isSuccess} | Source: '{entry.sourceTag}'");
+        count++;
+        if (count >= 100) {
+          sb.AppendLine("  ... (truncated output for first 100 entries)");
+          break;
+        }
+      }
+    }
+
+    sb.AppendLine("Deferred Requests:");
+    var defCount = 0;
+    foreach (var pair in deferredRequests) {
+      var address = pair.Key;
+      var state = pair.Value;
+      sb.AppendLine($"  Address: '{address}' | Priority: {state.priority} | Pin: {state.pinEntry} | Source: '{state.sourceTag}'");
+      defCount++;
+      if (defCount >= 100) {
+        sb.AppendLine("  ... (truncated output for first 100 entries)");
+        break;
+      }
+    }
+    
+    Debug.Log(sb.ToString());
+  }
 }

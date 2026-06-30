@@ -96,7 +96,7 @@ public static class StandaloneBuildInvoker
             throw new BuildFailedException("[BuildInvoker] No enabled scenes were found in EditorBuildSettings.");
         }
 
-        string outputPath = Path.GetFullPath(Path.Combine("Builds", "My project.exe"));
+        string outputPath = Path.GetFullPath(Path.Combine("Builds", "MyProject.exe"));
         Debug.Log($"[BuildInvoker] Starting Windows64 build. outputPath={outputPath} sceneCount={enabledScenes.Length}");
 
         BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions

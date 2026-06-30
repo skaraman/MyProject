@@ -3,6 +3,7 @@ using UnityEngine.Assertions;
 
 namespace UnityEditor.Performance.ProfileAnalyzer
 {
+    [Serializable]
     internal class MarkerColumnFilter
     {
         public enum Mode

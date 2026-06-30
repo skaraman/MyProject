@@ -247,10 +247,7 @@ public static partial class TextureResidencyCache {
   }
 
   static bool IsCompletionFollowupDeadlineActive() {
-    return IsLoadingScreenStreamingContextActive() ||
-      queuedEntryCount > 0 ||
-      inFlightLoads > 0 ||
-      deferredRequests.Count > 0;
+    return true;
   }
 
   static float ResolveCompletionFollowupBudgetMs() {
@@ -260,7 +257,7 @@ public static partial class TextureResidencyCache {
     if (queuedEntryCount > 0 || inFlightLoads > 0 || deferredRequests.Count > 0) {
       return CompletionFollowupLoadingBudgetMs;
     }
-    return float.PositiveInfinity;
+    return CompletionFollowupGameplayBudgetMs;
   }
 
   static bool IsLoadingScreenStreamingContextActive() {

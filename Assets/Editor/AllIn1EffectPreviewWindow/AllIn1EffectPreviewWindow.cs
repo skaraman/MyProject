@@ -7,8 +7,8 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   const string WindowTitle = "Fire Preview";
   const string MenuPath = "Tools/Shader Preview/Fire Effect Preview";
   const string LegacyMenuPath = "Tools/Shader Preview/AllIn1 Effect Preview";
-  const string PreviewTextureAssetPath = "Assets/Sprites/Core/Empty.png";
-  const string TextureAtlasFolderPath = "Assets/Sprites/Core/Textures";
+  const string PreviewTextureAssetPath = "Packages/com.skaraman.myprojectcontent/Core/Sprites/Core/Empty.png";
+  const string TextureAtlasFolderPath = "Packages/com.skaraman.myprojectcontent/Core/Sprites/Core/Textures";
   const string ShaderName = "Hidden/Esperanza/FirePreview";
   const float WindowMinWidth = 760f;
   const float WindowMinHeight = 660f;

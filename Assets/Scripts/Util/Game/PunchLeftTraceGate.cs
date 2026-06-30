@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 public static class PunchLeftTraceGate {
-  static readonly bool EnableTraceLogs = false;
+  static readonly bool EnableTraceLogs = true;
   const int ActiveFrameWindow = 900;
   const float HitchDeltaMsThreshold = 22f;
 

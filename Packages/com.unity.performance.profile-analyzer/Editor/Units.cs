@@ -16,6 +16,7 @@ namespace UnityEditor.Performance.ProfileAnalyzer
         Count,
     };
 
+    [Serializable]
     internal class DisplayUnits
     {
         public static readonly string[] UnitNames =

@@ -17,160 +17,340 @@ using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 public static partial class ContentPackPipeline {
   static List<PackDefinition> BuildPackDefinitions(string externalRoot) {
     var normalizedRoot = NormalizeFullPath(externalRoot);
+    var result = DiscoverExternalPackDefinitions(normalizedRoot);
+    AddContentManifestPackDefinitions(result, normalizedRoot);
+    ApplyExistingPackManifests(result);
+    return result;
+  }
 
-    var core = new PackDefinition {
-      packId = CorePackId,
-      kind = "core",
-      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Core")),
-      stageAssetRoot = StageCoreAssetPath,
-      defaultLocationId = "",
+  static List<PackDefinition> DiscoverExternalPackDefinitions(string normalizedRoot) {
+    var result = new List<PackDefinition>();
+    AddExternalRootPackDefinitions(result, normalizedRoot);
+    AddExistingPackDefinition(
+      result,
+      packId: CorePackId,
+      kind: "core",
+      externalRootPath: NormalizeFullPath(Path.Combine(normalizedRoot, "Core")),
+      stageAssetRoot: StageCoreAssetPath
+    );
+    AddExternalPackDefinitions(result, normalizedRoot, "Forms", "form", StageFormsAssetPath);
+    AddExternalPackDefinitions(result, normalizedRoot, "Gears", "gear", StageGearsAssetPath);
+    AddExternalPackDefinitions(result, normalizedRoot, "Slices", "slice", StageSlicesAssetPath);
+    AddExternalPackDefinitions(result, normalizedRoot, "Episodes", "episode", StageEpisodesAssetPath);
+    return result;
+  }
+
+  static void AddExternalRootPackDefinitions(List<PackDefinition> result, string normalizedRoot) {
+    if (!Directory.Exists(normalizedRoot)) return;
+    var knownFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+      "Core",
+      "Forms",
+      "Gears",
+      "Slices",
+      "Episodes"
     };
-    core.seedRoots.Add("Assets/Prefabs/Characters/ESPER.prefab");
-    core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/Skin");
-    core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/Expressions/Base");
-    core.seedRoots.Add("Assets/Sprites/Characters/Esperanza/_Bounces");
-    core.seedRoots.Add("Assets/Prefabs/Fonts/FontCharacter.prefab");
-    AddCoreUiOwnedRoots(core.seedRoots);
-    foreach (var projectile in Projectiles.EnumerateAll()) {
-      var projectilePrefabPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
-      if (string.IsNullOrWhiteSpace(projectilePrefabPath) ||
-          string.Equals(projectilePrefabPath, "Assets/Prefabs/Projectiles/BlastBall.prefab", StringComparison.OrdinalIgnoreCase)) {
-        continue;
-      }
-      AddUniquePath(core.seedRoots, projectilePrefabPath);
+    var directories = Directory.GetDirectories(normalizedRoot);
+    Array.Sort(directories, StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < directories.Length; i++) {
+      var packId = Path.GetFileName(directories[i]);
+      if (string.IsNullOrWhiteSpace(packId) || knownFolders.Contains(packId)) continue;
+      AddExistingPackDefinition(
+        result,
+        packId,
+        "pack",
+        NormalizeFullPath(directories[i]),
+        StageRootAssetPath + "/" + packId
+      );
     }
-    core.manualLibraryNames.Add("Dialog/DialogEsper");
-    core.manualLibraryNames.Add("Dialog/DialogUI");
-    core.manualLibraryNames.Add("Items/Items");
-    core.manualLibraryNames.Add("MainMenu/MainMenu");
-    core.manualLibraryNames.Add("UI/CharUI");
-    core.manualLibraryNames.Add("UI/MapMenus");
-    core.manualLibraryNames.Add("UI/SelectMenus");
-    core.ownedRoots.AddRange(core.seedRoots);
+  }
 
-    var baseForm = new PackDefinition {
-      packId = BaseFormPackId,
-      kind = "form",
-      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Forms", BaseFormPackId)),
-      stageAssetRoot = StageFormsAssetPath + "/" + BaseFormPackId,
+  static void AddContentManifestPackDefinitions(List<PackDefinition> result, string normalizedRoot) {
+    var packIds = ReadContentManifestPackIds();
+    for (var i = 0; i < packIds.Count; i++) {
+      var packId = NormalizeToken(packIds[i]);
+      if (string.IsNullOrWhiteSpace(packId)) continue;
+      var kind = InferManifestPackKind(packId);
+      AddPackDefinition(
+        result,
+        packId,
+        kind,
+        ResolveManifestPackExternalRoot(normalizedRoot, kind, packId),
+        ResolveManifestPackStageRoot(kind, packId)
+      );
+    }
+  }
+
+  static string InferManifestPackKind(string packId) {
+    if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) return "core";
+    if (packId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase)) return "form";
+    if (packId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) return "gear";
+    if (packId.StartsWith("Episode_", StringComparison.OrdinalIgnoreCase)) return "episode";
+    return "pack";
+  }
+
+  static string ResolveManifestPackExternalRoot(string normalizedRoot, string kind, string packId) {
+    if (string.Equals(kind, "core", StringComparison.OrdinalIgnoreCase)) {
+      return NormalizeFullPath(Path.Combine(normalizedRoot, "Core"));
+    }
+    if (string.Equals(kind, "form", StringComparison.OrdinalIgnoreCase)) {
+      return NormalizeFullPath(Path.Combine(normalizedRoot, "Forms", packId));
+    }
+    if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase)) {
+      return NormalizeFullPath(Path.Combine(normalizedRoot, "Gears", packId));
+    }
+    if (string.Equals(kind, "episode", StringComparison.OrdinalIgnoreCase)) {
+      return NormalizeFullPath(Path.Combine(normalizedRoot, "Episodes", packId));
+    }
+    return NormalizeFullPath(Path.Combine(normalizedRoot, packId));
+  }
+
+  static string ResolveManifestPackStageRoot(string kind, string packId) {
+    if (string.Equals(kind, "core", StringComparison.OrdinalIgnoreCase)) return StageCoreAssetPath;
+    if (string.Equals(kind, "form", StringComparison.OrdinalIgnoreCase)) return StageFormsAssetPath + "/" + packId;
+    if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase)) return StageGearsAssetPath + "/" + packId;
+    if (string.Equals(kind, "episode", StringComparison.OrdinalIgnoreCase)) return StageEpisodesAssetPath + "/" + packId;
+    return StageRootAssetPath + "/" + packId;
+  }
+
+  static List<string> ReadContentManifestPackIds() {
+    var result = new List<string>();
+    var path = Path.Combine(GetProjectRoot(), "Assets", "ContentManifest.json");
+    if (!File.Exists(path)) return result;
+
+    ContentManifestJson manifest;
+    try {
+      manifest = JsonUtility.FromJson<ContentManifestJson>(File.ReadAllText(path));
+    }
+    catch (Exception ex) {
+      Debug.LogWarning("[ContentPackPipeline] Failed to read Assets/ContentManifest.json. error='" + ex.Message + "'");
+      return result;
+    }
+    if (manifest == null) return result;
+
+    if (manifest.slices == null) return result;
+    for (var i = 0; i < manifest.slices.Count; i++) {
+      AddListValues(result, manifest.slices[i]?.packs);
+    }
+    return result;
+  }
+
+  static void AddListValues(List<string> result, List<string> values) {
+    if (result == null || values == null) return;
+    for (var i = 0; i < values.Count; i++) {
+      AddUniquePath(result, values[i]);
+    }
+  }
+
+  static void AddExternalPackDefinitions(
+    List<PackDefinition> result,
+    string normalizedRoot,
+    string folderName,
+    string kind,
+    string stageRoot
+  ) {
+    var root = NormalizeFullPath(Path.Combine(normalizedRoot, folderName));
+    if (!Directory.Exists(root)) return;
+    var directories = Directory.GetDirectories(root);
+    Array.Sort(directories, StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < directories.Length; i++) {
+      var packId = Path.GetFileName(directories[i]);
+      if (string.IsNullOrWhiteSpace(packId)) continue;
+      AddExistingPackDefinition(
+        result,
+        packId,
+        kind,
+        NormalizeFullPath(directories[i]),
+        stageRoot + "/" + packId
+      );
+    }
+  }
+
+  static void AddExistingPackDefinition(
+    List<PackDefinition> result,
+    string packId,
+    string kind,
+    string externalRootPath,
+    string stageAssetRoot
+  ) {
+    if (result == null || string.IsNullOrWhiteSpace(packId) || string.IsNullOrWhiteSpace(externalRootPath)) return;
+    if (!Directory.Exists(externalRootPath) && !File.Exists(Path.Combine(externalRootPath, ManifestFileName))) return;
+    AddPackDefinition(result, packId, kind, externalRootPath, stageAssetRoot);
+  }
+
+  static void AddPackDefinition(
+    List<PackDefinition> result,
+    string packId,
+    string kind,
+    string externalRootPath,
+    string stageAssetRoot
+  ) {
+    if (result == null || string.IsNullOrWhiteSpace(packId) || string.IsNullOrWhiteSpace(externalRootPath)) return;
+    if (result.Any(pack => string.Equals(pack?.packId, packId, StringComparison.OrdinalIgnoreCase))) return;
+    var pack = new PackDefinition {
+      packId = packId,
+      kind = kind,
+      externalRootPath = externalRootPath,
+      stageAssetRoot = stageAssetRoot,
       defaultLocationId = ""
     };
-    baseForm.requiredPackIds.Add(CorePackId);
-    baseForm.seedRoots.Add("Assets/Prefabs/Projectiles/BlastBall.prefab");
-    baseForm.seedRoots.Add("Assets/Sprites/Characters/Esperanza/Effects");
-    baseForm.ownedRoots.AddRange(baseForm.seedRoots);
+    result.Add(pack);
+  }
 
-    var gearPacks = DiscoverGearPackDefinitions(normalizedRoot);
+  static void ApplyExistingPackManifests(List<PackDefinition> packDefinitions) {
+    if (packDefinitions == null || packDefinitions.Count <= 0) return;
 
-    var slice = new PackDefinition {
-      packId = SlicePackId,
-      kind = "slice",
-      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Slices", SlicePackId)),
-      stageAssetRoot = StageSlicesAssetPath + "/" + SlicePackId,
-      defaultLocationId = LocationEnemyData.DomeCityLocationId,
-      snapshotRelativePath = PackDataFolderName + "/" + DomeCityLocationSnapshotFileName,
-      dialogSnapshotRelativePath = PackDataFolderName + "/" + DomeCityDialogSnapshotFileName
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null || string.IsNullOrWhiteSpace(pack.externalRootPath)) continue;
+
+      var manifestPath = Path.Combine(pack.externalRootPath, ManifestFileName);
+      if (!File.Exists(manifestPath)) continue;
+
+      ContentPackManifestJson manifest;
+      try {
+        manifest = JsonUtility.FromJson<ContentPackManifestJson>(File.ReadAllText(manifestPath));
+      }
+      catch (Exception ex) {
+        Debug.LogWarning(
+          "[ContentPackPipeline] Failed to read content pack manifest." +
+          " pack_id='" + pack.packId + "'" +
+          " path='" + manifestPath + "'" +
+          " error='" + ex.Message + "'"
+        );
+        continue;
+      }
+
+      ApplyExistingPackManifest(pack, manifest);
+    }
+  }
+
+  static void ApplyExistingPackManifest(PackDefinition pack, ContentPackManifestJson manifest) {
+    if (pack == null || manifest == null) return;
+
+    pack.loadedManifest = true;
+    if (!string.IsNullOrWhiteSpace(manifest.kind)) {
+      pack.kind = NormalizeToken(manifest.kind);
+    }
+
+    ReplaceListIfPresent(pack.ownedRoots, manifest.ownedRoots);
+    ReplaceListIfPresent(pack.ownedLocations, manifest.ownedLocations);
+    ReplaceListIfPresent(pack.ownedEnemyTypes, manifest.ownedEnemyTypes);
+    ReplaceListIfPresent(pack.dialogIds, manifest.dialogIds);
+
+    pack.authoringSources.Clear();
+    if (manifest.authoringSources == null || manifest.authoringSources.Count <= 0) {
+      return;
+    }
+
+    for (var i = 0; i < manifest.authoringSources.Count; i++) {
+      var source = NormalizeAuthoringSource(manifest.authoringSources[i]);
+      if (source == null) continue;
+      pack.authoringSources.Add(source);
+    }
+
+    if (pack.authoringSources.Count <= 0) return;
+
+    pack.seedRoots.Clear();
+    pack.manualLibraryNames.Clear();
+    pack.targetRelativePathByAssetPath.Clear();
+    for (var i = 0; i < pack.authoringSources.Count; i++) {
+      AddUniquePath(pack.seedRoots, pack.authoringSources[i].assetPath);
+      AddUniquePath(pack.ownedRoots, pack.authoringSources[i].assetPath);
+    }
+  }
+
+  static ContentPackAuthoringSourceJson NormalizeAuthoringSource(ContentPackAuthoringSourceJson source) {
+    if (source == null) return null;
+
+    var rawAssetPath = NormalizeAssetPath(source.assetPath);
+    var assetPath = StripAuthoringSliceSuffix(rawAssetPath);
+    var sourceType = NormalizeToken(source.sourceType).ToLowerInvariant();
+    var targetFolder = NormalizePackTargetFolder(source.targetFolder);
+    if (string.IsNullOrWhiteSpace(sourceType) ||
+        string.IsNullOrWhiteSpace(assetPath) ||
+        string.IsNullOrWhiteSpace(targetFolder)) {
+      return null;
+    }
+
+    return new ContentPackAuthoringSourceJson {
+      sourceType = sourceType,
+      assetPath = assetPath,
+      label = string.IsNullOrWhiteSpace(source.label) ? ExtractAuthoringSliceLabel(rawAssetPath) : NormalizeToken(source.label),
+      targetFolder = targetFolder
     };
-    slice.requiredPackIds.Add(CorePackId);
-    slice.requiredPackIds.Add(BaseFormPackId);
-    slice.seedRoots.Add("Assets/Prefabs/Locations/DomeCity.prefab");
-    slice.seedRoots.Add("Assets/Prefabs/Enemies/Imp.prefab");
-    slice.seedRoots.Add("Assets/Sprites/Characters/Enemies/Imp");
-    slice.manualLibraryNames.Add("Dialog/DialogImp");
-    slice.ownedRoots.AddRange(slice.seedRoots);
-    slice.ownedLocations.Add(LocationEnemyData.DomeCityLocationId);
-    slice.ownedEnemyTypes.Add("Imp");
-    slice.dialogIds.Add(LocationEnemyData.DomeCityLocationId);
+  }
 
-    var homebase = new PackDefinition {
-      packId = HomebaseSlicePackId,
-      kind = "slice",
-      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Slices", HomebaseSlicePackId)),
-      stageAssetRoot = StageSlicesAssetPath + "/" + HomebaseSlicePackId,
-      stageForRuntime = false
-    };
-    homebase.requiredPackIds.Add(CorePackId);
+  static string StripAuthoringSliceSuffix(string assetPath) {
+    var normalized = NormalizeAssetPath(assetPath);
+    var bracketIndex = normalized.IndexOf('[', StringComparison.Ordinal);
+    return bracketIndex >= 0 ? normalized.Substring(0, bracketIndex) : normalized;
+  }
 
-    var sunkenCave = new PackDefinition {
-      packId = SunkenCaveSlicePackId,
-      kind = "slice",
-      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Slices", SunkenCaveSlicePackId)),
-      stageAssetRoot = StageSlicesAssetPath + "/" + SunkenCaveSlicePackId,
-      stageForRuntime = false
-    };
-    sunkenCave.requiredPackIds.Add(CorePackId);
+  static string ExtractAuthoringSliceLabel(string assetPath) {
+    var normalized = NormalizeAssetPath(assetPath);
+    var openIndex = normalized.IndexOf('[', StringComparison.Ordinal);
+    var closeIndex = normalized.LastIndexOf(']');
+    if (openIndex < 0 || closeIndex <= openIndex) return "";
+    return normalized.Substring(openIndex + 1, closeIndex - openIndex - 1).Trim();
+  }
 
-    var episode = new PackDefinition {
-      packId = EpisodePackId,
-      kind = "episode",
-      externalRootPath = NormalizeFullPath(Path.Combine(normalizedRoot, "Episodes", EpisodePackId)),
-      stageAssetRoot = StageRootAssetPath + "/Episodes/" + EpisodePackId,
-      stageForRuntime = false,
-      defaultLocationId = LocationEnemyData.DomeCityLocationId,
-    };
-    episode.requiredPackIds.Add(SlicePackId);
-    episode.requiredPackIds.Add(HomebaseSlicePackId);
-    episode.requiredPackIds.Add(SunkenCaveSlicePackId);
+  static string NormalizePackTargetFolder(string targetFolder) {
+    var normalized = NormalizeAssetPath(targetFolder).Trim('/');
+    if (string.IsNullOrWhiteSpace(normalized)) return "";
+    if (normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring("Assets/".Length);
+    }
+    var segments = normalized.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+    if (segments.Length > 1 && string.Equals(segments[0], CorePackId, StringComparison.OrdinalIgnoreCase)) {
+      normalized = string.Join("/", segments.Skip(1));
+    }
+    else if (segments.Length > 2 &&
+             (string.Equals(segments[0], "Forms", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(segments[0], "Gears", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(segments[0], "Slices", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(segments[0], "Episodes", StringComparison.OrdinalIgnoreCase))) {
+      normalized = string.Join("/", segments.Skip(2));
+    }
+    return NormalizeAssetPath(normalized).Trim('/');
+  }
 
-    var result = new List<PackDefinition> { core, baseForm };
-    result.AddRange(gearPacks);
-    result.Add(slice);
-    result.Add(homebase);
-    result.Add(sunkenCave);
-    result.Add(episode);
-    return result;
+  static void ReplaceListIfPresent(List<string> target, List<string> source) {
+    if (target == null || source == null) return;
+    target.Clear();
+    for (var i = 0; i < source.Count; i++) {
+      AddUniquePath(target, source[i]);
+    }
   }
 
   static List<PackDefinition> DiscoverGearPackDefinitions(string normalizedExternalRoot) {
     var result = new List<PackDefinition>();
-    var groupedGearRoot = NormalizeAssetPath(EsperanzaGroupedGearRoot);
-    var groupedGearFullPath = Path.GetFullPath(groupedGearRoot);
+    var groupedGearFullPath = GetPhysicalPath(EsperanzaGroupedGearRoot);
     if (!Directory.Exists(groupedGearFullPath)) {
       return result;
     }
 
-    var formDirectories = Directory.GetDirectories(groupedGearFullPath);
-    Array.Sort(formDirectories, StringComparer.OrdinalIgnoreCase);
-    for (var formIndex = 0; formIndex < formDirectories.Length; formIndex++) {
-      var formAssetPath = ToProjectAssetPath(formDirectories[formIndex]);
-      var formName = Path.GetFileName(formAssetPath);
-      if (string.IsNullOrWhiteSpace(formName) ||
-          string.Equals(formName, "Skin", StringComparison.OrdinalIgnoreCase)) {
+    var gearDirectories = Directory.GetDirectories(groupedGearFullPath);
+    Array.Sort(gearDirectories, StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < gearDirectories.Length; i++) {
+      var dirPath = gearDirectories[i].Replace('\\', '/');
+      var packId = Path.GetFileName(dirPath);
+      if (string.IsNullOrWhiteSpace(packId) || !packId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) {
         continue;
       }
 
-      var gearDirectories = Directory.GetDirectories(formDirectories[formIndex]);
-      Array.Sort(gearDirectories, StringComparer.OrdinalIgnoreCase);
-      for (var gearIndex = 0; gearIndex < gearDirectories.Length; gearIndex++) {
-        var gearAssetPath = ToProjectAssetPath(gearDirectories[gearIndex]);
-        var gearCode = Path.GetFileName(gearAssetPath);
-        if (string.IsNullOrWhiteSpace(gearCode)) {
-          continue;
-        }
+      var stageAssetRoot = StageGearsAssetPath + "/" + packId;
+      var pack = new PackDefinition {
+        packId = packId,
+        kind = "gear",
+        externalRootPath = NormalizeFullPath(Path.Combine(normalizedExternalRoot, "Gears", packId)),
+        stageAssetRoot = stageAssetRoot,
+        defaultLocationId = ""
+      };
 
-        var leafDirectories = Directory.GetDirectories(gearDirectories[gearIndex]);
-        Array.Sort(leafDirectories, StringComparer.OrdinalIgnoreCase);
-        for (var leafIndex = 0; leafIndex < leafDirectories.Length; leafIndex++) {
-          var leafAssetPath = ToProjectAssetPath(leafDirectories[leafIndex]);
-          var leafCode = Path.GetFileName(leafAssetPath);
-          var packId = EquippedItems.BuildGearPackId(formName + "_" + gearCode, leafCode);
-          if (string.IsNullOrWhiteSpace(packId)) {
-            continue;
-          }
-
-          var pack = new PackDefinition {
-            packId = packId,
-            kind = "gear",
-            externalRootPath = NormalizeFullPath(Path.Combine(normalizedExternalRoot, "Gears", packId)),
-            stageAssetRoot = StageGearsAssetPath + "/" + packId,
-            defaultLocationId = ""
-          };
-          pack.requiredPackIds.Add(CorePackId);
-          pack.seedRoots.Add(leafAssetPath);
-          pack.ownedRoots.Add(leafAssetPath);
-          result.Add(pack);
-        }
-      }
+      var stagedSpritesFolder = stageAssetRoot + "/Sprites";
+      pack.seedRoots.Add(stagedSpritesFolder);
+      pack.ownedRoots.Add(stagedSpritesFolder);
+      result.Add(pack);
     }
 
     return result;
@@ -190,6 +370,11 @@ public static partial class ContentPackPipeline {
   ) {
     if (pack == null) return;
 
+    if (pack.authoringSources != null && pack.authoringSources.Count > 0) {
+      PrepareAuthoringSourceDependencies(pack, errors);
+      return;
+    }
+
     var seedAssetPaths = ExpandProjectRoots(pack.seedRoots, errors);
     var libraryNames = CollectReferencedLibraryNamesFromAssets(seedAssetPaths);
     for (var i = 0; i < pack.manualLibraryNames.Count; i++) {
@@ -206,6 +391,109 @@ public static partial class ContentPackPipeline {
     pack.assetDependencies = CollectPackDependencies(allSeedPaths, errors);
   }
 
+  static void PrepareAuthoringSourceDependencies(PackDefinition pack, List<string> errors) {
+    pack.assetDependencies.Clear();
+    pack.targetRelativePathByAssetPath.Clear();
+
+    for (var i = 0; i < pack.authoringSources.Count; i++) {
+      var source = pack.authoringSources[i];
+      if (!ValidateAuthoringSource(source, errors)) {
+        continue;
+      }
+
+      var dependencies = CollectPackDependencies(new List<string> { source.assetPath }, errors);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Count; dependencyIndex++) {
+        AddUniquePath(pack.assetDependencies, dependencies[dependencyIndex]);
+      }
+
+      var targetRelativePath = BuildAuthoringSourceTargetRelativePath(source);
+      if (string.IsNullOrWhiteSpace(targetRelativePath)) continue;
+      if (pack.targetRelativePathByAssetPath.TryGetValue(source.assetPath, out var existingTarget) &&
+          !string.Equals(existingTarget, targetRelativePath, StringComparison.OrdinalIgnoreCase)) {
+        errors?.Add(
+          "Authoring source maps to multiple target folders." +
+          " pack_id='" + pack.packId + "'" +
+          " asset='" + source.assetPath + "'" +
+          " first='" + existingTarget + "'" +
+          " second='" + targetRelativePath + "'"
+        );
+        continue;
+      }
+      pack.targetRelativePathByAssetPath[source.assetPath] = targetRelativePath;
+    }
+  }
+
+  static bool ValidateAuthoringSource(ContentPackAuthoringSourceJson source, List<string> errors) {
+    if (source == null) return false;
+    var assetPath = NormalizeAssetPath(source.assetPath);
+    var sourceType = NormalizeToken(source.sourceType);
+    if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(sourceType)) return false;
+    if (!File.Exists(Path.GetFullPath(assetPath))) {
+      errors?.Add("Missing authoring source asset '" + assetPath + "'.");
+      return false;
+    }
+
+    var extension = Path.GetExtension(assetPath);
+    if (string.Equals(sourceType, "sprite_library", StringComparison.OrdinalIgnoreCase)) {
+      if (!string.Equals(extension, ".spriteLib", StringComparison.OrdinalIgnoreCase)) {
+        errors?.Add("Sprite library authoring source must be a .spriteLib asset. asset='" + assetPath + "'");
+        return false;
+      }
+      return true;
+    }
+
+    if (string.Equals(sourceType, "sprite_slice", StringComparison.OrdinalIgnoreCase)) {
+      if (!string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) {
+        errors?.Add("Sprite slice authoring source must be a .png asset. asset='" + assetPath + "'");
+        return false;
+      }
+      if (string.IsNullOrWhiteSpace(source.label)) {
+        errors?.Add("Sprite slice authoring source requires a slice label. asset='" + assetPath + "'");
+        return false;
+      }
+      if (!TextureContainsSpriteSlice(assetPath, source.label)) {
+        errors?.Add(
+          "Sprite slice authoring source label was not found." +
+          " asset='" + assetPath + "'" +
+          " label='" + source.label + "'"
+        );
+        return false;
+      }
+      return true;
+    }
+
+    errors?.Add("Unknown authoring source type '" + sourceType + "' for asset '" + assetPath + "'.");
+    return false;
+  }
+
+  static bool TextureContainsSpriteSlice(string assetPath, string label) {
+    var normalizedLabel = NormalizeToken(label);
+    if (string.IsNullOrWhiteSpace(normalizedLabel)) return false;
+
+    var mainAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+    if (mainAsset != null && string.Equals(mainAsset.name, normalizedLabel, StringComparison.OrdinalIgnoreCase)) {
+      return true;
+    }
+
+    var subAssets = AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath);
+    for (var i = 0; i < subAssets.Length; i++) {
+      if (subAssets[i] == null) continue;
+      if (string.Equals(subAssets[i].name, normalizedLabel, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static string BuildAuthoringSourceTargetRelativePath(ContentPackAuthoringSourceJson source) {
+    if (source == null) return "";
+    var assetPath = NormalizeAssetPath(source.assetPath);
+    var targetFolder = NormalizePackTargetFolder(source.targetFolder);
+    if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(targetFolder)) return "";
+    return NormalizeAssetPath(targetFolder + "/" + Path.GetFileName(assetPath));
+  }
+
   static List<string> ResolveConcreteActivePackIds(
     List<string> selectedPackIds,
     Dictionary<string, PackDefinition> packById
@@ -215,11 +503,9 @@ public static partial class ContentPackPipeline {
       return resolved;
     }
 
-    var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-    void Visit(string packId) {
+    void AddSelectedPack(string packId) {
       var normalizedPackId = NormalizeToken(packId);
-      if (string.IsNullOrWhiteSpace(normalizedPackId) || !visited.Add(normalizedPackId)) {
+      if (string.IsNullOrWhiteSpace(normalizedPackId)) {
         return;
       }
 
@@ -227,63 +513,19 @@ public static partial class ContentPackPipeline {
         return;
       }
 
-      if (pack.requiredPackIds != null) {
-        for (var i = 0; i < pack.requiredPackIds.Count; i++) {
-          Visit(pack.requiredPackIds[i]);
-        }
-      }
-
-      if (pack.stageForRuntime && !string.IsNullOrWhiteSpace(pack.stageAssetRoot)) {
+      if (pack.stageForRuntime &&
+          !string.IsNullOrWhiteSpace(pack.stageAssetRoot) &&
+          !resolved.Contains(pack.packId, StringComparer.OrdinalIgnoreCase)) {
         resolved.Add(pack.packId);
       }
     }
 
     for (var i = 0; i < selectedPackIds.Count; i++) {
-      Visit(selectedPackIds[i]);
-    }
-
-    var equippedGearPackIds = ResolveEquippedGearPackIds(packById);
-    for (var i = 0; i < equippedGearPackIds.Count; i++) {
-      Visit(equippedGearPackIds[i]);
+      AddSelectedPack(selectedPackIds[i]);
     }
 
     return resolved;
   }
 
-  static List<string> ResolveEquippedGearPackIds(Dictionary<string, PackDefinition> packById) {
-    var result = new List<string>();
-    if (packById == null || packById.Count <= 0) {
-      return result;
-    }
-
-    var equippedGearIds = EquippedItems.GetEquippedGearIds();
-    if (equippedGearIds.Count <= 0) {
-      return result;
-    }
-
-    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var pair in packById) {
-      var pack = pair.Value;
-      if (pack == null || !string.Equals(pack.kind, "gear", StringComparison.OrdinalIgnoreCase)) {
-        continue;
-      }
-
-      if (!EquippedItems.TryParseGearPackId(pack.packId, out var gearForm, out var gearCode, out _)) {
-        continue;
-      }
-
-      var equippedGearId = NormalizeToken(gearForm + "_" + gearCode);
-      if (string.IsNullOrWhiteSpace(equippedGearId) ||
-          !equippedGearIds.Contains(equippedGearId, StringComparer.OrdinalIgnoreCase) ||
-          !seen.Add(pack.packId)) {
-        continue;
-      }
-
-      result.Add(pack.packId);
-    }
-
-    result.Sort(StringComparer.OrdinalIgnoreCase);
-    return result;
-  }
 }
 #endif

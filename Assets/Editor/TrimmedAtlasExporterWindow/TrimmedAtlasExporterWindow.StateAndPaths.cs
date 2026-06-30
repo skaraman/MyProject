@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -122,7 +121,16 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
   static List<Sprite> LoadSourceSprites(string sourcePath) {
     if (string.IsNullOrWhiteSpace(sourcePath)) return new List<Sprite>();
-    return AssetDatabase.LoadAllAssetsAtPath(sourcePath).OfType<Sprite>().ToList();
+
+    var assets = AssetDatabase.LoadAllAssetsAtPath(sourcePath);
+    var sprites = new List<Sprite>(assets.Length);
+    for (var i = 0; i < assets.Length; i++) {
+      if (assets[i] is Sprite sprite) {
+        sprites.Add(sprite);
+      }
+    }
+
+    return sprites;
   }
 
   Dictionary<int, string> BuildSpriteNameLookup(IEnumerable<Sprite> sprites, int columns, int rows, int gridCellWidth, int gridCellHeight) {
@@ -159,19 +167,14 @@ public sealed partial class TrimmedAtlasExporterWindow {
   }
 
   static int CountDistinctCellOrigins(IEnumerable<float> values) {
-    const float epsilon = 0.01f;
-    var orderedValues = values.OrderBy(value => value).ToList();
-    if (orderedValues.Count <= 0) return 0;
+    var distinctOrigins = new HashSet<int>();
+    if (values == null) return 0;
 
-    var count = 1;
-    var previous = orderedValues[0];
-    for (var i = 1; i < orderedValues.Count; i++) {
-      if (Mathf.Abs(orderedValues[i] - previous) <= epsilon) continue;
-      count++;
-      previous = orderedValues[i];
+    foreach (var value in values) {
+      distinctOrigins.Add(Mathf.RoundToInt(value));
     }
 
-    return count;
+    return distinctOrigins.Count;
   }
 
   internal static string NormalizeAssetPath(string assetPath) {
@@ -331,7 +334,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
       return false;
     }
 
-    characterRootPath = string.Join("/", segments.Take(4));
+    characterRootPath = segments[0] + "/" + segments[1] + "/" + segments[2] + "/" + segments[3];
     return !string.IsNullOrWhiteSpace(characterRootPath);
   }
 }

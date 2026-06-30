@@ -84,7 +84,8 @@ public static partial class SpriteRuntimeResolver {
     }
 
     assetPath = CollapseSlashes(assetPath.Replace('\\', '/'));
-    if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return false;
+    if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) &&
+        !assetPath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)) return false;
 
     var assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
     if (TryMatchEditorSprite(assets, spriteName, out sprite)) return true;
@@ -176,11 +177,27 @@ public static partial class SpriteRuntimeResolver {
     return spriteIdsByName != null && spriteIdsByName.TryGetValue(spriteName, out localFileId);
   }
 
+  static string ResolvePhysicalPath(string assetPath) {
+    if (string.IsNullOrWhiteSpace(assetPath)) return "";
+    if (assetPath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)) {
+      var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(assetPath);
+      if (packageInfo != null) {
+        var prefix = packageInfo.assetPath;
+        if (assetPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
+          var relativePath = assetPath.Substring(prefix.Length).TrimStart('/', '\\');
+          return Path.Combine(packageInfo.resolvedPath, relativePath).Replace('\\', '/');
+        }
+      }
+    }
+    return assetPath;
+  }
+
   static Dictionary<string, long> BuildEditorMetaSpriteIdMap(string assetPath) {
     var spriteIdsByName = new Dictionary<string, long>(StringComparer.Ordinal);
     if (string.IsNullOrWhiteSpace(assetPath)) return spriteIdsByName;
 
-    var metaPath = assetPath + ".meta";
+    var physicalPath = ResolvePhysicalPath(assetPath);
+    var metaPath = physicalPath + ".meta";
     if (!File.Exists(metaPath)) return spriteIdsByName;
 
     var inTable = false;

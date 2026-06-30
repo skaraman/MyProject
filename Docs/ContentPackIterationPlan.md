@@ -1,92 +1,95 @@
 # Content Pack Iteration Plan
 
+## Purpose
+
+Use this document after source images and pack source mappings have been authored.
+
+This workflow is about iteration and runtime packaging:
+
+- scan existing packs
+- create or edit pack manifests through `Tools\ContentPackIterationUI.py`
+- pack selected content through the Unity Content Pack tools
+- stage active packs
+- rebuild runtime sprite indexes
+- build Addressables
+- verify from `Editor.log`
+
+
 ## Current State
 
-- Play Mode and BuildAndRun now load and play from active content packs.
-- `D:\localDev\Unity\MyProjectContent` is the authoritative runtime content source.
-- `Assets/ContentStage` is the only project-local runtime/editor mirror for active external packs.
-- `Assets/Sprites` remains the artist/importer staging root before content is packed.
-- Exact duplicate local sprite payloads under `Assets/Sprites` were removed after SHA-256 matched external pack copies.
-- Remaining local/external sprite path overlap is non-identical and must be reviewed before deletion.
-- Legacy transition menu entries and old `Slice_DomeCity_Imp` mapping were removed.
-- `Build Active Content` exports project-local authored sprite changes to external packs, then stages active external packs.
+- The external content-pack root is resolved from `Packages/manifest.json` dependency `com.skaraman.myprojectcontent`; in this checkout it resolves to `D:\localDev\Unity\Esperanza\MyProjectContent`.
+- `Packages/com.skaraman.myprojectcontent` is the project-local runtime/editor mirror for active external packs.
+- `Assets/Sprites` is the artist/importer staging root before content is packed.
+- `Tools\ContentPackIterationUI.py` is the pack manifest, active-selection, and Smart-build control surface.
+- Latest Python UI scan reports planned rows for `Core`, `Form_Base`, `DomeCity`, and `Imp`; the external pack folders/manifests still need to be authored.
 
-Latest known validation:
+## Python Pack Tool
 
-- Unity batch import/compile passed.
-- Active content build reached clean stage/audit:
-  `generated_refs=0 stage_errors=0 pack_policy_errors=0 gameplay_core_errors=0`.
-- 2026-05-15 Smart runtime-index rebuild completed:
-  `libraryNames=50 shards=50 schemaRepairs=0 errors=0`.
-- Repeated `SpriteIndexBuilder ResolveSpriteAddress: Caching address map` logging was fixed at the shared GUID address-map cache.
-- External-enabled sprite library/texture discovery no longer falls back to `Assets/Sprites`.
-- Follow-up validation is blocked while another Unity instance has this project open.
-- Remaining duplicate metrics after cleanup:
-  `remaining_exact_duplicates=0`
-  `remaining_path_overlaps_nonidentical=46`
+Run:
 
-## Authoring Workflow
+```powershell
+python .\Tools\ContentPackIterationUI.py
+```
 
-Artists place or update source content under:
+Use the UI for one pack action:
 
-`D:\localDev\Unity\MyProject\Assets\Sprites`
+- create a pack
+- scan existing packs
+- edit an existing pack
 
-Authoring tools normalize atlas/offset outputs there, then content packing moves the owned payload into:
+Pack creation fields:
 
-`D:\localDev\Unity\MyProjectContent`
+- pack type: `Core`, `Form`, `Gear`, `Slice`, or `Episode`
+- pack name/id
+- source assets
+- target folder per source asset
 
-Examples:
+Source asset types:
 
-- `D:\localDev\Unity\MyProjectContent\Core\Sprites\GameInterface\MainMenu\atlas.png`
-- `D:\localDev\Unity\MyProjectContent\Core\Sprites\Fonts\Plate\atlas.png`
-- `D:\localDev\Unity\MyProjectContent\Forms\Form_Base\Sprites\Characters\Esperanza\Effects\Blast\1.png`
-- `D:\localDev\Unity\MyProjectContent\Gears\Gear_Aqua_aa_p\Sprites\Characters\Esperanza\GroupedGearAtlases\Aqua\aa\p\Aqua_aa_p_p1.png`
-- `D:\localDev\Unity\MyProjectContent\Slices\Slice_DomeCity_Imp_Base\Sprites\Characters\Enemies\Imp\Run\1.png`
-- `D:\localDev\Unity\MyProjectContent\Slices\Slice_DomeCity_Imp_Base\Sprites\Environments\ForestRuins\road\atlas.png`
+- `Sprite Library`: `.spriteLib` plus category and label
+- `Sprite Slice`: direct `.png` pointer plus slice label
 
-Normal flow:
+The tool saves external `ContentPackManifest.json` files and stores source rows as `authoringSources`.
 
-1. Change source content under `Assets/Sprites/Characters` or `Assets/Sprites/Environments`.
-2. Run the relevant authoring tool if atlas/offset output changed.
-3. Ensure the active pack selection matches the test.
-4. Run `Tools/Content Pack/1) Build Active Content (Smart)`.
-5. Test in Play Mode.
-6. Run BuildAndRun for player validation.
+CLI scan:
 
-Clean fallback:
+```powershell
+python .\Tools\ContentPackIterationUI.py --list
+```
 
-1. Run `Tools/Content Pack/2) Build Active Content (Clean)`.
-2. Re-test Play Mode and BuildAndRun.
+## Addressables Packing Workflow
 
-## Pipeline Contract
+Normal iteration uses the Python tool as the primary action:
 
-Primary build path:
+```powershell
+python .\Tools\ContentPackIterationUI.py --set-active Core,Form_Base,DomeCity,Imp --build-smart
+```
 
-1. Export project-authored source assets from `Assets/Sprites` into `D:\localDev\Unity\MyProjectContent`.
-2. Validate selected external pack directories exist.
-3. Stage active packs into `Assets/ContentStage`.
-4. Generate `ActiveContentRegistry`.
-5. Audit staged content.
-6. Apply unified import flow.
-7. Rebuild runtime sprite index.
-8. Apply gameplay/location hotset.
-9. Build Addressables.
+The Python UI has the same controls:
 
-Allowed project-local generated mirrors:
+- `Set Active`
+- `Build Smart`
 
-- `Assets/ContentStage`
-- `Assets/Resources/ActiveContentRegistry.asset`
-- runtime index assets generated by the sprite index builder
-- Addressables group/build metadata
+Unity content-pack menu actions are removed. The C# backend exists for the Python tool and build-pipeline callers only.
 
-Not allowed as normal content ownership:
+Use a clean fallback only when output is stale or structurally wrong, and add that cleaning variant to the Python tool before relying on it as a normal workflow.
 
-- duplicated sprite payloads in `Assets/Sprites`
-- legacy `Assets/Generated` references
-- stale transition-only menu paths
-- old slice-id compatibility mapping as a runtime dependency
+Smart packing should:
 
-## Packaging Model
+1. read selected pack manifests
+2. export project-authored source assets into the manifest-resolved external content-pack root
+3. validate external pack directories
+4. stage active packs into `Packages/com.skaraman.myprojectcontent`
+5. generate `ActiveContentRegistry`
+6. audit staged content
+7. apply unified import flow
+8. rebuild the runtime sprite index
+9. apply gameplay/location hotset
+10. build Addressables
+
+Clean packing follows the same contract but allows the recovery path to rebuild stale output.
+
+## Pack Model
 
 Ownership layers:
 
@@ -96,236 +99,135 @@ Ownership layers:
 - `Slice`
 - `Episode`
 
-Current concrete packs:
+Pack isolation rules:
 
-- `Core`
-- `Form_Base`
-- equipped `Gear_*` packs discovered from `D:\localDev\Unity\MyProjectContent\Gears\Gear_*`
-- `Slice_DomeCity_Imp_Base`
-- `Slice_Homebase_Placeholder`
-- `Slice_SunkenCave_Placeholder`
-- `Episode_01`
+- packs are self-isolated
+- active selection is exact; select pack ids, not slice ids
+- the Python UI lists external pack folders/manifests plus explicit pack names from `Assets\ContentManifest.json`
+- `Assets\ContentManifest.json` groups pack sets under `slices`
+- each slice block lists its pack names in `packs`
+- episodes are official release arrangements that list slice ids
+- Esperanza form unlocks stay out of this manifest and come from player save/runtime state
+- gear and episode packs appear when they exist as external pack manifests or are explicitly authored
+- form packs own form-specific UI, item icons, character form animation payloads, attack animation payloads, projectiles, effects, and other form-specific objects
+- Core stays limited to stable shared runtime content that is not specific to a form, location, enemy, gear loadout, or episode
 
-Current dependency rule:
+Example:
 
-- `Episode_01 -> Slice_DomeCity_Imp_Base + Slice_Homebase_Placeholder + Slice_SunkenCave_Placeholder`
-- `Slice_DomeCity_Imp_Base -> Core + Form_Base`
-- active gameplay gear is additive: `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base`
-- each slice depends on `Core`
-- each form depends on `Core`
-- each `Gear_*` pack depends on `Core`
-- current runtime baseline remains `Core + Form_Base + equipped Gear_* + Slice_DomeCity_Imp_Base`
+```json
+{
+  "slices": [
+    {
+      "id": "Core",
+      "packs": ["Core"]
+    },
+    {
+      "id": "DomeCity_Imp_Base",
+      "packs": ["Form_Base", "DomeCity", "Imp"]
+    }
+  ],
+  "episodes": [
+    {
+      "id": "Episode01",
+      "slices": ["Core", "DomeCity_Imp_Base"]
+    }
+  ]
+}
+```
 
-## Ownership Rules
+## Runtime Packaging Contract
 
-### Core
+Allowed generated mirrors:
 
-Owns globally shared runtime content:
+- `Packages/com.skaraman.myprojectcontent`
+- `Assets/Resources/ActiveContentRegistry.asset`
+- runtime index assets generated by the sprite index builder
+- Addressables group/build metadata
 
-- Esperanza skin movement/state baseline
-- Esperanza movement transitions
-- global UI
-- dialog UI
-- fonts
-- main menu
-- select menus
-- character UI
-- map UI
-- Esperanza portrait expressions
-- shared projectile prefabs except form-specific exceptions
+Not allowed as runtime ownership:
 
-### Form
-
-Owns form-specific combat content:
-
-- form-specific projectile prefabs
-- form-specific combat effects and VFX
-- form-specific combat animation payloads outside the locomotion baseline
-
-Current form pack:
-
-- `Form_Base`
-
-Current form-owned example:
-
-- `BlastBall`
-
-### Gear
-
-Owns equipped visual payload only:
-
-- each external `Gears/Gear_*` directory is one gear pack
-- pack id format: `Gear_<Form>_<GearCode>_<Leaf>`
-- staged grouped gear atlas sprite slices come from Unity importer data in `.meta`
-- runtime `.json` remains offset-only placement data
-- runtime `.json` must not become slice-definition authority
-- zero-offset grouped/trimmed atlas exports should not emit runtime `atlas.json`
-
-### Slice
-
-Owns one independently stageable gameplay unit:
-
-- one gameplay location
-- location prefab
-- location dialog snapshot
-- location enemy set
-- slice-local encounter content
-
-Current baseline slice:
-
-- `Slice_DomeCity_Imp_Base`
-- location: `DomeCity`
-- enemy: `Imp`
-- dialog: `DomeCity`
-- current slice-local Esperanza combat moves:
-  `PunchRight`, `PunchLeft`, `KickRight`, `KickLeft`, `Blast`
-
-### Episode
-
-Owns progression composition only:
-
-- combines multiple slices
-- does not own unrelated scene-local content
-- current placeholder follow-up slices:
-  `Slice_Homebase_Placeholder`, `Slice_SunkenCave_Placeholder`
-
-## Loading Expectations
+- duplicated sprite payloads in `Assets/Sprites`
+- legacy `Assets/Generated` references
+- stale transition-only menu paths
+- old slice-id compatibility mapping as a runtime dependency
 
 Runtime loading remains ordered:
 
-`player -> location -> enemies -> ui -> dialog`
+```text
+player -> location -> enemies -> ui -> dialog
+```
 
 Reveal must stay honest:
 
-- do not show gameplay before player first frame is ready
-- do not show gameplay before BG and FG/Static are ready
-- do not show gameplay before spawn-critical enemies are ready
-- do not show gameplay before gameplay UI shell and dialog shell are ready
-- dynamic/destructible location work can defer unless measured first-frame need says otherwise
+- player first frame is ready
+- BG and FG/Static are ready
+- spawn-critical enemies are ready
+- gameplay UI shell is ready
+- dialog shell is ready
+- dynamic/destructible location work can defer unless measured as first-frame critical
 
-Performance contract:
+## Verification
 
-- preload only content relevant to current scene flow and player state
-- keep ownership narrow
-- avoid broad scans and fallback to the full project tree
-- use staged paths as runtime resolution roots
-- prefer cache/readiness/resolver contracts over per-feature fixes
+After Smart packing from Python, check both logs:
 
-## Known Missing Or Incomplete Work
+- `Logs\ContentPackIterationUI-SmartBuild.log`
+- `%LOCALAPPDATA%\Unity\Editor\Editor.log`
 
-### Runtime Index Rebuild
+Look for:
 
-- Fixed the repeated:
-  `SpriteIndexBuilder ResolveSpriteAddress: Caching address map`
-- Root cause: unresolved/empty GUID address maps from non-error probe paths were not cached.
-- Shared fix: cache empty GUID address maps, and rebuild only if a later error-recording path needs diagnostics.
-- Next: rerun `Build Active Content (Smart)` / `Clean` after the open Unity instance releases the project.
+- active pack stage success
+- staged content audit success
+- runtime index rebuild success
+- Addressables build success
+- no `Assets/Generated` references
+- no staged dependency leaks
+- no missing sprite slices in main menu, fonts, player, location, or active enemies
 
-### Remaining Local Sprite Overlaps
+Quick scan command:
 
-- The `46` non-identical local/external path overlaps are all `.spriteLib` assets.
-- Most local `.spriteLib` overlaps have no prefab/scene references and are superseded by external staged libraries.
-- `Assets/Sprites/SpriteLibraries/UI/Fonts.spriteLib` is still referenced by current scenes/prefabs, so it cannot be deleted until references are retargeted.
-- Runtime build discovery has been changed to staged roots only when external content is enabled, so stale local `.spriteLib` files no longer participate in active runtime-index builds.
-
-### External Pack Authority
-
-- Authoring tools may write normalized sprite payloads into `Assets/Sprites` as the project-local staging source.
-- `Build Active Content` must export those staged sources into `MyProjectContent` before staging active packs.
-- Build/player preflight may validate and stage existing external packs, but day-to-day artist changes should go through `Build Active Content`.
-
-### Gear Pack Breadth
-
-- Confirm active gear pack selection represents only equipped runtime gear.
-- If all `Gear_*` packs are staged because current equipment state is broad, fix the equipped-gear resolver contract.
-- If broad staging is intentional for the current test, document why.
-
-### Pack Definitions
-
-- Define real pack IDs for next slices.
-- Replace `Slice_Homebase_Placeholder` with a real slice.
-- Replace `Slice_SunkenCave_Placeholder` with a real slice.
-- Define whether enemy archetypes stay slice-local or move to species/shared packs.
-- Define whether location prefab ownership always lives only in the location slice.
-
-### Dialog And Portraits
-
-- Author stable `speakerId` values.
-- Resolve portrait libraries from `speakerId`.
-- Validate dialog portrait libraries for all staged packs.
-- Stop repeated exhausted-auto-dialog noise if still present.
-
-### Reveal And Streaming Policy
-
-- Define reveal-critical assets per slice.
-- Define post-reveal streaming policy per slice.
-- Define weakest supported memory tier.
-- Define when an environment deserves hot-cache residency.
-- Confirm warm-gate, pre-unlock, and reveal-settle timings after the migration cleanup.
+```powershell
+Get-Content -Path $env:LOCALAPPDATA\Unity\Editor\Editor.log -Tail 240
+```
 
 ## Next Validation Loop
 
-1. Re-run `Build Active Content (Smart)` after closing the extra Unity instance.
-2. Confirm runtime-index rebuild reports zero `ResolveSpriteAddress: Caching address map` messages.
-3. Confirm active discovery does not include local-only stale `Assets/Sprites/SpriteLibraries` entries.
-4. Run `Build Active Content (Clean)` to completion.
-5. Run Play Mode `Load Game` into `DomeCity`.
-6. Run BuildAndRun.
-7. Check `Editor.log` for:
-   - active pack stage/audit success
-   - runtime index completion
-   - Addressables completion
-   - no `Assets/Generated` references
-   - no staged content dependency leaks
-   - no missing sprite slices in main menu, fonts, player, location, or Imp
-8. If one example passes, batch-check sibling paths:
-   - Core UI atlases
-   - font atlases
-   - Esperanza skin atlases
-   - equipped gear atlases
-   - Form_Base effects
-   - DomeCity location atlases
-   - Imp atlases
+Use one example first:
 
-## Concrete Remaining Work List
+1. create or edit one pack in `Tools\ContentPackIterationUI.py`
+2. run `python .\Tools\ContentPackIterationUI.py --set-active Core,Form_Base,DomeCity,Imp --build-smart`
+3. inspect `Editor.log`
+4. run Play Mode into the target flow
+5. inspect `Editor.log` again
+6. fix the shared contract if the failure is repeated across equivalent packs
 
-- fix runtime-index rebuild stall/log flood
-- re-run `Build Active Content (Smart)` to completion
-- run `Build Active Content (Clean)` to completion
-- run Play Mode smoke test
-- run BuildAndRun smoke test
-- classify the `46` non-identical sprite path overlaps
-- remove any remaining stale local sprite duplicates
-- verify `Assets/Sprites` contains only current artist/importer staging payloads and required sprite library artifacts
-- verify authoring tool output is exported by `Build Active Content`
-- validate active gear pack breadth
-- define next slice pack names
-- define slice dependency rules
-- define core projectile ownership
-- define core/shared enemy ownership
-- author speaker ids
-- define default external-build start location
-- define reveal-critical asset policy by slice
-- define post-reveal streaming policy by slice
-- define weakest supported memory tier
-- define pack naming and folder conventions
-- define environment hot-cache policy
-- add next slice pack definitions
-- import next slice snapshots into active content registry
-- validate enemy stats, animations, and projectile references for all staged packs
+After one example passes, batch-check sibling paths:
+
+- Core UI atlases
+- font atlases
+- Base form UI, item, projectile, effect, and character animation atlases
+- equipped gear atlases
+- Form_Base effects
+- DomeCity location atlases
+- Imp atlases
+
+## Remaining Work
+
+- run Python Smart packing after a real manifest is created
+- run Clean packing only if Smart output is stale
+- verify active gear pack breadth represents equipped runtime gear
+- replace placeholder slice packs with real slice definitions
+- remake form libraries as needed and save them through `Form_*` pack manifests
+- define whether enemy archetypes stay slice-local or move to shared packs
+- define reveal-critical asset policy per slice
+- define post-reveal streaming policy per slice
 - validate dialog portrait libraries for all staged packs
-- validate location load loop for all staged packs
 - tune warm scope from measured logs
-- tune UI/dialog readiness gating
-- tune reveal-critical activation versus deferred activation
 
 ## Good Handoff Prompts
 
-- "Fix the runtime-index rebuild stall from the repeated ResolveSpriteAddress cache log."
-- "Classify the 46 remaining non-identical sprite overlaps and remove only proven stale duplicates."
-- "Audit active packs after my content move and tell me what still depends on the full project tree."
-- "I decided the next slice IDs are X, Y, Z. Add them to the pack pipeline."
-- "These assets must stay in Core. Move validation and ownership around that."
+- "I created this pack in the Python UI. Use the Python Smart build and read the log."
+- "This Smart pack failed. Find the shared manifest or staging contract that broke."
+- "Clean packing output looks stale. Run the clean fallback and compare the log."
 - "This location should reveal with only BG + static FG, everything else can defer."
 - "These enemies should be globally available, those others should be slice-local."
 - "I changed the location prefab. Read the log and retune the pipeline."

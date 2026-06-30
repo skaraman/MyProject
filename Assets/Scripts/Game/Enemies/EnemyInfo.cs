@@ -16,6 +16,11 @@ public class EnemyInfo : MonoBehaviour {
   public IReadOnlyDictionary<string, float> ResolvedStats => resolvedStats;
   public IReadOnlyList<DemonStatModifier> StatBonuses => runtimeStatBonuses;
 
+  static bool ShouldLogSpawnDebug() {
+    return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
+  }
+
   public void ApplySpawnContext(
     string resolvedEnemyType,
     int resolvedLevel,
@@ -31,7 +36,7 @@ public class EnemyInfo : MonoBehaviour {
     ResetHealthFromResolvedStats();
     SpawnContextVersion += 1;
 
-    if (Application.isEditor || Debug.isDebugBuild) {
+    if (ShouldLogSpawnDebug()) {
       Debug.Log(
         "[EnemyInfo][ApplySpawnContext]" +
         " object='" + gameObject.name + "'" +

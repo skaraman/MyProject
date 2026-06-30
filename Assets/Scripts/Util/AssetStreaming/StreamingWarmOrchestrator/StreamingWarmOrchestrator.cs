@@ -18,7 +18,6 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   readonly HashSet<string> readyLabelSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> criticalReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> criticalReadyLabelSet = new(StringComparer.OrdinalIgnoreCase);
-  readonly HashSet<string> playerCriticalAtlasSeedAddresses = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> playerWarmAtlasSeedAddresses = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> scheduledAddressSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> scheduledReadyAddressSet = new(StringComparer.OrdinalIgnoreCase);
@@ -48,6 +47,11 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   static readonly HashSet<string> rescueSeenAddressBuffer = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<EnemyController> rescueEnemyControllerBuffer = new();
   static readonly List<UnityEngine.ResourceManagement.ResourceLocations.IResourceLocation> locationBuffer = new();
+  static readonly HashSet<string> uniqueScheduledImagesScratch = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> uniqueScheduledReadyImagesScratch = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> uniqueScheduledCriticalReadyImagesScratch = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> uniqueWarmImagesScratch = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> uniqueCriticalImagesScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> normalizedTokenSetScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> rescueDispatchBuffer = new(64);
   Coroutine rescueDispatchRoutine;
@@ -212,6 +216,11 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     completedWarmTokens.Clear();
     hasActiveProgress = false;
     activeProgress = default;
+    uniqueScheduledImagesScratch.Clear();
+    uniqueScheduledReadyImagesScratch.Clear();
+    uniqueScheduledCriticalReadyImagesScratch.Clear();
+    uniqueWarmImagesScratch.Clear();
+    uniqueCriticalImagesScratch.Clear();
   }
 
   void Awake() {
@@ -348,10 +357,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var reachedHardTimeout = now >= hardTimeoutAt;
       var reachedExtendedSweepTimeout = now >= extendedSweepDeadline;
 
-      if (resolverIdle && hasResolvedAddresses) break;
-      if (reachedHardTimeout && (hasResolvedAddresses || reachedExtendedSweepTimeout)) {
-        break;
-      }
+      if (resolverIdle) break;
+      if (reachedHardTimeout) break;
       resolverWaitFrames++;
       TextureResidencyCache.Pump();
       yield return null;
@@ -385,6 +392,9 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
     yield return ExpandPlayerAtlasSeedsRoutine(context, hardTimeoutAt, debugLogs);
 
+    GetUniqueImageSets(warmAddressSet, uniqueWarmImagesScratch);
+    GetUniqueImageSets(criticalReadyAddressSet, uniqueCriticalImagesScratch);
+
     if (debugLogs) {
       var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
       Debug.Log(
@@ -398,8 +408,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
         " high_priority_cap=" + activeHighPriorityAddressCap +
         " critical_cap=" + activeCriticalReadyAddressCap +
         " libraries=" + warmLibrarySet.Count +
-        " addresses=" + warmAddressSet.Count +
-        " critical=" + criticalReadyAddressSet.Count +
+        " addresses=" + uniqueWarmImagesScratch.Count +
+        " critical=" + uniqueCriticalImagesScratch.Count +
         " dropped=" + warmPlanDroppedAddresses +
         " dropped_high_priority=" + warmPlanDroppedHighPriorityAddresses +
         " dropped_critical=" + warmPlanDroppedCriticalReadyAddresses +
@@ -418,7 +428,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
     // Initialize the loading session with the total known count of addresses to warm.
     // This allows the loading screen to show a more accurate progress bar.
-    TextureResidencyCache.BeginSession(scheduledAddressSet.Count);
+    GetUniqueImageSets(scheduledAddressSet, uniqueScheduledImagesScratch);
+    TextureResidencyCache.BeginSession(uniqueScheduledImagesScratch.Count);
 
     var warmEnqueueBudget = ResolveEnqueueBudgetPerFrame(warmAddressBatch.Count, isHighPriority: false);
     IEnumerator warmEnqueue = null;
@@ -455,10 +466,15 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var shouldSampleProgress = frame >= nextProgressSampleFrame;
       if (shouldSampleProgress) {
         var runtimeSnapshot = GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId);
-        var spriteReadyCount = CountReadyAddresses(scheduledReadyAddressSet, pumpEntries: false);
-        var spriteCriticalReadyCount = CountReadyAddresses(scheduledCriticalReadyAddressSet, pumpEntries: false);
-        var spriteTotalCount = scheduledReadyAddressSet.Count;
-        var spriteCriticalTotalCount = scheduledCriticalReadyAddressSet.Count;
+
+        GetUniqueImageSets(scheduledReadyAddressSet, uniqueScheduledReadyImagesScratch);
+        GetUniqueImageSets(scheduledCriticalReadyAddressSet, uniqueScheduledCriticalReadyImagesScratch);
+
+        var spriteReadyCount = CountReadyImages(uniqueScheduledReadyImagesScratch, pumpEntries: false);
+        var spriteCriticalReadyCount = CountReadyImages(uniqueScheduledCriticalReadyImagesScratch, pumpEntries: false);
+        var spriteTotalCount = uniqueScheduledReadyImagesScratch.Count;
+        var spriteCriticalTotalCount = uniqueScheduledCriticalReadyImagesScratch.Count;
+
         readyCount = spriteReadyCount + runtimeSnapshot.readyCount;
         totalCount = spriteTotalCount + runtimeSnapshot.totalCount;
         criticalReadyCount = spriteCriticalReadyCount + runtimeSnapshot.criticalReadyCount;
@@ -467,6 +483,17 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
         var spriteCriticalReady = spriteCriticalTotalCount <= 0 || spriteCriticalReadyCount >= spriteCriticalTotalCount;
         criticalReady = spriteCriticalReady && runtimeSnapshot.criticalReady;
         reachedThreshold = criticalReady && ratio >= requiredReadyRatio;
+        if (debugLogs && SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
+          Debug.Log(
+            $"[StreamingWarmOrchestrator][DebugLoop] reachedThreshold={reachedThreshold} " +
+            $"criticalReady={criticalReady} (sprite={spriteCriticalReady}, runtime={runtimeSnapshot.criticalReady}) " +
+            $"ratio={ratio:0.000} (required={requiredReadyRatio:0.000}) " +
+            $"readyCount={readyCount} totalCount={totalCount} " +
+            $"runtimeReady={runtimeSnapshot.readyCount} runtimeTotal={runtimeSnapshot.totalCount} " +
+            $"runtimeCriticalReady={runtimeSnapshot.criticalReadyCount} runtimeCriticalTotal={runtimeSnapshot.criticalTotalCount} " +
+            $"runtimePrepared={runtimeSnapshot.prepared}"
+          );
+        }
         progressSampleInterval = totalCount > 4096 ? 3 : (totalCount > 2048 ? 2 : 1);
         nextProgressSampleFrame = frame + progressSampleInterval;
 
@@ -512,8 +539,10 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       }
       if (softTimedOut && criticalReady && request.allowCriticalReadySoftTimeout) break;
       if (now >= hardTimeoutAt) {
-        hardTimedOut = true;
-        break;
+        if (!request.allowHardTimeoutBypass || SingleSceneManager.IsCriticalScopeReadyForRevealStatic()) {
+          hardTimedOut = true;
+          break;
+        }
       }
       yield return null;
     }
@@ -525,7 +554,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     var failureReason = "";
     if (!reachedThreshold) {
       if (hardTimedOut && !criticalReady) {
-        if (request.allowHardTimeoutBypass) {
+        if (request.allowHardTimeoutBypass && SingleSceneManager.IsCriticalScopeReadyForRevealStatic()) {
           hardTimeoutBypassUsed = true;
           failureReason = "hard_timeout_critical_not_ready";
         }
@@ -551,7 +580,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       totalCount: totalCount,
       criticalReadyCount: criticalReadyCount,
       criticalTotalCount: criticalTotalCount,
-      requestedAddressCount: scheduledAddressSet.Count + GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId).totalCount,
+      requestedAddressCount: uniqueScheduledImagesScratch.Count + GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId).totalCount,
       elapsedMs: elapsedMs,
       hardTimeoutBypassUsed: hardTimeoutBypassUsed,
       failureReason: failureReason
@@ -684,20 +713,21 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     var cap = Math.Max(highPriorityCap / 2, 128);
     switch (context) {
       case WarmContext.LoadSave:
-        cap = Math.Min(cap, 384);
+        cap = Math.Min(cap, 1024);
         break;
       case WarmContext.GearApplyReturn:
-        cap = Math.Min(cap, 256);
+        cap = Math.Min(cap, 512);
         break;
       case WarmContext.EnemyWaveSpawn:
-        cap = Math.Min(cap, 320);
+        cap = Math.Min(cap, 512);
         break;
       default:
-        cap = Math.Min(cap, 512);
+        cap = Math.Min(cap, 1024);
         break;
     }
     return Math.Max(cap, 128);
   }
+
 
   int ResolveWarmBackgroundAddressCap(int highPriorityAddressCount) {
     var targetOutstanding = ResolveWarmOutstandingTarget();
@@ -720,11 +750,41 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     scheduledReadyAddressSet.Clear();
     scheduledCriticalReadyAddressSet.Clear();
     archetypeTargetCache.Clear();
-    playerCriticalAtlasSeedAddresses.Clear();
     playerWarmAtlasSeedAddresses.Clear();
     warmAddressBatch.Clear();
     normalizedTokenSetScratch.Clear();
     rescueDispatchBuffer.Clear();
+    uniqueScheduledImagesScratch.Clear();
+    uniqueScheduledReadyImagesScratch.Clear();
+    uniqueScheduledCriticalReadyImagesScratch.Clear();
+    uniqueWarmImagesScratch.Clear();
+    uniqueCriticalImagesScratch.Clear();
+  }
+
+  static void GetUniqueImageSets(
+    HashSet<string> addresses,
+    HashSet<string> outUniqueImages
+  ) {
+    outUniqueImages.Clear();
+    if (addresses == null) return;
+    foreach (var address in addresses) {
+      var normalized = NormalizeToken(address);
+      if (string.IsNullOrWhiteSpace(normalized)) continue;
+      if (SpriteSliceAddressUtility.TryParseSliceAddress(normalized, out var atlasAssetPath, out _)) {
+        outUniqueImages.Add(NormalizeToken(atlasAssetPath));
+      } else {
+        outUniqueImages.Add(normalized);
+      }
+    }
+  }
+
+  static int CountReadyImages(HashSet<string> uniqueImages, bool pumpEntries) {
+    if (uniqueImages == null || uniqueImages.Count == 0) return 0;
+    var count = 0;
+    foreach (var img in uniqueImages) {
+      if (TextureResidencyCache.IsReady(img, pumpEntries)) count++;
+    }
+    return count;
   }
 
   static bool ShouldLogLoadingDebug() {

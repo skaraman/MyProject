@@ -1,18 +1,34 @@
 {
-  "locations": [
+  "slices": [
     {
-      "name": "DomeCity",
-      "enemies": [
-        "Imp"
+      "id": "Core",
+      "packs": [
+        "Core"
+      ]
+    },
+    {
+      "id": "DomeCity_Imp_Base",
+      "packs": [
+        "Form_Base",
+        "DomeCity",
+        "Imp",
+        "Form_UI_Form_Base"
+      ]
+    },
+    {
+      "id": "BaseFormUI",
+      "packs": [
+        "Form_Base"
       ]
     }
   ],
-  "esperanzaForms": [
-    "Base",
-    "Aqua",
-    "Fire",
-    "Bolt",
-    "Dark",
-    "Cold"
+  "episodes": [
+    {
+      "id": "Episode01",
+      "slices": [
+        "Core",
+        "DomeCity_Imp_Base"
+      ]
+    }
   ]
 }

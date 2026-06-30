@@ -14,10 +14,14 @@ public class ProjectileManager : MonoBehaviour {
 
   [Header("Debug")]
   public bool pauseEditorAfterFirstProjectileSpawnFrame;
+  public bool logSpawnOffsetDebug;
 
   private readonly Dictionary<string, Pool> pools = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
+  private readonly List<EnemyInfo> enemyInfoCache = new();
   private bool hasQueuedEditorPauseAfterFirstProjectileSpawn;
+  private int enemyInfoCacheFrame = -1;
+  private Transform enemyInfoCacheRoot;
 
   void Awake() {
     poolContainer = transform;
@@ -32,7 +36,9 @@ public class ProjectileManager : MonoBehaviour {
     foreach (var entry in Projectiles.EnumerateAll()) {
       var key = NormalizeProjectileKey(entry.Key);
       if (string.IsNullOrWhiteSpace(key) || entry.Value == null) continue;
-      TryGetPool(key, out _);
+      if (entry.Value.IsPrefabLoaded()) {
+        TryGetPool(key, out _);
+      }
     }
   }
 
@@ -213,8 +219,10 @@ public class ProjectileManager : MonoBehaviour {
     Projectiles.ReleaseDirectLoads();
   }
 
-  static bool ShouldLogSpawnOffsetDebug() {
-    return Application.isEditor || Debug.isDebugBuild;
+  bool ShouldLogSpawnOffsetDebug() {
+    return logSpawnOffsetDebug &&
+           SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
   }
 
   bool IsEditorPauseAfterFirstProjectileSpawnEnabled() {
@@ -235,7 +243,7 @@ public class ProjectileManager : MonoBehaviour {
     return false;
   }
 
-  static Vector3 ResolveSpawnPosition(string key, Vector3 basePosition, Vector3 direction) {
+  Vector3 ResolveSpawnPosition(string key, Vector3 basePosition, Vector3 direction) {
     if (!Projectiles.TryGet(key, out var data) || data == null) {
       return basePosition;
     }
@@ -340,12 +348,13 @@ public class ProjectileManager : MonoBehaviour {
 
   public Transform FindNearestEnemyTarget(Vector3 origin) {
     if (enemyRoot == null) return null;
-    EnemyInfo[] enemies = enemyRoot.GetComponentsInChildren<EnemyInfo>(false);
-    if (enemies == null || enemies.Length == 0) return null;
+    RefreshEnemyInfoCache();
+    if (enemyInfoCache.Count == 0) return null;
 
     Transform closest = null;
     float closestSqr = float.MaxValue;
-    foreach (var info in enemies) {
+    for (var i = 0; i < enemyInfoCache.Count; i++) {
+      var info = enemyInfoCache[i];
       if (info == null || !info.gameObject.activeInHierarchy) continue;
       var t = info.transform;
       var diff = t.position - origin;
@@ -356,6 +365,22 @@ public class ProjectileManager : MonoBehaviour {
       }
     }
     return closest;
+  }
+
+  void RefreshEnemyInfoCache() {
+    var frame = Time.frameCount;
+    if (enemyInfoCacheFrame == frame && enemyInfoCacheRoot == enemyRoot) {
+      return;
+    }
+
+    enemyInfoCacheFrame = frame;
+    enemyInfoCacheRoot = enemyRoot;
+    enemyInfoCache.Clear();
+    if (enemyRoot == null) {
+      return;
+    }
+
+    enemyRoot.GetComponentsInChildren<EnemyInfo>(false, enemyInfoCache);
   }
 
   void TryQueueEditorPauseAfterFirstProjectileSpawn(string key, Vector3 spawnPosition, Vector3 direction) {

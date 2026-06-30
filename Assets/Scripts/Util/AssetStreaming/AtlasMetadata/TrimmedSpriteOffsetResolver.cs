@@ -29,10 +29,16 @@ public static class TrimmedSpriteOffsetResolver {
 
   sealed class AtlasOffsets {
     readonly Dictionary<string, Vector2> exactOffsetsBySpriteName = new(StringComparer.Ordinal);
+    readonly Dictionary<string, Vector2> offsetsByNumericLabel = new(StringComparer.Ordinal);
 
     public void Set(string spriteName, Vector2 offsetPx) {
       if (string.IsNullOrWhiteSpace(spriteName)) return;
       exactOffsetsBySpriteName[spriteName] = offsetPx;
+      if (TryExtractNumericLabel(spriteName, out var numericLabel)) {
+        if (!offsetsByNumericLabel.ContainsKey(numericLabel)) {
+          offsetsByNumericLabel[numericLabel] = offsetPx;
+        }
+      }
     }
 
     public bool TryGet(string spriteName, out Vector2 offsetPx) {
@@ -41,10 +47,10 @@ public static class TrimmedSpriteOffsetResolver {
       if (string.IsNullOrWhiteSpace(normalizedSpriteName)) return false;
       if (exactOffsetsBySpriteName.TryGetValue(normalizedSpriteName, out offsetPx)) return true;
 
-      foreach (var pair in exactOffsetsBySpriteName) {
-        if (!SpriteSliceAddressUtility.HasEquivalentNumericLabel(pair.Key, normalizedSpriteName)) continue;
-        offsetPx = pair.Value;
-        return true;
+      if (TryExtractNumericLabel(normalizedSpriteName, out var queryNumeric)) {
+        if (offsetsByNumericLabel.TryGetValue(queryNumeric, out offsetPx)) {
+          return true;
+        }
       }
 
       return false;
@@ -166,7 +172,7 @@ public static class TrimmedSpriteOffsetResolver {
     var budget = Math.Max(ResolveDeferredRuntimeLoadBudgetPerFrame(), 1);
     var processed = 0;
     while (processed < budget && pendingWarmGateRuntimeLoadQueue.Count > 0) {
-      var atlasAssetPath = NormalizeAtlasPath(pendingWarmGateRuntimeLoadQueue.Dequeue());
+      var atlasAssetPath = pendingWarmGateRuntimeLoadQueue.Dequeue();
       if (string.IsNullOrWhiteSpace(atlasAssetPath)) continue;
       if (!pendingWarmGateRuntimeLoadSet.Remove(atlasAssetPath)) continue;
       if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) continue;
@@ -463,7 +469,7 @@ public static class TrimmedSpriteOffsetResolver {
     var budget = Math.Max(ResolveOverlayWarmupRuntimeLoadBudgetPerFrame(), 1);
     var processed = 0;
     while (processed < budget && pendingOverlayWarmupLoadQueue.Count > 0) {
-      var atlasAssetPath = NormalizeAtlasPath(pendingOverlayWarmupLoadQueue.Dequeue());
+      var atlasAssetPath = pendingOverlayWarmupLoadQueue.Dequeue();
       if (string.IsNullOrWhiteSpace(atlasAssetPath)) continue;
       if (!pendingOverlayWarmupLoadSet.Remove(atlasAssetPath)) continue;
       if (loadedAtlasOffsets.ContainsKey(atlasAssetPath)) continue;
@@ -502,6 +508,11 @@ public static class TrimmedSpriteOffsetResolver {
 
   static void StartResolvedOptionalOffsetRuntimeLoad(string atlasAssetPath, string metadataAssetPath) {
     if (string.IsNullOrWhiteSpace(atlasAssetPath) || string.IsNullOrWhiteSpace(metadataAssetPath)) return;
+#if UNITY_EDITOR
+    TryLoadEditorOffsets(atlasAssetPath);
+    NotifyPendingCallbacks(atlasAssetPath);
+    return;
+#else
     var loadStartedAt = ShouldMeasureRuntimeLoadStartCosts() ? Time.realtimeSinceStartup : 0f;
     AsyncOperationHandle<TextAsset> loadHandle;
     try {
@@ -522,6 +533,7 @@ public static class TrimmedSpriteOffsetResolver {
     MaybeLogSlowRuntimeLoadStart(atlasAssetPath, metadataAssetPath, loadStartedAt);
     pendingLoads[atlasAssetPath] = loadHandle;
     loadHandle.Completed += operation => CompleteRuntimeLoad(atlasAssetPath, operation);
+#endif
   }
 
   static void CompleteRuntimeLocationCheck(
@@ -681,23 +693,73 @@ public static class TrimmedSpriteOffsetResolver {
     atlasOffsets = null;
     if (string.IsNullOrWhiteSpace(jsonText)) return false;
 
-    TrimmedAtlasOffsetPayload payload;
-    try {
-      payload = JsonUtility.FromJson<TrimmedAtlasOffsetPayload>(jsonText);
-    }
-    catch {
-      return false;
-    }
-
-    if (payload == null) return false;
-
+    // Direct linear scanner to avoid structural C# GC allocations.
+    // The schema is: "name": "spriteName", "offsetFromCellCenterPx": { "x": val, "y": val }
     atlasOffsets = new AtlasOffsets();
-    if (payload.sprites == null) return true;
+    var index = 0;
+    var len = jsonText.Length;
 
-    for (var i = 0; i < payload.sprites.Count; i++) {
-      var sprite = payload.sprites[i];
-      if (sprite == null || string.IsNullOrWhiteSpace(sprite.name)) continue;
-      atlasOffsets.Set(sprite.name, new Vector2(sprite.offsetFromCellCenterPx.x, sprite.offsetFromCellCenterPx.y));
+    while (index < len) {
+      // Find "name"
+      var nameKeyIdx = jsonText.IndexOf("\"name\"", index, StringComparison.Ordinal);
+      if (nameKeyIdx == -1) break;
+
+      // Find the colon after "name"
+      var colonIdx = jsonText.IndexOf(':', nameKeyIdx + 6);
+      if (colonIdx == -1) break;
+
+      // Find opening quote for the string value
+      var openQuote = jsonText.IndexOf('\"', colonIdx + 1);
+      if (openQuote == -1) break;
+
+      // Find closing quote
+      var closeQuote = jsonText.IndexOf('\"', openQuote + 1);
+      if (closeQuote == -1) break;
+
+      var spriteName = jsonText.Substring(openQuote + 1, closeQuote - openQuote - 1);
+
+      // Now find "offsetFromCellCenterPx"
+      var offsetKeyIdx = jsonText.IndexOf("\"offsetFromCellCenterPx\"", closeQuote + 1, StringComparison.Ordinal);
+      if (offsetKeyIdx == -1) break;
+
+      // Find "x" and "y" values after offsetKeyIdx
+      var xKeyIdx = jsonText.IndexOf("\"x\"", offsetKeyIdx, StringComparison.Ordinal);
+      if (xKeyIdx == -1) break;
+      var xColon = jsonText.IndexOf(':', xKeyIdx + 3);
+      if (xColon == -1) break;
+
+      // Scan the float value for x
+      var xStart = xColon + 1;
+      while (xStart < len && char.IsWhiteSpace(jsonText[xStart])) {
+        xStart++;
+      }
+      var xEnd = xStart;
+      while (xEnd < len && (char.IsDigit(jsonText[xEnd]) || jsonText[xEnd] == '.' || jsonText[xEnd] == '-' || jsonText[xEnd] == '+' || jsonText[xEnd] == 'e' || jsonText[xEnd] == 'E')) {
+        xEnd++;
+      }
+      var xVal = 0f;
+      TryParseFloat(jsonText, xStart, xEnd - 1, out xVal);
+
+      var yKeyIdx = jsonText.IndexOf("\"y\"", xEnd, StringComparison.Ordinal);
+      if (yKeyIdx == -1) break;
+      var yColon = jsonText.IndexOf(':', yKeyIdx + 3);
+      if (yColon == -1) break;
+
+      var yStart = yColon + 1;
+      while (yStart < len && char.IsWhiteSpace(jsonText[yStart])) {
+        yStart++;
+      }
+      var yEnd = yStart;
+      while (yEnd < len && (char.IsDigit(jsonText[yEnd]) || jsonText[yEnd] == '.' || jsonText[yEnd] == '-' || jsonText[yEnd] == '+' || jsonText[yEnd] == 'e' || jsonText[yEnd] == 'E')) {
+        yEnd++;
+      }
+      var yVal = 0f;
+      TryParseFloat(jsonText, yStart, yEnd - 1, out yVal);
+
+      atlasOffsets.Set(spriteName, new Vector2(xVal, yVal));
+
+      // Advance search index
+      index = yEnd;
     }
 
     return true;
@@ -709,6 +771,24 @@ public static class TrimmedSpriteOffsetResolver {
 
   static string NormalizeAtlasPath(string atlasAssetPath) {
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return "";
+
+    var len = atlasAssetPath.Length;
+    if (len == 0) return "";
+
+    var needsNormalize = false;
+    if (char.IsWhiteSpace(atlasAssetPath[0]) || char.IsWhiteSpace(atlasAssetPath[len - 1])) {
+      needsNormalize = true;
+    } else {
+      for (var i = 0; i < len; i++) {
+        if (atlasAssetPath[i] == '\\') {
+          needsNormalize = true;
+          break;
+        }
+      }
+    }
+
+    if (!needsNormalize) return atlasAssetPath;
+
     return atlasAssetPath.Trim().Replace("\\", "/");
   }
 
@@ -720,6 +800,129 @@ public static class TrimmedSpriteOffsetResolver {
     return File.Exists(Path.GetFullPath(normalizedMetadataAssetPath));
   }
 #endif
+
+  static bool TryExtractNumericLabel(string value, out string numericLabel) {
+    numericLabel = null;
+    if (string.IsNullOrWhiteSpace(value)) return false;
+
+    var start = 0;
+    var end = value.Length - 1;
+    while (start <= end && char.IsWhiteSpace(value[start])) start++;
+    while (end >= start && char.IsWhiteSpace(value[end])) end--;
+    if (start > end) return false;
+
+    if (IsNumericToken(value, start, end, out var val)) {
+      numericLabel = val;
+      return true;
+    }
+
+    var underscoreIndex = -1;
+    for (var i = end; i >= start; i--) {
+      if (value[i] == '_') {
+        underscoreIndex = i;
+        break;
+      }
+    }
+
+    if (underscoreIndex < 0 || underscoreIndex >= end) return false;
+
+    if (IsNumericToken(value, underscoreIndex + 1, end, out val)) {
+      numericLabel = val;
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool IsNumericToken(string value, int start, int end, out string parsedStr) {
+    parsedStr = null;
+    if (start > end) return false;
+
+    var accumulator = 0;
+    for (var i = start; i <= end; i++) {
+      var c = value[i];
+      if (c < '0' || c > '9') return false;
+      if (accumulator > 214748364 || (accumulator == 214748364 && (c - '0') > 7)) {
+        return false;
+      }
+      accumulator = accumulator * 10 + (c - '0');
+    }
+
+    if (accumulator < 0) return false;
+    parsedStr = accumulator.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    return true;
+  }
+
+  static bool TryParseFloat(string text, int start, int end, out float result) {
+    result = 0f;
+    if (start > end) return false;
+
+    var sign = 1f;
+    var i = start;
+    if (text[i] == '-') {
+      sign = -1f;
+      i++;
+    } else if (text[i] == '+') {
+      i++;
+    }
+
+    double integerPart = 0.0;
+    double fractionalPart = 0.0;
+    var divisor = 1.0;
+    var inFraction = false;
+    var hasExponent = false;
+
+    while (i <= end) {
+      var c = text[i];
+      if (c >= '0' && c <= '9') {
+        if (inFraction) {
+          fractionalPart = fractionalPart * 10.0 + (c - '0');
+          divisor *= 10.0;
+        } else {
+          integerPart = integerPart * 10.0 + (c - '0');
+        }
+      } else if (c == '.') {
+        if (inFraction) return false;
+        inFraction = true;
+      } else if (c == 'e' || c == 'E') {
+        hasExponent = true;
+        break;
+      } else {
+        break;
+      }
+      i++;
+    }
+
+    var value = integerPart + (fractionalPart / divisor);
+    value *= sign;
+
+    if (hasExponent) {
+      i++;
+      if (i <= end) {
+        var expSign = 1;
+        if (text[i] == '-') {
+          expSign = -1;
+          i++;
+        } else if (text[i] == '+') {
+          i++;
+        }
+        var exponent = 0;
+        while (i <= end) {
+          var c = text[i];
+          if (c >= '0' && c <= '9') {
+            exponent = exponent * 10 + (c - '0');
+          } else {
+            break;
+          }
+          i++;
+        }
+        value *= Math.Pow(10.0, exponent * expSign);
+      }
+    }
+
+    result = (float)value;
+    return true;
+  }
 
   static bool ShouldSkipOptionalOffsetAtlas(string atlasAssetPath, string source) {
     var normalizedAtlasPath = NormalizeAtlasPath(atlasAssetPath);

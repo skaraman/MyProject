@@ -171,7 +171,8 @@ public static partial class TextureResidencyCache {
       return StrictSerialLoadingBudgetPerFrame;
     }
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
-      return 1;
+      var cfg = GetSettings();
+      return Math.Max(cfg.loadingOverlayMaxAddressableStartsPerFrame, 1);
     }
     return 4;
   }

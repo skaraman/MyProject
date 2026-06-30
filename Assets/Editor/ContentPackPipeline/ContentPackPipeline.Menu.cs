@@ -15,95 +15,16 @@ using Process = System.Diagnostics.Process;
 using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 public static partial class ContentPackPipeline {
-  [MenuItem("Tools/Content Pack/1) Build Active Content (Smart)")]
-  public static void BuildActiveContentSmartMenu() {
+  public static void BuildActiveContentSmart() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
   }
 
-  [MenuItem("Tools/Content Pack/2) Build Active Content (Clean)")]
-  public static void BuildActiveContentCleanMenu() {
+  public static void BuildActiveContentClean() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
-  }
-
-  public static void AnalyzeOwnershipAndDuplicatesMenu() {
-    AnalyzeOwnershipAndDuplicates(logResult: true);
-  }
-
-  public static void ExportMissingPackContentMenu() {
-    RunExportTransitionStep(logResult: true, TransitionPipelineMode.Smart);
-  }
-
-  public static void StageTransitionActivePacksMenu() {
-    RunStageTransitionStep(logResult: true, TransitionPipelineMode.Smart);
-  }
-
-  public static void AuditLegacyDependenciesMenu() {
-    AuditLegacyDependencies(logResult: true);
-  }
-
-  public static void RebuildTransitionRuntimeIndexMenu() {
-    RunRebuildRuntimeIndexTransitionStep(logResult: true);
-  }
-
-  public static void BuildTransitionAddressablesMenu() {
-    RunBuildAddressablesTransitionStep(logResult: true, cleanCachesBeforeBuild: false);
-  }
-
-  public static void FullMigrationPassSmartMenu() {
-    RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
-  }
-
-  public static void FullMigrationPassCleanMenu() {
-    RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
-  }
-
-  public static void ExportFirstPackSetMenu() {
-    ExportFirstPackSet(logResult: true);
-  }
-
-  public static void StageActivePacksMenu() {
-    StageActivePacks(logResult: true);
-  }
-
-  public static void AuditActivePacksMenu() {
-    AuditActivePacks(logResult: true);
-  }
-
-  public static void StageAuditAndRebuildRuntimeIndexMenu() {
-    RunPrepareActivePacksPipeline(logResult: true);
-  }
-
-  public static void FocusSelectionOnFirstSliceMenu() {
-    FocusSelectionOnFirstSlice(logResult: true);
-  }
-
-  public static bool FocusSelectionOnFirstSlice(bool logResult) {
-    var selection = LoadOrCreateSelectionAsset(logResult);
-    if (selection == null) {
-      return false;
-    }
-
-    var changed = selection.SetActivePackIds(new[] { SlicePackId });
-    if (!changed) {
-      if (logResult) {
-        Debug.Log("[ContentPackPipeline] Content pack selection already focused on the first slice.");
-      }
-      return true;
-    }
-
-    EditorUtility.SetDirty(selection);
-    AssetDatabase.SaveAssets();
-    if (logResult) {
-      Debug.Log(
-        "[ContentPackPipeline] Focused content pack selection on the first slice." +
-        " active_pack='" + SlicePackId + "'"
-      );
-    }
-    return true;
   }
 
   public static bool PrepareSelectedPacksForRuntimeIndex(string contextLabel, bool logResult) {
-    return PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult, TransitionPipelineMode.Clean);
+    return PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult, TransitionPipelineMode.Smart);
   }
 
   public static bool PrepareSelectedPacksForRuntimeIndex(string contextLabel, bool logResult, TransitionPipelineMode mode) {
@@ -134,41 +55,6 @@ public static partial class ContentPackPipeline {
       return false;
     }
     return AuditActivePacks(logResult);
-  }
-
-  public static bool ExportFirstPackSet(bool logResult) {
-    return ExportPackSet(logResult, TransitionPipelineMode.Clean, stats: null);
-  }
-
-  static bool RunExportTransitionStep(bool logResult, TransitionPipelineMode mode) {
-    var summary = new TransitionRunSummary(mode);
-    var ok = ExportPackSet(logResult, mode, summary.export);
-    if (logResult) {
-      LogTransitionRunSummary("Export Pack Content", summary);
-    }
-    return ok;
-  }
-
-  static bool RunStageTransitionStep(bool logResult, TransitionPipelineMode mode) {
-    var summary = new TransitionRunSummary(mode);
-    var selection = LoadOrCreateSelectionAsset(logResult);
-    if (selection == null) {
-      return false;
-    }
-
-    if (!RefreshExportedPackSetForStage(selection, "transition_stage", logResult, mode, summary.export)) {
-      return false;
-    }
-
-    summary.stageCompleted = StageActivePacksInternal(selection, logResult, "transition_stage");
-    if (logResult) {
-      LogTransitionRunSummary("Stage Active Packs", summary);
-    }
-    return summary.stageCompleted;
-  }
-
-  static bool RunRebuildRuntimeIndexTransitionStep(bool logResult) {
-    return SpriteIndexBuilder.RebuildRuntimeIndexPrepared("Content Pipeline Transition", logResult, failOnError: false);
   }
 
   static bool RunBuildAddressablesTransitionStep(bool logResult, bool cleanCachesBeforeBuild) {

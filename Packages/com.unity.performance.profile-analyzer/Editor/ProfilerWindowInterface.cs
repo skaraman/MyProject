@@ -310,9 +310,7 @@ namespace UnityEditor.Performance.ProfileAnalyzer
         static int GetFrameDataEntityId(ProfilerFrameDataIterator frameData)
         {
 #if UNITY_6000_0_OR_NEWER
-#pragma warning disable CS0618
-            return Convert.ToInt32(frameData.entityId);
-#pragma warning restore CS0618
+            return frameData.entityId.GetHashCode();
 #else
 #pragma warning disable CS0618 // instanceId is required on older editor versions
             return frameData.instanceId;

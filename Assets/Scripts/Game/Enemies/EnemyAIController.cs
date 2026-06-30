@@ -24,6 +24,11 @@ public class EnemyAIController : MonoBehaviour {
   private float nextAttackTime;
   private int cachedSpawnContextVersion = -1;
 
+  static bool ShouldLogSpawnDebug() {
+    return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
+  }
+
   void Awake() {
     baselineMoveSpeed = moveSpeed;
     baselineAttackCooldown = attackCooldown;
@@ -160,7 +165,7 @@ public class EnemyAIController : MonoBehaviour {
     runtimeAttackCooldown = ResolveRuntimeAttackCooldown();
     closingDistance = ResolveClosingDistance();
 
-    if (Application.isEditor || Debug.isDebugBuild) {
+    if (ShouldLogSpawnDebug()) {
       Debug.Log(
         "[EnemyAIController][RefreshResolvedCombatStats]" +
         " object='" + gameObject.name + "'" +

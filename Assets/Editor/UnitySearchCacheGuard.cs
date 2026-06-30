@@ -8,7 +8,7 @@ public static class UnitySearchCacheGuard {
   const long MaxSearchCacheBytes = 2L * 1024L * 1024L * 1024L;
   const double StartupWatchSeconds = 120d;
   const string SearchCacheRelativePath = "Library/Search";
-  const string CrashFolderName = "Crash";
+  const string TempFolderName = "Temp";
   static readonly string[] RequiredSearchCacheFiles = {
     "propertyDatabase.db.st"
   };
@@ -33,7 +33,7 @@ public static class UnitySearchCacheGuard {
     if (s_PurgeScheduled) return;
     if (!TryGetSearchCacheSize(out var totalBytes, out var largestBytes)) return;
     if (HasMissingRequiredFiles()) {
-      MoveSearchCache("missing_required_file");
+      MoveSearchCache("missing_required_file", totalBytes, largestBytes);
       return;
     }
     if (totalBytes < MaxSearchCacheBytes && largestBytes < MaxSearchCacheBytes) return;
@@ -94,10 +94,10 @@ public static class UnitySearchCacheGuard {
 
     try {
       var projectRoot = GetProjectRoot();
-      var crashRoot = Path.Combine(projectRoot, CrashFolderName);
-      Directory.CreateDirectory(crashRoot);
+      var tempRoot = Path.Combine(projectRoot, TempFolderName);
+      Directory.CreateDirectory(tempRoot);
       var destination = Path.Combine(
-        crashRoot,
+        tempRoot,
         "UnitySearchCache_" + DateTime.Now.ToString("yyyyMMdd_HHmmss")
       );
       Directory.Move(searchPath, destination);
@@ -136,9 +136,9 @@ public static class UnitySearchCacheGuard {
     try {
       var projectRoot = GetProjectRoot();
       var searchPath = GetSearchCachePath();
-      var crashRoot = Path.Combine(projectRoot, CrashFolderName);
+      var tempRoot = Path.Combine(projectRoot, TempFolderName);
       var destination = Path.Combine(
-        crashRoot,
+        tempRoot,
         "UnitySearchCache_" + DateTime.Now.ToString("yyyyMMdd_HHmmss")
       );
 
@@ -149,7 +149,7 @@ public static class UnitySearchCacheGuard {
         $"$proc = Get-Process -Id {pid} -ErrorAction SilentlyContinue; " +
         $"if ($proc) {{ $proc.WaitForExit(15000) }}; " +
         $"if (Test-Path '{searchPath}') {{ " +
-        $"  New-Item -ItemType Directory -Force -Path '{crashRoot}' | Out-Null; " +
+        $"  New-Item -ItemType Directory -Force -Path '{tempRoot}' | Out-Null; " +
         $"  Move-Item -Path '{searchPath}' -Destination '{destination}' -Force -ErrorAction SilentlyContinue; " +
         $"}}\"";
 

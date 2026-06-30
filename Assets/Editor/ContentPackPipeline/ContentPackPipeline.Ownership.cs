@@ -122,13 +122,6 @@ public static partial class ContentPackPipeline {
 
   static void AnalyzePackOwnership(PackDefinition pack, OwnershipAnalysisReport report) {
     if (pack == null || report == null) return;
-    if (IsPlaceholderPack(pack)) {
-      report.placeholderExemptionCount++;
-      report.placeholderFindings.Add(
-        "Placeholder ownership checks deferred. pack_id='" + pack.packId + "'"
-      );
-      return;
-    }
 
     var findings = GetOwnershipFindingsBucket(pack, report);
     if (findings == null) return;
@@ -146,10 +139,6 @@ public static partial class ContentPackPipeline {
       }
     }
 
-    if (string.Equals(pack.kind, "episode", StringComparison.OrdinalIgnoreCase) &&
-        (pack.requiredPackIds == null || pack.requiredPackIds.Count <= 0)) {
-      findings.Add("Episode has no slice dependencies declared. pack_id='" + pack.packId + "'");
-    }
   }
 
   static List<string> GetOwnershipFindingsBucket(PackDefinition pack, OwnershipAnalysisReport report) {
@@ -162,15 +151,9 @@ public static partial class ContentPackPipeline {
     return report.unknownFindings;
   }
 
-  static bool IsPlaceholderPack(PackDefinition pack) {
-    if (pack == null || string.IsNullOrWhiteSpace(pack.packId)) return false;
-    return pack.packId.IndexOf("Placeholder", StringComparison.OrdinalIgnoreCase) >= 0 ||
-           string.Equals(pack.packId, EpisodePackId, StringComparison.OrdinalIgnoreCase);
-  }
-
   static int CountStageDependenciesOutsideStageRoots(List<PackDefinition> packDefinitions) {
     var stageRoots = BuildStageRoots(packDefinitions);
-    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    var stageRootFullPath = GetPhysicalPath(StageRootAssetPath);
     if (!Directory.Exists(stageRootFullPath)) return 0;
 
     var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
@@ -210,7 +193,7 @@ public static partial class ContentPackPipeline {
 
   static int CountStageCodeDependenciesOutsideStageRoots(List<PackDefinition> packDefinitions) {
     var stageRoots = BuildStageRoots(packDefinitions);
-    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    var stageRootFullPath = GetPhysicalPath(StageRootAssetPath);
     if (!Directory.Exists(stageRootFullPath)) return 0;
 
     var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
@@ -243,7 +226,7 @@ public static partial class ContentPackPipeline {
     if (output == null) return;
 
     var stageRoots = BuildStageRoots(packDefinitions);
-    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    var stageRootFullPath = GetPhysicalPath(StageRootAssetPath);
     if (!Directory.Exists(stageRootFullPath)) return;
 
     var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
@@ -273,7 +256,7 @@ public static partial class ContentPackPipeline {
     if (output == null) return;
 
     var stageRoots = BuildStageRoots(packDefinitions);
-    var stageRootFullPath = Path.GetFullPath(StageRootAssetPath);
+    var stageRootFullPath = GetPhysicalPath(StageRootAssetPath);
     if (!Directory.Exists(stageRootFullPath)) return;
 
     var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);

@@ -18,7 +18,7 @@ public static class SpriteSliceAddressUtility {
     if (openBracket <= startIndex || openBracket >= endIndex) return false;
     if (!TryGetTrimmedSegmentBounds(address, startIndex, openBracket - 1, out var atlasStart, out var atlasLength)) return false;
     if (!TryGetTrimmedSegmentBounds(address, openBracket + 1, endIndex - 1, out var spriteStart, out var spriteLength)) return false;
-    if (!StartsWithAssetsPrefix(address, atlasStart, atlasLength)) return false;
+    if (!StartsWithRuntimeAssetPrefix(address, atlasStart, atlasLength)) return false;
 
     atlasAssetPath = address.Substring(atlasStart, atlasLength);
     spriteName = address.Substring(spriteStart, spriteLength);
@@ -117,8 +117,12 @@ public static class SpriteSliceAddressUtility {
     return true;
   }
 
-  static bool StartsWithAssetsPrefix(string value, int startIndex, int length) {
-    const string prefix = "Assets/";
+  static bool StartsWithRuntimeAssetPrefix(string value, int startIndex, int length) {
+    return StartsWithPrefix(value, startIndex, length, "Assets/") ||
+           StartsWithPrefix(value, startIndex, length, "Packages/com.skaraman.myprojectcontent/");
+  }
+
+  static bool StartsWithPrefix(string value, int startIndex, int length, string prefix) {
     if (string.IsNullOrEmpty(value)) return false;
     if (startIndex < 0 || length < prefix.Length) return false;
     if ((startIndex + length) > value.Length) return false;

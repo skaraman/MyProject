@@ -268,12 +268,6 @@ public static class SpriteStreamingDiagnostics {
     var now = Time.unscaledTime;
     if (now < nextSummaryTime) return;
     nextSummaryTime = now + SummaryIntervalSeconds;
-
-    var totalLookups = cacheHits + cacheMisses;
-    var missRatePct = totalLookups > 0 ? (100f * cacheMisses / totalLookups) : 0f;
-    var avgSwitchWait = switchWaitSamples > 0 ? (totalSwitchWaitMs / switchWaitSamples) : 0f;
-
-    
   }
 
   internal static string BuildHudLine() {

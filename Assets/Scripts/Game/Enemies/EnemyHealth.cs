@@ -7,7 +7,8 @@ public class EnemyHealth : MonoBehaviour {
   int appliedSpawnContextVersion = -1;
 
   static bool ShouldLogDebug() {
-    return Application.isEditor || Debug.isDebugBuild;
+    return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
   }
 
   void Awake() {

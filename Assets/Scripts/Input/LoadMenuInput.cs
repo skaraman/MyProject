@@ -176,6 +176,17 @@ public class LoadMenuInput : ButtonGroup {
     if (!slotSelectionLocked) {
       foreach (var hit in hits) {
         if (hit?.gameObject == null) continue;
+        if (hit.gameObject.name == "Delete") {
+          var slotIndex = ResolveButtonIndex(hit.gameObject);
+          if (slotIndex >= 0) {
+            Debug.Log("Delete Confirm Box");
+            return;
+          }
+        }
+      }
+
+      foreach (var hit in hits) {
+        if (hit?.gameObject == null) continue;
         var hitIndex = ResolveButtonIndex(hit.gameObject);
         if (hitIndex >= 0) {
           activeIndexLoadMenu = hitIndex;

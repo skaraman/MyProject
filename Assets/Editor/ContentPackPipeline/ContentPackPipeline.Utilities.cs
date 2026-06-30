@@ -24,7 +24,9 @@ public static partial class ContentPackPipeline {
       throw new InvalidOperationException("Pack root escaped external root. pack='" + normalizedPackRoot + "'");
     }
 
-    if (mode == TransitionPipelineMode.Clean && Directory.Exists(normalizedPackRoot)) {
+    if (mode == TransitionPipelineMode.Clean &&
+        Directory.Exists(normalizedPackRoot) &&
+        !IsPackageBackedExternalPackPath(normalizedPackRoot, normalizedExternalRoot)) {
       Directory.Delete(normalizedPackRoot, recursive: true);
       if (stats != null) {
         stats.packDirectoriesRecreated++;
@@ -37,6 +39,12 @@ public static partial class ContentPackPipeline {
         stats.packDirectoriesCreated++;
       }
     }
+  }
+
+  static bool IsPackageBackedExternalPackPath(string normalizedPackRoot, string normalizedExternalRoot) {
+    if (!StageRootAssetPath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)) return false;
+    if (string.IsNullOrWhiteSpace(normalizedPackRoot) || string.IsNullOrWhiteSpace(normalizedExternalRoot)) return false;
+    return string.Equals(normalizedPackRoot, normalizedExternalRoot, StringComparison.OrdinalIgnoreCase);
   }
 
   static void EnsureDirectoryAssetPath(string assetPath) {
@@ -76,6 +84,12 @@ public static partial class ContentPackPipeline {
       normalized = normalized.Substring(root.Length + 1);
     }
 
+    var localRoot = "Assets/Sprites/SpriteLibraries";
+    if (string.Equals(normalized, localRoot, StringComparison.OrdinalIgnoreCase)) return "";
+    if (normalized.StartsWith(localRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring(localRoot.Length + 1);
+    }
+
     return normalized.Trim('/');
   }
 
@@ -104,17 +118,93 @@ public static partial class ContentPackPipeline {
     return string.IsNullOrWhiteSpace(value) ? "" : value.Trim().Replace('\\', '/');
   }
 
-  static string NormalizeFullPath(string value) {
-    return string.IsNullOrWhiteSpace(value) ? "" : Path.GetFullPath(value).Replace('\\', '/');
+  public static string GetPhysicalPath(string path) {
+    if (string.IsNullOrWhiteSpace(path)) return "";
+    var normalized = NormalizeAssetPath(path);
+    if (normalized.StartsWith(StageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase)) {
+      var relative = normalized.Substring(StageRootAssetPath.Length + 1);
+      return Path.GetFullPath(Path.Combine(GetConfiguredExternalRoot(), relative)).Replace('\\', '/');
+    }
+    if (string.Equals(normalized, StageRootAssetPath, StringComparison.OrdinalIgnoreCase)) {
+      return GetConfiguredExternalRoot();
+    }
+
+    return Path.GetFullPath(normalized).Replace('\\', '/');
   }
 
-  static string ToProjectAssetPath(string fullPath) {
+  static string NormalizeFullPath(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+    var normalized = NormalizeAssetPath(value);
+    if (string.Equals(normalized, StageRootAssetPath, StringComparison.OrdinalIgnoreCase) ||
+        normalized.StartsWith(StageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase)) {
+      return GetPhysicalPath(normalized);
+    }
+
+    return Path.GetFullPath(value).Replace('\\', '/');
+  }
+
+  public static string ToProjectAssetPath(string fullPath) {
     var normalizedFullPath = NormalizeFullPath(fullPath);
+    var externalRoot = GetConfiguredExternalRoot();
+    if (string.Equals(normalizedFullPath, externalRoot, StringComparison.OrdinalIgnoreCase)) {
+      return StageRootAssetPath;
+    }
+    if (normalizedFullPath.StartsWith(externalRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+      var relative = normalizedFullPath.Substring(externalRoot.Length + 1);
+      return NormalizeAssetPath(StageRootAssetPath + "/" + relative);
+    }
+
     var projectRoot = NormalizeFullPath(GetProjectRoot());
     if (normalizedFullPath.StartsWith(projectRoot + "/", StringComparison.OrdinalIgnoreCase)) {
       return normalizedFullPath.Substring(projectRoot.Length + 1);
     }
     return normalizedFullPath;
+  }
+
+  static string GetConfiguredExternalRoot() {
+    var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(SelectionAssetPath);
+    var configuredRoot = selection != null && !string.IsNullOrWhiteSpace(selection.ExternalRoot)
+      ? selection.ExternalRoot
+      : ResolveDefaultExternalRoot();
+    return Path.GetFullPath(configuredRoot).Replace('\\', '/').TrimEnd('/');
+  }
+
+  public static string ResolveDefaultExternalRoot() {
+    var manifestRoot = "";
+    try {
+      manifestRoot = ResolvePackageFileDependencyRoot();
+    }
+    catch (Exception ex) {
+      Debug.LogWarning("[ContentPackPipeline] Failed to resolve package external root from manifest. fallback='" + DefaultExternalRootFallback + "' error='" + ex.Message + "'");
+    }
+    return string.IsNullOrWhiteSpace(manifestRoot) ? DefaultExternalRootFallback : manifestRoot;
+  }
+
+  static string ResolveDefaultExternalRootFallback() {
+    var projectRoot = GetProjectRoot();
+    var parent = Directory.GetParent(projectRoot)?.FullName;
+    var root = string.IsNullOrWhiteSpace(parent)
+      ? Path.Combine(projectRoot, "..", DefaultExternalRootFolderName)
+      : Path.Combine(parent, DefaultExternalRootFolderName);
+    return Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/');
+  }
+
+  static string ResolvePackageFileDependencyRoot() {
+    var projectRoot = GetProjectRoot();
+    var manifestPath = Path.Combine(projectRoot, "Packages", "manifest.json");
+    if (!File.Exists(manifestPath)) return "";
+
+    var manifestText = File.ReadAllText(manifestPath);
+    var match = ContentPackageDependencyRegex.Match(manifestText);
+    if (!match.Success) return "";
+
+    var packagePath = Uri.UnescapeDataString(match.Groups[1].Value).Replace('\\', '/').Trim();
+    if (string.IsNullOrWhiteSpace(packagePath)) return "";
+
+    var packageRoot = Path.IsPathRooted(packagePath)
+      ? packagePath
+      : Path.Combine(projectRoot, "Packages", packagePath);
+    return Path.GetFullPath(packageRoot).Replace('\\', '/').TrimEnd('/');
   }
 
   static string GetProjectRoot() {

@@ -39,12 +39,12 @@ public static partial class ContentPackPipeline {
       if (!packById.TryGetValue(packId, out var pack) || pack == null) continue;
 
       var stagedSpritesRoot = NormalizeAssetPath(pack.stageAssetRoot + "/Sprites");
-      if (Directory.Exists(Path.GetFullPath(stagedSpritesRoot))) {
+      if (Directory.Exists(GetPhysicalPath(stagedSpritesRoot))) {
         AddUniquePath(stagedTextureRoots, stagedSpritesRoot);
       }
 
       var stagedSpriteLibraryRoot = NormalizeAssetPath(pack.stageAssetRoot + "/Sprites/SpriteLibraries");
-      if (Directory.Exists(Path.GetFullPath(stagedSpriteLibraryRoot))) {
+      if (Directory.Exists(GetPhysicalPath(stagedSpriteLibraryRoot))) {
         AddUniquePath(stagedSpriteLibraryRoots, stagedSpriteLibraryRoot);
       }
 
@@ -85,12 +85,10 @@ public static partial class ContentPackPipeline {
 
     if (logResult) {
       var activeForm = EsperanzaForms.GetActive();
-      var equippedGearPackIds = ResolveEquippedGearPackIds(packById);
       Debug.Log(
         "[ContentPackPipeline] Generated active content registry." +
         " active_packs=" + string.Join(", ", activePackIds) +
         " active_form='" + (string.IsNullOrWhiteSpace(activeForm) ? "-" : activeForm) + "'" +
-        " equipped_gear_packs=" + (equippedGearPackIds.Count <= 0 ? "-" : string.Join(", ", equippedGearPackIds)) +
         " default_location='" + (string.IsNullOrWhiteSpace(defaultLocationId) ? "-" : defaultLocationId) + "'" +
         " staged_texture_roots=" + stagedTextureRoots.Count +
         " staged_library_roots=" + stagedSpriteLibraryRoots.Count
@@ -121,6 +119,7 @@ public static partial class ContentPackPipeline {
 
     EditorUtility.SetDirty(registry);
     AssetDatabase.SaveAssets();
+    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
     ActiveContentRegistryRuntime.ForceReload();
 
     if (logResult) {
@@ -133,7 +132,7 @@ public static partial class ContentPackPipeline {
     if (pack == null || string.IsNullOrWhiteSpace(pack.snapshotRelativePath)) return false;
 
     var snapshotAssetPath = NormalizeAssetPath(pack.stageAssetRoot + "/" + pack.snapshotRelativePath);
-    var snapshotFullPath = Path.GetFullPath(snapshotAssetPath);
+    var snapshotFullPath = GetPhysicalPath(snapshotAssetPath);
     if (!File.Exists(snapshotFullPath)) return false;
 
     var json = JsonUtility.FromJson<ExportedLocationJson>(File.ReadAllText(snapshotFullPath));
@@ -176,7 +175,7 @@ public static partial class ContentPackPipeline {
     if (pack == null || string.IsNullOrWhiteSpace(pack.dialogSnapshotRelativePath)) return false;
 
     var snapshotAssetPath = NormalizeAssetPath(pack.stageAssetRoot + "/" + pack.dialogSnapshotRelativePath);
-    var snapshotFullPath = Path.GetFullPath(snapshotAssetPath);
+    var snapshotFullPath = GetPhysicalPath(snapshotAssetPath);
     if (!File.Exists(snapshotFullPath)) return false;
 
     var json = JsonUtility.FromJson<ExportedDialogJson>(File.ReadAllText(snapshotFullPath));

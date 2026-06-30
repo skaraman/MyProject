@@ -153,10 +153,19 @@ public class GameplayDialogController : MonoBehaviour {
       return dialogRoot != null && dialogText != null;
     }
   }
+  public string ResolvedUiReferencesBlockerSummary {
+    get {
+      EnsureResolved();
+      if (dialogRoot == null && dialogText == null) return "dialogRoot_and_dialogText_Null";
+      if (dialogRoot == null) return "dialogRoot_Null";
+      if (dialogText == null) return "dialogText_Null";
+      return "None";
+    }
+  }
   public bool IsReadyForLoadingProgress =>
-    isActiveAndEnabled &&
+    enabled &&
     HasResolvedUiReferencesForLoadingProgress &&
-    dialogStateReady;
+    IsDialogStateReadyForLoadingProgress();
   public bool HasPendingLocationDialog => HasPendingDialogRequestForActiveLocation() || HasPendingAutoLocationDialog();
   public bool IsBlockingGameplayInput => dialogueActive || HasPendingLocationDialog;
 
@@ -165,6 +174,13 @@ public class GameplayDialogController : MonoBehaviour {
       return false;
     }
     return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  bool IsDialogStateReadyForLoadingProgress() {
+    if (!dialogStateReady && DialogController.IsStateReadyForCurrentSlot) {
+      dialogStateReady = true;
+    }
+    return dialogStateReady;
   }
 
   bool IsEditorDebugSeenOverrideEnabled() {

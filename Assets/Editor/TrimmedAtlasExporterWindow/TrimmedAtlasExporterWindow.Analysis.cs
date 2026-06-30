@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEngine;
 
 public sealed partial class TrimmedAtlasExporterWindow {
@@ -159,16 +158,22 @@ public sealed partial class TrimmedAtlasExporterWindow {
     if (sprites.Count <= 0) return null;
     if (sprites.Count == 1 && DoesSpriteCoverEntireTexture(sprites[0], previewTexture)) return null;
 
-    var orderedSprites = sprites
-      .OrderBy(sprite => sprite.name, SpriteSliceAddressUtility.NaturalStringComparer)
-      .ThenBy(sprite => sprite.rect.yMin)
-      .ThenBy(sprite => sprite.rect.xMin)
-      .ToList();
+    var orderedSprites = new List<Sprite>(sprites);
+    orderedSprites.Sort(CompareImportedSourceSprites);
 
     var sourceCells = new List<SourceCellDefinition>(orderedSprites.Count);
+    var distinctColumns = new HashSet<int>();
+    var distinctRows = new HashSet<int>();
+    var widthSum = 0f;
+    var heightSum = 0f;
+    var minWidth = float.MaxValue;
+    var maxWidth = float.MinValue;
+    var minHeight = float.MaxValue;
+    var maxHeight = float.MinValue;
     for (var i = 0; i < orderedSprites.Count; i++) {
       var sprite = orderedSprites[i];
-      var roundedRect = RoundSpriteRectToPixelRect(sprite.rect, previewTexture.width, previewTexture.height);
+      var rect = sprite.rect;
+      var roundedRect = RoundSpriteRectToPixelRect(rect, previewTexture.width, previewTexture.height);
       if (roundedRect.width <= 0 || roundedRect.height <= 0) {
         error =
           "Sprite '" + sprite.name +
@@ -179,17 +184,26 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
       sourceCells.Add(new SourceCellDefinition {
         sourceCell = roundedRect,
-        logicalCellRect = sprite.rect,
+        logicalCellRect = rect,
         spriteName = preserveSpriteNames && !string.IsNullOrWhiteSpace(sprite.name)
           ? sprite.name
           : Path.GetFileNameWithoutExtension(sourcePath) + "_" + (i + 1)
       });
+
+      distinctColumns.Add(Mathf.RoundToInt(rect.xMin));
+      distinctRows.Add(Mathf.RoundToInt(rect.yMin));
+      widthSum += rect.width;
+      heightSum += rect.height;
+      if (rect.width < minWidth) minWidth = rect.width;
+      if (rect.width > maxWidth) maxWidth = rect.width;
+      if (rect.height < minHeight) minHeight = rect.height;
+      if (rect.height > maxHeight) maxHeight = rect.height;
     }
 
-    columns = CountDistinctCellOrigins(orderedSprites.Select(sprite => sprite.rect.xMin));
-    rows = CountDistinctCellOrigins(orderedSprites.Select(sprite => sprite.rect.yMin));
-    resolvedCellWidth = Mathf.Max(1, Mathf.RoundToInt((float)orderedSprites.Average(sprite => sprite.rect.width)));
-    resolvedCellHeight = Mathf.Max(1, Mathf.RoundToInt((float)orderedSprites.Average(sprite => sprite.rect.height)));
+    columns = distinctColumns.Count;
+    rows = distinctRows.Count;
+    resolvedCellWidth = Mathf.Max(1, Mathf.RoundToInt(widthSum / orderedSprites.Count));
+    resolvedCellHeight = Mathf.Max(1, Mathf.RoundToInt(heightSum / orderedSprites.Count));
     if (columns > 0 && rows > 0 && (columns * rows) != orderedSprites.Count) {
       Debug.LogWarning(
         "[TrimAtlasExport] Imported sprite layout is sparse or irregular." +
@@ -198,10 +212,6 @@ public sealed partial class TrimmedAtlasExporterWindow {
         " grid=" + columns + "x" + rows);
     }
 
-    var minWidth = orderedSprites.Min(sprite => sprite.rect.width);
-    var maxWidth = orderedSprites.Max(sprite => sprite.rect.width);
-    var minHeight = orderedSprites.Min(sprite => sprite.rect.height);
-    var maxHeight = orderedSprites.Max(sprite => sprite.rect.height);
     var frameRangeDiffersFromConfigured =
       Mathf.Abs(minWidth - cellWidth) > 0.01f ||
       Mathf.Abs(maxWidth - cellWidth) > 0.01f ||
@@ -408,7 +418,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
   TrimmedSpriteBuildData AnalyzeCell(string sourcePath, int atlasWidth, Color32[] sourcePixels, PixelRect sourceCell, Rect logicalCellRect, string spriteName, int index) {
     var localPixelCount = sourceCell.width * sourceCell.height;
-    var visibleMask = new bool[localPixelCount];
+    var visibleMask = RentAnalysisBoolScratch(ref analysisVisibleMaskScratch, localPixelCount);
     var minX = sourceCell.width;
     var minY = sourceCell.height;
     var maxX = -1;
@@ -568,13 +578,14 @@ public sealed partial class TrimmedAtlasExporterWindow {
     return true;
   }
 
-  static bool TryBuildVisiblePixelComponents(bool[] visibleMask, int width, int height, out List<VisiblePixelComponent> components) {
+  bool TryBuildVisiblePixelComponents(bool[] visibleMask, int width, int height, out List<VisiblePixelComponent> components) {
     components = new List<VisiblePixelComponent>();
-    if (visibleMask == null || width <= 0 || height <= 0 || visibleMask.Length != width * height) return false;
+    var pixelCount = width * height;
+    if (visibleMask == null || width <= 0 || height <= 0 || visibleMask.Length < pixelCount) return false;
 
-    var visited = new bool[visibleMask.Length];
-    var queue = new int[visibleMask.Length];
-    for (var i = 0; i < visibleMask.Length; i++) {
+    var visited = RentAnalysisBoolScratch(ref analysisVisitedScratch, pixelCount);
+    var queue = RentAnalysisIntScratch(ref analysisQueueScratch, pixelCount);
+    for (var i = 0; i < pixelCount; i++) {
       if (!visibleMask[i] || visited[i]) continue;
 
       var component = new VisiblePixelComponent();
@@ -642,6 +653,47 @@ public sealed partial class TrimmedAtlasExporterWindow {
     return 0;
   }
 
+  static int CompareImportedSourceSprites(Sprite left, Sprite right) {
+    if (ReferenceEquals(left, right)) return 0;
+    if (left == null) return -1;
+    if (right == null) return 1;
+
+    var nameComparison = SpriteSliceAddressUtility.NaturalStringComparer.Compare(left.name, right.name);
+    if (nameComparison != 0) return nameComparison;
+
+    var yComparison = left.rect.yMin.CompareTo(right.rect.yMin);
+    if (yComparison != 0) return yComparison;
+
+    return left.rect.xMin.CompareTo(right.rect.xMin);
+  }
+
+  static bool[] RentAnalysisBoolScratch(ref bool[] scratch, int requiredLength) {
+    if (requiredLength <= 0) {
+      return Array.Empty<bool>();
+    }
+
+    if (scratch == null || scratch.Length < requiredLength) {
+      scratch = new bool[requiredLength];
+    }
+    else {
+      Array.Clear(scratch, 0, requiredLength);
+    }
+
+    return scratch;
+  }
+
+  static int[] RentAnalysisIntScratch(ref int[] scratch, int requiredLength) {
+    if (requiredLength <= 0) {
+      return Array.Empty<int>();
+    }
+
+    if (scratch == null || scratch.Length < requiredLength) {
+      scratch = new int[requiredLength];
+    }
+
+    return scratch;
+  }
+
   bool IsVisible(Color32 color) {
     if (color.a <= alphaThreshold) return false;
     if (!treatNearWhiteAsEmpty) return true;
@@ -650,13 +702,11 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
   Color32[] CopyTrimmedPixels(Color32[] sourcePixels, int atlasWidth, PixelRect sourceCell, PixelRect trimRect) {
     var trimmedPixels = new Color32[trimRect.width * trimRect.height];
-    var dst = 0;
     for (var y = 0; y < trimRect.height; y++) {
       var srcY = sourceCell.y + trimRect.y + y;
-      for (var x = 0; x < trimRect.width; x++) {
-        var srcX = sourceCell.x + trimRect.x + x;
-        trimmedPixels[dst++] = sourcePixels[(srcY * atlasWidth) + srcX];
-      }
+      var srcIndex = (srcY * atlasWidth) + sourceCell.x + trimRect.x;
+      var dstIndex = y * trimRect.width;
+      Array.Copy(sourcePixels, srcIndex, trimmedPixels, dstIndex, trimRect.width);
     }
 
     return trimmedPixels;

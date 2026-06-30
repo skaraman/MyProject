@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -353,19 +353,21 @@ public static partial class SpriteIndexBuilder {
     var roots = ContentPackPipeline.GetSpriteLibrarySearchRoots();
     for (var rootIndex = 0; rootIndex < roots.Count; rootIndex++) {
       var root = NormalizePath(roots[rootIndex]);
-      if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
+      var physicalRoot = ContentPackPipeline.GetPhysicalPath(root);
+      if (string.IsNullOrWhiteSpace(physicalRoot) || !Directory.Exists(physicalRoot)) continue;
 
-      var files = Directory.GetFiles(root, "*.spriteLib", SearchOption.AllDirectories);
+      var files = Directory.GetFiles(physicalRoot, "*.spriteLib", SearchOption.AllDirectories);
       Array.Sort(files, StringComparer.Ordinal);
 
       for (var i = 0; i < files.Length; i++) {
-        var path = NormalizePath(files[i]);
-        var relative = path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
-          ? path.Substring(root.Length + 1)
-          : path;
+        var physicalPath = NormalizePath(files[i]);
+        var projectPath = ContentPackPipeline.ToProjectAssetPath(physicalPath);
+        var relative = projectPath.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
+          ? projectPath.Substring(root.Length + 1)
+          : projectPath;
         var key = RemoveExtension(relative);
         if (result.ContainsKey(key)) continue;
-        result[key] = path;
+        result[key] = projectPath;
       }
     }
 

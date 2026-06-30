@@ -10,7 +10,7 @@ public class CameraPositionFollower : MonoBehaviour {
   [SerializeField] bool followY = true;
   [SerializeField] bool followZ;
   [SerializeField, Min(0f)] float smoothTime = 0.1f;
-  [SerializeField] bool logSetup = true;
+  [SerializeField] bool logSetup;
 
   Transform cachedTransform;
   Camera resolvedCamera;
@@ -82,7 +82,7 @@ public class CameraPositionFollower : MonoBehaviour {
     offset = cachedTransform.position - resolvedCamera.transform.position;
     hasCapturedOffset = true;
 
-    if (!logSetup) return;
+    if (!ShouldLogSetup()) return;
     Debug.Log(
       "[CameraPositionFollower] Captured offset reason='" + reason +
       "' object='" + cachedTransform.name +
@@ -123,7 +123,7 @@ public class CameraPositionFollower : MonoBehaviour {
   }
 
   void LogResolvedCamera() {
-    if (!logSetup) return;
+    if (!ShouldLogSetup()) return;
 
     Debug.Log(
       "[CameraPositionFollower] Bound object='" + cachedTransform.name +
@@ -141,5 +141,11 @@ public class CameraPositionFollower : MonoBehaviour {
 
     hasLoggedMissingCamera = true;
     Debug.LogWarning("[CameraPositionFollower] No target camera available for object='" + gameObject.name + "'.", this);
+  }
+
+  bool ShouldLogSetup() {
+    return logSetup &&
+           SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
   }
 }

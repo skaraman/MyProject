@@ -43,6 +43,8 @@ public static partial class TextureResidencyCache {
     public AsyncOperationHandle<TextAsset> groupedMetadataHandle;
     public AsyncOperationHandle<Texture2D> metadataAtlasTextureHandle;
     public AsyncOperationHandle<TextAsset> metadataAtlasMetadataHandle;
+    public GeneratedAtlasSpriteSynthesisUtility.AtlasImportPayload parsedGroupedMetadata;
+    public GeneratedAtlasSpriteSynthesisUtility.AtlasImportPayload parsedMetadataAtlasMetadata;
     public readonly List<AsyncOperationHandle<Sprite>> exactSliceSupplementHandles = new();
     public readonly List<IResourceLocation> pendingAssetLoadLocations = new(4);
     public readonly List<IResourceLocation> activeAssetLoadLocations = new(4);
@@ -85,6 +87,7 @@ public static partial class TextureResidencyCache {
     public string lastRequestedAddress;
     public bool atlasFallbackToDirect;
     public bool atlasDirectFallbackAttempted;
+    public string sourceTag;
   }
 
   public readonly struct PinSnapshot {
@@ -274,6 +277,7 @@ public static partial class TextureResidencyCache {
   struct DeferredRequestState {
     public LoadPriority priority;
     public bool pinEntry;
+    public string sourceTag;
   }
 
   readonly struct ExactSliceSupplementRequest {
@@ -424,6 +428,7 @@ public static partial class TextureResidencyCache {
   const int CompletionFinalizeGameplayBudgetPerFrame = 8;
   const float CompletionFollowupOverlayBudgetMs = 1.5f;
   const float CompletionFollowupLoadingBudgetMs = 3.0f;
+  const float CompletionFollowupGameplayBudgetMs = 1.0f;
 #if UNITY_EDITOR
   const int EditorAtlasSupplementOverlayBudgetPerFrame = 1;
   const int EditorAtlasSupplementLoadingBudgetPerFrame = 4;

@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -37,7 +36,10 @@ public sealed partial class TrimmedAtlasExporterWindow {
       atlasPathsByKey[key] = assetPath;
     }
 
-    var atlasPaths = atlasPathsByKey.Values.ToList();
+    var atlasPaths = new List<string>(atlasPathsByKey.Count);
+    foreach (var atlasPath in atlasPathsByKey.Values) {
+      atlasPaths.Add(atlasPath);
+    }
     atlasPaths.Sort(SpriteSliceAddressUtility.CompareNaturally);
     Debug.Log(
       "[TrimAtlasExport] Source atlas scan complete." +
@@ -63,7 +65,8 @@ public sealed partial class TrimmedAtlasExporterWindow {
     }
 
     var exportBatches = new List<SourceAtlasExportBatch>(sourceAtlasPaths.Count);
-    var orderedFolderPaths = sourcePathsByFolder.Keys.OrderBy(path => path, SpriteSliceAddressUtility.NaturalStringComparer).ToList();
+    var orderedFolderPaths = new List<string>(sourcePathsByFolder.Keys);
+    orderedFolderPaths.Sort(SpriteSliceAddressUtility.NaturalStringComparer);
     for (var folderIndex = 0; folderIndex < orderedFolderPaths.Count; folderIndex++) {
       var folderPath = orderedFolderPaths[folderIndex];
       var folderSourcePaths = sourcePathsByFolder[folderPath];
@@ -85,6 +88,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
         var groupedOutputName = BuildNumericBatchOutputName(folderPath, numericSourcePaths);
         nonNumericSourcePaths.RemoveAll(sourcePath => ShouldSkipGroupedNumericOutput(sourcePath, groupedOutputName));
         exportBatches.Add(new SourceAtlasExportBatch {
+          sourceFolderPath = folderPath,
           primarySourcePath = numericSourcePaths[0],
           outputName = groupedOutputName,
           groupedNumericSiblings = true,
@@ -92,16 +96,16 @@ public sealed partial class TrimmedAtlasExporterWindow {
         });
       }
       else if (numericSourcePaths.Count == 1) {
-        exportBatches.Add(BuildSingleSourceExportBatch(numericSourcePaths[0]));
+        exportBatches.Add(BuildSingleSourceExportBatch(numericSourcePaths[0], folderPath));
       }
 
       nonNumericSourcePaths.Sort(SpriteSliceAddressUtility.CompareNaturally);
       for (var sourceIndex = 0; sourceIndex < nonNumericSourcePaths.Count; sourceIndex++) {
-        exportBatches.Add(BuildSingleSourceExportBatch(nonNumericSourcePaths[sourceIndex]));
+        exportBatches.Add(BuildSingleSourceExportBatch(nonNumericSourcePaths[sourceIndex], folderPath));
       }
     }
 
-    exportBatches.Sort((left, right) => SpriteSliceAddressUtility.CompareNaturally(left?.primarySourcePath, right?.primarySourcePath));
+    exportBatches.Sort(CompareExportBatchPaths);
     return exportBatches;
   }
 
@@ -192,13 +196,23 @@ public sealed partial class TrimmedAtlasExporterWindow {
     return int.MaxValue;
   }
 
-  static SourceAtlasExportBatch BuildSingleSourceExportBatch(string sourcePath) {
+  static SourceAtlasExportBatch BuildSingleSourceExportBatch(string sourcePath, string sourceFolderPath) {
     return new SourceAtlasExportBatch {
+      sourceFolderPath = NormalizeAssetPath(string.IsNullOrWhiteSpace(sourceFolderPath) ? Path.GetDirectoryName(sourcePath) : sourceFolderPath),
       primarySourcePath = sourcePath,
       outputName = Path.GetFileNameWithoutExtension(sourcePath),
       groupedNumericSiblings = false,
       sourcePaths = new List<string> { sourcePath }
     };
+  }
+
+  static int CompareExportBatchPaths(SourceAtlasExportBatch left, SourceAtlasExportBatch right) {
+    var folderComparison = SpriteSliceAddressUtility.CompareNaturally(left?.sourceFolderPath, right?.sourceFolderPath);
+    if (folderComparison != 0) {
+      return folderComparison;
+    }
+
+    return SpriteSliceAddressUtility.CompareNaturally(left?.primarySourcePath, right?.primarySourcePath);
   }
 
   static bool TryParseNumericSourceName(string sourcePath, out int numericValue) {

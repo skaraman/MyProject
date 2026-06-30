@@ -418,6 +418,37 @@ public static partial class HierarchyCaretMemory
     }
   }
 
+  private static void ResolveInstanceIdToObjectMethod()
+  {
+    if (instanceIdToObjectMethod != null)
+    {
+      return;
+    }
+
+    const BindingFlags allFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+    foreach (var method in typeof(EditorUtility).GetMethods(allFlags))
+    {
+      if (!string.Equals(method.Name, "InstanceIDToObject", StringComparison.Ordinal))
+      {
+        continue;
+      }
+
+      var parameters = method.GetParameters();
+      if (parameters.Length != 1)
+      {
+        continue;
+      }
+
+      if (parameters[0].ParameterType != typeof(int))
+      {
+        continue;
+      }
+
+      instanceIdToObjectMethod = method;
+      return;
+    }
+  }
+
   private static bool TryInstanceIdToObject(int instanceId, out UnityEngine.Object target)
   {
     target = null;
@@ -444,9 +475,21 @@ public static partial class HierarchyCaretMemory
       return true;
     }
 
-#pragma warning disable CS0618
-    target = EditorUtility.InstanceIDToObject(instanceId);
-#pragma warning restore CS0618
+    ResolveInstanceIdToObjectMethod();
+    if (instanceIdToObjectMethod == null)
+    {
+      return false;
+    }
+
+    try
+    {
+      target = instanceIdToObjectMethod.Invoke(null, new object[] { instanceId }) as UnityEngine.Object;
+    }
+    catch
+    {
+      target = null;
+    }
+
     return target != null;
   }
 

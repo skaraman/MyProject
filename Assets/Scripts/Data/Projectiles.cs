@@ -45,22 +45,37 @@ public class ProjectileData {
 
     prefabLoadAttempted = true;
     var startedAt = Time.realtimeSinceStartup;
-    cachedPrefabHandle = Addressables.LoadAssetAsync<GameObject>(address);
-    cachedPrefab = cachedPrefabHandle.WaitForCompletion();
-    prefab = cachedPrefab;
-    if (cachedPrefabHandle.Status != AsyncOperationStatus.Succeeded || prefab == null) {
-      var status = cachedPrefabHandle.Status.ToString();
-      var error = cachedPrefabHandle.OperationException != null ? cachedPrefabHandle.OperationException.Message : "none";
+    try {
+      cachedPrefabHandle = Addressables.LoadAssetAsync<GameObject>(address);
+      cachedPrefab = cachedPrefabHandle.WaitForCompletion();
+      prefab = cachedPrefab;
+      if (cachedPrefabHandle.Status != AsyncOperationStatus.Succeeded || prefab == null) {
+        var status = cachedPrefabHandle.Status.ToString();
+        var error = cachedPrefabHandle.OperationException != null ? cachedPrefabHandle.OperationException.Message : "none";
+        if (cachedPrefabHandle.IsValid()) {
+          Addressables.Release(cachedPrefabHandle);
+        }
+        cachedPrefabHandle = default;
+        cachedPrefab = null;
+        Debug.LogWarning(
+          "[Projectiles] Failed to load prefab for key '" + key +
+          "' from Addressables address '" + address +
+          "' status=" + status +
+          " error='" + error + "'."
+        );
+        return false;
+      }
+    }
+    catch (System.Exception ex) {
       if (cachedPrefabHandle.IsValid()) {
         Addressables.Release(cachedPrefabHandle);
       }
       cachedPrefabHandle = default;
       cachedPrefab = null;
       Debug.LogWarning(
-        "[Projectiles] Failed to load prefab for key '" + key +
+        "[Projectiles] Exception loading prefab for key '" + key +
         "' from Addressables address '" + address +
-        "' status=" + status +
-        " error='" + error + "'."
+        "' error='" + ex.Message + "'."
       );
       return false;
     }
@@ -97,6 +112,12 @@ public class ProjectileData {
     cachedPrefabHandle = default;
     cachedPrefab = null;
     prefabLoadAttempted = false;
+  }
+
+  public bool IsPrefabLoaded() {
+    if (cachedPrefab != null) return true;
+    if (!TryGetPrefabAddress(out var address) || string.IsNullOrWhiteSpace(address)) return false;
+    return RuntimeAssetCache.TryGetLoaded<GameObject>(address, out var prefab) && prefab != null;
   }
 }
 

@@ -23,6 +23,9 @@ public static partial class ContentPackPipeline {
     Directory.CreateDirectory(externalRoot);
 
     var packDefinitions = BuildPackDefinitions(externalRoot);
+    if (logResult) {
+      LogAuthoringManifestSummary(packDefinitions);
+    }
     var projectLibraries = DiscoverProjectLibraryPaths();
     var errors = new List<string>();
 
@@ -86,6 +89,24 @@ public static partial class ContentPackPipeline {
     catch (Exception ex) {
       Debug.LogError("[ContentPackPipeline] Export failed.\n" + ex);
       return false;
+    }
+  }
+
+  static void LogAuthoringManifestSummary(List<PackDefinition> packDefinitions) {
+    if (packDefinitions == null || packDefinitions.Count <= 0) return;
+
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null || !pack.loadedManifest) continue;
+
+      var sourceCount = pack.authoringSources != null ? pack.authoringSources.Count : 0;
+      Debug.Log(
+        "[ContentPackPipeline] Loaded content pack manifest." +
+        " pack_id='" + pack.packId + "'" +
+        " kind='" + pack.kind + "'" +
+        " authoring_sources=" + sourceCount +
+        " external_root='" + pack.externalRootPath + "'"
+      );
     }
   }
 }

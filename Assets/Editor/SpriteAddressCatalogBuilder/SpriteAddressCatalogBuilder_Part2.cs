@@ -197,13 +197,14 @@ public static partial class SpriteIndexBuilder {
     if (string.IsNullOrWhiteSpace(assetPath)) return 0;
 
     extension = Path.GetExtension(assetPath).ToLowerInvariant();
-    if (Directory.Exists(assetPath)) {
+    var physicalPath = ContentPackPipeline.GetPhysicalPath(assetPath);
+    if (Directory.Exists(physicalPath)) {
       isDirectory = true;
       return 0;
     }
 
     try {
-      var info = new FileInfo(assetPath);
+      var info = new FileInfo(physicalPath);
       return info.Exists ? info.Length : 0;
     }
     catch {
@@ -267,13 +268,14 @@ public static partial class SpriteIndexBuilder {
     if (cachedSpriteSliceCountsByAssetPath.TryGetValue(assetPath, out var cached)) return cached;
 
     var metaPath = assetPath + ".meta";
-    if (!File.Exists(metaPath)) {
+    var physicalMetaPath = ContentPackPipeline.GetPhysicalPath(metaPath);
+    if (!File.Exists(physicalMetaPath)) {
       cachedSpriteSliceCountsByAssetPath[assetPath] = 0;
       return 0;
     }
 
     var count = 0;
-    foreach (var line in File.ReadLines(metaPath)) {
+    foreach (var line in File.ReadLines(physicalMetaPath)) {
       var trimmed = line.Trim();
       if (trimmed.StartsWith("- serializedVersion:", StringComparison.Ordinal) ||
           trimmed.StartsWith("serializedVersion:", StringComparison.Ordinal) &&
@@ -333,7 +335,7 @@ public static partial class SpriteIndexBuilder {
     LogAddressablesBuildMemorySnapshot(contextLabel, "after_gc");
   }
 
-  // Menu items moved to ContentPackPipeline.cs for unified workflow
+  // Content pack builds are driven by Tools/ContentPackIterationUI.py.
 
   public static bool PrepareForPlayerBuild(bool logResult, bool failOnError) {
     if (logResult) {

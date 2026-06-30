@@ -98,7 +98,14 @@ public static partial class SpriteRuntimeResolver {
       if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalized, out var entry)) continue;
 
       var shardKey = string.IsNullOrWhiteSpace(entry.namepart) ? normalized : entry.namepart;
-      if (!loadedShards.ContainsKey(shardKey)) return false;
+      if (!loadedShards.ContainsKey(shardKey)) {
+        if (shardParses.TryGetValue(shardKey, out var shardParseTask) && shardParseTask.IsCompleted) {
+          if (TryGetShard(shardKey, entry, out _)) {
+            continue;
+          }
+        }
+        return false;
+      }
     }
     return true;
   }

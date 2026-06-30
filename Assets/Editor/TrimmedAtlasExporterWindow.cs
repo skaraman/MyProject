@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -40,6 +39,9 @@ public sealed partial class TrimmedAtlasExporterWindow : EditorWindow {
   Texture2D analyzedPreviewTexture;
   string analyzedSourcePath = "";
   string analyzedSettingsSignature = "";
+  bool[] analysisVisibleMaskScratch;
+  bool[] analysisVisitedScratch;
+  int[] analysisQueueScratch;
 
   [MenuItem("Tools/Authoring/Trim Atlas + Export Offsets")]
   static void ShowWindow() {
@@ -175,12 +177,21 @@ public sealed partial class TrimmedAtlasExporterWindow : EditorWindow {
       }
     }
 
+    if (!ApplyDeferredImportMetadata(sourcePath, pendingExports, forceReimport: true, out error)) {
+      EditorUtility.DisplayDialog("Trim Export Failed", error, "OK");
+      return;
+    }
+
+    DeleteSingleSourceAssetAfterSuccessfulExport(sourcePath, pendingExports);
+
+    var exportedSpriteCount = CountExportedSprites(pendingExports);
+
     Debug.Log(
       "[TrimAtlasExport] Exported atlas." +
       " source='" + sourcePath + "'" +
       " outputs=" + (pendingExports?.Count ?? 0) +
       " first_output='" + (pendingExports != null && pendingExports.Count > 0 ? pendingExports[0].exportedAtlasAssetPath : "") + "'" +
-      " sprites=" + (pendingExports?.Sum(export => export?.exportData?.sprites?.Count ?? 0) ?? 0) +
+      " sprites=" + exportedSpriteCount +
       " empty=" + exportData.emptyCellCount +
       " deferred_import=True");
   }
@@ -215,62 +226,95 @@ public sealed partial class TrimmedAtlasExporterWindow : EditorWindow {
     var failedCount = 0;
     var failureLogs = new List<string>();
     var pendingExportCount = 0;
-    var deferredWritePhaseStarted = false;
+    var batchStartIndex = 0;
+    while (batchStartIndex < exportBatches.Count) {
+      var folderBatchPath = ResolveBatchFolderPath(exportBatches[batchStartIndex]);
+      var batchEndIndex = FindFolderBatchEndIndex(exportBatches, batchStartIndex, folderBatchPath);
+      var folderPendingExportCount = 0;
+      var folderFailedCount = 0;
+      var folderPendingImports = new List<PendingTrimmedAtlasExport>();
+      var folderPendingSourceCleanups = new List<PendingTrimmedSourceCleanup>();
 
-    try {
-      BeginDeferredTrimmedWritePhase(sourceFolderPath, exportBatches.Count);
-      deferredWritePhaseStarted = true;
+      Debug.Log(
+        "[TrimAtlasExport] Starting folder export phase." +
+        " source_folder='" + folderBatchPath + "'" +
+        " export_batch_count=" + (batchEndIndex - batchStartIndex));
 
-      for (var i = 0; i < exportBatches.Count; i++) {
-        var batch = exportBatches[i];
-        var sourcePath = batch.primarySourcePath;
-        var outputFolderPath = ResolveOutputFolderPath(sourcePath, sourceFolderPath);
-        if (string.IsNullOrWhiteSpace(outputFolderPath)) {
-          failedCount++;
-          AddFailureLog(failureLogs, sourcePath, "Could not resolve an output folder.");
-          continue;
+      BeginDeferredTrimmedWritePhase(folderBatchPath, batchEndIndex - batchStartIndex);
+      try {
+        for (var i = batchStartIndex; i < batchEndIndex; i++) {
+          var batch = exportBatches[i];
+          var sourcePath = batch.primarySourcePath;
+          var outputFolderPath = ResolveOutputFolderPath(sourcePath, sourceFolderPath);
+          if (string.IsNullOrWhiteSpace(outputFolderPath)) {
+            failedCount++;
+            folderFailedCount++;
+            AddFailureLog(failureLogs, sourcePath, "Could not resolve an output folder.");
+            continue;
+          }
+
+          if (!TryAnalyzeSourceAtlasBatch(batch, outputFolderPath, out var exportData, out var buildItems, out var error)) {
+            failedCount++;
+            folderFailedCount++;
+            AddFailureLog(failureLogs, sourcePath, error);
+            continue;
+          }
+
+          if (!TryWriteAtlasExports(
+                sourcePath,
+                outputFolderPath,
+                batch.outputName,
+                exportData,
+                buildItems,
+                out var batchPendingExports,
+                out error)) {
+            failedCount++;
+            folderFailedCount++;
+            AddFailureLog(failureLogs, sourcePath, error);
+            continue;
+          }
+
+          pendingExportCount += batchPendingExports.Count;
+          folderPendingExportCount += batchPendingExports.Count;
+          exportedCount += batchPendingExports.Count;
+          folderPendingImports.AddRange(batchPendingExports);
+          folderPendingSourceCleanups.Add(new PendingTrimmedSourceCleanup {
+            batch = batch,
+            exportedAtlasAssetPath = batchPendingExports[0].exportedAtlasAssetPath
+          });
+          if (batchPendingExports.Count > 1) {
+            Debug.Log(
+              "[TrimAtlasExport] Folder export split oversized atlas batch into pages." +
+              " source='" + sourcePath + "'" +
+              " source_count=" + batch.sourcePaths.Count +
+              " grouped_numeric=" + batch.groupedNumericSiblings +
+              " outputs=" + batchPendingExports.Count +
+              " first_output='" + batchPendingExports[0].exportedAtlasAssetPath + "'" +
+              " last_output='" + batchPendingExports[batchPendingExports.Count - 1].exportedAtlasAssetPath + "'");
+          }
         }
-
-        if (!TryAnalyzeSourceAtlasBatch(batch, outputFolderPath, out var exportData, out var buildItems, out var error)) {
-          failedCount++;
-          AddFailureLog(failureLogs, sourcePath, error);
-          continue;
-        }
-
-        if (!TryWriteAtlasExports(
-              sourcePath,
-              outputFolderPath,
-              batch.outputName,
-              exportData,
-              buildItems,
-              out var batchPendingExports,
-              out error)) {
-          failedCount++;
-          AddFailureLog(failureLogs, sourcePath, error);
-          continue;
-        }
-
-        pendingExportCount += batchPendingExports.Count;
-        exportedCount += batchPendingExports.Count;
-        if (batchPendingExports.Count > 1) {
-          Debug.Log(
-            "[TrimAtlasExport] Folder export split oversized atlas batch into pages." +
-            " source='" + sourcePath + "'" +
-            " source_count=" + batch.sourcePaths.Count +
-            " grouped_numeric=" + batch.groupedNumericSiblings +
-            " outputs=" + batchPendingExports.Count +
-            " first_output='" + batchPendingExports[0].exportedAtlasAssetPath + "'" +
-            " last_output='" + batchPendingExports[batchPendingExports.Count - 1].exportedAtlasAssetPath + "'");
-        }
-
-        deletedSourceCount += DeletePackedSourceAssets(batch, batchPendingExports[0].exportedAtlasAssetPath);
-        DeleteLegacyGeneratedOutputs(batch, batch.outputName, batchPendingExports[0].exportedAtlasAssetPath);
       }
-    }
-    finally {
-      if (deferredWritePhaseStarted) {
-        EndDeferredTrimmedWritePhase(sourceFolderPath, pendingExportCount, failedCount);
+      finally {
+        EndDeferredTrimmedWritePhase(folderBatchPath, folderPendingExportCount, folderFailedCount);
       }
+
+      var metadataApplied = ApplyDeferredImportMetadata(folderBatchPath, folderPendingImports, forceReimport: true, out var importMetadataError);
+      if (!metadataApplied) {
+        failedCount += folderPendingImports.Count;
+        folderFailedCount += folderPendingImports.Count;
+        AddFailureLog(failureLogs, folderBatchPath, importMetadataError);
+      }
+      else {
+        for (var cleanupIndex = 0; cleanupIndex < folderPendingSourceCleanups.Count; cleanupIndex++) {
+          var pendingCleanup = folderPendingSourceCleanups[cleanupIndex];
+          if (pendingCleanup?.batch == null || string.IsNullOrWhiteSpace(pendingCleanup.exportedAtlasAssetPath)) continue;
+          deletedSourceCount += DeletePackedSourceAssets(pendingCleanup.batch, pendingCleanup.exportedAtlasAssetPath);
+          DeleteLegacyGeneratedOutputs(pendingCleanup.batch, pendingCleanup.batch.outputName, pendingCleanup.exportedAtlasAssetPath);
+        }
+      }
+
+      ReleaseFolderExportMemory(folderBatchPath, folderPendingExportCount, folderFailedCount);
+      batchStartIndex = batchEndIndex;
     }
 
     var summary =
@@ -304,28 +348,156 @@ public sealed partial class TrimmedAtlasExporterWindow : EditorWindow {
       " failures=" + failureCount);
   }
 
+  static string ResolveBatchFolderPath(SourceAtlasExportBatch batch) {
+    if (batch == null) return "";
+    if (!string.IsNullOrWhiteSpace(batch.sourceFolderPath)) {
+      return NormalizeAssetPath(batch.sourceFolderPath);
+    }
+
+    return NormalizeAssetPath(Path.GetDirectoryName(batch.primarySourcePath));
+  }
+
+  static int FindFolderBatchEndIndex(List<SourceAtlasExportBatch> exportBatches, int startIndex, string folderPath) {
+    if (exportBatches == null) return startIndex;
+
+    var normalizedFolderPath = NormalizeAssetPath(folderPath);
+    var endIndex = startIndex;
+    while (endIndex < exportBatches.Count) {
+      if (!string.Equals(ResolveBatchFolderPath(exportBatches[endIndex]), normalizedFolderPath, StringComparison.OrdinalIgnoreCase)) {
+        break;
+      }
+
+      endIndex++;
+    }
+
+    return endIndex;
+  }
+
+  static void ReleaseFolderExportMemory(string folderPath, int pendingExportCount, int failureCount) {
+    GC.Collect();
+    EditorUtility.UnloadUnusedAssetsImmediate();
+    GC.Collect();
+    Debug.Log(
+      "[TrimAtlasExport] Folder export cleanup complete." +
+      " source_folder='" + folderPath + "'" +
+      " pending_exports=" + pendingExportCount +
+      " failures=" + failureCount);
+  }
+
+  static bool ApplyDeferredImportMetadata(string contextPath, List<PendingTrimmedAtlasExport> pendingExports, bool forceReimport, out string error) {
+    error = "";
+    if (pendingExports == null || pendingExports.Count <= 0) {
+      return true;
+    }
+
+    var reimportPaths = forceReimport ? new List<string>(pendingExports.Count) : null;
+    var seenReimportPaths = forceReimport ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
+    for (var i = 0; i < pendingExports.Count; i++) {
+      var pendingExport = pendingExports[i];
+      if (pendingExport == null) {
+        continue;
+      }
+
+      if (!GeneratedAtlasImportMetadataStore.TryWrite(
+            pendingExport.exportedAtlasAssetPath,
+            pendingExport.editorImportMetadataJson,
+            false,
+            out var metadataChanged,
+            out error)) {
+        error =
+          "Failed to store generated atlas import metadata for '" +
+          (pendingExport.exportedAtlasAssetPath ?? contextPath ?? "") +
+          "': " + error;
+        return false;
+      }
+
+      if (!forceReimport) {
+        continue;
+      }
+
+      var normalizedExportedAtlasPath = NormalizeAssetPath(pendingExport.exportedAtlasAssetPath);
+      if (!metadataChanged) {
+        continue;
+      }
+      if (string.IsNullOrWhiteSpace(normalizedExportedAtlasPath) || !seenReimportPaths.Add(normalizedExportedAtlasPath)) {
+        continue;
+      }
+
+      reimportPaths.Add(normalizedExportedAtlasPath);
+    }
+
+    if (forceReimport && !GeneratedAtlasImportMetadataStore.TryBatchReimport(contextPath, reimportPaths, out error)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  static int CountExportedSprites(List<PendingTrimmedAtlasExport> pendingExports) {
+    if (pendingExports == null || pendingExports.Count <= 0) {
+      return 0;
+    }
+
+    var spriteCount = 0;
+    for (var i = 0; i < pendingExports.Count; i++) {
+      spriteCount += pendingExports[i]?.exportData?.sprites?.Count ?? 0;
+    }
+
+    return spriteCount;
+  }
+
+  static int DeleteSingleSourceAssetAfterSuccessfulExport(string sourcePath, List<PendingTrimmedAtlasExport> pendingExports) {
+    var normalizedSourcePath = NormalizeAssetPath(sourcePath);
+    if (string.IsNullOrWhiteSpace(normalizedSourcePath) || pendingExports == null || pendingExports.Count <= 0) {
+      return 0;
+    }
+
+    for (var i = 0; i < pendingExports.Count; i++) {
+      var exportedAtlasAssetPath = NormalizeAssetPath(pendingExports[i]?.exportedAtlasAssetPath);
+      if (string.Equals(exportedAtlasAssetPath, normalizedSourcePath, StringComparison.OrdinalIgnoreCase)) {
+        return 0;
+      }
+    }
+
+    var deletedCount = DeletePackedSourceAsset(normalizedSourcePath, "");
+    if (deletedCount > 0) {
+      Debug.Log(
+        "[TrimAtlasExport] Deleted original source atlas after successful export." +
+        " source='" + normalizedSourcePath + "'" +
+        " outputs=" + pendingExports.Count);
+    }
+
+    return deletedCount;
+  }
+
   static int DeletePackedSourceAssets(SourceAtlasExportBatch batch, string exportedAtlasPath) {
     if (batch == null || batch.sourcePaths == null || batch.sourcePaths.Count <= 0) return 0;
 
     var deletedCount = 0;
-    var normalizedExportedAtlasPath = NormalizeAssetPath(exportedAtlasPath);
     for (var sourceIndex = 0; sourceIndex < batch.sourcePaths.Count; sourceIndex++) {
-      var sourcePath = NormalizeAssetPath(batch.sourcePaths[sourceIndex]);
-      if (string.IsNullOrWhiteSpace(sourcePath)) continue;
-      if (string.Equals(sourcePath, normalizedExportedAtlasPath, StringComparison.OrdinalIgnoreCase)) {
-        continue;
-      }
-
-      if (!File.Exists(Path.GetFullPath(sourcePath))) continue;
-      if (!AssetDatabase.DeleteAsset(sourcePath)) {
-        Debug.LogWarning("[TrimAtlasExport] Failed to delete packed source atlas. asset='" + sourcePath + "'");
-        continue;
-      }
-
-      deletedCount++;
+      deletedCount += DeletePackedSourceAsset(batch.sourcePaths[sourceIndex], exportedAtlasPath);
     }
 
     return deletedCount;
+  }
+
+  static int DeletePackedSourceAsset(string sourcePath, string exportedAtlasPath) {
+    var normalizedSourcePath = NormalizeAssetPath(sourcePath);
+    if (string.IsNullOrWhiteSpace(normalizedSourcePath)) return 0;
+
+    var normalizedExportedAtlasPath = NormalizeAssetPath(exportedAtlasPath);
+    if (!string.IsNullOrWhiteSpace(normalizedExportedAtlasPath) &&
+        string.Equals(normalizedSourcePath, normalizedExportedAtlasPath, StringComparison.OrdinalIgnoreCase)) {
+      return 0;
+    }
+
+    if (!File.Exists(Path.GetFullPath(normalizedSourcePath))) return 0;
+    if (!AssetDatabase.DeleteAsset(normalizedSourcePath)) {
+      Debug.LogWarning("[TrimAtlasExport] Failed to delete packed source atlas. asset='" + normalizedSourcePath + "'");
+      return 0;
+    }
+
+    return 1;
   }
 
   bool EnsureAnalysisAvailable(string sourcePath, string outputFolderPath, out string error) {

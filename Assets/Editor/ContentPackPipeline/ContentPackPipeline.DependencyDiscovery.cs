@@ -110,8 +110,8 @@ public static partial class ContentPackPipeline {
 
   static Dictionary<string, string> DiscoverProjectLibraryPaths() {
     var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    var root = NormalizeAssetPath(SpriteStreamingConfig.SourceRootFolder);
-    var fullRoot = Path.GetFullPath(root);
+    var root = "Assets/Sprites/SpriteLibraries";
+    var fullRoot = GetPhysicalPath(root);
     if (!Directory.Exists(fullRoot)) return result;
 
     var files = Directory.GetFiles(fullRoot, "*.spriteLib", SearchOption.AllDirectories);
@@ -273,6 +273,12 @@ public static partial class ContentPackPipeline {
     if (!string.IsNullOrWhiteSpace(pack.stageAssetRoot) &&
         normalizedProjectPath.StartsWith(NormalizeAssetPath(pack.stageAssetRoot) + "/", StringComparison.OrdinalIgnoreCase)) {
       return normalizedProjectPath;
+    }
+    var relativePath = ResolveExportRelativePath(pack, normalizedProjectPath);
+    if (!string.IsNullOrWhiteSpace(relativePath) &&
+        pack.targetRelativePathByAssetPath != null &&
+        pack.targetRelativePathByAssetPath.ContainsKey(normalizedProjectPath)) {
+      return NormalizeAssetPath(pack.stageAssetRoot + "/" + relativePath);
     }
     if (!normalizedProjectPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return normalizedProjectPath;
     return NormalizeAssetPath(pack.stageAssetRoot + "/" + normalizedProjectPath.Substring("Assets/".Length));

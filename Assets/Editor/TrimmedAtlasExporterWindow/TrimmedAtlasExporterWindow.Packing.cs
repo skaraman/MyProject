@@ -94,14 +94,36 @@ public sealed partial class TrimmedAtlasExporterWindow {
     var atlasTexture = new Texture2D(packedWidth, packedHeight, TextureFormat.RGBA32, false);
     atlasTexture.filterMode = FilterMode.Point;
     atlasTexture.wrapMode = TextureWrapMode.Clamp;
-    atlasTexture.SetPixels32(new Color32[packedWidth * packedHeight]);
-    for (var i = 0; i < items.Count; i++) {
-      var rect = items[i].metadata.packedRect;
-      atlasTexture.SetPixels32(rect.x, rect.y, rect.width, rect.height, items[i].trimmedPixels);
-    }
-
+    atlasTexture.SetPixels32(BuildPackedPixels(packedWidth, packedHeight, items));
     atlasTexture.Apply(false, false);
     return atlasTexture;
+  }
+
+  static Color32[] BuildPackedPixels(int packedWidth, int packedHeight, List<TrimmedSpriteBuildData> items) {
+    var packedPixels = new Color32[Math.Max(1, packedWidth * packedHeight)];
+    if (items == null || items.Count <= 0) {
+      return packedPixels;
+    }
+
+    for (var i = 0; i < items.Count; i++) {
+      var item = items[i];
+      if (item == null || item.metadata == null || item.trimmedPixels == null) {
+        continue;
+      }
+
+      var rect = item.metadata.packedRect;
+      if (rect.width <= 0 || rect.height <= 0) {
+        continue;
+      }
+
+      for (var row = 0; row < rect.height; row++) {
+        var srcIndex = row * rect.width;
+        var dstIndex = ((rect.y + row) * packedWidth) + rect.x;
+        Array.Copy(item.trimmedPixels, srcIndex, packedPixels, dstIndex, rect.width);
+      }
+    }
+
+    return packedPixels;
   }
 
   bool TryWriteAtlasExport(
@@ -128,10 +150,12 @@ public sealed partial class TrimmedAtlasExporterWindow {
     try {
       var exportedAtlasPath = WriteAtlasTexture(exportData.exportedAtlasAssetPath, atlasTexture);
       exportData.exportedAtlasAssetPath = exportedAtlasPath;
-      WriteMetadataJson(exportedAtlasPath, exportData);
+      var runtimeMetadataAssetPath = WriteMetadataJson(exportedAtlasPath, exportData);
       pendingExport = new PendingTrimmedAtlasExport {
         sourceAtlasAssetPath = sourcePath,
         exportedAtlasAssetPath = exportedAtlasPath,
+        runtimeMetadataAssetPath = runtimeMetadataAssetPath,
+        editorImportMetadataJson = BuildEditorImportMetadataJson(exportData),
         exportData = exportData
       };
 
@@ -166,6 +190,8 @@ public sealed partial class TrimmedAtlasExporterWindow {
       error = "The selected atlas has no visible slices to export after trimming.";
       return false;
     }
+
+    DeleteExistingOutputTargets(outputFolderPath, outputName, sourcePath);
 
     var pageCount = CalculateExportPageCount(exportedBuildItems.Count);
     if (pageCount <= 1) {
@@ -312,6 +338,43 @@ public sealed partial class TrimmedAtlasExporterWindow {
     Directory.CreateDirectory(Path.GetDirectoryName(outputFullPath) ?? "");
     File.WriteAllBytes(outputFullPath, atlasTexture.EncodeToPNG());
     return outputAssetPath.Replace("\\", "/");
+  }
+
+  void DeleteExistingOutputTargets(string outputFolderPath, string outputName, string sourcePath) {
+    var normalizedOutputFolderPath = NormalizeAssetPath(outputFolderPath);
+    if (string.IsNullOrWhiteSpace(normalizedOutputFolderPath) || string.IsNullOrWhiteSpace(outputName)) return;
+
+    var outputFolderFullPath = Path.GetFullPath(normalizedOutputFolderPath);
+    if (!Directory.Exists(outputFolderFullPath)) return;
+
+    var normalizedSourcePath = NormalizeAssetPath(sourcePath);
+    var candidateFiles = Directory.GetFiles(outputFolderFullPath, "*.png", SearchOption.TopDirectoryOnly);
+    var deletedAssetCount = 0;
+    var deletedMetadataOnlyCount = 0;
+    for (var i = 0; i < candidateFiles.Length; i++) {
+      if (!TryConvertFullPathToAssetPath(candidateFiles[i], out var candidateAssetPath)) continue;
+      if (!MatchesGeneratedOutputName(candidateAssetPath, outputName)) continue;
+
+      var normalizedCandidateAssetPath = NormalizeAssetPath(candidateAssetPath);
+      if (string.Equals(normalizedCandidateAssetPath, normalizedSourcePath, StringComparison.OrdinalIgnoreCase)) {
+        DeleteMetadataAsset(BuildRuntimeMetadataAssetPath(normalizedCandidateAssetPath));
+        DeleteMetadataAsset(BuildEditorMetadataAssetPath(normalizedCandidateAssetPath));
+        deletedMetadataOnlyCount++;
+        continue;
+      }
+
+      DeleteGeneratedOutputAssetPair(normalizedCandidateAssetPath);
+      deletedAssetCount++;
+    }
+
+    if (deletedAssetCount <= 0 && deletedMetadataOnlyCount <= 0) return;
+
+    Debug.Log(
+      "[TrimAtlasExport] Cleared existing target outputs before overwrite." +
+      " output_folder='" + normalizedOutputFolderPath + "'" +
+      " output_name='" + outputName + "'" +
+      " deleted_assets=" + deletedAssetCount +
+      " deleted_metadata_only=" + deletedMetadataOnlyCount);
   }
 
 }

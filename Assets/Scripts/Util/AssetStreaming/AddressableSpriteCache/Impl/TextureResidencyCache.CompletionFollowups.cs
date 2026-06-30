@@ -23,7 +23,7 @@ public static partial class TextureResidencyCache {
     if (completionFollowupFrame == frame) return;
     completionFollowupFrame = frame;
     var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
-    var measureFollowupCost = diagnosticsEnabled || SpriteStreamingLoadingState.IsLoadingOverlayActive;
+    var measureFollowupCost = diagnosticsEnabled || SpriteStreamingLoadingState.IsLoadingOverlayActive || IsCompletionFollowupDeadlineActive();
     var followupStartedAt = measureFollowupCost ? Time.realtimeSinceStartup : 0f;
     var followupDeadlineAt = ResolveCompletionFollowupDeadline(followupStartedAt);
 
@@ -204,37 +204,53 @@ public static partial class TextureResidencyCache {
       }
 
       var metadataAsset = entry.groupedMetadataHandle.Result;
-      var canUseProtectedSingleSprite =
-        IsProtectedLoadingScreenStreamingContextActive() &&
-        !entry.requestedSpriteNameConflict &&
-        !string.IsNullOrWhiteSpace(entry.requestedSpriteNameHint);
-      if (canUseProtectedSingleSprite &&
-          GeneratedAtlasSpriteSynthesisUtility.TryCreateGroupedSurrogateSprite(
-            atlasTexture,
-            metadataAsset,
-            entry.requestedSpriteNameHint,
-            out var requestedGroupedSprite)) {
-        entry.generatedSprites.Clear();
-        entry.generatedSprites.Add(requestedGroupedSprite);
-        entry.generatedSpriteSetComplete = false;
-        loadSucceeded = true;
-        return entry.generatedSprites;
-      }
-
-      if (!GeneratedAtlasSpriteSynthesisUtility.TryCreateGroupedSurrogateSprites(atlasTexture, metadataAsset, out var generatedSprites)) {
+      if (!GeneratedAtlasSpriteSynthesisUtility.TryParseMetadata(metadataAsset, out entry.parsedGroupedMetadata) || entry.parsedGroupedMetadata == null) {
         LogAtlasSynthesisFailureOnce(
           "grouped_generated_atlas",
           entry.address,
           metadataAddress,
-          "Failed to synthesize grouped surrogate sprites from loaded texture + metadata"
+          "Failed to parse grouped metadata payload"
+        );
+        return null;
+      }
+
+      GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload primaryPayload = null;
+      if (!string.IsNullOrWhiteSpace(entry.requestedSpriteNameHint)) {
+        var hintName = entry.requestedSpriteNameHint.Trim();
+        primaryPayload = entry.parsedGroupedMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), hintName, StringComparison.Ordinal));
+      }
+      if (primaryPayload == null && entry.parsedGroupedMetadata.sprites.Count > 0) {
+        primaryPayload = entry.parsedGroupedMetadata.sprites[0];
+      }
+
+      if (primaryPayload == null) {
+        LogAtlasSynthesisFailureOnce(
+          "grouped_generated_atlas",
+          entry.address,
+          metadataAddress,
+          "Grouped metadata payload does not contain any sprites"
+        );
+        return null;
+      }
+
+      var pixelsPerUnit = entry.parsedGroupedMetadata.spritePixelsPerUnit > 0f ? entry.parsedGroupedMetadata.spritePixelsPerUnit : 100f;
+      var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedGroupedMetadata.spriteMeshType, SpriteMeshType.FullRect);
+      var primarySprite = GeneratedAtlasSpriteSynthesisUtility.CreateSpriteFromPayload(atlasTexture, primaryPayload, pixelsPerUnit, meshType);
+      if (primarySprite == null) {
+        LogAtlasSynthesisFailureOnce(
+          "grouped_generated_atlas",
+          entry.address,
+          metadataAddress,
+          "Failed to synthesize primary sprite from payload"
         );
         return null;
       }
 
       entry.generatedSprites.Clear();
-      entry.generatedSprites.AddRange(generatedSprites);
-      entry.generatedSpriteSetComplete = entry.generatedSprites.Count > 0;
-      loadSucceeded = entry.generatedSprites.Count > 0;
+      entry.generatedSprites.Add(primarySprite);
+      entry.generatedSpriteSetComplete = false;
+      entry.deferredSpriteMapMaterialization = true;
+      loadSucceeded = true;
       return entry.generatedSprites;
     }
 
@@ -257,33 +273,7 @@ public static partial class TextureResidencyCache {
       }
 
       var metadataAsset = entry.metadataAtlasMetadataHandle.Result;
-      var canUseProtectedSingleSprite =
-        IsProtectedLoadingScreenStreamingContextActive() &&
-        !entry.requestedSpriteNameConflict &&
-        !string.IsNullOrWhiteSpace(entry.requestedSpriteNameHint);
-      if (canUseProtectedSingleSprite &&
-          GeneratedAtlasSpriteSynthesisUtility.TryCreateSpriteFromMetadata(
-            atlasTexture,
-            fallbackPixelsPerUnit: 100f,
-            fallbackMeshType: SpriteMeshType.FullRect,
-            metadataAsset,
-            entry.requestedSpriteNameHint,
-            out var requestedMetadataSprite,
-            out _)) {
-        entry.generatedSprites.Clear();
-        entry.generatedSprites.Add(requestedMetadataSprite);
-        entry.generatedSpriteSetComplete = false;
-        loadSucceeded = true;
-        return entry.generatedSprites;
-      }
-
-      if (!GeneratedAtlasSpriteSynthesisUtility.TryCreateSpritesFromMetadata(
-        atlasTexture,
-        fallbackPixelsPerUnit: 100f,
-        fallbackMeshType: SpriteMeshType.FullRect,
-        metadataAsset,
-        out var generatedSprites,
-        out var metadataKind)) {
+      if (!GeneratedAtlasSpriteSynthesisUtility.TryParseMetadata(metadataAsset, out entry.parsedMetadataAtlasMetadata) || entry.parsedMetadataAtlasMetadata == null) {
 #if UNITY_EDITOR
         if (GeneratedAtlasSpriteSynthesisUtility.IsOffsetOnlyRuntimeMetadata(metadataAsset) &&
             TryLoadEditorImportedAtlasSprites(entry.address, out var importedSprites)) {
@@ -297,15 +287,48 @@ public static partial class TextureResidencyCache {
           "metadata_synthesized_atlas",
           entry.address,
           metadataAddress,
-          "Failed to synthesize sprites from metadata_kind='" + (string.IsNullOrWhiteSpace(metadataKind) ? "" : metadataKind) + "'"
+          "Failed to parse metadata payload"
+        );
+        return null;
+      }
+
+      GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload primaryPayload = null;
+      if (!string.IsNullOrWhiteSpace(entry.requestedSpriteNameHint)) {
+        var hintName = entry.requestedSpriteNameHint.Trim();
+        primaryPayload = entry.parsedMetadataAtlasMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), hintName, StringComparison.Ordinal));
+      }
+      if (primaryPayload == null && entry.parsedMetadataAtlasMetadata.sprites.Count > 0) {
+        primaryPayload = entry.parsedMetadataAtlasMetadata.sprites[0];
+      }
+
+      if (primaryPayload == null) {
+        LogAtlasSynthesisFailureOnce(
+          "metadata_synthesized_atlas",
+          entry.address,
+          metadataAddress,
+          "Metadata payload does not contain any sprites"
+        );
+        return null;
+      }
+
+      var pixelsPerUnit = entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit > 0f ? entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit : 100f;
+      var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedMetadataAtlasMetadata.spriteMeshType, SpriteMeshType.FullRect);
+      var primarySprite = GeneratedAtlasSpriteSynthesisUtility.CreateSpriteFromPayload(atlasTexture, primaryPayload, pixelsPerUnit, meshType);
+      if (primarySprite == null) {
+        LogAtlasSynthesisFailureOnce(
+          "metadata_synthesized_atlas",
+          entry.address,
+          metadataAddress,
+          "Failed to synthesize primary sprite from payload"
         );
         return null;
       }
 
       entry.generatedSprites.Clear();
-      entry.generatedSprites.AddRange(generatedSprites);
-      entry.generatedSpriteSetComplete = entry.generatedSprites.Count > 0;
-      loadSucceeded = entry.generatedSprites.Count > 0;
+      entry.generatedSprites.Add(primarySprite);
+      entry.generatedSpriteSetComplete = false;
+      entry.deferredSpriteMapMaterialization = true;
+      loadSucceeded = true;
       return entry.generatedSprites;
     }
 

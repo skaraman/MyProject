@@ -100,7 +100,7 @@ public static partial class SpriteIndexBuilder {
         continue;
       }
 
-      var colorRows = ParseLibraryRows(colorLibraryPath, state.errors, state.activeTextureAssetPathByGuid);
+      var colorRows = ParseLibraryRows(colorLibraryPath, state.errors);
       var normalLibraryName = libraryName + "N";
       var hasNormalLibrary = librariesByKey.TryGetValue(normalLibraryName, out var normalLibraryPath);
       if (!hasNormalLibrary) {
@@ -108,7 +108,7 @@ public static partial class SpriteIndexBuilder {
       }
 
       var normalRows = hasNormalLibrary
-        ? ParseLibraryRows(normalLibraryPath, state.errors, state.activeTextureAssetPathByGuid)
+        ? ParseLibraryRows(normalLibraryPath, state.errors)
         : new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
       if (colorRows.Count == 0) {
         state.skippedColorLibraryCount++;
