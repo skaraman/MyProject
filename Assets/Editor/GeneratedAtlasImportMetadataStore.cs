@@ -44,7 +44,7 @@ static class GeneratedAtlasImportMetadataStore {
       return false;
     }
 
-    var importer = AssetImporter.GetAtPath(normalizedAtlasAssetPath);
+    var importer = ResolveImporterForWrite(normalizedAtlasAssetPath);
     if (importer == null) {
       error = "Could not resolve atlas importer: " + normalizedAtlasAssetPath;
       return false;
@@ -68,6 +68,24 @@ static class GeneratedAtlasImportMetadataStore {
     }
 
     return true;
+  }
+
+  static AssetImporter ResolveImporterForWrite(string atlasAssetPath) {
+    var importer = AssetImporter.GetAtPath(atlasAssetPath);
+    if (importer != null) {
+      return importer;
+    }
+
+    var fullAtlasPath = Path.GetFullPath(atlasAssetPath);
+    if (!File.Exists(fullAtlasPath)) {
+      return null;
+    }
+
+    AssetDatabase.ImportAsset(
+      atlasAssetPath,
+      ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+
+    return AssetImporter.GetAtPath(atlasAssetPath);
   }
 
   public static bool TryBatchReimport(string contextPath, List<string> atlasAssetPaths, out string error) {

@@ -1,6 +1,5 @@
 using CustomInspector.Extensions;
 using CustomInspector.Helpers.Editor;
-using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -21,18 +20,8 @@ namespace CustomInspector.Editor
 
             if (!TryOnGUI(position, property, label))
                 return;
-
-            Type type = DirtyValue.GetType(property);
-            var referenceProperty = property.FindPropertyRelative("serializedReference");
-            Debug.Assert(referenceProperty != null);
-
-            EditorGUI.BeginChangeCheck();
-            var res = EditorGUI.ObjectField(position, label, referenceProperty.objectReferenceValue, type.GetGenericArguments()[0], true);
-            if (EditorGUI.EndChangeCheck())
-            {
-                referenceProperty.objectReferenceValue = res;
-                referenceProperty.serializedObject.ApplyModifiedProperties();
-            }
+            SerializedProperty referenceProperty = property.FindPropertyRelative("serializedReference");
+            DrawProperties.PropertyField(position, label, referenceProperty);
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {

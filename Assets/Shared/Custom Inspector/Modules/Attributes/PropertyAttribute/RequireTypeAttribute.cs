@@ -11,13 +11,20 @@ namespace CustomInspector
     [Conditional("UNITY_EDITOR")]
     public class RequireTypeAttribute : ComparablePropertyAttribute
     {
-        public System.Type requiredType { get; private set; }
+        public System.Type requiredType { get; private set; } = null;
+        public bool UseBaseGenericArg => requiredType == null;
+
+        internal RequireTypeAttribute(bool UseBaseGenericArg)
+        {
+            if (!UseBaseGenericArg)
+                throw new NotImplementedException("Use type parameter if UseBaseGenericArg is not wanted");
+        }
 
         public RequireTypeAttribute(System.Type type)
         {
-            this.requiredType = type;
+            requiredType = type ?? throw new ArgumentNullException("Type cannot be null");
         }
 
-        protected override object[] GetParameters() => new object[] { requiredType };
+        protected override object[] GetParameters() => new object[] { requiredType?.FullName };
     }
 }

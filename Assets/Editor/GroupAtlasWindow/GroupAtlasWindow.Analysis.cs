@@ -37,7 +37,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         skinCandidateCount++;
       }
     }
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[GearGroupAtlas] Selection analysis complete." +
       " source_root='" + sourceRootPath + "'" +
       " output_name='" + sanitizedOutputName + "'" +

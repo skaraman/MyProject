@@ -9,16 +9,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(exportedAtlasAssetPath);
     var editorMetadataAssetPath = BuildEditorMetadataAssetPath(exportedAtlasAssetPath);
     var runtimeMetadata = BuildRuntimeMetadata(exportData);
-    if (HasRuntimeOffsetMetadata(runtimeMetadata)) {
-      WriteMetadataPayload(runtimeMetadataAssetPath, JsonUtility.ToJson(runtimeMetadata, true));
-    }
-    else {
-      DeleteMetadataAsset(runtimeMetadataAssetPath);
-      Debug.Log(
-        "[TrimAtlasExport] Skipped runtime offset metadata because all exported offsets resolved to zero." +
-        " atlas='" + exportedAtlasAssetPath + "'" +
-        " sprite_count=" + (exportData?.sprites?.Count ?? 0));
-    }
+    WriteMetadataPayload(runtimeMetadataAssetPath, JsonUtility.ToJson(runtimeMetadata, true));
     DeleteMetadataAsset(editorMetadataAssetPath);
     return runtimeMetadataAssetPath;
   }
@@ -29,27 +20,28 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
   static RuntimeTrimmedAtlasExport BuildRuntimeMetadata(TrimmedAtlasExport exportData) {
     var runtimeMetadata = new RuntimeTrimmedAtlasExport();
+    if (exportData == null) return runtimeMetadata;
+
+    runtimeMetadata.metadataKind = exportData.metadataKind;
+    runtimeMetadata.coordinateOrigin = exportData.coordinateOrigin;
+    runtimeMetadata.sourceAtlasAssetPath = exportData.sourceAtlasAssetPath;
+    runtimeMetadata.sliceExportedAtlas = exportData.sliceExportedAtlas;
+    runtimeMetadata.spritePixelsPerUnit = exportData.spritePixelsPerUnit;
+    runtimeMetadata.spriteMeshType = exportData.spriteMeshType;
     if (exportData?.sprites == null || exportData.sprites.Count <= 0) return runtimeMetadata;
 
     runtimeMetadata.sprites.Capacity = exportData.sprites.Count;
     for (var i = 0; i < exportData.sprites.Count; i++) {
       var sprite = exportData.sprites[i];
       if (sprite == null || string.IsNullOrWhiteSpace(sprite.name)) continue;
-      if (!HasMeaningfulRuntimeOffset(sprite.offsetFromCellCenterPx)) continue;
       runtimeMetadata.sprites.Add(new RuntimeTrimmedSpriteMetadata {
         name = sprite.name,
+        empty = sprite.empty,
+        packedRect = sprite.packedRect,
         offsetFromCellCenterPx = sprite.offsetFromCellCenterPx
       });
     }
     return runtimeMetadata;
-  }
-
-  static bool HasRuntimeOffsetMetadata(RuntimeTrimmedAtlasExport runtimeMetadata) {
-    return runtimeMetadata?.sprites != null && runtimeMetadata.sprites.Count > 0;
-  }
-
-  static bool HasMeaningfulRuntimeOffset(PixelPoint offset) {
-    return Mathf.Abs(offset.x) > 0.001f || Mathf.Abs(offset.y) > 0.001f;
   }
 
   static void WriteMetadataPayload(string metadataAssetPath, string jsonText) {

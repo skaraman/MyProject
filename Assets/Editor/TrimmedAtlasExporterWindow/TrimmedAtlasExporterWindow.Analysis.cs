@@ -114,6 +114,27 @@ public sealed partial class TrimmedAtlasExporterWindow {
     out int resolvedCellHeight,
     out string error) {
     var sourceSprites = LoadSourceSprites(sourcePath);
+    if (ShouldUseConfiguredGrid(previewTexture, out resolvedCellWidth, out resolvedCellHeight)) {
+      if (sourceSprites != null && sourceSprites.Count > 0) {
+        AtlasAuthoringLog.Verbose(
+          "[TrimAtlasExport] Using configured grid as authoritative trim layout." +
+          " source='" + sourcePath + "'" +
+          " configured_cell=" + resolvedCellWidth + "x" + resolvedCellHeight +
+          " imported_sprite_count=" + sourceSprites.Count);
+      }
+
+      return TryBuildGridSourceCells(
+        sourcePath,
+        previewTexture,
+        sourceSprites,
+        out sourceCells,
+        out columns,
+        out rows,
+        out resolvedCellWidth,
+        out resolvedCellHeight,
+        out error);
+    }
+
     sourceCells = TryBuildImportedSourceCells(
       sourcePath,
       previewTexture,
@@ -136,6 +157,16 @@ public sealed partial class TrimmedAtlasExporterWindow {
       out resolvedCellWidth,
       out resolvedCellHeight,
       out error);
+  }
+
+  bool ShouldUseConfiguredGrid(Texture2D previewTexture, out int resolvedCellWidth, out int resolvedCellHeight) {
+    resolvedCellWidth = Mathf.Max(1, cellWidth);
+    resolvedCellHeight = Mathf.Max(1, cellHeight);
+    if (previewTexture == null) return false;
+    if (previewTexture.width < resolvedCellWidth || previewTexture.height < resolvedCellHeight) return false;
+    if ((previewTexture.width % resolvedCellWidth) != 0) return false;
+    if ((previewTexture.height % resolvedCellHeight) != 0) return false;
+    return true;
   }
 
   List<SourceCellDefinition> TryBuildImportedSourceCells(
@@ -205,7 +236,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     resolvedCellWidth = Mathf.Max(1, Mathf.RoundToInt(widthSum / orderedSprites.Count));
     resolvedCellHeight = Mathf.Max(1, Mathf.RoundToInt(heightSum / orderedSprites.Count));
     if (columns > 0 && rows > 0 && (columns * rows) != orderedSprites.Count) {
-      Debug.LogWarning(
+      AtlasAuthoringLog.VerboseWarning(
         "[TrimAtlasExport] Imported sprite layout is sparse or irregular." +
         " source='" + sourcePath + "'" +
         " sprite_count=" + orderedSprites.Count +
@@ -218,7 +249,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
       Mathf.Abs(minHeight - cellHeight) > 0.01f ||
       Mathf.Abs(maxHeight - cellHeight) > 0.01f;
     if (frameRangeDiffersFromConfigured) {
-      Debug.Log(
+      AtlasAuthoringLog.Verbose(
         "[TrimAtlasExport] Using imported sprite layout for trim analysis." +
         " source='" + sourcePath + "'" +
         " sprite_count=" + orderedSprites.Count +
@@ -266,7 +297,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     var ignoredWidth = previewTexture.width - (columns * resolvedCellWidth);
     var ignoredHeight = previewTexture.height - (rows * resolvedCellHeight);
     if (ignoredWidth > 0 || ignoredHeight > 0) {
-      Debug.Log(
+      AtlasAuthoringLog.Verbose(
         "[TrimAtlasExport] Ignoring atlas-edge remainder outside the configured grid." +
         " source='" + sourcePath + "'" +
         " texture=" + previewTexture.width + "x" + previewTexture.height +
@@ -295,32 +326,54 @@ public sealed partial class TrimmedAtlasExporterWindow {
     return true;
   }
 
-  bool TryAnalyzeSourceAtlasBatch(SourceAtlasExportBatch batch, string outputFolderPath, out TrimmedAtlasExport exportData, out List<TrimmedSpriteBuildData> buildItems, out string error) {
+  static bool ShouldSkipSourceAtlasForFolderExport(string error) {
+    return !string.IsNullOrWhiteSpace(error) &&
+           error.StartsWith("Atlas dimensions are smaller than the configured cell size.", StringComparison.Ordinal);
+  }
+
+  SourceAtlasBatchAnalysisStatus AnalyzeSourceAtlasBatch(
+    SourceAtlasExportBatch batch,
+    string outputFolderPath,
+    out TrimmedAtlasExport exportData,
+    out List<TrimmedSpriteBuildData> buildItems,
+    out List<string> analyzedSourcePaths,
+    out int skippedSourceCount,
+    out string error) {
     exportData = null;
     buildItems = null;
+    analyzedSourcePaths = new List<string>();
+    skippedSourceCount = 0;
     error = "";
     if (batch == null || batch.sourcePaths == null || batch.sourcePaths.Count <= 0) {
       error = "No source atlases were supplied for folder export.";
-      return false;
+      return SourceAtlasBatchAnalysisStatus.Failed;
     }
 
     if (batch.sourcePaths.Count == 1) {
       if (!TryAnalyzeSourceAtlas(batch.primarySourcePath, outputFolderPath, out exportData, out buildItems, out var previewTexture, out error)) {
-        return false;
+        if (ShouldSkipSourceAtlasForFolderExport(error)) {
+          skippedSourceCount = 1;
+          error = "";
+          return SourceAtlasBatchAnalysisStatus.Skipped;
+        }
+
+        return SourceAtlasBatchAnalysisStatus.Failed;
       }
 
       if (previewTexture != null) {
         DestroyImmediate(previewTexture);
       }
 
+      analyzedSourcePaths.Add(batch.primarySourcePath);
       exportData.exportedAtlasAssetPath = BuildOutputAtlasAssetPath(batch.outputName, outputFolderPath);
-      return true;
+      return SourceAtlasBatchAnalysisStatus.Succeeded;
     }
 
     var mergedBuildItems = new List<TrimmedSpriteBuildData>();
     var totalEmptyCellCount = 0;
     long packedArea = 0;
     long totalSourceArea = 0;
+    var representativeSourcePath = "";
     var sourceWidth = 0;
     var sourceHeight = 0;
     var columns = 0;
@@ -331,15 +384,26 @@ public sealed partial class TrimmedAtlasExporterWindow {
       Texture2D previewTexture = null;
       try {
         if (!TryAnalyzeSourceAtlas(sourcePath, outputFolderPath, out var sourceExportData, out var sourceBuildItems, out previewTexture, out error)) {
-          return false;
+          if (ShouldSkipSourceAtlasForFolderExport(error)) {
+            skippedSourceCount++;
+            error = "";
+            continue;
+          }
+
+          return SourceAtlasBatchAnalysisStatus.Failed;
         }
 
         if (sourceExportData == null || sourceBuildItems == null) {
           error = "No analyzed atlas data was returned for '" + sourcePath + "'.";
-          return false;
+          return SourceAtlasBatchAnalysisStatus.Failed;
         }
 
-        if (sourceIndex == 0) {
+        if (string.IsNullOrWhiteSpace(representativeSourcePath)) {
+          representativeSourcePath = sourcePath;
+        }
+
+        analyzedSourcePaths.Add(sourcePath);
+        if (analyzedSourcePaths.Count == 1) {
           sourceWidth = sourceExportData.sourceWidth;
           sourceHeight = sourceExportData.sourceHeight;
           columns = sourceExportData.columns;
@@ -349,7 +413,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
                  sourceExportData.sourceHeight != sourceHeight ||
                  sourceExportData.columns != columns ||
                  sourceExportData.rows != rows) {
-          Debug.LogWarning(
+          AtlasAuthoringLog.VerboseWarning(
             "[TrimAtlasExport] Grouping numeric atlases with mixed source dimensions." +
             " output_name='" + batch.outputName + "'" +
             " first=" + sourceWidth + "x" + sourceHeight + " (" + columns + "x" + rows + " cells)" +
@@ -374,10 +438,15 @@ public sealed partial class TrimmedAtlasExporterWindow {
       }
     }
 
+    if (analyzedSourcePaths.Count <= 0) {
+      error = "";
+      return SourceAtlasBatchAnalysisStatus.Skipped;
+    }
+
     var exportedBuildItems = BuildExportBuildItems(mergedBuildItems);
     if (exportedBuildItems.Count <= 0) {
       error = "The grouped atlas batch has no visible slices to export after trimming.";
-      return false;
+      return SourceAtlasBatchAnalysisStatus.Failed;
     }
 
     for (var i = 0; i < exportedBuildItems.Count; i++) {
@@ -385,13 +454,13 @@ public sealed partial class TrimmedAtlasExporterWindow {
     }
 
     if (!TryPackTrimmedSprites(exportedBuildItems, out var packedWidth, out var packedHeight, out error)) {
-      return false;
+      return SourceAtlasBatchAnalysisStatus.Failed;
     }
 
     exportData = new TrimmedAtlasExport {
-      sourceAtlasAssetPath = batch.primarySourcePath,
+      sourceAtlasAssetPath = representativeSourcePath,
       exportedAtlasAssetPath = BuildOutputAtlasAssetPath(batch.outputName, outputFolderPath),
-      sourceAtlasCount = batch.sourcePaths.Count,
+      sourceAtlasCount = analyzedSourcePaths.Count,
       sourceWidth = sourceWidth,
       sourceHeight = sourceHeight,
       cellWidth = cellWidth,
@@ -406,14 +475,14 @@ public sealed partial class TrimmedAtlasExporterWindow {
         ? (float)Math.Round((packedArea / (double)totalSourceArea) * 100.0, 2)
         : 0f
     };
-    CopySourceImporterSnapshot(batch.primarySourcePath, exportData);
+    CopySourceImporterSnapshot(representativeSourcePath, exportData);
 
     buildItems = mergedBuildItems;
     for (var i = 0; i < exportedBuildItems.Count; i++) {
       exportData.sprites.Add(exportedBuildItems[i].metadata);
     }
 
-    return true;
+    return SourceAtlasBatchAnalysisStatus.Succeeded;
   }
 
   TrimmedSpriteBuildData AnalyzeCell(string sourcePath, int atlasWidth, Color32[] sourcePixels, PixelRect sourceCell, Rect logicalCellRect, string spriteName, int index) {
@@ -564,7 +633,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
       }
     }
 
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[TrimAtlasExport] Ignored distant stray sprite pixels." +
       " source='" + sourcePath + "'" +
       " sprite='" + spriteName + "'" +

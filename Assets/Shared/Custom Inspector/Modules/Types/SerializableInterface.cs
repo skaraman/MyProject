@@ -18,9 +18,10 @@ namespace CustomInspector
     {
         [MessageBox("You are overriding the default drawer of SerializableInterface. " +
         "Please add the [Interface]-attribute to the property.")]
+        [SerializeField, HideField] private bool ______;
 
-        [SerializeField, ReadOnly]
-        MonoBehaviour serializedReference = null; // MonoBehaviour, because UnityEngine.Object or Component bugs
+        [SerializeField, RequireType(UseBaseGenericArg: true)]
+        private MonoBehaviour serializedReference = null; // MonoBehaviour, because UnityEngine.Object or Component bugs
 
         public T Value
         {
@@ -28,12 +29,19 @@ namespace CustomInspector
             set
             {
                 if (value == null)
-                    this.serializedReference = null;
+                {
+                    serializedReference = null;
+                }
                 else if (value is MonoBehaviour m)
-                    this.serializedReference = m;
+                {
+                    serializedReference = m;
+                }
                 else
+                {
                     throw new ArgumentException($"Unity Serialization only supports classes derived from {typeof(MonoBehaviour).FullName}." +
                                                 $"\n{value.GetType().FullName} does not derive from it.");
+                }
+
                 castedReference = value;
             }
         }
@@ -43,8 +51,10 @@ namespace CustomInspector
         public SerializableInterface()
         {
             if (!typeof(T).IsInterface)
+            {
                 throw new ArgumentException($"SerializableInterface is only valid on Interfaces. " +
                                             $"T({typeof(T).FullName}) is not an Interface");
+            }
         }
 
         public SerializableInterface(T value) : this()
@@ -59,7 +69,7 @@ namespace CustomInspector
 
             if (value is T t)
             {
-                this.serializedReference = value;
+                serializedReference = value;
                 Value = t;
             }
             else

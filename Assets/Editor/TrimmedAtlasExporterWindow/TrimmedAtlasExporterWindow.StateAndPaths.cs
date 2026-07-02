@@ -140,8 +140,8 @@ public sealed partial class TrimmedAtlasExporterWindow {
     foreach (var sprite in sprites) {
       if (sprite == null) continue;
       var rect = sprite.rect;
-      var column = Mathf.RoundToInt(rect.x / gridCellWidth);
-      var row = Mathf.RoundToInt(rect.y / gridCellHeight);
+      var column = Mathf.FloorToInt(rect.xMin / gridCellWidth);
+      var row = Mathf.FloorToInt(rect.yMin / gridCellHeight);
       if (column < 0 || column >= columns || row < 0 || row >= rows) continue;
       result[(row * columns) + column] = sprite.name;
     }
@@ -273,7 +273,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     }
 
     var sourceDirectoryPath = NormalizeAssetPath(Path.GetDirectoryName(sourcePath));
-    return ResolveEyeOutputFolderPath(sourcePath, "", sourceDirectoryPath);
+    return sourceDirectoryPath;
   }
 
   static string ResolveEyeOutputFolderPath(string sourcePath, string configuredOutputRootPath, string resolvedOutputFolderPath) {
@@ -291,7 +291,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
       return normalizedResolvedOutputFolderPath;
     }
 
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[TrimAtlasExport] Redirecting eye atlas output to the shared skin folder." +
       " source='" + NormalizeAssetPath(sourcePath) + "'" +
       " from='" + normalizedResolvedOutputFolderPath + "'" +

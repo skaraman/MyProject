@@ -75,6 +75,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     EditorGUILayout.HelpBox(
       "Export and sprite-library rebinding are separate workflows. Export builds grouped atlases plus JSON metadata. Rebind uses those grouped outputs to update matching sprite-library entries later.",
       MessageType.Info);
+    AtlasAuthoringLog.VerboseLoggingEnabled = EditorGUILayout.Toggle("Verbose Logging", AtlasAuthoringLog.VerboseLoggingEnabled);
 
     EditorGUILayout.LabelField("Export Grouped Atlases", EditorStyles.boldLabel);
     EditorGUI.BeginChangeCheck();
@@ -452,7 +453,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       InvalidateScan();
     }
 
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[GearGroupAtlas] Auto Find complete." +
       " key='" + autoFindSourceAtlasKey + "'" +
       " root='" + rootFolderPath + "'" +

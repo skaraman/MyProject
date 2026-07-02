@@ -1,6 +1,10 @@
 # Performance Goal
 
-Updated: 2026-06-08
+Updated: 2026-07-01
+
+## Latest Note
+
+- 2026-07-02: editor atlas authoring pass removed per-folder forced GC/unload from trim export and switched grouped atlas export to deterministic full repack from source instead of loading/reusing prior output pages
 
 ## Objective
 
@@ -27,10 +31,11 @@ Checked before this reset:
 
 Latest editor-log evidence:
 
-- Unity version: `6000.4.10f1`
-- compile/import state: `Tundra build success (1.30 seconds)`
-- latest log end: `2026-06-08T04:35:57.818Z`
-- latest run type: editor import/domain reload/refresh, not gameplay
+- `2026-07-01T04:15Z`: Unity `6000.5.1f1` batch compile passed after fixing EditorThemes path resolution noise; `Tundra build success (0.51 seconds)` and no `DirectoryNotFoundException` in the compile log.
+- Unity version: `6000.5.1f1`
+- compile/import state: `Tundra build success (0.51 seconds)`
+- latest log end: `2026-07-01T04:15:43.503Z`
+- latest run type: editor batch compile/import/domain reload/refresh, not gameplay
 - latest search-cache guard: locked search cache scheduled for purge, `total_gb=4.77`, `largest_gb=4.77`
 - no fresh post-reset `LoadGameFlow` runtime baseline is present in the latest editor log
 
@@ -273,12 +278,13 @@ next fix:
 
 ### Active Findings
 
-Status: empty.
+Status: active.
 
 ```text
-1.
-2.
-3.
+1. Import settings are mostly speed-friendly: Asset Pipeline v2, async shader compile on, crunch off, mipmaps off on almost all textures, readable off on almost all textures.
+2. Cache/Accelerator is disabled. Local Library cache is active; cross-project/team reimport cache is not.
+3. Current editor open spent 211.258s in Asset Database refresh. Dominant import cost is sliced Esperanza sprite textures: Dance 1108 imports / 1120.0 worker-sec, To 283 imports / 711.8 worker-sec.
+4. Top slow texture was Assets/Sprites/Characters/Esperanza/To/Base/ac/t/t.png at 4.078s with 1056 sprite rects.
 ```
 
 ### Completed This Pass
@@ -305,6 +311,12 @@ Status: in progress.
 17. GroupAtlasWindow blank output names now export numbered atlas pages: `1.png`, `2.png`, etc.
 18. GroupAtlasWindow source atlas picker added Auto Find for underscore-key folder lookup.
 19. GroupAtlasWindow Auto Find now supports `root/*/Aqua/aa/t` and `root/*/t/Aqua_aa` while preserving root-relative category parsing.
+20. TrimmedAtlasExporterWindow resolves folder export metadata reimport, source cleanup, and memory cleanup per folder so one sibling failure does not suppress cleanup for successful folders.
+21. TrimmedAtlasExporterWindow now treats same-name `.json` sidecars as existing trimmed atlas outputs so folder export skips them as inputs and overwrites them as targets.
+22. TrimmedAtlasExporterWindow source cleanup now deletes packed source atlases through one batch delete contract, resolves asset paths from the project root, and logs delete/failure counts.
+23. TrimmedAtlasExporterWindow now writes full editor import sidecars before asset import and persists importer metadata without the second forced atlas reimport.
+24. GroupAtlasWindow now uses the same single-import sidecar contract, avoiding a second forced grouped-atlas reimport after export.
+25. TrimmedAtlasExporterWindow now validates every exported atlas target and import-metadata contract before deleting source atlases, so overwrite cleanup cannot leave a processed folder empty.
 ```
 
 ### Runtime Measurements

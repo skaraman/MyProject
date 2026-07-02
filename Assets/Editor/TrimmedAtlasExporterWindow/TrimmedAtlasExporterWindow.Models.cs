@@ -30,12 +30,20 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
   [Serializable]
   sealed class RuntimeTrimmedAtlasExport {
+    public string metadataKind = "trimmed";
+    public string coordinateOrigin = "bottom-left";
+    public string sourceAtlasAssetPath;
+    public bool sliceExportedAtlas = true;
+    public float spritePixelsPerUnit = 100f;
+    public int spriteMeshType = (int)SpriteMeshType.Tight;
     public List<RuntimeTrimmedSpriteMetadata> sprites = new();
   }
 
   [Serializable]
   sealed class RuntimeTrimmedSpriteMetadata {
     public string name;
+    public bool empty;
+    public PixelRect packedRect;
     public PixelPoint offsetFromCellCenterPx;
   }
 
@@ -93,6 +101,18 @@ public sealed partial class TrimmedAtlasExporterWindow {
     public List<string> sourcePaths = new();
   }
 
+  enum SourceAtlasBatchAnalysisStatus {
+    Succeeded,
+    Skipped,
+    Failed
+  }
+
+  sealed class SourceAtlasScanResult {
+    public List<string> sourceAtlasPaths = new();
+    public int deletedGeneratedAtlasCount;
+    public int deletedGeneratedMetadataCount;
+  }
+
   sealed class SourceCellDefinition {
     public PixelRect sourceCell;
     public Rect logicalCellRect;
@@ -120,6 +140,8 @@ public sealed partial class TrimmedAtlasExporterWindow {
   sealed class PendingTrimmedSourceCleanup {
     public SourceAtlasExportBatch batch;
     public string exportedAtlasAssetPath;
+    public List<PendingTrimmedAtlasExport> pendingExports = new();
+    public List<string> sourcePathsToDelete = new();
   }
 
   [Serializable]

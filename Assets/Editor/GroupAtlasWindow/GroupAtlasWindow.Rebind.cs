@@ -20,7 +20,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
     buildIndexStopwatch.Stop();
 
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[GearGroupAtlas] Prepared rebind index." +
       " grouped_root='" + sourceFolderPath + "'" +
       " library_root='" + libraryFolderPath + "'" +
@@ -74,7 +74,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     totalStopwatch.Stop();
-    Debug.Log(
+    AtlasAuthoringLog.Info(
       "[GearGroupAtlas] Rebind complete." +
       " grouped_root='" + sourceFolderPath + "'" +
       " library_root='" + libraryFolderPath + "'" +
@@ -104,15 +104,14 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       " duplicates=" + replacementIndex.duplicateKeyCount +
       " sampled=" + replacementIndex.duplicateKeySamples.Count;
     if (replacementIndex.duplicateKeySamples.Count <= 0) {
-      Debug.LogWarning(summary);
+      AtlasAuthoringLog.Warning(summary);
       return;
     }
 
-    Debug.LogWarning(
-      summary + "\n" +
-      string.Join(
-        "\n",
-        replacementIndex.duplicateKeySamples.Select(sample => "  " + sample)));
+    var samples = replacementIndex.duplicateKeySamples
+      .Select(sample => "  " + sample)
+      .ToList();
+    AtlasAuthoringLog.WarningWithSamples(summary, samples);
   }
 
   bool TryBuildGroupedSpriteReplacementIndex(
@@ -517,7 +516,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         loadFailedCount++;
         failedLibraryCount++;
         if (skippedLibraryLogCount < 8) {
-          Debug.LogWarning(
+          AtlasAuthoringLog.Warning(
             "[GearGroupAtlas] Rebind skipped sprite library because it could not be rewritten." +
             " path='" + libraryPath + "'" +
             " error='" + rebindError + "'");
@@ -527,7 +526,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       }
 
       if (libraryMatchedCategoryCount <= 0 && skippedLibraryLogCount < 8) {
-        Debug.Log(
+        AtlasAuthoringLog.Verbose(
           "[GearGroupAtlas] Rebind found no matching categories for sprite library." +
           " path='" + libraryPath + "'" +
           " part='" + partCode + "'" +
@@ -540,7 +539,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       unchangedEntries += libraryUnchangedEntries;
 
       if (libraryMatchedCategoryCount > 0 || libraryChanged) {
-        Debug.Log(
+        AtlasAuthoringLog.Verbose(
           "[GearGroupAtlas] Rebind processed sprite library." +
           " index=" + (libraryIndex + 1) + "/" + libraryPaths.Length +
           " path='" + libraryPath + "'" +
@@ -563,7 +562,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     if (touchedLibraries <= 0) {
-      Debug.LogWarning(
+      AtlasAuthoringLog.Warning(
         "[GearGroupAtlas] Rebind updated no sprite libraries." +
         " library_files=" + libraryPaths.Length +
         " parsed_libraries=" + parsedLibraryCount +
@@ -1536,7 +1535,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         var fileName = Path.GetFileNameWithoutExtension(assetPath);
         if (!IsCleanupAssetForPlan(plan, fileName)) continue;
         if (plan.keepAssetPaths.Contains(assetPath)) continue;
-        if (!AssetDatabase.DeleteAsset(assetPath)) continue;
+        if (!TrimmedAtlasExporterWindow.DeleteAssetFiles(assetPath)) continue;
         deletedAssets++;
       }
     }
@@ -1579,8 +1578,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       var assetPath = orderedAssetPaths[assetIndex];
       if (string.IsNullOrWhiteSpace(assetPath)) continue;
       if (!File.Exists(Path.GetFullPath(assetPath))) continue;
-      if (!AssetDatabase.DeleteAsset(assetPath)) {
-        Debug.LogWarning("[GearGroupAtlas] Failed to delete exported source asset. asset='" + assetPath + "'");
+      if (!TrimmedAtlasExporterWindow.DeleteAssetFiles(assetPath)) {
+        AtlasAuthoringLog.Warning("[GearGroupAtlas] Failed to delete exported source asset. asset='" + assetPath + "'");
         continue;
       }
 
@@ -1602,10 +1601,11 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     for (var folderIndex = 0; folderIndex < orderedFolderPaths.Count; folderIndex++) {
       var folderPath = orderedFolderPaths[folderIndex];
-      if (!AssetDatabase.IsValidFolder(folderPath)) continue;
+      var fullFolderPath = Path.GetFullPath(folderPath);
+      if (!Directory.Exists(fullFolderPath)) continue;
       if (!IsFolderEmptyForCleanup(folderPath)) continue;
-      if (!AssetDatabase.DeleteAsset(folderPath)) {
-        Debug.LogWarning("[GearGroupAtlas] Failed to delete empty source folder. folder='" + folderPath + "'");
+      if (!DeleteFolderFiles(folderPath)) {
+        AtlasAuthoringLog.Warning("[GearGroupAtlas] Failed to delete empty source folder. folder='" + folderPath + "'");
         continue;
       }
 
@@ -1642,6 +1642,21 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       if (string.IsNullOrWhiteSpace(entryName)) continue;
       if (entryName.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) continue;
       return false;
+    }
+
+    return true;
+  }
+
+  static bool DeleteFolderFiles(string folderPath) {
+    var fullFolderPath = Path.GetFullPath(folderPath);
+    if (!Directory.Exists(fullFolderPath)) {
+      return false;
+    }
+
+    var metaPath = fullFolderPath + ".meta";
+    Directory.Delete(fullFolderPath, false);
+    if (File.Exists(metaPath)) {
+      File.Delete(metaPath);
     }
 
     return true;
@@ -1689,7 +1704,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     summary.deletedAssetCount = DeleteSourceAssets(sourceAssetPaths);
     summary.deletedFolderCount = DeleteEmptySourceFolders(sourceRootPath, sourceAssetPaths);
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[GearGroupAtlas] Cleaned exported source assets." +
       " source_root='" + sourceRootPath + "'" +
       " scheduled_assets=" + sourceAssetPaths.Count +

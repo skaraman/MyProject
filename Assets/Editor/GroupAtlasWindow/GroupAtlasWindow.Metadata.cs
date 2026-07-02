@@ -89,9 +89,10 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     try {
       metadataAssetPath = BuildRuntimeMetadataAssetPath(atlasAssetPath);
+      var editorMetadataAssetPath = BuildEditorMetadataAssetPath(atlasAssetPath);
+      editorImportMetadataJson = JsonUtility.ToJson(payload, true);
       WriteJsonPayload(metadataAssetPath, JsonUtility.ToJson(BuildRuntimeGroupedMetadata(payload), true));
       DeleteEditorMetadataAsset(atlasAssetPath);
-      editorImportMetadataJson = JsonUtility.ToJson(payload, true);
       return true;
     }
     catch (Exception ex) {
@@ -358,11 +359,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     if (!string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) {
       assetPaths.Add(runtimeMetadataAssetPath);
     }
-
-    var editorMetadataAssetPath = BuildEditorMetadataAssetPath(atlasAssetPath);
-    if (!string.IsNullOrWhiteSpace(editorMetadataAssetPath)) {
-      assetPaths.Add(editorMetadataAssetPath);
-    }
   }
 
   static Dictionary<string, ExistingTrimmedAtlasSpriteMetadata> LoadTrimmedSourceMetadataByName(string atlasPath) {
@@ -386,7 +382,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       TryPopulateTrimmedMetadataDictionary(File.ReadAllText(metadataFullPath), metadataFullPath, dictionary);
     }
     catch (Exception ex) {
-      Debug.LogWarning("[GearGroupAtlas] Failed to load source trimmed metadata from '" + metadataFullPath + "': " + ex.Message);
+      AtlasAuthoringLog.VerboseWarning("[GearGroupAtlas] Failed to load source trimmed metadata from '" + metadataFullPath + "': " + ex.Message);
     }
 
     return dictionary;
@@ -414,7 +410,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       }
     }
     catch (Exception ex) {
-      Debug.LogWarning("[GearGroupAtlas] Failed to parse source trimmed metadata from '" + sourceLabel + "': " + ex.Message);
+      AtlasAuthoringLog.VerboseWarning("[GearGroupAtlas] Failed to parse source trimmed metadata from '" + sourceLabel + "': " + ex.Message);
     }
   }
 

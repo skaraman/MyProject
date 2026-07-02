@@ -33,7 +33,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     if (widestSprite > maxContentWidth) {
       var spriteName = string.IsNullOrWhiteSpace(widestItem.metadata.name) ? "<unnamed>" : widestItem.metadata.name;
       error = "Trimmed sprite '" + spriteName + "' is too wide to fit within the max atlas width once padding is applied.";
-      Debug.LogWarning(
+      AtlasAuthoringLog.Warning(
         "[TrimAtlasExport] Trimmed sprite exceeds padded atlas width." +
         " sprite='" + spriteName + "'" +
         " sprite_width=" + widestSprite +
@@ -67,7 +67,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     packedHeight = Math.Max(1, y + rowHeight + padding);
     if (packedWidth > targetWidth) {
       error = "Packed atlas width exceeded the configured max atlas width.";
-      Debug.LogWarning(
+      AtlasAuthoringLog.Warning(
         "[TrimAtlasExport] Packed atlas width exceeded limit after packing." +
         " packed_width=" + packedWidth +
         " atlas_limit=" + targetWidth +
@@ -174,6 +174,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     string sourcePath,
     string outputFolderPath,
     string outputName,
+    List<string> sourceAssetPaths,
     TrimmedAtlasExport exportData,
     List<TrimmedSpriteBuildData> buildItems,
     out List<PendingTrimmedAtlasExport> pendingExports,
@@ -191,10 +192,13 @@ public sealed partial class TrimmedAtlasExporterWindow {
       return false;
     }
 
-    DeleteExistingOutputTargets(outputFolderPath, outputName, sourcePath);
+    var resolvedOutputName = ResolveSafeOutputName(outputName, outputFolderPath, sourceAssetPaths);
+    exportData.exportedAtlasAssetPath = BuildOutputAtlasAssetPath(resolvedOutputName, outputFolderPath);
+    DeleteExistingOutputTargets(outputFolderPath, resolvedOutputName, sourcePath);
 
     var pageCount = CalculateExportPageCount(exportedBuildItems.Count);
     if (pageCount <= 1) {
+      exportData.exportedAtlasAssetPath = BuildOutputAtlasAssetPath(resolvedOutputName, outputFolderPath);
       if (!TryWriteAtlasExport(sourcePath, outputFolderPath, exportData, buildItems, out var pendingExport, out error)) {
         return false;
       }
@@ -209,7 +213,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     for (var pageIndex = 0; pageIndex < pageCount; pageIndex++) {
       var pageItems = GetExportPageItems(exportedBuildItems, pageIndex);
       if (pageItems.Count <= 0) continue;
-      var pageOutputName = BuildPagedOutputName(outputName, pageIndex);
+      var pageOutputName = BuildPagedOutputName(resolvedOutputName, pageIndex);
       if (!TryValidateSpriteSliceLimit(pageOutputName, pageItems.Count, out error)) {
         return false;
       }
@@ -234,6 +238,52 @@ public sealed partial class TrimmedAtlasExporterWindow {
     }
 
     return pendingExports.Count > 0;
+  }
+
+  string ResolveSafeOutputName(string outputName, string outputFolderPath, List<string> sourceAssetPaths) {
+    var resolvedOutputName = string.IsNullOrWhiteSpace(outputName) ? "trimmed" : outputName;
+    if (!DoesOutputPathCollideWithSources(resolvedOutputName, outputFolderPath, sourceAssetPaths)) {
+      return resolvedOutputName;
+    }
+
+    var baseOutputName = resolvedOutputName + "_atlas";
+    resolvedOutputName = baseOutputName;
+    var suffix = 2;
+    while (DoesOutputPathCollideWithSources(resolvedOutputName, outputFolderPath, sourceAssetPaths)) {
+      resolvedOutputName = baseOutputName + suffix;
+      suffix++;
+    }
+
+    AtlasAuthoringLog.Verbose(
+      "[TrimAtlasExport] Adjusted output name to avoid overwriting a source atlas." +
+      " requested_output='" + outputName + "'" +
+      " resolved_output='" + resolvedOutputName + "'" +
+      " output_folder='" + outputFolderPath + "'");
+    return resolvedOutputName;
+  }
+
+  bool DoesOutputPathCollideWithSources(string outputName, string outputFolderPath, List<string> sourceAssetPaths) {
+    if (sourceAssetPaths == null || sourceAssetPaths.Count <= 0) {
+      return false;
+    }
+
+    var outputAssetPath = NormalizeAssetPath(BuildOutputAtlasAssetPath(outputName, outputFolderPath));
+    if (string.IsNullOrWhiteSpace(outputAssetPath)) {
+      return false;
+    }
+
+    for (var i = 0; i < sourceAssetPaths.Count; i++) {
+      var sourceAssetPath = NormalizeAssetPath(sourceAssetPaths[i]);
+      if (string.IsNullOrWhiteSpace(sourceAssetPath)) {
+        continue;
+      }
+
+      if (string.Equals(outputAssetPath, sourceAssetPath, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static List<TrimmedSpriteBuildData> BuildExportBuildItems(List<TrimmedSpriteBuildData> buildItems) {
@@ -369,7 +419,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
 
     if (deletedAssetCount <= 0 && deletedMetadataOnlyCount <= 0) return;
 
-    Debug.Log(
+    AtlasAuthoringLog.Verbose(
       "[TrimAtlasExport] Cleared existing target outputs before overwrite." +
       " output_folder='" + normalizedOutputFolderPath + "'" +
       " output_name='" + outputName + "'" +
