@@ -10,6 +10,11 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   const string SkinFormName = "Skin";
   const string SkinVariantName = "All";
   const int DuplicateRebindWarningSampleLimit = 8;
+  const int DefaultMaxAtlasSize = 2048;
+  const int DefaultMaxSpritesPerAtlasPage = 1024;
+  const int DefaultPadding = 0;
+  const int DefaultAlphaThreshold = 1;
+  const int DefaultNearWhiteThreshold = 250;
   static bool ExportNormalAtlases => false;
   static readonly Dictionary<string, string> PartCodeByToken = new(StringComparer.OrdinalIgnoreCase) {
     { "ArmLeft", "aL" },
@@ -51,12 +56,12 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   string autoFindSourceRootPath = "";
   DefaultAsset rebindSourceFolder;
   DefaultAsset rebindSpriteLibraryFolder;
-  int maxAtlasSize = 2048;
-  int maxSpritesPerAtlasPage = 1024;
-  int padding = 1;
-  int alphaThreshold = 1;
+  int maxAtlasSize = DefaultMaxAtlasSize;
+  int maxSpritesPerAtlasPage = DefaultMaxSpritesPerAtlasPage;
+  int padding = DefaultPadding;
+  int alphaThreshold = DefaultAlphaThreshold;
   bool treatNearWhiteAsEmpty;
-  int nearWhiteThreshold = 250;
+  int nearWhiteThreshold = DefaultNearWhiteThreshold;
   Vector2 scrollPosition;
   Vector2 resultsScrollPosition;
   string analyzedSelectionSignature = "";
@@ -76,6 +81,9 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       "Export and sprite-library rebinding are separate workflows. Export builds grouped atlases plus JSON metadata. Rebind uses those grouped outputs to update matching sprite-library entries later.",
       MessageType.Info);
     AtlasAuthoringLog.VerboseLoggingEnabled = EditorGUILayout.Toggle("Verbose Logging", AtlasAuthoringLog.VerboseLoggingEnabled);
+    if (GUILayout.Button("Reset Tool")) {
+      ResetWindowState();
+    }
 
     EditorGUILayout.LabelField("Export Grouped Atlases", EditorStyles.boldLabel);
     EditorGUI.BeginChangeCheck();
@@ -303,6 +311,27 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     scannedCandidates = new List<GroupCandidate>();
     analyzedSelectionSignature = "";
     analyzedSourceRootPath = "";
+  }
+
+  void ResetWindowState() {
+    outputFolder = null;
+    outputName = "";
+    sourceAtlases = new List<Texture2D>();
+    showAutoFindSourceAtlases = false;
+    autoFindSourceAtlasKey = "";
+    autoFindSourceAtlasFolder = null;
+    autoFindSourceRootPath = "";
+    rebindSourceFolder = null;
+    rebindSpriteLibraryFolder = null;
+    maxAtlasSize = DefaultMaxAtlasSize;
+    maxSpritesPerAtlasPage = DefaultMaxSpritesPerAtlasPage;
+    padding = DefaultPadding;
+    alphaThreshold = DefaultAlphaThreshold;
+    treatNearWhiteAsEmpty = false;
+    nearWhiteThreshold = DefaultNearWhiteThreshold;
+    scrollPosition = Vector2.zero;
+    resultsScrollPosition = Vector2.zero;
+    InvalidateScan();
   }
 
   bool TryGetOutputFolderPath(out string outputFolderPath, bool showDialog) {

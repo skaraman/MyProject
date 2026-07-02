@@ -1396,7 +1396,28 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       ordered.Add(item);
     }
 
+    ordered.Sort(ComparePackedSpriteBuildItemsForPacking);
     return ordered;
+  }
+
+  static int ComparePackedSpriteBuildItemsForPacking(PackedSpriteBuildItem left, PackedSpriteBuildItem right) {
+    if (ReferenceEquals(left, right)) return 0;
+    if (left == null) return -1;
+    if (right == null) return 1;
+
+    var categoryCompare = SpriteSliceAddressUtility.NaturalStringComparer.Compare(left.sourceCategory, right.sourceCategory);
+    if (categoryCompare != 0) return categoryCompare;
+
+    var sourceSpriteCompare = SpriteSliceAddressUtility.NaturalStringComparer.Compare(left.sourceSpriteName, right.sourceSpriteName);
+    if (sourceSpriteCompare != 0) return sourceSpriteCompare;
+
+    var partCompare = SpriteSliceAddressUtility.NaturalStringComparer.Compare(left.sourcePartCode, right.sourcePartCode);
+    if (partCompare != 0) return partCompare;
+
+    var atlasCompare = SpriteSliceAddressUtility.NaturalStringComparer.Compare(left.colorSourceAtlasPath, right.colorSourceAtlasPath);
+    if (atlasCompare != 0) return atlasCompare;
+
+    return SpriteSliceAddressUtility.NaturalStringComparer.Compare(left.outputSpriteName, right.outputSpriteName);
   }
 
   static string BuildLibraryEntryLabel(GroupedAtlasMetadataPayload payload, GroupedAtlasSpriteMetadata sprite) {
