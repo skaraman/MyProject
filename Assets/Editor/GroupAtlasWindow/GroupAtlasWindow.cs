@@ -180,15 +180,28 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     for (var i = 0; i < sourceAtlases.Count; i++) {
       using (new EditorGUILayout.VerticalScope()) {
         using (new EditorGUILayout.HorizontalScope()) {
-          EditorGUI.BeginChangeCheck();
-          sourceAtlases[i] = (Texture2D)EditorGUILayout.ObjectField(
-            "Atlas " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-            sourceAtlases[i],
-            typeof(Texture2D),
-            false);
-          if (EditorGUI.EndChangeCheck()) {
-            autoFindSourceRootPath = "";
-            InvalidateScan();
+          var atlas = sourceAtlases[i];
+          var atlasLabel = "Atlas " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+          if (atlas == null) {
+            EditorGUI.BeginChangeCheck();
+            sourceAtlases[i] = (Texture2D)EditorGUILayout.ObjectField(
+              atlasLabel,
+              sourceAtlases[i],
+              typeof(Texture2D),
+              false);
+            if (EditorGUI.EndChangeCheck()) {
+              autoFindSourceRootPath = "";
+              InvalidateScan();
+            }
+          }
+          else {
+            var atlasPath = NormalizePath(AssetDatabase.GetAssetPath(atlas));
+            EditorGUILayout.PrefixLabel(atlasLabel);
+            EditorGUILayout.SelectableLabel(
+              atlasPath,
+              EditorStyles.textField,
+              GUILayout.Height(EditorGUIUtility.singleLineHeight));
           }
 
           if (GUILayout.Button("Remove", GUILayout.Width(72f))) {
@@ -471,7 +484,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
         if (!string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) continue;
         var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-        if (TryAddSourceAtlas(texture, existingPaths)) {
+        if (TryAddSourceAtlas(texture, existingPaths, rootFolderPath)) {
           addedCount++;
         }
       }
@@ -504,19 +517,22 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return false;
     }
 
-    var hierarchy = BuildAutoFindHierarchy(autoFindSourceAtlasKey);
-    if (string.IsNullOrWhiteSpace(hierarchy)) {
-      error = "Enter a key like Aqua_aa_t.";
+    var hierarchies = BuildAutoFindHierarchies(autoFindSourceAtlasKey);
+    if (hierarchies.Count <= 0) {
+      error = "Enter a key like Aqua_aa_t or Skin_t.";
       return false;
     }
 
-    AddAutoFindFolderPath(folderPaths, rootFolderPath, hierarchy);
+    for (var hierarchyIndex = 0; hierarchyIndex < hierarchies.Count; hierarchyIndex++) {
+      AddAutoFindFolderPath(folderPaths, rootFolderPath, hierarchies[hierarchyIndex]);
+    }
 
     var childFolders = AssetDatabase.GetSubFolders(rootFolderPath);
     for (var i = 0; i < childFolders.Length; i++) {
       var childFolderPath = NormalizePath(childFolders[i]);
-      AddAutoFindFolderPath(folderPaths, childFolderPath, hierarchy);
-      AddAutoFindWrappedFolderPath(folderPaths, childFolderPath, autoFindSourceAtlasKey);
+      for (var hierarchyIndex = 0; hierarchyIndex < hierarchies.Count; hierarchyIndex++) {
+        AddAutoFindFolderPath(folderPaths, childFolderPath, hierarchies[hierarchyIndex]);
+      }
     }
 
     if (folderPaths.Count > 0) {
@@ -527,11 +543,16 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     return false;
   }
 
-  static string BuildAutoFindHierarchy(string key) {
-    if (string.IsNullOrWhiteSpace(key)) return "";
+  static List<string> BuildAutoFindHierarchies(string key) {
+    var hierarchies = new List<string>();
+    if (string.IsNullOrWhiteSpace(key)) return hierarchies;
 
     var tokens = BuildAutoFindTokens(key);
-    return tokens.Count <= 0 ? "" : string.Join("/", tokens);
+    if (tokens.Count <= 0) return hierarchies;
+
+    AddAutoFindHierarchy(hierarchies, string.Join("/", tokens));
+    AddAutoFindAlternateHierarchies(hierarchies, tokens);
+    return hierarchies;
   }
 
   static void AddAutoFindFolderPath(List<string> folderPaths, string rootFolderPath, string hierarchy) {
@@ -550,17 +571,35 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     folderPaths.Add(folderPath);
   }
 
-  static void AddAutoFindWrappedFolderPath(List<string> folderPaths, string rootFolderPath, string key) {
-    if (folderPaths == null) return;
-    if (string.IsNullOrWhiteSpace(rootFolderPath)) return;
+  static void AddAutoFindAlternateHierarchies(List<string> hierarchies, List<string> tokens) {
+    if (hierarchies == null || tokens == null) return;
 
-    var tokens = BuildAutoFindTokens(key);
-    if (tokens.Count < 3) return;
+    if (tokens.Count >= 3) {
+      var descriptor = tokens[0] + "_" + tokens[1];
+      var part = tokens[2];
+      AddAutoFindHierarchy(hierarchies, part + "/" + descriptor);
+    }
 
-    var descriptor = tokens[0] + "_" + tokens[1];
-    var part = tokens[2];
-    var hierarchy = part + "/" + descriptor;
-    AddAutoFindFolderPath(folderPaths, rootFolderPath, hierarchy);
+    if (tokens.Count == 2 &&
+        string.Equals(tokens[0], SkinFormName, StringComparison.OrdinalIgnoreCase)) {
+      AddAutoFindHierarchy(hierarchies, tokens[1] + "/" + tokens[0]);
+      AddAutoFindHierarchy(hierarchies, tokens[1]);
+    }
+  }
+
+  static void AddAutoFindHierarchy(List<string> hierarchies, string hierarchy) {
+    if (hierarchies == null) return;
+    if (string.IsNullOrWhiteSpace(hierarchy)) return;
+
+    var normalizedHierarchy = NormalizePath(hierarchy).Trim('/');
+    if (string.IsNullOrWhiteSpace(normalizedHierarchy)) return;
+    for (var i = 0; i < hierarchies.Count; i++) {
+      if (string.Equals(hierarchies[i], normalizedHierarchy, StringComparison.OrdinalIgnoreCase)) {
+        return;
+      }
+    }
+
+    hierarchies.Add(normalizedHierarchy);
   }
 
   static List<string> BuildAutoFindTokens(string key) {
@@ -591,14 +630,15 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
   }
 
-  bool TryAddSourceAtlas(Texture2D texture, HashSet<string> existingPaths) {
+  bool TryAddSourceAtlas(Texture2D texture, HashSet<string> existingPaths, string sourceRootPath = "") {
     if (texture == null || existingPaths == null) return false;
 
     var texturePath = NormalizePath(AssetDatabase.GetAssetPath(texture));
     if (string.IsNullOrWhiteSpace(texturePath)) return false;
     if (!IsSupportedColorAtlas(texturePath)) return false;
     if (IsGeneratedNormalAtlasAssetPath(texturePath)) return false;
-    if (SpriteAtlasSourceFilter.HasIgnoredFolderInPath(texturePath)) return false;
+    if (!string.IsNullOrWhiteSpace(sourceRootPath) &&
+        SpriteAtlasSourceFilter.HasIgnoredSubfolderInPath(sourceRootPath, texturePath)) return false;
     if (!existingPaths.Add(texturePath)) return false;
 
     sourceAtlases.Add(texture);

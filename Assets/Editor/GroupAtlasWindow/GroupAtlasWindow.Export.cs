@@ -119,15 +119,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     var candidatePendingImports = new List<PendingGroupedAtlasImport>();
 
-    for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++) {
-      var page = pages[pageIndex];
-      page.colorAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, page.pageIndex, false);
-      if (ExportNormalAtlases) {
-        page.normalAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, page.pageIndex, true);
-      }
-    }
-
-    CleanupStaleCandidateOutputs(outputFolderPath, candidate, pages, ExportNormalAtlases);
+    AssignUniquePageOutputPaths(outputFolderPath, candidate, pages, ExportNormalAtlases);
 
     for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++) {
       var page = pages[pageIndex];

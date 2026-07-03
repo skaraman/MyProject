@@ -1293,7 +1293,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     var groupedNameCompare = SpriteSliceAddressUtility.CompareNaturally(left?.groupedSpriteName, right?.groupedSpriteName);
     if (groupedNameCompare != 0) return groupedNameCompare;
 
-    return SpriteSliceAddressUtility.CompareNaturally(left?.atlasAssetPath, right?.atlasAssetPath);
+    return SpriteSliceAddressUtility.CompareNaturally(right?.atlasAssetPath, left?.atlasAssetPath);
   }
 
   static List<PendingGroupedSpriteReplacement> ExpandPendingGroupedSpriteSequenceBySourceSlices(

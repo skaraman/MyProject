@@ -394,7 +394,9 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   }
 
   static bool TryParseImplicitSkinSourceAtlasPath(
+    string sourceFolderPath,
     string[] relativeSegments,
+    string fileBase,
     out string category,
     out string form,
     out string variant,
@@ -405,15 +407,42 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     variant = "";
     partCode = "";
     isSkin = false;
-    if (relativeSegments == null || relativeSegments.Length != 3) return false;
+    if (relativeSegments == null || relativeSegments.Length <= 0 || relativeSegments.Length > 3) return false;
 
-    partCode = ResolvePartCode(relativeSegments[relativeSegments.Length - 1]);
-    if (!string.Equals(partCode, "e", StringComparison.OrdinalIgnoreCase)) return false;
+    var partToken = (relativeSegments[relativeSegments.Length - 1] ?? "").Trim();
+    if (!IsKnownPartCodeToken(partToken)) return false;
 
-    category = (relativeSegments[0] ?? "").Trim();
-    var sourceForm = (relativeSegments[1] ?? "").Trim();
-    if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(sourceForm)) return false;
-    if (TryParseWrappedDescriptorToken(sourceForm, out _, out _, out _)) return false;
+    partCode = ResolvePartCode(partToken);
+    if (string.IsNullOrWhiteSpace(partCode)) return false;
+
+    var normalizedFileBase = (fileBase ?? "").Trim();
+    var isFlatDirectAtlas =
+      !string.IsNullOrWhiteSpace(normalizedFileBase) &&
+      (string.Equals(normalizedFileBase, partToken, StringComparison.OrdinalIgnoreCase) ||
+       string.Equals(normalizedFileBase, partCode, StringComparison.OrdinalIgnoreCase));
+
+    if (relativeSegments.Length == 1) {
+      if (!isFlatDirectAtlas) return false;
+      category = System.IO.Path.GetFileName(NormalizePath(sourceFolderPath).TrimEnd('/'));
+    }
+    else if (relativeSegments.Length == 2) {
+      var firstToken = (relativeSegments[0] ?? "").Trim();
+      if (string.Equals(firstToken, SkinFormName, StringComparison.OrdinalIgnoreCase)) {
+        category = System.IO.Path.GetFileName(NormalizePath(sourceFolderPath).TrimEnd('/'));
+      }
+      else {
+        if (!isFlatDirectAtlas) return false;
+        category = firstToken;
+      }
+    }
+    else {
+      var sourceForm = (relativeSegments[1] ?? "").Trim();
+      if (!string.Equals(sourceForm, SkinFormName, StringComparison.OrdinalIgnoreCase)) return false;
+      category = (relativeSegments[0] ?? "").Trim();
+    }
+
+    if (string.IsNullOrWhiteSpace(category)) return false;
+    if (TryParseWrappedDescriptorToken(category, out _, out _, out _)) return false;
 
     form = SkinFormName;
     variant = SkinVariantName;
@@ -449,7 +478,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return !string.IsNullOrWhiteSpace(fileBase);
     }
 
-    if (TryParseImplicitSkinSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
+    if (TryParseImplicitSkinSourceAtlasPath(sourceFolderPath, relativeSegments, fileBase, out category, out form, out variant, out partCode, out isSkin)) {
       return !string.IsNullOrWhiteSpace(fileBase);
     }
 
@@ -503,11 +532,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         error = "Normal atlas inputs are not supported. Remove: " + assetPath;
         return false;
       }
-      if (SpriteAtlasSourceFilter.HasIgnoredFolderInPath(assetPath)) {
-        error = "Selected atlas is inside an ignored folder: " + assetPath;
-        return false;
-      }
-
       sourceAtlasPaths.Add(assetPath);
     }
 
@@ -519,6 +543,22 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     sourceRootPath = BuildSourceRootPath(sourceAtlasPaths);
     if (string.IsNullOrWhiteSpace(sourceRootPath) || !AssetDatabase.IsValidFolder(sourceRootPath)) {
       error = "Could not resolve a common source root folder from the selected atlases.";
+      return false;
+    }
+
+    var filteredSourceAtlasPaths = new List<string>(sourceAtlasPaths.Count);
+    for (var i = 0; i < sourceAtlasPaths.Count; i++) {
+      var assetPath = sourceAtlasPaths[i];
+      if (SpriteAtlasSourceFilter.HasIgnoredSubfolderInPath(sourceRootPath, assetPath)) {
+        continue;
+      }
+
+      filteredSourceAtlasPaths.Add(assetPath);
+    }
+
+    sourceAtlasPaths = filteredSourceAtlasPaths;
+    if (sourceAtlasPaths.Count <= 0) {
+      error = "No source atlas assets remained after ignored subfolders were filtered out.";
       return false;
     }
 

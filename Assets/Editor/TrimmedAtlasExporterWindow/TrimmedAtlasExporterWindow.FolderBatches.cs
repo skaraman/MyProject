@@ -36,7 +36,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
         continue;
       }
 
-      if (SpriteAtlasSourceFilter.HasIgnoredFolderInPath(folderAssetPath)) {
+      if (SpriteAtlasSourceFilter.HasIgnoredSubfolderInPath(normalizedSourceFolderPath, folderAssetPath)) {
         ignoredFolderSkippedCount++;
         continue;
       }
@@ -49,7 +49,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
           continue;
         }
 
-        if (SpriteAtlasSourceFilter.HasIgnoredFolderInPath(assetPath)) {
+        if (SpriteAtlasSourceFilter.HasIgnoredSubfolderInPath(normalizedSourceFolderPath, assetPath)) {
           continue;
         }
 

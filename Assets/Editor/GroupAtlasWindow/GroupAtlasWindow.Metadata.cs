@@ -89,9 +89,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     try {
       metadataAssetPath = BuildRuntimeMetadataAssetPath(atlasAssetPath);
-      var editorMetadataAssetPath = BuildEditorMetadataAssetPath(atlasAssetPath);
       editorImportMetadataJson = JsonUtility.ToJson(payload, true);
-      WriteJsonPayload(metadataAssetPath, JsonUtility.ToJson(BuildRuntimeGroupedMetadata(payload), true));
+      WriteJsonPayload(metadataAssetPath, editorImportMetadataJson);
       DeleteEditorMetadataAsset(atlasAssetPath);
       return true;
     }
@@ -290,6 +289,38 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     return normalizedOutputFolderPath;
   }
 
+  void AssignUniquePageOutputPaths(string outputFolderPath, GroupCandidate candidate, List<AtlasPage> pages, bool includeNormalAtlases) {
+    if (string.IsNullOrWhiteSpace(outputFolderPath) || candidate == null || pages == null) {
+      return;
+    }
+
+    var reservedAssetPaths = CollectReservedGroupedOutputAssetPaths(outputFolderPath);
+    for (var pageListIndex = 0; pageListIndex < pages.Count; pageListIndex++) {
+      var page = pages[pageListIndex];
+      if (page == null) {
+        continue;
+      }
+
+      var assignedPageIndex = FindNextAvailableGroupedPageIndex(
+        outputFolderPath,
+        candidate,
+        page.pageIndex,
+        includeNormalAtlases,
+        reservedAssetPaths);
+      ApplyAssignedGroupedPageIndex(page, assignedPageIndex);
+
+      page.colorAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, assignedPageIndex, false);
+      ReserveGroupedOutputAssetPath(reservedAssetPaths, page.colorAtlasPath);
+      if (includeNormalAtlases) {
+        page.normalAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, assignedPageIndex, true);
+        ReserveGroupedOutputAssetPath(reservedAssetPaths, page.normalAtlasPath);
+      }
+      else {
+        page.normalAtlasPath = "";
+      }
+    }
+  }
+
   string BuildPageAtlasAssetPath(string outputFolderPath, GroupCandidate candidate, int pageIndex, bool isNormalAtlas) {
     var fileName = BuildPageAtlasFileBase(candidate, pageIndex) + (isNormalAtlas ? "_N" : "") + ".png";
     return NormalizePath(outputFolderPath.TrimEnd('/') + "/" + fileName);
@@ -341,6 +372,123 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     return (candidate.form ?? "Form") + "_" + (candidate.variant ?? "Variant") + "_" + (candidate.partCode ?? "part");
+  }
+
+  HashSet<string> CollectReservedGroupedOutputAssetPaths(string outputFolderPath) {
+    var reservedAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (string.IsNullOrWhiteSpace(outputFolderPath)) {
+      return reservedAssetPaths;
+    }
+
+    var fullOutputFolderPath = Path.GetFullPath(outputFolderPath);
+    if (!Directory.Exists(fullOutputFolderPath)) {
+      return reservedAssetPaths;
+    }
+
+    var existingFilePaths = Directory.GetFiles(fullOutputFolderPath, "*", SearchOption.TopDirectoryOnly);
+    for (var fileIndex = 0; fileIndex < existingFilePaths.Length; fileIndex++) {
+      if (!TryConvertFullPathToAssetPath(existingFilePaths[fileIndex], out var assetPath)) {
+        continue;
+      }
+
+      reservedAssetPaths.Add(NormalizePath(assetPath));
+    }
+
+    return reservedAssetPaths;
+  }
+
+  int FindNextAvailableGroupedPageIndex(
+    string outputFolderPath,
+    GroupCandidate candidate,
+    int startingPageIndex,
+    bool includeNormalAtlases,
+    HashSet<string> reservedAssetPaths) {
+    var pageIndex = Math.Max(0, startingPageIndex);
+    while (true) {
+      var colorAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, pageIndex, false);
+      if (HasReservedGroupedOutputPath(reservedAssetPaths, colorAtlasPath)) {
+        pageIndex++;
+        continue;
+      }
+
+      if (includeNormalAtlases) {
+        var normalAtlasPath = BuildPageAtlasAssetPath(outputFolderPath, candidate, pageIndex, true);
+        if (HasReservedGroupedOutputPath(reservedAssetPaths, normalAtlasPath)) {
+          pageIndex++;
+          continue;
+        }
+      }
+
+      return pageIndex;
+    }
+  }
+
+  static void ApplyAssignedGroupedPageIndex(AtlasPage page, int assignedPageIndex) {
+    if (page == null) {
+      return;
+    }
+
+    page.pageIndex = assignedPageIndex;
+    if (page.items == null) {
+      return;
+    }
+
+    for (var itemIndex = 0; itemIndex < page.items.Count; itemIndex++) {
+      var item = page.items[itemIndex];
+      if (item == null) {
+        continue;
+      }
+
+      item.pageIndex = assignedPageIndex;
+    }
+  }
+
+  static bool HasReservedGroupedOutputPath(HashSet<string> reservedAssetPaths, string atlasAssetPath) {
+    if (reservedAssetPaths == null || string.IsNullOrWhiteSpace(atlasAssetPath)) {
+      return false;
+    }
+
+    var normalizedAtlasAssetPath = NormalizePath(atlasAssetPath);
+    if (reservedAssetPaths.Contains(normalizedAtlasAssetPath) ||
+        reservedAssetPaths.Contains(normalizedAtlasAssetPath + ".meta")) {
+      return true;
+    }
+
+    var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(normalizedAtlasAssetPath);
+    if (!string.IsNullOrWhiteSpace(runtimeMetadataAssetPath) &&
+        (reservedAssetPaths.Contains(runtimeMetadataAssetPath) ||
+         reservedAssetPaths.Contains(runtimeMetadataAssetPath + ".meta"))) {
+      return true;
+    }
+
+    var editorMetadataAssetPath = BuildEditorMetadataAssetPath(normalizedAtlasAssetPath);
+    return !string.IsNullOrWhiteSpace(editorMetadataAssetPath) &&
+           (reservedAssetPaths.Contains(editorMetadataAssetPath) ||
+            reservedAssetPaths.Contains(editorMetadataAssetPath + ".meta"));
+  }
+
+  static void ReserveGroupedOutputAssetPath(HashSet<string> reservedAssetPaths, string atlasAssetPath) {
+    if (reservedAssetPaths == null || string.IsNullOrWhiteSpace(atlasAssetPath)) {
+      return;
+    }
+
+    var normalizedAtlasAssetPath = NormalizePath(atlasAssetPath);
+    reservedAssetPaths.Add(normalizedAtlasAssetPath);
+    reservedAssetPaths.Add(normalizedAtlasAssetPath + ".meta");
+
+    var runtimeMetadataAssetPath = BuildRuntimeMetadataAssetPath(normalizedAtlasAssetPath);
+    if (!string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) {
+      reservedAssetPaths.Add(runtimeMetadataAssetPath);
+      reservedAssetPaths.Add(runtimeMetadataAssetPath + ".meta");
+    }
+
+    var editorMetadataAssetPath = BuildEditorMetadataAssetPath(normalizedAtlasAssetPath);
+    if (string.IsNullOrWhiteSpace(editorMetadataAssetPath)) {
+      return;
+    }
+
+    reservedAssetPaths.Add(editorMetadataAssetPath);
+    reservedAssetPaths.Add(editorMetadataAssetPath + ".meta");
   }
 
   static string BuildGroupedSpriteName(string partCode, string sourceCategory, string sourceSpriteName) {
