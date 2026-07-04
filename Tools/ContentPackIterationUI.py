@@ -19,6 +19,7 @@ DEFAULT_EXTERNAL_ROOT_NAME = "MyProjectContent"
 CUSTOM_LIBRARY_EXTENSION = ".spriteSheetLib"
 LEGACY_LIBRARY_EXTENSION = ".spriteLib"
 UNITY_LOCK_EXIT_CODE = 3
+LAST_LIBRARY_SOURCE_DIR: Path | None = None
 
 KIND_FOLDERS = {
     "pack": "",
@@ -2238,9 +2239,11 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self._refresh_sources()
 
         def add_library_sources(self) -> None:
+            global LAST_LIBRARY_SOURCE_DIR
+            initial_dir = LAST_LIBRARY_SOURCE_DIR if LAST_LIBRARY_SOURCE_DIR else self.project_root / "Assets"
             selected_paths = filedialog.askopenfilenames(
                 parent=self,
-                initialdir=str(self.project_root / "Assets"),
+                initialdir=str(initial_dir),
                 filetypes=[
                     ("Sprite libraries", (f"*{CUSTOM_LIBRARY_EXTENSION}", f"*{LEGACY_LIBRARY_EXTENSION}")),
                     ("Custom sheet libraries", f"*{CUSTOM_LIBRARY_EXTENSION}"),
@@ -2251,6 +2254,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             if not selected_paths:
                 return
 
+            LAST_LIBRARY_SOURCE_DIR = Path(selected_paths[0]).parent
             added_count = 0
             for selected_path in selected_paths:
                 source = create_authoring_source("sprite_library", selected_path, self.project_root)
