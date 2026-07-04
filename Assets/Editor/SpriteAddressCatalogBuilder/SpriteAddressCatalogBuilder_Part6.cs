@@ -87,6 +87,180 @@ public static partial class SpriteIndexBuilder {
     return rows;
   }
 
+  static Dictionary<string, List<ShardRow>> DiscoverCustomSpriteSheetRows(BuildState state) {
+    var result = new Dictionary<string, List<ShardRow>>(StringComparer.OrdinalIgnoreCase);
+    var manifests = DiscoverStagedContentPackManifestPaths();
+    for (var manifestIndex = 0; manifestIndex < manifests.Count; manifestIndex++) {
+      var manifestPath = manifests[manifestIndex];
+      var physicalManifestPath = ContentPackPipeline.GetPhysicalPath(manifestPath);
+      if (string.IsNullOrWhiteSpace(physicalManifestPath) || !File.Exists(physicalManifestPath)) continue;
+
+      CustomSheetManifest manifest;
+      try {
+        manifest = JsonUtility.FromJson<CustomSheetManifest>(File.ReadAllText(physicalManifestPath));
+      }
+      catch (Exception ex) {
+        state?.errors.Add("Failed to parse content pack manifest '" + manifestPath + "'. error='" + ex.Message + "'");
+        continue;
+      }
+
+      if (manifest?.authoringSources == null || manifest.authoringSources.Count <= 0) continue;
+
+      var stageRoot = NormalizePath(Path.GetDirectoryName(manifestPath));
+      for (var sourceIndex = 0; sourceIndex < manifest.authoringSources.Count; sourceIndex++) {
+        AddCustomSpriteSheetRows(state, result, stageRoot, manifest.authoringSources[sourceIndex], manifestPath);
+      }
+    }
+
+    return result;
+  }
+
+  static List<string> DiscoverStagedContentPackManifestPaths() {
+    var result = new List<string>();
+    var textureRoots = ContentPackPipeline.GetTextureSearchRoots();
+    for (var i = 0; i < textureRoots.Count; i++) {
+      var textureRoot = NormalizePath(textureRoots[i]).TrimEnd('/');
+      if (string.IsNullOrWhiteSpace(textureRoot)) continue;
+
+      var stageRoot = textureRoot.EndsWith("/Sprites", StringComparison.OrdinalIgnoreCase)
+        ? textureRoot.Substring(0, textureRoot.Length - "/Sprites".Length)
+        : textureRoot;
+      var manifestPath = NormalizePath(stageRoot + "/ContentPackManifest.json");
+      if (result.Contains(manifestPath, StringComparer.OrdinalIgnoreCase)) continue;
+      if (!File.Exists(ContentPackPipeline.GetPhysicalPath(manifestPath))) continue;
+      result.Add(manifestPath);
+    }
+
+    return result;
+  }
+
+  static void AddCustomSpriteSheetRows(
+    BuildState state,
+    Dictionary<string, List<ShardRow>> rowsByLibrary,
+    string stageRoot,
+    CustomSheetSource source,
+    string manifestPath
+  ) {
+    if (source == null || rowsByLibrary == null) return;
+    if (!string.Equals((source.sourceType ?? "").Trim(), "sprite_sheet", StringComparison.OrdinalIgnoreCase)) return;
+
+    var libraryName = SpriteAddressResolver.NormalizeNamePart(source.libraryName);
+    var category = (source.category ?? "").Trim();
+    var labelPrefix = (source.labelPrefix ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(libraryName) ||
+        string.IsNullOrWhiteSpace(category) ||
+        string.IsNullOrWhiteSpace(labelPrefix)) {
+      state?.errors.Add("Sprite sheet source is missing libraryName, category, or labelPrefix in '" + manifestPath + "'.");
+      return;
+    }
+
+    var colorAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.assetPath);
+    var normalAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.normalAssetPath);
+    if (string.IsNullOrWhiteSpace(colorAssetPath) || !File.Exists(ContentPackPipeline.GetPhysicalPath(colorAssetPath))) {
+      state?.errors.Add("Sprite sheet source texture was not found. manifest='" + manifestPath + "' asset='" + colorAssetPath + "'");
+      return;
+    }
+
+    var colorSpriteNames = ReadSpriteNamesFromTextureMeta(colorAssetPath);
+    if (colorSpriteNames.Count <= 0) {
+      colorSpriteNames.Add(Path.GetFileNameWithoutExtension(colorAssetPath));
+    }
+
+    var normalSpriteNames = new HashSet<string>(StringComparer.Ordinal);
+    if (!string.IsNullOrWhiteSpace(source.normalAssetPath) &&
+        (string.IsNullOrWhiteSpace(normalAssetPath) || !File.Exists(ContentPackPipeline.GetPhysicalPath(normalAssetPath)))) {
+      state?.errors.Add("Sprite sheet normal texture was not found. manifest='" + manifestPath + "' asset='" + normalAssetPath + "'");
+    }
+    else if (!string.IsNullOrWhiteSpace(normalAssetPath) && File.Exists(ContentPackPipeline.GetPhysicalPath(normalAssetPath))) {
+      var names = ReadSpriteNamesFromTextureMeta(normalAssetPath);
+      for (var i = 0; i < names.Count; i++) {
+        normalSpriteNames.Add(names[i]);
+      }
+      if (normalSpriteNames.Count <= 0) {
+        normalSpriteNames.Add(Path.GetFileNameWithoutExtension(normalAssetPath));
+      }
+    }
+
+    if (!rowsByLibrary.TryGetValue(libraryName, out var rows)) {
+      rows = new List<ShardRow>();
+      rowsByLibrary[libraryName] = rows;
+    }
+
+    if (state != null) {
+      state.activeTextureAssetPaths.Add(colorAssetPath);
+    }
+    if (state != null && !string.IsNullOrWhiteSpace(normalAssetPath) && normalSpriteNames.Count > 0) {
+      state.activeTextureAssetPaths.Add(normalAssetPath);
+    }
+
+    for (var i = 0; i < colorSpriteNames.Count; i++) {
+      var spriteName = colorSpriteNames[i];
+      if (string.IsNullOrWhiteSpace(spriteName)) continue;
+
+      ParseLabel(spriteName, out _, out var frame);
+      var colorAddress = SpriteSliceAddressUtility.BuildSliceAddress(colorAssetPath, spriteName);
+      var normalAddress = "";
+      if (!string.IsNullOrWhiteSpace(normalAssetPath) && normalSpriteNames.Contains(spriteName)) {
+        normalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAssetPath, spriteName);
+      }
+
+      if (!ValidateRuntimeAtlasAddress(state, colorAddress, libraryName + "/" + category + ":" + spriteName + " (sheet color)", recordError: true)) {
+        continue;
+      }
+      if (!string.IsNullOrWhiteSpace(normalAddress) &&
+          !ValidateRuntimeAtlasAddress(state, normalAddress, libraryName + "/" + category + ":" + spriteName + " (sheet normal)", recordError: false)) {
+        normalAddress = "";
+      }
+
+      rows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
+    }
+  }
+
+  static string BuildStagedAuthoringSourceAssetPath(string stageRoot, string targetFolder, string assetPath) {
+    var normalizedStageRoot = NormalizePath(stageRoot).TrimEnd('/');
+    var normalizedTargetFolder = NormalizeAuthoringTargetFolder(targetFolder);
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedStageRoot) ||
+        string.IsNullOrWhiteSpace(normalizedTargetFolder) ||
+        string.IsNullOrWhiteSpace(normalizedAssetPath)) {
+      return "";
+    }
+
+    return NormalizePath(normalizedStageRoot + "/" + normalizedTargetFolder + "/" + Path.GetFileName(normalizedAssetPath));
+  }
+
+  static string NormalizeAuthoringTargetFolder(string targetFolder) {
+    var normalized = NormalizePath(targetFolder).Trim('/');
+    if (normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring("Assets/".Length);
+    }
+    var segments = normalized.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+    if (segments.Length > 1 && string.Equals(segments[0], "Core", StringComparison.OrdinalIgnoreCase)) {
+      normalized = string.Join("/", segments.Skip(1));
+    }
+    else if (segments.Length > 2 &&
+             (string.Equals(segments[0], "Forms", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(segments[0], "Gears", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(segments[0], "Slices", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(segments[0], "Episodes", StringComparison.OrdinalIgnoreCase))) {
+      normalized = string.Join("/", segments.Skip(2));
+    }
+    return NormalizePath(normalized).Trim('/');
+  }
+
+  static List<string> ReadSpriteNamesFromTextureMeta(string assetPath) {
+    var result = new List<string>();
+    var physicalMetaPath = ContentPackPipeline.GetPhysicalPath(assetPath + ".meta");
+    var byFileId = ReadSpriteNamesByFileIdFromMeta(physicalMetaPath);
+    foreach (var spriteName in byFileId.Values) {
+      if (!string.IsNullOrWhiteSpace(spriteName)) {
+        result.Add(spriteName);
+      }
+    }
+    result.Sort(SpriteSliceAddressUtility.NaturalStringComparer);
+    return result;
+  }
+
   static string ResolveSpriteAddress(BuildState state, SpriteRef spriteRef, string context, bool recordError = true) {
     if (string.IsNullOrWhiteSpace(spriteRef.guid)) {
       if (recordError) {

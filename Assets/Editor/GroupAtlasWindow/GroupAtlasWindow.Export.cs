@@ -243,7 +243,15 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
           if (colorSprite == null) continue;
 
           var normalSprite = ExportNormalAtlases ? FindMatchingSprite(normalAtlas, colorSprite.name) : null;
-          if (!TryAnalyzeSourceSprite(record, colorAtlas, normalAtlas, colorSprite, normalSprite, out var item, out error)) {
+          if (!TryAnalyzeSourceSprite(
+                candidate,
+                record,
+                colorAtlas,
+                normalAtlas,
+                colorSprite,
+                normalSprite,
+                out var item,
+                out error)) {
             return false;
           }
 
@@ -435,6 +443,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   }
 
   bool TryAnalyzeSourceSprite(
+    GroupCandidate candidate,
     SourceAtlasRecord record,
     LoadedAtlas colorAtlas,
     LoadedAtlas normalAtlas,
@@ -449,14 +458,15 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return false;
     }
 
-    if (TryBuildItemFromTrimmedSourceMetadata(record, colorAtlas, normalAtlas, colorSprite, normalSprite, out item, out error)) {
+    if (TryBuildItemFromTrimmedSourceMetadata(candidate, record, colorAtlas, normalAtlas, colorSprite, normalSprite, out item, out error)) {
       return true;
     }
 
     var sourceRect = ToPixelRect(colorSprite.rect);
     AnalyzeTrimmedSprite(colorAtlas, sourceRect, out var trimRect, out var offsetPx, out var colorTrimPixels, out var empty);
+    var spriteNameCategory = ResolveSpriteNameCategory(candidate, record);
     item = new PackedSpriteBuildItem {
-      outputSpriteName = BuildGroupedSpriteName(record.partCode, record.category, colorSprite.name),
+      outputSpriteName = BuildGroupedSpriteName(record.partCode, spriteNameCategory, colorSprite.name),
       sourceCategory = record.category,
       colorSourceAtlasPath = NormalizePath(record.atlasPath),
       normalSourceAtlasPath = NormalizePath(!string.IsNullOrWhiteSpace(record.normalAtlasPath) ? record.normalAtlasPath : record.atlasPath),
@@ -476,6 +486,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   }
 
   bool TryBuildItemFromTrimmedSourceMetadata(
+    GroupCandidate candidate,
     SourceAtlasRecord record,
     LoadedAtlas colorAtlas,
     LoadedAtlas normalAtlas,
@@ -499,8 +510,9 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return false;
     }
 
+    var spriteNameCategory = ResolveSpriteNameCategory(candidate, record);
     item = new PackedSpriteBuildItem {
-      outputSpriteName = BuildGroupedSpriteName(record.partCode, record.category, colorSprite.name),
+      outputSpriteName = BuildGroupedSpriteName(record.partCode, spriteNameCategory, colorSprite.name),
       sourceCategory = record.category,
       colorSourceAtlasPath = NormalizePath(record.atlasPath),
       normalSourceAtlasPath = NormalizePath(!string.IsNullOrWhiteSpace(record.normalAtlasPath) ? record.normalAtlasPath : record.atlasPath),

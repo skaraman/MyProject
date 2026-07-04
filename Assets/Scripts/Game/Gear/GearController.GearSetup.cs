@@ -293,7 +293,7 @@ public partial class GearController {
       return esperanzaGearMaterial;
     }
 
-    var activeAddress = ActiveContentRegistryRuntime.ResolveCoreAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath);
+    var activeAddress = ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath);
     if (!runtimeGearMaterialWarningLogged) {
       runtimeGearMaterialWarningLogged = true;
       Debug.LogWarning(
@@ -318,7 +318,7 @@ public partial class GearController {
       return esperanzaHairMaterial;
     }
 
-    var activeAddress = ActiveContentRegistryRuntime.ResolveCoreAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath);
+    var activeAddress = ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath);
     if (!runtimeHairMaterialWarningLogged) {
       runtimeHairMaterialWarningLogged = true;
       Debug.LogWarning(
@@ -375,7 +375,7 @@ public partial class GearController {
       return esperanzaBodyMaterial;
     }
 
-    var activeAddress = ActiveContentRegistryRuntime.ResolveCoreAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath);
+    var activeAddress = ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath);
     if (!runtimeBodyMaterialWarningLogged) {
       runtimeBodyMaterialWarningLogged = true;
       Debug.LogWarning(

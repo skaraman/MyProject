@@ -49,7 +49,7 @@ public static partial class ContentPackPipeline {
 
   static void EnsureDirectoryAssetPath(string assetPath) {
     if (string.IsNullOrWhiteSpace(assetPath)) return;
-    var fullPath = Path.GetFullPath(assetPath);
+    var fullPath = GetPhysicalPath(assetPath);
     Directory.CreateDirectory(fullPath);
   }
 
@@ -74,8 +74,11 @@ public static partial class ContentPackPipeline {
   static string NormalizeLibraryName(string value) {
     var normalized = NormalizeAssetPath(value);
     if (string.IsNullOrWhiteSpace(normalized)) return "";
-    if (normalized.EndsWith(".spriteLib", StringComparison.OrdinalIgnoreCase)) {
-      normalized = normalized.Substring(0, normalized.Length - ".spriteLib".Length);
+    if (normalized.EndsWith(SpriteStreamingConfig.CustomSpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring(0, normalized.Length - SpriteStreamingConfig.CustomSpriteLibraryExtension.Length);
+    }
+    else if (normalized.EndsWith(SpriteStreamingConfig.LegacySpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring(0, normalized.Length - SpriteStreamingConfig.LegacySpriteLibraryExtension.Length);
     }
 
     var root = NormalizeAssetPath(SpriteStreamingConfig.SourceRootFolder);
@@ -94,15 +97,20 @@ public static partial class ContentPackPipeline {
   }
 
   static void AddUniquePath(List<string> paths, string value) {
-    if (paths == null) return;
+    TryAddUniquePath(paths, value);
+  }
+
+  static bool TryAddUniquePath(List<string> paths, string value) {
+    if (paths == null) return false;
     var normalized = NormalizeAssetPath(value);
-    if (string.IsNullOrWhiteSpace(normalized)) return;
+    if (string.IsNullOrWhiteSpace(normalized)) return false;
 
     for (var i = 0; i < paths.Count; i++) {
-      if (string.Equals(paths[i], normalized, StringComparison.OrdinalIgnoreCase)) return;
+      if (string.Equals(paths[i], normalized, StringComparison.OrdinalIgnoreCase)) return false;
     }
 
     paths.Add(normalized);
+    return true;
   }
 
   static string RemoveExtension(string assetPath) {
@@ -112,6 +120,128 @@ public static partial class ContentPackPipeline {
 
   static string NormalizeToken(string value) {
     return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+  }
+
+  public static bool IsGameplayContentRequested(IReadOnlyList<string> activePackIds) {
+    if (activePackIds == null || activePackIds.Count <= 0) return false;
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var packId = NormalizeToken(activePackIds[i]);
+      if (string.IsNullOrWhiteSpace(packId)) continue;
+      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) continue;
+      if (IsUiOnlyPackId(packId)) continue;
+      if (IsGameplayPackId(packId)) return true;
+    }
+
+    return false;
+  }
+
+  static bool IsGameplayContentRequested(
+    Dictionary<string, PackDefinition> packById,
+    IReadOnlyList<string> activePackIds
+  ) {
+    if (activePackIds == null || activePackIds.Count <= 0) return false;
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var packId = NormalizeToken(activePackIds[i]);
+      if (string.IsNullOrWhiteSpace(packId)) continue;
+      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) continue;
+
+      if (packById != null &&
+          packById.TryGetValue(packId, out var pack) &&
+          pack != null) {
+        if (IsGameplayPack(pack)) return true;
+        continue;
+      }
+
+      if (IsGameplayPackId(packId)) return true;
+    }
+
+    return false;
+  }
+
+  static bool IsGameplayPack(PackDefinition pack) {
+    if (pack == null) return false;
+    if (IsGameplayPackKind(pack.kind)) return true;
+    if (!string.IsNullOrWhiteSpace(pack.defaultLocationId)) return true;
+    if (pack.ownedLocations != null && pack.ownedLocations.Count > 0) return true;
+    if (pack.ownedEnemyTypes != null && pack.ownedEnemyTypes.Count > 0) return true;
+    if (PackHasGameplayRoot(pack.ownedRoots)) return true;
+
+    if (pack.authoringSources != null) {
+      for (var i = 0; i < pack.authoringSources.Count; i++) {
+        var source = pack.authoringSources[i];
+        if (source == null) continue;
+        if (IsGameplayRoot(source.assetPath)) return true;
+        if (IsGameplayRoot(source.normalAssetPath)) return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool IsGameplayPackKind(string kind) {
+    var normalizedKind = NormalizeToken(kind);
+    return string.Equals(normalizedKind, "form", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "gear", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "slice", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "episode", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool IsGameplayPackId(string packId) {
+    var normalizedPackId = NormalizeToken(packId);
+    if (string.IsNullOrWhiteSpace(normalizedPackId)) return false;
+    if (IsUiOnlyPackId(normalizedPackId)) return false;
+
+    return normalizedPackId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Slice_", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Episode_", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool IsUiOnlyPackId(string packId) {
+    var normalizedPackId = NormalizeToken(packId);
+    return normalizedPackId.EndsWith("UI", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool PackHasGameplayRoot(List<string> roots) {
+    if (roots == null || roots.Count <= 0) return false;
+
+    for (var i = 0; i < roots.Count; i++) {
+      if (IsGameplayRoot(roots[i])) return true;
+    }
+
+    return false;
+  }
+
+  static bool IsGameplayRoot(string assetPath) {
+    var normalized = NormalizeAssetPath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalized)) return false;
+
+    return normalized.StartsWith("Assets/Prefabs/Characters/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Prefabs/Enemies/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Prefabs/Projectiles/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Materials/Gameplay/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Sprites/Characters/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Sprites/Enemies/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Sprites/Effects/", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Assets/Sprites/Locations/", StringComparison.OrdinalIgnoreCase);
+  }
+
+  public static bool IsGameplayContentRequestedForConfiguredSelection() {
+    var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(SelectionAssetPath);
+    if (selection != null && selection.ExternalContentEnabled) {
+      var packDefinitions = BuildPackDefinitions(selection.ExternalRoot);
+      var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
+      return IsGameplayContentRequested(packById, selection.GetNormalizedActivePackIds());
+    }
+
+    var registry = AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ActiveRegistryAssetPath);
+    if (registry != null && registry.ExternalContentActive) {
+      return IsGameplayContentRequested(registry.ActivePackIds);
+    }
+
+    return true;
   }
 
   static string NormalizeAssetPath(string value) {

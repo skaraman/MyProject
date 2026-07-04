@@ -65,6 +65,11 @@ public static partial class SpriteIndexBuilder {
     var guidToLibraryName = DiscoverGuidToLibraryName(librariesByKey);
     var requestedLibraryReferences = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
     var requestedLibraryNames = CollectRequestedLibraryNames(librariesByKey, guidToLibraryName, includeAsset, requestedLibraryReferences);
+    BuildActiveTextureGuidIndex(state);
+    var customSheetRowsByLibrary = DiscoverCustomSpriteSheetRows(state);
+    foreach (var libraryName in customSheetRowsByLibrary.Keys) {
+      requestedLibraryNames.Add(libraryName);
+    }
 
     var shardAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var manifestEntries = new List<ManifestRow>();
@@ -73,15 +78,20 @@ public static partial class SpriteIndexBuilder {
     var orderedLibraryNames = requestedLibraryNames.ToList();
     orderedLibraryNames.Sort(StringComparer.Ordinal);
 
-    BuildActiveTextureGuidIndex(state);
     Debug.Log($"[SpriteIndexBuilder] RebuildRuntimeIndexInternal: Processing {orderedLibraryNames.Count} requested library names.");
 
     for (var i = 0; i < orderedLibraryNames.Count; i++) {
       var requestedLibraryName = orderedLibraryNames[i];
       var libraryName = ResolveCanonicalLibraryName(requestedLibraryName, librariesByKey, state.runtimeAmbiguityWarnings, contextLabel);
       if (string.IsNullOrWhiteSpace(libraryName)) {
+        var normalizedRequested = SpriteAddressResolver.NormalizeNamePart(requestedLibraryName);
+        if (customSheetRowsByLibrary.ContainsKey(normalizedRequested)) {
+          libraryName = normalizedRequested;
+        }
+      }
+      if (string.IsNullOrWhiteSpace(libraryName)) {
         var error =
-          "Missing color library for requested libraryName '" + requestedLibraryName + "'." +
+          "Missing color library or sprite sheet for requested libraryName '" + requestedLibraryName + "'." +
           BuildRequestedLibraryReferenceSuffix(requestedLibraryName, requestedLibraryReferences);
         Debug.LogError($"[SpriteIndexBuilder] Failed to resolve canonical library name for '{requestedLibraryName}'.");
         state.errors.Add(error);
@@ -92,25 +102,30 @@ public static partial class SpriteIndexBuilder {
         continue;
       }
 
-      if (!librariesByKey.TryGetValue(libraryName, out var colorLibraryPath)) {
-        Debug.LogError($"[SpriteIndexBuilder] Library '{libraryName}' not found in librariesByKey. Expected path.");
+      var hasColorLibrary = librariesByKey.TryGetValue(libraryName, out var colorLibraryPath);
+      customSheetRowsByLibrary.TryGetValue(libraryName, out var customSheetRows);
+      var customSheetRowCount = customSheetRows != null ? customSheetRows.Count : 0;
+      if (!hasColorLibrary && customSheetRowCount <= 0) {
+        Debug.LogError($"[SpriteIndexBuilder] Library '{libraryName}' not found in librariesByKey or custom sheet rows. Expected path.");
         state.errors.Add(
-          "Missing color library for libraryName '" + libraryName + "' (requested '" + requestedLibraryName + "')." +
+          "Missing color library or sprite sheet for libraryName '" + libraryName + "' (requested '" + requestedLibraryName + "')." +
           BuildRequestedLibraryReferenceSuffix(requestedLibraryName, requestedLibraryReferences));
         continue;
       }
 
-      var colorRows = ParseLibraryRows(colorLibraryPath, state.errors);
+      var colorRows = hasColorLibrary
+        ? ParseLibraryRows(colorLibraryPath, state.errors)
+        : new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
       var normalLibraryName = libraryName + "N";
       var hasNormalLibrary = librariesByKey.TryGetValue(normalLibraryName, out var normalLibraryPath);
-      if (!hasNormalLibrary) {
+      if (hasColorLibrary && !hasNormalLibrary) {
         state.missingNormalLibraryCount++;
       }
 
       var normalRows = hasNormalLibrary
         ? ParseLibraryRows(normalLibraryPath, state.errors)
         : new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
-      if (colorRows.Count == 0) {
+      if (colorRows.Count == 0 && customSheetRowCount <= 0) {
         state.skippedColorLibraryCount++;
         Debug.LogWarning(
           "[SpriteIndexBuilder] [" + contextLabel + "] Skipped sprite library because it produced zero color rows." +
@@ -120,7 +135,7 @@ public static partial class SpriteIndexBuilder {
         continue;
       }
 
-      var shardRows = new List<ShardRow>(colorRows.Count);
+      var shardRows = new List<ShardRow>(colorRows.Count + customSheetRowCount);
       var skippedColorRowsForLibrary = 0;
       var failedResolveCount = 0;
       var failedValidateCount = 0;
@@ -191,6 +206,10 @@ public static partial class SpriteIndexBuilder {
         shardRows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
       }
 
+      if (customSheetRows != null && customSheetRows.Count > 0) {
+        shardRows.AddRange(customSheetRows);
+      }
+
       if (skippedColorRowsForLibrary > 0) {
         state.skippedColorRowCount += skippedColorRowsForLibrary;
         TrackSkippedColorLibrarySummary(state, libraryName, requestedLibraryName, skippedColorRowsForLibrary, colorRows.Count);
@@ -203,8 +222,9 @@ public static partial class SpriteIndexBuilder {
             "[SpriteIndexBuilder] Library produced zero shard rows." +
             " libraryName='" + libraryName + "'" +
             " requested='" + requestedLibraryName + "'" +
-            " path='" + colorLibraryPath + "'" +
+            " path='" + (colorLibraryPath ?? "") + "'" +
             " colorRows=" + colorRows.Count +
+            " sheetRows=" + customSheetRowCount +
             " failedResolveCount=" + failedResolveCount +
             " failedValidateCount=" + failedValidateCount +
             (string.IsNullOrWhiteSpace(sampleResolveContext) ? "" : " sampleResolve='" + sampleResolveContext + "'") +

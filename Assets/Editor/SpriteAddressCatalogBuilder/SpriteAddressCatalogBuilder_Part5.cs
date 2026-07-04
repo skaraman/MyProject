@@ -27,16 +27,24 @@ public static partial class SpriteIndexBuilder {
       }
     }
 
-    var assetsRoot = NormalizePath("Assets");
     var spriteWithNormalsGuid = AssetDatabase.AssetPathToGUID(BuilderConfig.SpriteWithNormalsScriptPath);
 
-    CollectLibraryNamesFromFiles(assetsRoot, "*.unity", spriteWithNormalsGuid, guidToLibraryName, result, requestedLibraryReferences);
-    CollectLibraryNamesFromFiles(assetsRoot, "*.prefab", spriteWithNormalsGuid, guidToLibraryName, result, requestedLibraryReferences);
+    var activeStageRoots = ContentPackPipeline.GetActiveStageAssetRoots();
+    if (activeStageRoots.Count > 0) {
+      for (var i = 0; i < activeStageRoots.Count; i++) {
+        CollectLibraryNamesFromFiles(activeStageRoots[i], "*.unity", spriteWithNormalsGuid, guidToLibraryName, result, requestedLibraryReferences);
+        CollectLibraryNamesFromFiles(activeStageRoots[i], "*.prefab", spriteWithNormalsGuid, guidToLibraryName, result, requestedLibraryReferences);
+      }
+    }
+    else {
+      CollectLibraryNamesFromFiles("Assets", "*.unity", spriteWithNormalsGuid, guidToLibraryName, result, requestedLibraryReferences);
+      CollectLibraryNamesFromFiles("Assets", "*.prefab", spriteWithNormalsGuid, guidToLibraryName, result, requestedLibraryReferences);
+    }
 
     if (includeAsset != null && includeAsset.libraryNames != null) {
       for (var i = 0; i < includeAsset.libraryNames.Count; i++) {
         var normalized = SpriteAddressResolver.NormalizeNamePart(includeAsset.libraryNames[i]);
-        if (!string.IsNullOrWhiteSpace(normalized)) {
+        if (!string.IsNullOrWhiteSpace(normalized) && IsKnownActiveLibraryName(normalized, librariesByKey)) {
           result.Add(normalized);
           AddRequestedLibraryReference(
             requestedLibraryReferences,
@@ -58,6 +66,17 @@ public static partial class SpriteIndexBuilder {
     return librariesByKey.ContainsKey(candidateColorLibraryName);
   }
 
+  static bool IsKnownActiveLibraryName(string libraryName, Dictionary<string, string> librariesByKey) {
+    var normalized = SpriteAddressResolver.NormalizeNamePart(libraryName);
+    if (string.IsNullOrWhiteSpace(normalized) || librariesByKey == null) return false;
+    if (librariesByKey.ContainsKey(normalized)) return true;
+
+    var slash = normalized.LastIndexOf('/');
+    if (slash < 0 || slash >= normalized.Length - 1) return false;
+    var leafName = normalized.Substring(slash + 1);
+    return librariesByKey.ContainsKey(leafName);
+  }
+
   static void CollectLibraryNamesFromFiles(
     string rootPath,
     string pattern,
@@ -66,12 +85,14 @@ public static partial class SpriteIndexBuilder {
     HashSet<string> target,
     Dictionary<string, List<string>> requestedLibraryReferences
   ) {
-    if (!Directory.Exists(rootPath)) return;
-    var files = Directory.GetFiles(rootPath, pattern, SearchOption.AllDirectories);
+    var physicalRootPath = ContentPackPipeline.GetPhysicalPath(rootPath);
+    if (string.IsNullOrWhiteSpace(physicalRootPath) || !Directory.Exists(physicalRootPath)) return;
+    var files = Directory.GetFiles(physicalRootPath, pattern, SearchOption.AllDirectories);
     Array.Sort(files, StringComparer.Ordinal);
 
     for (var i = 0; i < files.Length; i++) {
-      CollectLibraryNamesFromSerializedFile(NormalizePath(files[i]), spriteWithNormalsGuid, guidToLibraryName, target, requestedLibraryReferences);
+      var assetPath = ContentPackPipeline.ToProjectAssetPath(files[i]);
+      CollectLibraryNamesFromSerializedFile(NormalizePath(assetPath), spriteWithNormalsGuid, guidToLibraryName, target, requestedLibraryReferences);
     }
   }
 
@@ -82,10 +103,11 @@ public static partial class SpriteIndexBuilder {
     HashSet<string> target,
     Dictionary<string, List<string>> requestedLibraryReferences
   ) {
-    if (!File.Exists(path)) return;
+    var physicalPath = ContentPackPipeline.GetPhysicalPath(path);
+    if (string.IsNullOrWhiteSpace(physicalPath) || !File.Exists(physicalPath)) return;
 
     // Fast pre-filter using memory/CPU efficient contains
-    var text = File.ReadAllText(path);
+    var text = File.ReadAllText(physicalPath);
     if ((string.IsNullOrEmpty(spriteWithNormalsGuid) || !text.Contains(spriteWithNormalsGuid)) &&
         !text.Contains("SpriteWithNormals")) {
       return;
@@ -138,7 +160,7 @@ public static partial class SpriteIndexBuilder {
       pendingColorLibraryGuid = "";
     }
 
-    using (var reader = new StreamReader(path, Encoding.UTF8)) {
+    using (var reader = new StreamReader(physicalPath, Encoding.UTF8)) {
       string line;
       while ((line = reader.ReadLine()) != null) {
         if (line.StartsWith("--- !u!", StringComparison.Ordinal)) {

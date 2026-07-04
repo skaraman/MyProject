@@ -194,6 +194,25 @@ public static partial class ContentPackPipeline {
     return roots;
   }
 
+  public static IReadOnlyList<string> GetActiveStageAssetRoots() {
+    var roots = new List<string>();
+
+    var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(SelectionAssetPath);
+    if (selection == null || !selection.ExternalContentEnabled) return roots;
+
+    var packDefinitions = BuildPackDefinitions(selection.ExternalRoot);
+    var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
+    var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var stageRoot = GetStageAssetRoot(activePackIds[i], packById);
+      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
+      AddUniquePath(roots, stageRoot);
+    }
+
+    return roots;
+  }
+
   static bool IsExternalContentEnabled() {
     var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(SelectionAssetPath);
     return selection != null && selection.ExternalContentEnabled;
@@ -277,11 +296,24 @@ public static partial class ContentPackPipeline {
       ActiveContentRegistryRuntime.ForceReload();
       SpriteIndexBuilder.ClearCachedSpriteSliceEstimates("content_pack_stage:" + contextLabel);
 
-      var runtimeAddressablesChanged =
-        GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(logResult: false, saveAndRefresh: false) |
-        ProjectileAddressablesBootstrap.SyncProjectileAddressables(logResult: false, saveAndRefresh: false) |
-        LocationAddressablesBootstrap.SyncLocationAddressables(logResult: false, saveAndRefresh: false) |
-        RuntimeMaterialAddressablesBootstrap.SyncRuntimeMaterialAddressables(logResult: false, saveAndRefresh: false);
+      var runtimeAddressablesChanged = LocationAddressablesBootstrap.SyncLocationAddressables(
+        logResult: false,
+        saveAndRefresh: false
+      );
+      if (IsGameplayContentRequested(packById, activePackIds)) {
+        runtimeAddressablesChanged |= GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
+        runtimeAddressablesChanged |= ProjectileAddressablesBootstrap.SyncProjectileAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
+        runtimeAddressablesChanged |= RuntimeMaterialAddressablesBootstrap.SyncRuntimeMaterialAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
+      }
       if (runtimeAddressablesChanged) {
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
@@ -458,6 +490,10 @@ public static partial class ContentPackPipeline {
     }
   }
 
+  public static string ResolveStageAssetRoot(string packId) {
+    return GetStageAssetRoot(packId);
+  }
+
   static string GetStageAssetRoot(string packId, Dictionary<string, PackDefinition> packById = null) {
     var normalizedPackId = NormalizeToken(packId);
     if (string.IsNullOrWhiteSpace(normalizedPackId)) return "";
@@ -586,6 +622,12 @@ public static partial class ContentPackPipeline {
     var normalizedStageAssetPath = NormalizeAssetPath(stageAssetPath);
     var stageFullPath = NormalizeFullPath(stageAssetPath);
     var targetFullPath = NormalizeFullPath(externalRootPath);
+
+    if (string.Equals(stageFullPath, targetFullPath, StringComparison.OrdinalIgnoreCase)) {
+      EnsureDirectoryFullPath(targetFullPath);
+      reused = true;
+      return false;
+    }
 
     if (CanReuseStageLink(stageFullPath, targetFullPath)) {
       reused = true;

@@ -501,7 +501,14 @@ def create_details_frame(right_paned: tk.PanedWindow) -> tuple[tk.Frame, list[tk
     return details_frame, [doc_info_label, cat_info_label, lbl_info_label, sprite_ref_label], btn_frame
 
 
-def create_action_buttons(btn_frame: tk.Frame, on_open: callable, on_save_all: callable, on_scan_previews: callable, on_unload_all: callable, on_delete_without_prefix_all: callable) -> None:
+def create_action_buttons(
+    btn_frame: tk.Frame,
+    on_open: callable,
+    on_save_all: callable,
+    on_scan_previews: callable,
+    on_unload_all: callable,
+    on_delete_without_prefix_all: callable,
+) -> None:
     """Create the action button row with dark theme buttons.
 
     Args:

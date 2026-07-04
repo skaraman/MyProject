@@ -87,13 +87,19 @@ public static class RuntimeMaterialAddressablesBootstrap {
     var result = new List<RuntimeMaterialAsset>();
     var ownerAssetPaths = new List<string>();
     var externalContentActive = IsExternalContentConfigured();
+    var gameplayContentRequested = ContentPackPipeline.IsGameplayContentRequestedForConfiguredSelection();
 
     if (externalContentActive) {
-      AddMaterialFilesUnderRoot(ContentPackPipeline.StageRootAssetPath, result);
-      AddOwnerFilesUnderRoot(ContentPackPipeline.StageRootAssetPath, ownerAssetPaths);
-      AddUniqueMaterialIfExists(result, ResolvePreferredCoreAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath));
-      AddUniqueMaterialIfExists(result, ResolvePreferredCoreAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath));
-      AddUniqueMaterialIfExists(result, ResolvePreferredCoreAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath));
+      var activeStageRoots = CollectConfiguredActiveStageRoots();
+      for (var i = 0; i < activeStageRoots.Count; i++) {
+        AddMaterialFilesUnderRoot(activeStageRoots[i], result);
+        AddOwnerFilesUnderRoot(activeStageRoots[i], ownerAssetPaths);
+      }
+      if (gameplayContentRequested) {
+        AddUniqueMaterialIfExists(result, ResolvePreferredActiveAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath));
+        AddUniqueMaterialIfExists(result, ResolvePreferredActiveAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath));
+        AddUniqueMaterialIfExists(result, ResolvePreferredActiveAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath));
+      }
     }
     else {
       AddRuntimeFallbackOwners(ownerAssetPaths);
@@ -124,6 +130,35 @@ public static class RuntimeMaterialAddressablesBootstrap {
     }
 
     return HasStagedExternalMaterialFiles();
+  }
+
+  static List<string> CollectConfiguredActiveStageRoots() {
+    var result = new List<string>();
+
+    var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(ContentPackPipeline.SelectionAssetPath);
+    if (selection != null && selection.ExternalContentEnabled) {
+      AddStageRootsForPackIds(result, selection.GetNormalizedActivePackIds());
+      return result;
+    }
+
+    var registry = AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ContentPackPipeline.ActiveRegistryAssetPath);
+    if (registry != null && registry.ExternalContentActive) {
+      AddStageRootsForPackIds(result, registry.ActivePackIds);
+    }
+
+    return result;
+  }
+
+  static void AddStageRootsForPackIds(List<string> output, IReadOnlyList<string> packIds) {
+    if (output == null || packIds == null) return;
+
+    for (var i = 0; i < packIds.Count; i++) {
+      var stageRoot = RuntimePrefabAddressables.NormalizeAssetPath(
+        ContentPackPipeline.ResolveStageAssetRoot(packIds[i])
+      );
+      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
+      AddUniquePath(output, stageRoot);
+    }
   }
 
   static void AddMaterialFilesUnderRoot(string assetRoot, List<RuntimeMaterialAsset> output) {
@@ -174,21 +209,25 @@ public static class RuntimeMaterialAddressablesBootstrap {
     }
   }
 
-  static string ResolvePreferredCoreAssetPath(string assetPath) {
+  static string ResolvePreferredActiveAssetPath(string assetPath) {
     var normalizedAssetPath = RuntimePrefabAddressables.NormalizeAssetPath(assetPath);
     if (IsExternalContentConfigured() &&
         !string.IsNullOrWhiteSpace(normalizedAssetPath) &&
         normalizedAssetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) {
-      var stagedAssetPath = RuntimePrefabAddressables.NormalizeAssetPath(
-        ContentPackPipeline.StageCoreAssetPath + "/" + normalizedAssetPath.Substring("Assets/".Length)
-      );
-      if (File.Exists(ContentPackPipeline.GetPhysicalPath(stagedAssetPath))) {
-        return stagedAssetPath;
+      var relativePath = normalizedAssetPath.Substring("Assets/".Length);
+      var activeStageRoots = CollectConfiguredActiveStageRoots();
+      for (var i = 0; i < activeStageRoots.Count; i++) {
+        var stagedAssetPath = RuntimePrefabAddressables.NormalizeAssetPath(
+          activeStageRoots[i] + "/" + relativePath
+        );
+        if (File.Exists(ContentPackPipeline.GetPhysicalPath(stagedAssetPath))) {
+          return stagedAssetPath;
+        }
       }
     }
 
     var resolvedAssetPath = RuntimePrefabAddressables.NormalizeAssetPath(
-      ActiveContentRegistryRuntime.ResolveCoreAssetPath(assetPath)
+      ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(assetPath)
     );
     if (!string.IsNullOrWhiteSpace(resolvedAssetPath) &&
         File.Exists(ContentPackPipeline.GetPhysicalPath(resolvedAssetPath))) {

@@ -49,7 +49,6 @@ def _on_context_menu(self: Any, event: Any) -> None:
 
 def _add_global_menu_items(self: Any, menu: Any) -> None:
     menu.add_command(label="Open Library", command=self.open_library)
-    menu.add_separator()
     menu.add_command(label="Unload All Libraries", command=self.unload_all)
     menu.add_command(
         label="Delete Labels Without Prefix In All Libraries...",
@@ -209,7 +208,6 @@ def _on_doc_listbox_context_menu(self: Any, event: Any) -> None:
     _add_document_menu_items(self, menu, index)
     menu.add_separator()
     menu.add_command(label="Open Library", command=self.open_library)
-    menu.add_separator()
     menu.add_command(label="Unload All Libraries", command=self.unload_all)
     menu.add_separator()
     menu.add_command(

@@ -1,22 +1,31 @@
 # Performance Goal
 
-Updated: 2026-07-01
+Updated: 2026-07-03
 
 ## Latest Note
 
+- 2026-07-03: current performance target is Core/main-menu boot only; gameplay scenes that expect the player, enemies, projectiles, or effects are deferred until the scene/playground structure is split.
 - 2026-07-02: editor atlas authoring pass removed per-folder forced GC/unload from trim export and switched grouped atlas export to deterministic full repack from source instead of loading/reusing prior output pages
 
 ## Objective
 
 Make the loading pipeline consistent, fast, and measurable.
 
-The primary workflow is:
+Current scope:
+
+- boot to the main menu
+- validate Core UI/font/menu content
+- do not require gameplay player, location, enemy, projectile, or effect content
+- treat packs with gameplay ownership or gameplay asset roots as the signal that gameplay content was requested
+- defer `LoadGameFlow -> DomeCity` until dedicated gameplay/playground scenes are separated from menu startup
+
+The primary workflow for the current scope is:
 
 ```powershell
-python .\Tools\ContentPackIterationUI.py --set-active Core,Form_Base,DomeCity,Imp --build-smart
+python .\Tools\ContentPackIterationUI.py --set-active Core --build-smart
 ```
 
-Then run Play Mode into `LoadGameFlow` for `DomeCity` and verify from `%LOCALAPPDATA%\Unity\Editor\Editor.log`.
+Then run Play Mode to the main menu and verify from `%LOCALAPPDATA%\Unity\Editor\Editor.log`.
 
 ## Verified Inputs
 
@@ -48,11 +57,21 @@ Current content-pack evidence from docs:
 - Python UI fallback external root is `..\MyProjectContent` instead of a hardcoded machine path
 - Unity content-pack backend uses the same `..\MyProjectContent` fallback and no longer expands active packs through pack dependencies
 - Unity content-pack menu actions are removed
-- next runtime measurement waits on a passing Smart content-pack build
+- next runtime measurement waits on a passing Core Smart content-pack build and main-menu startup
 
 ## Performance Targets
 
-Editor Play Mode target:
+Current Editor Play Mode target:
+
+- main menu reaches first usable frame in under `5s`
+- no missing main-menu UI sprites
+- no missing font sprites
+- no `SpriteRuntimeIndex/Shard/UI/Fonts` Addressables key failure
+- no gameplay player, location, enemy, projectile, or effect dependency is required for menu startup
+- no `[CompletionDiag]` over `50ms` during menu reveal
+- no `[LoadingHeartbeatGap]` over `2.0s`
+
+Deferred gameplay target:
 
 - `LoadGameFlow` into `DomeCity` reveals gameplay in under `15s`
 - `warm_gate` completes without hard timeout
@@ -63,7 +82,13 @@ Editor Play Mode target:
 - no `[LoadingHeartbeatGap]` over `2.0s`
 - no visible first-frame missing player, active location, spawn-critical enemies, gameplay UI shell, or dialog shell
 
-Player-build target after editor flow is stable:
+Current player-build target after editor menu flow is stable:
+
+- main menu first usable frame in under `3s`
+- no recurring menu `GC.Alloc` after warmup
+- no recurring debug logs from menu frame paths during a normal performance run
+
+Deferred gameplay player-build target:
 
 - gameplay reveal in under `8s`
 - gameplay frames stay under `16.7ms` outside intentional loading work
@@ -119,12 +144,12 @@ One GC policy:
 
 Goal:
 
-Make the content pipeline valid before measuring runtime loading.
+Make the Core content pipeline valid before measuring main-menu loading.
 
 Run:
 
 ```powershell
-python .\Tools\ContentPackIterationUI.py --set-active Core,Form_Base,DomeCity,Imp --build-smart
+python .\Tools\ContentPackIterationUI.py --set-active Core --build-smart
 ```
 
 Verify:
@@ -132,17 +157,17 @@ Verify:
 - Smart export succeeds
 - active pack stage succeeds
 - staged content audit succeeds
-- runtime index rebuild reports nonzero libraries and shards
+- runtime index rebuild reports nonzero Core UI/font/menu libraries and shards
 - Addressables build succeeds
-- runtime index, player prefab/materials, location prefab, projectiles, and active staged materials use package paths
+- runtime index, main-menu sprites, and font sprites use package paths
 - no `Assets/Generated` or `Assets/ContentStage` runtime references remain
 
 Acceptance:
 
 - `Editor.log` contains a complete passing Smart content-pack run
-- gameplay measurement can test loading performance instead of missing content
+- main-menu measurement can test loading performance instead of missing content
 
-### Pass 2: Measure One Gameplay Example
+### Pass 2: Measure One Menu Example
 
 Goal:
 
@@ -151,19 +176,15 @@ Use one concrete runtime example before batch work.
 Run Play Mode:
 
 ```text
-LoadGameFlow -> DomeCity
+Application start -> Main Menu
 ```
 
 Capture from `Editor.log`:
 
-- total flow time
-- location resolve, instantiate, activation, and barrier timings
-- warm gate start/end request counts
-- `reveal_critical_ready`
-- `warm_plan_critical_ready`
-- pre-unlock start/end queue state
-- unlock `queued`, `in_flight`, and `deferred`
-- reveal-settle timing
+- total menu startup time
+- Core runtime index readiness
+- UI/font shard readiness
+- menu reveal timing
 - `[CompletionDiag]` over `50ms`
 - `[LoadingHeartbeatGap]` over `2.0s`
 - first visible missing content, if any
@@ -171,7 +192,6 @@ Capture from `Editor.log`:
 Acceptance:
 
 - one dominant elapsed-time owner is known
-- one dominant handoff backlog producer is known
 - no code change starts without an owner and contract failure
 
 ### Pass 3: Enforce Warm Ownership

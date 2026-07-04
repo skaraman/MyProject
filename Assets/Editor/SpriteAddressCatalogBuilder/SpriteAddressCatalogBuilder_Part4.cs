@@ -356,8 +356,7 @@ public static partial class SpriteIndexBuilder {
       var physicalRoot = ContentPackPipeline.GetPhysicalPath(root);
       if (string.IsNullOrWhiteSpace(physicalRoot) || !Directory.Exists(physicalRoot)) continue;
 
-      var files = Directory.GetFiles(physicalRoot, "*.spriteLib", SearchOption.AllDirectories);
-      Array.Sort(files, StringComparer.Ordinal);
+      var files = DiscoverLogicalLibraryFiles(physicalRoot);
 
       for (var i = 0; i < files.Length; i++) {
         var physicalPath = NormalizePath(files[i]);
@@ -372,6 +371,22 @@ public static partial class SpriteIndexBuilder {
     }
 
     return result;
+  }
+
+  static string[] DiscoverLogicalLibraryFiles(string physicalRoot) {
+    if (string.IsNullOrWhiteSpace(physicalRoot) || !Directory.Exists(physicalRoot)) {
+      return Array.Empty<string>();
+    }
+
+    var customFiles = Directory.GetFiles(physicalRoot, "*" + BuilderConfig.CustomSpriteLibraryExtension, SearchOption.AllDirectories);
+    var legacyFiles = Directory.GetFiles(physicalRoot, "*" + BuilderConfig.LegacySpriteLibraryExtension, SearchOption.AllDirectories);
+    Array.Sort(customFiles, StringComparer.OrdinalIgnoreCase);
+    Array.Sort(legacyFiles, StringComparer.OrdinalIgnoreCase);
+
+    var files = new List<string>(customFiles.Length + legacyFiles.Length);
+    files.AddRange(customFiles);
+    files.AddRange(legacyFiles);
+    return files.ToArray();
   }
 
   static Dictionary<string, string> DiscoverGuidToLibraryName(Dictionary<string, string> librariesByKey) {

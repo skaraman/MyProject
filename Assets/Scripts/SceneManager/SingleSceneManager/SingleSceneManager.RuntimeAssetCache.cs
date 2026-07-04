@@ -398,7 +398,7 @@ public partial class SingleSceneManager {
     }
 
     var sourceAssetPath = "Assets/Sprites/Characters/Esperanza/Expressions/Base/atlas" + normalizedExtension;
-    return ActiveContentRegistryRuntime.ResolveCoreAssetPath(sourceAssetPath);
+    return ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(sourceAssetPath);
   }
 
   void PrimeLoadingTextRuntimeAssets(string source) {

@@ -13,7 +13,13 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return;
     }
 
-    scannedCandidates = CollectGroupCandidates(sourceRootPath, sourceAtlasPaths, sanitizedOutputName, out error);
+    var requireSingleSourceContract = IsValidAutoFindSourceRootPath(sourceAtlasPaths);
+    scannedCandidates = CollectGroupCandidates(
+      sourceRootPath,
+      sourceAtlasPaths,
+      sanitizedOutputName,
+      requireSingleSourceContract,
+      out error);
     if (!string.IsNullOrWhiteSpace(error)) {
       EditorUtility.DisplayDialog("Analyze Failed", error, "OK");
       scannedCandidates = new List<GroupCandidate>();
@@ -51,6 +57,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     string sourceRootPath,
     List<string> sourceAtlasPaths,
     string sanitizedOutputName,
+    bool requireSingleSourceContract,
     out string error) {
     error = "";
     var candidates = new List<GroupCandidate>();
@@ -62,10 +69,14 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     string detectedForm = "";
     string detectedVariant = "";
     string detectedPartCode = "";
+    var hasMixedForms = false;
+    var hasMixedVariants = false;
     var hasMixedPartCodes = false;
     var detectedSkin = false;
+    var hasMixedSkinGearContract = false;
     var candidate = new GroupCandidate {
-      outputName = sanitizedOutputName
+      outputName = sanitizedOutputName,
+      usesFolderStructureSpriteNames = !requireSingleSourceContract
     };
 
     for (var i = 0; i < sourceAtlasPaths.Count; i++) {
@@ -82,9 +93,23 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         detectedSkin = isSkin;
       }
       else {
-        if (!string.Equals(detectedForm, form, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(detectedVariant, variant, StringComparison.OrdinalIgnoreCase) ||
-            detectedSkin != isSkin) {
+        var hasDifferentForm = !string.Equals(detectedForm, form, StringComparison.OrdinalIgnoreCase);
+        var hasDifferentVariant = !string.Equals(detectedVariant, variant, StringComparison.OrdinalIgnoreCase);
+        var hasDifferentSkinContract = detectedSkin != isSkin;
+        if (hasDifferentForm) {
+          hasMixedForms = true;
+        }
+
+        if (hasDifferentVariant) {
+          hasMixedVariants = true;
+        }
+
+        if (hasDifferentSkinContract) {
+          hasMixedSkinGearContract = true;
+        }
+
+        if (requireSingleSourceContract &&
+            (hasDifferentForm || hasDifferentVariant || hasDifferentSkinContract)) {
           error = "All selected atlases must share the same form/variant and skin-vs-gear contract.";
           return new List<GroupCandidate>();
         }
@@ -105,10 +130,11 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       });
     }
 
-    candidate.form = detectedForm;
-    candidate.variant = detectedVariant;
-    candidate.partCode = hasMixedPartCodes ? "Mixed" : detectedPartCode;
-    candidate.isSkin = detectedSkin;
+    candidate.form = hasMixedForms ? MixedGroupToken : detectedForm;
+    candidate.variant = hasMixedVariants ? MixedGroupToken : detectedVariant;
+    candidate.partCode = hasMixedPartCodes ? MixedGroupToken : detectedPartCode;
+    candidate.isSkin = detectedSkin && !hasMixedSkinGearContract;
+    candidate.hasMixedSkinGearContract = hasMixedSkinGearContract;
     FinalizeCandidate(candidate);
     candidates.Add(candidate);
     return candidates;
@@ -166,24 +192,67 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   }
 
   static string ResolvePartCode(string token) {
-    if (string.IsNullOrWhiteSpace(token)) return "";
-    if (PartCodeByToken.TryGetValue(token.Trim(), out var mappedPartCode) && !string.IsNullOrWhiteSpace(mappedPartCode)) {
+    var normalizedToken = (token ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(normalizedToken)) {
+      return "";
+    }
+
+    if (PartCodeByToken.TryGetValue(normalizedToken, out var mappedPartCode) &&
+        !string.IsNullOrWhiteSpace(mappedPartCode)) {
       return mappedPartCode;
     }
 
-    return token.Trim();
+    return normalizedToken;
+  }
+
+  static string ResolvePartToken(string code) {
+    var normalizedCode = (code ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(normalizedCode)) {
+      return "";
+    }
+
+    if (PartTokenByCode.TryGetValue(normalizedCode, out var mappedPartToken) &&
+        !string.IsNullOrWhiteSpace(mappedPartToken)) {
+      return mappedPartToken;
+    }
+
+    return normalizedCode;
   }
 
   static bool IsKnownPartCodeToken(string token) {
-    var resolvedPartCode = ResolvePartCode(token);
-    if (string.IsNullOrWhiteSpace(resolvedPartCode)) return false;
-    foreach (var value in PartCodeByToken.Values) {
-      if (string.Equals(value, resolvedPartCode, StringComparison.OrdinalIgnoreCase)) {
-        return true;
-      }
+    var normalizedToken = (token ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(normalizedToken)) {
+      return false;
     }
 
-    return false;
+    if (PartCodeByToken.ContainsKey(normalizedToken)) {
+      return true;
+    }
+
+    return PartTokenByCode.ContainsKey(normalizedToken);
+  }
+
+  static Dictionary<string, string> BuildPartTokenByCode() {
+    var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var pair in PartCodeByToken) {
+      var partToken = (pair.Key ?? "").Trim();
+      var partCode = (pair.Value ?? "").Trim();
+      if (string.IsNullOrWhiteSpace(partToken)) {
+        continue;
+      }
+
+      if (string.IsNullOrWhiteSpace(partCode)) {
+        continue;
+      }
+
+      if (result.ContainsKey(partCode)) {
+        continue;
+      }
+
+      result.Add(partCode, partToken);
+    }
+
+    return result;
   }
 
   static bool TryParseWrappedDescriptorToken(string token, out string form, out string variant, out bool isSkin) {
@@ -393,10 +462,23 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
            !string.IsNullOrWhiteSpace(partCode);
   }
 
-  static bool TryParseImplicitSkinSourceAtlasPath(
+  static bool ContainsSkinSegment(string[] relativeSegments) {
+    if (relativeSegments == null) {
+      return false;
+    }
+
+    for (var i = 0; i < relativeSegments.Length; i++) {
+      if (string.Equals(relativeSegments[i], SkinFormName, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool TryParseSkinSourceAtlasPath(
     string sourceFolderPath,
     string[] relativeSegments,
-    string fileBase,
     out string category,
     out string form,
     out string variant,
@@ -407,47 +489,66 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     variant = "";
     partCode = "";
     isSkin = false;
-    if (relativeSegments == null || relativeSegments.Length <= 0 || relativeSegments.Length > 3) return false;
+    if (relativeSegments == null || relativeSegments.Length <= 0) return false;
 
-    var partToken = (relativeSegments[relativeSegments.Length - 1] ?? "").Trim();
-    if (!IsKnownPartCodeToken(partToken)) return false;
+    for (var skinIndex = 0; skinIndex < relativeSegments.Length; skinIndex++) {
+      if (!string.Equals(relativeSegments[skinIndex], SkinFormName, StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+
+      if (TryResolveSkinPartAndCategory(sourceFolderPath, relativeSegments, skinIndex, out category, out partCode)) {
+        form = SkinFormName;
+        variant = SkinVariantName;
+        isSkin = true;
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool TryResolveSkinPartAndCategory(
+    string sourceFolderPath,
+    string[] relativeSegments,
+    int skinIndex,
+    out string category,
+    out string partCode) {
+    category = "";
+    partCode = "";
+
+    if (TryResolveSkinPartCode(relativeSegments, skinIndex + 1, out partCode)) {
+      category = ResolveSkinCategory(sourceFolderPath, relativeSegments, skinIndex);
+      return !string.IsNullOrWhiteSpace(category);
+    }
+
+    if (TryResolveSkinPartCode(relativeSegments, skinIndex - 1, out partCode)) {
+      category = ResolveSkinCategory(sourceFolderPath, relativeSegments, skinIndex - 1);
+      return !string.IsNullOrWhiteSpace(category);
+    }
+
+    return false;
+  }
+
+  static bool TryResolveSkinPartCode(string[] relativeSegments, int partIndex, out string partCode) {
+    partCode = "";
+    if (relativeSegments == null) return false;
+    if (partIndex < 0 || partIndex >= relativeSegments.Length) return false;
+
+    var partToken = (relativeSegments[partIndex] ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(partToken)) return false;
+    if (string.Equals(partToken, SkinFormName, StringComparison.OrdinalIgnoreCase)) return false;
+    if (TryParseWrappedDescriptorToken(partToken, out _, out _, out _)) return false;
 
     partCode = ResolvePartCode(partToken);
-    if (string.IsNullOrWhiteSpace(partCode)) return false;
+    return !string.IsNullOrWhiteSpace(partCode);
+  }
 
-    var normalizedFileBase = (fileBase ?? "").Trim();
-    var isFlatDirectAtlas =
-      !string.IsNullOrWhiteSpace(normalizedFileBase) &&
-      (string.Equals(normalizedFileBase, partToken, StringComparison.OrdinalIgnoreCase) ||
-       string.Equals(normalizedFileBase, partCode, StringComparison.OrdinalIgnoreCase));
-
-    if (relativeSegments.Length == 1) {
-      if (!isFlatDirectAtlas) return false;
-      category = System.IO.Path.GetFileName(NormalizePath(sourceFolderPath).TrimEnd('/'));
-    }
-    else if (relativeSegments.Length == 2) {
-      var firstToken = (relativeSegments[0] ?? "").Trim();
-      if (string.Equals(firstToken, SkinFormName, StringComparison.OrdinalIgnoreCase)) {
-        category = System.IO.Path.GetFileName(NormalizePath(sourceFolderPath).TrimEnd('/'));
-      }
-      else {
-        if (!isFlatDirectAtlas) return false;
-        category = firstToken;
-      }
-    }
-    else {
-      var sourceForm = (relativeSegments[1] ?? "").Trim();
-      if (!string.Equals(sourceForm, SkinFormName, StringComparison.OrdinalIgnoreCase)) return false;
-      category = (relativeSegments[0] ?? "").Trim();
+  static string ResolveSkinCategory(string sourceFolderPath, string[] relativeSegments, int clusterStartIndex) {
+    if (TryResolveNearestCategoryToken(relativeSegments, clusterStartIndex, out var category)) {
+      return category;
     }
 
-    if (string.IsNullOrWhiteSpace(category)) return false;
-    if (TryParseWrappedDescriptorToken(category, out _, out _, out _)) return false;
-
-    form = SkinFormName;
-    variant = SkinVariantName;
-    isSkin = true;
-    return true;
+    return System.IO.Path.GetFileName(NormalizePath(sourceFolderPath).TrimEnd('/'));
   }
 
   static bool TryParseSourceAtlasPath(
@@ -470,15 +571,19 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return false;
     }
 
+    if (TryParseSkinSourceAtlasPath(sourceFolderPath, relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
+      return !string.IsNullOrWhiteSpace(fileBase);
+    }
+
+    if (ContainsSkinSegment(relativeSegments)) {
+      return false;
+    }
+
     if (TryParseTo2TransitionSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
       return !string.IsNullOrWhiteSpace(fileBase);
     }
 
     if (TryParseWrappedDescriptorSourceAtlasPath(relativeSegments, out category, out form, out variant, out partCode, out isSkin)) {
-      return !string.IsNullOrWhiteSpace(fileBase);
-    }
-
-    if (TryParseImplicitSkinSourceAtlasPath(sourceFolderPath, relativeSegments, fileBase, out category, out form, out variant, out partCode, out isSkin)) {
       return !string.IsNullOrWhiteSpace(fileBase);
     }
 
@@ -567,7 +672,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
   string BuildSourceRootPath(List<string> sourceAtlasPaths) {
     if (IsValidAutoFindSourceRootPath(sourceAtlasPaths)) {
-      return autoFindSourceRootPath;
+      return ResolveNearestParseableSourceRootPath(autoFindSourceRootPath, sourceAtlasPaths);
     }
 
     return BuildCommonSourceRootPath(sourceAtlasPaths);
@@ -618,7 +723,59 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     if (sharedSegments == null || sharedSegments.Length <= 0) return "";
-    return string.Join("/", sharedSegments);
+
+    var commonRootPath = string.Join("/", sharedSegments);
+    return ResolveNearestParseableSourceRootPath(commonRootPath, sourceAtlasPaths);
+  }
+
+  static string ResolveNearestParseableSourceRootPath(string commonRootPath, List<string> sourceAtlasPaths) {
+    var fallbackRootPath = NormalizePath(commonRootPath).TrimEnd('/');
+    var candidateRootPath = fallbackRootPath;
+    while (!string.IsNullOrWhiteSpace(candidateRootPath)) {
+      if (CanParseAllSourceAtlasPaths(candidateRootPath, sourceAtlasPaths)) {
+        return candidateRootPath;
+      }
+
+      var rawParentPath = System.IO.Path.GetDirectoryName(candidateRootPath);
+      var parentPath = NormalizePath(rawParentPath).TrimEnd('/');
+      if (string.IsNullOrWhiteSpace(parentPath)) {
+        break;
+      }
+
+      if (string.Equals(parentPath, candidateRootPath, StringComparison.OrdinalIgnoreCase)) {
+        break;
+      }
+
+      candidateRootPath = parentPath;
+    }
+
+    return fallbackRootPath;
+  }
+
+  static bool CanParseAllSourceAtlasPaths(string sourceRootPath, List<string> sourceAtlasPaths) {
+    if (string.IsNullOrWhiteSpace(sourceRootPath)) {
+      return false;
+    }
+
+    if (sourceAtlasPaths == null || sourceAtlasPaths.Count <= 0) {
+      return false;
+    }
+
+    for (var i = 0; i < sourceAtlasPaths.Count; i++) {
+      if (!TryParseSourceAtlasPath(
+            sourceRootPath,
+            sourceAtlasPaths[i],
+            out _,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   static int CompareSourceAtlasRecords(SourceAtlasRecord left, SourceAtlasRecord right) {

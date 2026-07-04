@@ -16,6 +16,9 @@ from typing import Any, Iterable
 
 PACKAGE_NAME = "com.skaraman.myprojectcontent"
 DEFAULT_EXTERNAL_ROOT_NAME = "MyProjectContent"
+CUSTOM_LIBRARY_EXTENSION = ".spriteSheetLib"
+LEGACY_LIBRARY_EXTENSION = ".spriteLib"
+UNITY_LOCK_EXIT_CODE = 3
 
 KIND_FOLDERS = {
     "pack": "",
@@ -38,6 +41,7 @@ PACK_TYPE_LABELS = {
 PACK_LABEL_TO_KIND = {label: kind for kind, label in PACK_TYPE_LABELS.items()}
 
 SOURCE_TYPE_LABELS = {
+    "sprite_sheet": "Sprite Sheet",
     "sprite_library": "Sprite Library",
     "sprite_slice": "Sprite Slice",
 }
@@ -75,17 +79,29 @@ class SourceAssetSpec:
     asset_path: str
     target_folder: str
     label: str = ""
+    library_name: str = ""
+    category: str = ""
+    label_prefix: str = ""
+    normal_asset_path: str = ""
 
     def source_label(self) -> str:
         if self.label:
             return f"{self.asset_path}[{self.label}]"
+        if self.source_type == "sprite_sheet":
+            parts = [self.library_name, self.category, self.label_prefix]
+            detail = "/".join(part for part in parts if part)
+            if detail:
+                return f"{self.asset_path} [{detail}]"
         return self.asset_path
 
     def row_values(self) -> tuple[str, str, str, str]:
+        label = self.label
+        if self.source_type == "sprite_sheet":
+            label = self.label_prefix
         return (
-            SOURCE_TYPE_LABELS.get(self.source_type, self.source_type),
+            source_type_label(self.source_type),
             self.asset_path,
-            self.label,
+            label,
             self.target_folder,
         )
 
@@ -139,7 +155,7 @@ class PackOption:
         lines.append("Authoring sources:")
         if self.authoring_sources:
             lines.extend(
-                f"- {SOURCE_TYPE_LABELS.get(source.source_type, source.source_type)}: "
+                f"- {source_type_label(source.source_type)}: "
                 f"{source.source_label()} -> {source.target_folder or '(target folder not set)'}"
                 for source in self.authoring_sources
             )
@@ -189,6 +205,7 @@ def main() -> int:
     parser.add_argument("--to-slice", default="", help="Slice id used with --add-pack-to-slice or --remove-pack-from-slice.")
     parser.add_argument("--remove-slice", default="", help="Remove a ContentManifest slice id.")
     parser.add_argument("--delete-pack", default="", help="Delete an external pack folder and remove pack references.")
+    parser.add_argument("--edit-sprite-sheets", action="store_true", help="Open the custom sprite sheet library editor.")
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
@@ -210,6 +227,9 @@ def main() -> int:
             print(f"deleted={deleted_path}")
         if not (args.list or args.build_smart):
             return 0
+
+    if args.edit_sprite_sheets:
+        return launch_sprite_sheet_editor(project_root, wait=True)
 
     if args.build_smart:
         return run_unity_smart_build(project_root, args.unity_exe)
@@ -364,8 +384,6 @@ def add_form_source_assets(project_root: Path, sources: list[str], form_name: st
             add_unique(sources, candidate)
 
     add_unique(sources, f"Assets/Sprites/Items/Gear/{form_name}")
-    add_unique(sources, "Assets/Sprites/SpriteLibraries/UI/CharUI.spriteLib")
-    add_unique(sources, "Assets/Sprites/SpriteLibraries/Items/Items.spriteLib")
     add_unique(sources, f"Assets/Materials/SelectMenu/Forms/{form_name}.mat")
     add_unique(sources, "Assets/Prefabs/UI/Ability.prefab")
     add_unique(sources, "Assets/Prefabs/UI/InventoryItem.prefab")
@@ -390,9 +408,22 @@ def parse_authoring_sources(manifest: dict[str, Any] | None) -> list[SourceAsset
         asset_path = normalize_slashes(str(raw.get("assetPath") or raw.get("sourceAsset") or raw.get("source") or ""))
         target_folder = normalize_slashes(str(raw.get("targetFolder") or raw.get("target") or ""))
         label = str(raw.get("label") or raw.get("slice") or "")
+        library_name = normalize_slashes(str(raw.get("libraryName") or raw.get("library") or ""))
+        category = str(raw.get("category") or "")
+        label_prefix = str(raw.get("labelPrefix") or raw.get("prefix") or "")
+        normal_asset_path = normalize_slashes(str(raw.get("normalAssetPath") or raw.get("normalSource") or ""))
         if not source_type or not asset_path:
             continue
-        result.append(SourceAssetSpec(source_type, asset_path, target_folder, label))
+        result.append(SourceAssetSpec(
+            source_type,
+            asset_path,
+            target_folder,
+            label,
+            library_name,
+            category,
+            label_prefix,
+            normal_asset_path,
+        ))
     return result
 
 
@@ -403,6 +434,8 @@ def write_authoring_manifest(
     kind: str,
     sources: list[SourceAssetSpec],
 ) -> Path:
+    normalize_authoring_sprite_libraries(project_root, sources)
+
     target_root = external_pack_root(external_root, kind, pack_id)
     target_root.mkdir(parents=True, exist_ok=True)
     manifest_path = target_root / "ContentPackManifest.json"
@@ -426,12 +459,18 @@ def write_authoring_manifest(
 
 
 def serialize_authoring_source(source: SourceAssetSpec) -> dict[str, str]:
-    return {
+    data = {
         "sourceType": normalize_source_type(source.source_type),
         "assetPath": normalize_slashes(source.asset_path),
         "label": source.label.strip(),
         "targetFolder": normalize_slashes(source.target_folder),
     }
+    if source.source_type == "sprite_sheet":
+        data["libraryName"] = normalize_slashes(source.library_name)
+        data["category"] = source.category.strip()
+        data["labelPrefix"] = source.label_prefix.strip()
+        data["normalAssetPath"] = normalize_slashes(source.normal_asset_path)
+    return data
 
 
 def build_owned_roots(sources: Iterable[SourceAssetSpec]) -> list[str]:
@@ -443,6 +482,8 @@ def build_owned_roots(sources: Iterable[SourceAssetSpec]) -> list[str]:
         if source.source_type == "sprite_slice" and "[" in asset_path:
             asset_path = asset_path.split("[", 1)[0]
         add_unique(roots, asset_path)
+        if source.source_type == "sprite_sheet":
+            add_unique(roots, normalize_slashes(source.normal_asset_path))
     return roots
 
 
@@ -951,6 +992,11 @@ def read_meta_guid(path: Path) -> str:
 
 
 def run_unity_smart_build(project_root: Path, unity_exe_override: str = "") -> int:
+    lock_message = get_unity_project_lock_message(project_root)
+    if lock_message:
+        print(lock_message, file=sys.stderr)
+        return UNITY_LOCK_EXIT_CODE
+
     unity_exe = Path(unity_exe_override).resolve() if unity_exe_override else find_unity_exe(project_root)
     if not unity_exe.exists():
         print(f"Unity.exe not found: {unity_exe}", file=sys.stderr)
@@ -973,6 +1019,20 @@ def run_unity_smart_build(project_root: Path, unity_exe_override: str = "") -> i
     completed = subprocess.run(command, cwd=project_root)
     print(f"unity_exit_code={completed.returncode} log={log_path}")
     return completed.returncode
+
+
+def get_unity_project_lock_message(project_root: Path) -> str:
+    lock_path = project_root / "Temp" / "UnityLockfile"
+    if not lock_path.exists():
+        return ""
+
+    lines = [
+        "Build Smart is blocked because this Unity project is already open.",
+        f"Lock file: {lock_path}",
+        "Close Unity for this project, then run Build Smart again.",
+        "If Unity is fully closed and this file remains, delete the stale lock file."
+    ]
+    return "\n".join(lines)
 
 
 def find_unity_exe(project_root: Path) -> Path:
@@ -1047,15 +1107,145 @@ def normalize_slashes(value: str) -> str:
     return (value or "").strip().replace("\\", "/")
 
 
+def source_type_label(source_type: str) -> str:
+    return SOURCE_TYPE_LABELS.get(source_type, source_type)
+
+
 def normalize_source_type(value: str) -> str:
     normalized = (value or "").strip().lower().replace(" ", "_").replace("-", "_")
     if normalized in SOURCE_TYPE_LABELS:
         return normalized
+    if normalized in ("sheet", "sprite_sheet", "spritesheet", "sprite_texture", "texture"):
+        return "sprite_sheet"
     if normalized in ("library", "spritelibrary", "sprite_lib"):
         return "sprite_library"
     if normalized in ("slice", "png", "sprite_pointer", "direct_sprite"):
         return "sprite_slice"
     return ""
+
+
+def migrate_sprite_library_file(project_root: Path, value: str) -> Path:
+    editor_dir = Path(__file__).resolve().parent / "SpriteLibraryMultiEditor"
+    if str(editor_dir) not in sys.path:
+        sys.path.insert(0, str(editor_dir))
+
+    from data import migrate_sprite_library_file as migrate_sheet_library_file  # noqa: PLC0415
+
+    source_path = resolve_project_or_absolute_path(project_root, value)
+    try:
+        return migrate_sheet_library_file(source_path)
+    except (FileExistsError, FileNotFoundError, ValueError) as ex:
+        raise SystemExit(str(ex)) from ex
+
+
+def normalize_authoring_sprite_libraries(project_root: Path, sources: list[SourceAssetSpec]) -> None:
+    legacy_sources = collect_legacy_sprite_library_sources(sources)
+    validate_sprite_library_migrations(project_root, legacy_sources)
+
+    for source in legacy_sources:
+        normalize_authoring_sprite_library(project_root, source)
+
+
+def collect_legacy_sprite_library_sources(sources: list[SourceAssetSpec]) -> list[SourceAssetSpec]:
+    legacy_sources: list[SourceAssetSpec] = []
+    for source in sources:
+        if should_migrate_authoring_sprite_library(source):
+            legacy_sources.append(source)
+    return legacy_sources
+
+
+def should_migrate_authoring_sprite_library(source: SourceAssetSpec) -> bool:
+    source_type = normalize_source_type(source.source_type)
+    if source_type != "sprite_library":
+        return False
+    return is_legacy_sprite_library_path(source.asset_path)
+
+
+def validate_sprite_library_migrations(project_root: Path, sources: list[SourceAssetSpec]) -> None:
+    for source in sources:
+        source_path = resolve_project_or_absolute_path(project_root, source.asset_path)
+        target_path = source_path.with_suffix(CUSTOM_LIBRARY_EXTENSION)
+        source_exists = source_path.exists()
+        target_exists = target_path.exists()
+
+        if source_exists:
+            if target_exists:
+                raise SystemExit(f"Target already exists: {target_path}")
+            continue
+
+        if target_exists:
+            continue
+
+        raise SystemExit(f"Missing sprite library file: {source_path}")
+
+
+def normalize_authoring_sprite_library(project_root: Path, source: SourceAssetSpec) -> None:
+    source_type = normalize_source_type(source.source_type)
+    if source_type != "sprite_library":
+        return
+
+    asset_path = normalize_slashes(source.asset_path)
+    if not is_legacy_sprite_library_path(asset_path):
+        return
+
+    source.source_type = source_type
+    source.asset_path = migrate_sprite_library_reference(project_root, asset_path)
+
+
+def is_legacy_sprite_library_path(asset_path: str) -> bool:
+    normalized = normalize_slashes(asset_path).lower()
+    return normalized.endswith(LEGACY_LIBRARY_EXTENSION.lower())
+
+
+def migrate_sprite_library_reference(project_root: Path, asset_path: str) -> str:
+    source_path = resolve_project_or_absolute_path(project_root, asset_path)
+    target_path = source_path.with_suffix(CUSTOM_LIBRARY_EXTENSION)
+    target_exists = target_path.exists()
+    source_exists = source_path.exists()
+
+    if target_exists:
+        if not source_exists:
+            return normalize_asset_reference(str(target_path), project_root)
+
+    migrated_path = migrate_sprite_library_file(project_root, asset_path)
+    return normalize_asset_reference(str(migrated_path), project_root)
+
+
+def launch_sprite_sheet_editor(project_root: Path, wait: bool) -> int:
+    editor_path = Path(__file__).resolve().parent / "SpriteLibraryMultiEditor" / "editor.py"
+    if not editor_path.exists():
+        raise FileNotFoundError(f"Missing sprite sheet editor: {editor_path}")
+
+    initial_paths = find_custom_sprite_sheet_libraries(project_root)
+    command = [
+        sys.executable,
+        str(editor_path),
+    ]
+    command.extend(str(path) for path in initial_paths)
+    process = subprocess.Popen(command, cwd=str(project_root))
+    if wait:
+        return process.wait()
+    return 0
+
+
+def find_custom_sprite_sheet_libraries(project_root: Path) -> list[Path]:
+    assets_root = project_root / "Assets"
+    if not assets_root.exists():
+        return []
+
+    pattern = f"*{CUSTOM_LIBRARY_EXTENSION}"
+    return sorted(
+        assets_root.rglob(pattern),
+        key=lambda path: str(path).lower(),
+    )
+
+
+def resolve_project_or_absolute_path(project_root: Path, value: str) -> Path:
+    normalized = normalize_slashes(value)
+    path = Path(normalized)
+    if path.is_absolute():
+        return path
+    return project_root / normalized.replace("/", os.sep)
 
 
 def sanitize_identifier(value: str) -> str:
@@ -1112,12 +1302,15 @@ def default_target_folder_for_asset(asset_path: str) -> str:
 
 def create_authoring_source(source_type: str, asset_path: str, project_root: Path) -> SourceAssetSpec:
     normalized_path = normalize_asset_reference(asset_path, project_root)
+    normalized_type = normalize_source_type(source_type)
     target_folder = default_target_folder_for_asset(normalized_path)
+    stem = Path(strip_source_asset_suffix(normalized_path)).stem
     return SourceAssetSpec(
-        source_type=normalize_source_type(source_type),
+        source_type=normalized_type,
         asset_path=normalized_path,
         target_folder=target_folder,
         label="",
+        label_prefix=stem if normalized_type == "sprite_sheet" else "",
     )
 
 
@@ -1158,7 +1351,7 @@ def read_text_preview(path: Path, max_chars: int = 20000) -> str:
 def collect_pack_source_rows(option: PackOption) -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
     for source in option.authoring_sources:
-        rows.append((SOURCE_TYPE_LABELS.get(source.source_type, source.source_type), source.source_label(), source.target_folder))
+        rows.append((source_type_label(source.source_type), source.source_label(), source.target_folder))
     if rows:
         return rows
     for source_asset in option.source_assets:
@@ -1198,6 +1391,11 @@ def verify_pack_option(project_root: Path, external_root: Path, option: PackOpti
         if source_path is None or not source_path.exists():
             errors.append(f"Source {index}: missing asset '{source.asset_path}'.")
 
+        if source.source_type == "sprite_sheet" and source.normal_asset_path:
+            normal_path = resolve_source_asset_path(project_root, external_root, source.normal_asset_path)
+            if normal_path is None or not normal_path.exists():
+                errors.append(f"Source {index}: missing normal asset '{source.normal_asset_path}'.")
+
         asset_key = strip_source_asset_suffix(source.asset_path).lower()
         target_path = normalize_target_relative_path(source.target_folder, source.asset_path)
         previous = seen_targets.get(asset_key)
@@ -1232,9 +1430,28 @@ def validate_authoring_source(source: SourceAssetSpec) -> str:
         return "Source asset path is required."
     if not source.target_folder.strip():
         return "Target folder is required."
-    if source.source_type == "sprite_library":
-        if not source.asset_path.lower().endswith(".spritelib"):
-            return "Sprite Library sources must point at a .spriteLib asset."
+    if source.source_type == "sprite_sheet":
+        if not source.asset_path.lower().endswith(".png"):
+            return "Sprite Sheet sources must point at a .png asset."
+        if not source.library_name.strip():
+            return "Sprite Sheet sources require a library name."
+        if not source.category.strip():
+            return "Sprite Sheet sources require a category."
+        if not source.label_prefix.strip():
+            return "Sprite Sheet sources require a label prefix."
+        normal_asset_path = source.normal_asset_path.strip()
+        if normal_asset_path:
+            if not normal_asset_path.lower().endswith(".png"):
+                return "Sprite Sheet normal texture must point at a .png asset."
+    elif source.source_type == "sprite_library":
+        asset_path = source.asset_path.lower()
+        has_custom_extension = asset_path.endswith(CUSTOM_LIBRARY_EXTENSION.lower())
+        has_legacy_extension = asset_path.endswith(LEGACY_LIBRARY_EXTENSION.lower())
+        if has_custom_extension:
+            return ""
+        if has_legacy_extension:
+            return ""
+        return f"Sprite Library sources must point at a {CUSTOM_LIBRARY_EXTENSION} or {LEGACY_LIBRARY_EXTENSION} asset."
     elif source.source_type == "sprite_slice":
         asset_path = source.asset_path.split("[", 1)[0]
         if not asset_path.lower().endswith(".png"):
@@ -1312,6 +1529,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Button(toolbar, text="Edit Pack", command=self.edit_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Delete Pack", command=self.delete_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Edit Manifest", command=self.edit_manifest).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Edit Sheets", command=self.edit_sheets).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Set Active", command=self.set_active).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Verify", command=self.verify_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Build Smart", command=self.build_smart).pack(side=tk.LEFT, padx=(0, 8))
@@ -1326,7 +1544,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             body.rowconfigure(0, weight=1)
 
             columns = ("type", "target", "source", "root", "status")
-            self.tree = ttk.Treeview(body, columns=columns, show="headings", selectmode="browse")
+            self.tree = ttk.Treeview(body, columns=columns, show="headings", selectmode="extended")
             headings = {
                 "type": "Type",
                 "target": "Target Name / ID",
@@ -1410,11 +1628,25 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 return None
             return self.filtered[index]
 
+        def selected_options(self) -> list[PackOption]:
+            result: list[PackOption] = []
+            for item_id in self.tree.selection():
+                index = int(item_id)
+                if index < 0 or index >= len(self.filtered):
+                    continue
+                result.append(self.filtered[index])
+            return result
+
         def update_details(self) -> None:
-            option = self.selected_option()
+            options = self.selected_options()
             self.detail.configure(state=tk.NORMAL)
             self.detail.delete("1.0", tk.END)
-            self.detail.insert(tk.END, option.detail_text() if option else "")
+            if len(options) == 1:
+                self.detail.insert(tk.END, options[0].detail_text())
+            elif len(options) > 1:
+                lines = ["Selected packs:"]
+                lines.extend(f"- {option.pack_id} ({option.status})" for option in options)
+                self.detail.insert(tk.END, "\n".join(lines))
             self.detail.configure(state=tk.DISABLED)
 
         def copy_target(self) -> None:
@@ -1487,12 +1719,23 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             if dialog.saved:
                 self.refresh()
 
-        def set_active(self) -> None:
-            option = self.selected_option()
-            if not option:
+        def edit_sheets(self) -> None:
+            try:
+                launch_sprite_sheet_editor(project_root, wait=False)
+            except (OSError, RuntimeError) as ex:
+                messagebox.showerror("Edit Sheets", str(ex), parent=self)
                 return
-            write_content_pack_selection(project_root, external_root, [option.pack_id])
-            self.status_text.set(f"Active pack set: {option.pack_id}")
+            self.status_text.set("Opened sprite sheet editor")
+
+        def set_active(self) -> None:
+            options = self.selected_options()
+            if not options:
+                return
+            pack_ids = read_active_pack_ids(project_root)
+            for option in options:
+                add_unique(pack_ids, option.pack_id)
+            write_content_pack_selection(project_root, external_root, pack_ids)
+            self.status_text.set(f"Active packs: {', '.join(pack_ids)}")
             self.refresh()
 
         def verify_pack(self) -> None:
@@ -1509,6 +1752,12 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 messagebox.showerror("Verify Pack", message, parent=self)
 
         def build_smart(self) -> None:
+            lock_message = get_unity_project_lock_message(project_root)
+            if lock_message:
+                self.status_text.set("Smart build blocked: Unity project is open")
+                messagebox.showerror("Build Smart", lock_message, parent=self)
+                return
+
             self.status_text.set("Running Smart build...")
             self.update_idletasks()
             exit_code = run_unity_smart_build(project_root)
@@ -1934,6 +2183,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
 
             source_toolbar = ttk.Frame(root)
             source_toolbar.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+            ttk.Button(source_toolbar, text="Add Sheet Source", command=lambda: self.add_source("sprite_sheet")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Add Library Source", command=lambda: self.add_source("sprite_library")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Add Slice Source", command=lambda: self.add_source("sprite_slice")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Edit Source", command=self.edit_source).pack(side=tk.LEFT, padx=(0, 8))
@@ -1944,7 +2194,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             headings = {
                 "type": "Type",
                 "asset": "Asset",
-                "label": "Label / Slice",
+                "label": "Label / Prefix",
                 "target": "Target Folder",
             }
             widths = {"type": 130, "asset": 430, "label": 150, "target": 260}
@@ -1988,24 +2238,43 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self._refresh_sources()
 
         def add_library_sources(self) -> None:
-            selected = filedialog.askopenfilenames(
+            selected_paths = filedialog.askopenfilenames(
                 parent=self,
                 initialdir=str(self.project_root / "Assets"),
-                filetypes=[("Sprite Library", "*.spriteLib"), ("All files", "*.*")],
+                filetypes=[
+                    ("Sprite libraries", (f"*{CUSTOM_LIBRARY_EXTENSION}", f"*{LEGACY_LIBRARY_EXTENSION}")),
+                    ("Custom sheet libraries", f"*{CUSTOM_LIBRARY_EXTENSION}"),
+                    ("Legacy sprite libraries", f"*{LEGACY_LIBRARY_EXTENSION}"),
+                    ("All files", "*.*"),
+                ],
             )
-            if not selected:
+            if not selected_paths:
                 return
-            added = 0
-            for path in selected:
-                source = create_authoring_source("sprite_library", path, self.project_root)
+
+            added_count = 0
+            for selected_path in selected_paths:
+                source = create_authoring_source("sprite_library", selected_path, self.project_root)
                 error = validate_authoring_source(source)
                 if error:
-                    messagebox.showerror("Pack Editor", error, parent=self)
-                    return
+                    messagebox.showerror("Add Library Source", error, parent=self)
+                    continue
+                if self.has_source_asset(source.asset_path):
+                    continue
                 self.sources.append(source)
-                added += 1
-            self._refresh_sources()
-            self.status_text.set(f"Added {added} library source(s)")
+                added_count += 1
+
+            if added_count:
+                self._refresh_sources()
+            self.status_text.set(f"Added {added_count} library source(s)")
+
+        def has_source_asset(self, asset_path: str) -> bool:
+            normalized = normalize_slashes(asset_path)
+            if not normalized:
+                return False
+            for source in self.sources:
+                if normalize_slashes(source.asset_path).lower() == normalized.lower():
+                    return True
+            return False
 
         def edit_source(self) -> None:
             index = self._selected_source_index()
@@ -2048,13 +2317,18 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 if error:
                     messagebox.showerror("Pack Editor", error, parent=self)
                     return
-            manifest_path = write_authoring_manifest(
-                self.project_root,
-                self.external_root,
-                pack_id,
-                kind,
-                self.sources,
-            )
+            try:
+                manifest_path = write_authoring_manifest(
+                    self.project_root,
+                    self.external_root,
+                    pack_id,
+                    kind,
+                    self.sources,
+                )
+            except (OSError, RuntimeError, SystemExit) as ex:
+                messagebox.showerror("Pack Editor", str(ex), parent=self)
+                return
+
             slice_id = sanitize_identifier(self.slice_text.get())
             if slice_id:
                 add_pack_to_content_manifest_slice(self.project_root, slice_id, pack_id)
@@ -2074,13 +2348,20 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self.project_root = project_root
             self.source: SourceAssetSpec | None = None
             initial_type = source.source_type if source else source_type
-            self.type_label = tk.StringVar(value=SOURCE_TYPE_LABELS.get(initial_type, "Sprite Library"))
+            self.type_label = tk.StringVar(value=SOURCE_TYPE_LABELS.get(initial_type, "Sprite Sheet"))
             self.asset_text = tk.StringVar(value=source.asset_path if source else "")
             self.label_text = tk.StringVar(value=source.label if source else "")
+            self.library_text = tk.StringVar(value=source.library_name if source else "")
+            self.category_text = tk.StringVar(value=source.category if source else "")
+            initial_label_prefix = ""
+            if source:
+                initial_label_prefix = source.label_prefix if source.source_type == "sprite_sheet" else source.label
+            self.label_prefix_text = tk.StringVar(value=initial_label_prefix)
+            self.normal_text = tk.StringVar(value=source.normal_asset_path if source else "")
             self.target_text = tk.StringVar(value=source.target_folder if source else "")
             self.title("Source Asset")
-            self.geometry("760x250")
-            self.minsize(680, 220)
+            self.geometry("820x420")
+            self.minsize(720, 360)
             self.configure(bg="#101418")
             self.transient(parent)
             self.grab_set()
@@ -2106,38 +2387,66 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Entry(root, textvariable=self.asset_text).grid(row=1, column=1, sticky="ew", pady=(0, 8))
             ttk.Button(root, text="Browse", command=self.browse_asset).grid(row=1, column=2, padx=(8, 0), pady=(0, 8))
 
-            ttk.Label(root, text="Label / Slice").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
-            ttk.Entry(root, textvariable=self.label_text).grid(row=2, column=1, columnspan=2, sticky="ew", pady=(0, 8))
+            ttk.Label(root, text="Library Name").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.library_text).grid(row=2, column=1, columnspan=2, sticky="ew", pady=(0, 8))
 
-            ttk.Label(root, text="Target Folder").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
-            ttk.Entry(root, textvariable=self.target_text).grid(row=3, column=1, sticky="ew", pady=(0, 8))
-            ttk.Button(root, text="Default", command=self.use_default_target).grid(row=3, column=2, padx=(8, 0), pady=(0, 8))
+            ttk.Label(root, text="Category").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.category_text).grid(row=3, column=1, columnspan=2, sticky="ew", pady=(0, 8))
+
+            ttk.Label(root, text="Label / Prefix").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.label_prefix_text).grid(row=4, column=1, columnspan=2, sticky="ew", pady=(0, 8))
+
+            ttk.Label(root, text="Normal Texture").grid(row=5, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.normal_text).grid(row=5, column=1, sticky="ew", pady=(0, 8))
+            ttk.Button(root, text="Browse", command=self.browse_normal_asset).grid(row=5, column=2, padx=(8, 0), pady=(0, 8))
+
+            ttk.Label(root, text="Target Folder").grid(row=6, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.target_text).grid(row=6, column=1, sticky="ew", pady=(0, 8))
+            ttk.Button(root, text="Default", command=self.use_default_target).grid(row=6, column=2, padx=(8, 0), pady=(0, 8))
 
             footer = ttk.Frame(root)
-            footer.grid(row=4, column=0, columnspan=3, sticky="e", pady=(12, 0))
+            footer.grid(row=7, column=0, columnspan=3, sticky="e", pady=(12, 0))
             ttk.Button(footer, text="Save Source", command=self.save_source).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(footer, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
 
         def _source_type(self) -> str:
-            return SOURCE_LABEL_TO_TYPE.get(self.type_label.get(), "sprite_library")
+            return SOURCE_LABEL_TO_TYPE.get(self.type_label.get(), "sprite_sheet")
 
         def _source_type_changed(self) -> None:
             return
 
         def browse_asset(self) -> None:
             source_type = self._source_type()
-            pattern = "*.spriteLib" if source_type == "sprite_library" else "*.png"
+            filetypes = [("Sprite sheet", "*.png"), ("All files", "*.*")]
+            if source_type == "sprite_library":
+                filetypes = [
+                    ("Sprite libraries", (f"*{CUSTOM_LIBRARY_EXTENSION}", f"*{LEGACY_LIBRARY_EXTENSION}")),
+                    ("Custom sheet libraries", f"*{CUSTOM_LIBRARY_EXTENSION}"),
+                    ("Legacy sprite libraries", f"*{LEGACY_LIBRARY_EXTENSION}"),
+                    ("All files", "*.*"),
+                ]
             selected = filedialog.askopenfilename(
                 parent=self,
                 initialdir=str(self.project_root / "Assets"),
-                filetypes=[("Unity source", pattern), ("All files", "*.*")],
+                filetypes=filetypes,
             )
             if not selected:
                 return
             source = create_authoring_source(source_type, selected, self.project_root)
             self.asset_text.set(source.asset_path)
+            if source.source_type == "sprite_sheet" and not self.label_prefix_text.get().strip():
+                self.label_prefix_text.set(source.label_prefix)
             if not self.target_text.get().strip():
                 self.target_text.set(source.target_folder)
+
+        def browse_normal_asset(self) -> None:
+            selected = filedialog.askopenfilename(
+                parent=self,
+                initialdir=str(self.project_root / "Assets"),
+                filetypes=[("Sprite sheet", "*.png"), ("All files", "*.*")],
+            )
+            if selected:
+                self.normal_text.set(normalize_asset_reference(selected, self.project_root))
 
         def use_default_target(self) -> None:
             self.target_text.set(default_target_folder_for_asset(self.asset_text.get()))
@@ -2152,7 +2461,11 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 source_type=source_type,
                 asset_path=asset_path,
                 target_folder=target_folder,
-                label=self.label_text.get().strip(),
+                label=self.label_prefix_text.get().strip() if source_type == "sprite_slice" else self.label_text.get().strip(),
+                library_name=normalize_slashes(self.library_text.get()),
+                category=self.category_text.get().strip(),
+                label_prefix=self.label_prefix_text.get().strip(),
+                normal_asset_path=normalize_asset_reference(self.normal_text.get(), self.project_root),
             )
             error = validate_authoring_source(source)
             if error:

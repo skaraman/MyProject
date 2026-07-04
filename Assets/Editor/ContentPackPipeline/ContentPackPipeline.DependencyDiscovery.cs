@@ -114,16 +114,24 @@ public static partial class ContentPackPipeline {
     var fullRoot = GetPhysicalPath(root);
     if (!Directory.Exists(fullRoot)) return result;
 
-    var files = Directory.GetFiles(fullRoot, "*.spriteLib", SearchOption.AllDirectories);
-    Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+    var customFiles = Directory.GetFiles(fullRoot, "*" + SpriteStreamingConfig.CustomSpriteLibraryExtension, SearchOption.AllDirectories);
+    var legacyFiles = Directory.GetFiles(fullRoot, "*" + SpriteStreamingConfig.LegacySpriteLibraryExtension, SearchOption.AllDirectories);
+    Array.Sort(customFiles, StringComparer.OrdinalIgnoreCase);
+    Array.Sort(legacyFiles, StringComparer.OrdinalIgnoreCase);
 
-    for (var i = 0; i < files.Length; i++) {
+    var files = new List<string>(customFiles.Length + legacyFiles.Length);
+    files.AddRange(customFiles);
+    files.AddRange(legacyFiles);
+
+    for (var i = 0; i < files.Count; i++) {
       var assetPath = ToProjectAssetPath(files[i]);
       var relativePath = assetPath.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
         ? assetPath.Substring(root.Length + 1)
         : assetPath;
       var key = RemoveExtension(relativePath);
-      result[key] = assetPath;
+      if (!result.ContainsKey(key)) {
+        result[key] = assetPath;
+      }
     }
 
     return result;
@@ -133,33 +141,84 @@ public static partial class ContentPackPipeline {
     var result = new List<string>();
     if (seedAssetPaths == null || seedAssetPaths.Count <= 0) return result;
 
+    for (var i = 0; i < seedAssetPaths.Count; i++) {
+      TryAddExportableDependency(result, seedAssetPaths[i], errors);
+    }
+
     var dependencies = AssetDatabase.GetDependencies(seedAssetPaths.ToArray(), true);
     Array.Sort(dependencies, StringComparer.OrdinalIgnoreCase);
 
     for (var i = 0; i < dependencies.Length; i++) {
-      var dependency = NormalizeAssetPath(dependencies[i]);
+      TryAddExportableDependency(result, dependencies[i], errors);
+    }
+
+    CollectSupplementalTextDependencies(result, errors);
+    return result;
+  }
+
+  static bool TryAddExportableDependency(List<string> result, string assetPath, List<string> errors) {
+    var dependency = NormalizeAssetPath(assetPath);
+    if (string.IsNullOrWhiteSpace(dependency)) return false;
+    if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return false;
+    if (AssetDatabase.IsValidFolder(dependency)) return false;
+    if (ShouldIgnoreDependency(dependency)) return false;
+    if (dependency.StartsWith(StageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase)) return false;
+    if (dependency.StartsWith("Assets/Generated/", StringComparison.OrdinalIgnoreCase)) {
+      errors?.Add("Generated asset dependency detected '" + dependency + "'.");
+      return false;
+    }
+
+    return TryAddUniquePath(result, dependency);
+  }
+
+  static void CollectSupplementalTextDependencies(List<string> result, List<string> errors) {
+    if (result == null || result.Count <= 0) return;
+
+    var pending = new Queue<string>(result);
+    var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    while (pending.Count > 0) {
+      var currentAssetPath = NormalizeAssetPath(pending.Dequeue());
+      if (string.IsNullOrWhiteSpace(currentAssetPath)) continue;
+      if (!visited.Add(currentAssetPath)) continue;
+
+      EnqueueSupplementalDependencies(result, pending, CollectLocalTextIncludeDependencies(currentAssetPath, errors), errors);
+      EnqueueSupplementalDependencies(result, pending, CollectTextGuidDependencies(currentAssetPath, errors), errors);
+    }
+  }
+
+  static void EnqueueSupplementalDependencies(
+    List<string> result,
+    Queue<string> pending,
+    List<string> dependencies,
+    List<string> errors
+  ) {
+    if (result == null || pending == null || dependencies == null) return;
+
+    for (var i = 0; i < dependencies.Count; i++) {
+      if (!TryAddExportableDependency(result, dependencies[i], errors)) continue;
+      pending.Enqueue(NormalizeAssetPath(dependencies[i]));
+    }
+  }
+
+  static List<string> CollectTextGuidDependencies(string assetPath, List<string> errors) {
+    var result = new List<string>();
+    if (!ShouldRewriteTextFile(assetPath)) return result;
+
+    var fullPath = Path.GetFullPath(assetPath);
+    if (!File.Exists(fullPath)) {
+      errors?.Add("Missing text dependency source asset '" + assetPath + "'.");
+      return result;
+    }
+
+    var text = File.ReadAllText(fullPath);
+    var matches = GuidRegex.Matches(text);
+    for (var i = 0; i < matches.Count; i++) {
+      if (!matches[i].Success) continue;
+      var guid = matches[i].Groups[1].Value;
+      var dependency = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guid));
       if (string.IsNullOrWhiteSpace(dependency)) continue;
-      if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
-      if (AssetDatabase.IsValidFolder(dependency)) continue;
-      if (ShouldIgnoreDependency(dependency)) continue;
-      if (dependency.StartsWith(StageRootAssetPath + "/", StringComparison.OrdinalIgnoreCase)) continue;
-      if (dependency.StartsWith("Assets/Generated/", StringComparison.OrdinalIgnoreCase)) {
-        errors?.Add("Generated asset dependency detected '" + dependency + "'.");
-        continue;
-      }
       AddUniquePath(result, dependency);
-    }
-
-    var includeDependencies = new List<string>();
-    for (var i = 0; i < result.Count; i++) {
-      var localIncludes = CollectLocalTextIncludeDependencies(result[i], errors);
-      for (var includeIndex = 0; includeIndex < localIncludes.Count; includeIndex++) {
-        AddUniquePath(includeDependencies, localIncludes[includeIndex]);
-      }
-    }
-
-    for (var i = 0; i < includeDependencies.Count; i++) {
-      AddUniquePath(result, includeDependencies[i]);
     }
 
     return result;

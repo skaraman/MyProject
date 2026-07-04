@@ -70,6 +70,7 @@ public static partial class ContentPackPipeline {
     ".shadergraph",
     ".shadersubgraph",
     ".spritelib",
+    ".spritesheetlib",
     ".txt",
     ".unity",
     ".uss",
@@ -120,6 +121,10 @@ public static partial class ContentPackPipeline {
     public string assetPath;
     public string label;
     public string targetFolder;
+    public string libraryName;
+    public string category;
+    public string labelPrefix;
+    public string normalAssetPath;
   }
 
   [Serializable]

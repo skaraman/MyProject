@@ -32,6 +32,8 @@ public static partial class SpriteIndexBuilder {
 
   static class BuilderConfig {
     public const string SourceRootFolder = SpriteStreamingConfig.SourceRootFolder;
+    public const string CustomSpriteLibraryExtension = SpriteStreamingConfig.CustomSpriteLibraryExtension;
+    public const string LegacySpriteLibraryExtension = SpriteStreamingConfig.LegacySpriteLibraryExtension;
     public const string TextureSourceRootFolder = SpriteStreamingConfig.TextureSourceRootFolder;
     public const string RuntimeIndexFolder = SpriteStreamingConfig.RuntimeIndexFolder;
     public const string ManifestAssetPath = SpriteStreamingConfig.ManifestAssetPath;
@@ -124,6 +126,20 @@ public static partial class SpriteIndexBuilder {
       this.colorAddress = colorAddress;
       this.normalAddress = normalAddress;
     }
+  }
+
+  sealed class CustomSheetManifest {
+    public List<CustomSheetSource> authoringSources = new();
+  }
+
+  sealed class CustomSheetSource {
+    public string sourceType;
+    public string assetPath;
+    public string targetFolder;
+    public string libraryName;
+    public string category;
+    public string labelPrefix;
+    public string normalAssetPath;
   }
 
   readonly struct ManifestRow {
@@ -437,11 +453,24 @@ public static partial class SpriteIndexBuilder {
       }
 
       ConfigureAddressablesBuilderDefaults(settings, logResult: false);
-      var runtimeAddressablesChanged =
-        GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(logResult: false, saveAndRefresh: false) |
-        ProjectileAddressablesBootstrap.SyncProjectileAddressables(logResult: false, saveAndRefresh: false) |
-        LocationAddressablesBootstrap.SyncLocationAddressables(logResult: false, saveAndRefresh: false) |
-        RuntimeMaterialAddressablesBootstrap.SyncRuntimeMaterialAddressables(logResult: false, saveAndRefresh: false);
+      var runtimeAddressablesChanged = LocationAddressablesBootstrap.SyncLocationAddressables(
+        logResult: false,
+        saveAndRefresh: false
+      );
+      if (ContentPackPipeline.IsGameplayContentRequestedForConfiguredSelection()) {
+        runtimeAddressablesChanged |= GameplayPlayerAddressablesBootstrap.SyncGameplayPlayerAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
+        runtimeAddressablesChanged |= ProjectileAddressablesBootstrap.SyncProjectileAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
+        runtimeAddressablesChanged |= RuntimeMaterialAddressablesBootstrap.SyncRuntimeMaterialAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
+      }
       if (runtimeAddressablesChanged && logResult) {
         Debug.Log("[SpriteIndexBuilder] [" + contextLabel + "] Synced runtime prefab/material Addressables entries before build.");
       }

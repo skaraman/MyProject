@@ -113,6 +113,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     public string variant;
     public string partCode;
     public bool isSkin;
+    public bool hasMixedSkinGearContract;
+    public bool usesFolderStructureSpriteNames;
     public List<SourceAtlasRecord> sourceAtlases = new();
     public List<string> sourceCategories = new();
     public int normalAtlasCount;
@@ -310,6 +312,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   sealed class GroupedSpriteReplacementIndex {
     public Dictionary<LibraryEntryKey, SpriteAssetReference> spritesByKey = new();
     public Dictionary<LibraryEntryScopeKey, Dictionary<string, SpriteAssetReference>> labelsByScope = new();
+    public Dictionary<LibraryEntryScopeKey, Dictionary<string, List<SpriteAssetReference>>> folderFallbacksByScope = new();
     public Dictionary<LibraryEntryScopeKey, RebindLabelCleanupPlan> cleanupByScope = new();
     public List<CleanupPlan> cleanupPlans = new();
     public int metadataFileCount;
@@ -321,6 +324,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
   sealed class SpriteLibraryCategoryPlan {
     public Dictionary<string, SpriteAssetReference> replacementsByLabel;
+    public Dictionary<string, List<SpriteAssetReference>> folderFallbacksByLabel;
+    public Dictionary<string, int> folderFallbackCursorByLabel;
     public RebindLabelCleanupPlan cleanupPlan;
   }
 

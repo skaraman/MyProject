@@ -256,6 +256,8 @@ public static partial class ContentPackPipeline {
     for (var i = 0; i < pack.authoringSources.Count; i++) {
       AddUniquePath(pack.seedRoots, pack.authoringSources[i].assetPath);
       AddUniquePath(pack.ownedRoots, pack.authoringSources[i].assetPath);
+      AddUniquePath(pack.seedRoots, pack.authoringSources[i].normalAssetPath);
+      AddUniquePath(pack.ownedRoots, pack.authoringSources[i].normalAssetPath);
     }
   }
 
@@ -276,7 +278,11 @@ public static partial class ContentPackPipeline {
       sourceType = sourceType,
       assetPath = assetPath,
       label = string.IsNullOrWhiteSpace(source.label) ? ExtractAuthoringSliceLabel(rawAssetPath) : NormalizeToken(source.label),
-      targetFolder = targetFolder
+      targetFolder = targetFolder,
+      libraryName = NormalizeAssetPath(source.libraryName),
+      category = NormalizeToken(source.category),
+      labelPrefix = NormalizeToken(source.labelPrefix),
+      normalAssetPath = StripAuthoringSliceSuffix(NormalizeAssetPath(source.normalAssetPath))
     };
   }
 
@@ -372,23 +378,24 @@ public static partial class ContentPackPipeline {
 
     if (pack.authoringSources != null && pack.authoringSources.Count > 0) {
       PrepareAuthoringSourceDependencies(pack, errors);
-      return;
+    }
+    else {
+      var seedAssetPaths = ExpandProjectRoots(pack.seedRoots, errors);
+      var libraryNames = CollectReferencedLibraryNamesFromAssets(seedAssetPaths);
+      for (var i = 0; i < pack.manualLibraryNames.Count; i++) {
+        AddUniqueLibraryName(libraryNames, pack.manualLibraryNames[i]);
+      }
+
+      var libraryAssetPaths = ResolveLibraryAssetPaths(libraryNames, projectLibraries, errors);
+      var allSeedPaths = new List<string>(seedAssetPaths.Count + libraryAssetPaths.Count);
+      allSeedPaths.AddRange(seedAssetPaths);
+      for (var i = 0; i < libraryAssetPaths.Count; i++) {
+        AddUniquePath(allSeedPaths, libraryAssetPaths[i]);
+      }
+
+      pack.assetDependencies = CollectPackDependencies(allSeedPaths, errors);
     }
 
-    var seedAssetPaths = ExpandProjectRoots(pack.seedRoots, errors);
-    var libraryNames = CollectReferencedLibraryNamesFromAssets(seedAssetPaths);
-    for (var i = 0; i < pack.manualLibraryNames.Count; i++) {
-      AddUniqueLibraryName(libraryNames, pack.manualLibraryNames[i]);
-    }
-
-    var libraryAssetPaths = ResolveLibraryAssetPaths(libraryNames, projectLibraries, errors);
-    var allSeedPaths = new List<string>(seedAssetPaths.Count + libraryAssetPaths.Count);
-    allSeedPaths.AddRange(seedAssetPaths);
-    for (var i = 0; i < libraryAssetPaths.Count; i++) {
-      AddUniquePath(allSeedPaths, libraryAssetPaths[i]);
-    }
-
-    pack.assetDependencies = CollectPackDependencies(allSeedPaths, errors);
   }
 
   static void PrepareAuthoringSourceDependencies(PackDefinition pack, List<string> errors) {
@@ -401,26 +408,49 @@ public static partial class ContentPackPipeline {
         continue;
       }
 
+      AddUniquePath(pack.assetDependencies, source.assetPath);
       var dependencies = CollectPackDependencies(new List<string> { source.assetPath }, errors);
       for (var dependencyIndex = 0; dependencyIndex < dependencies.Count; dependencyIndex++) {
         AddUniquePath(pack.assetDependencies, dependencies[dependencyIndex]);
       }
 
-      var targetRelativePath = BuildAuthoringSourceTargetRelativePath(source);
-      if (string.IsNullOrWhiteSpace(targetRelativePath)) continue;
-      if (pack.targetRelativePathByAssetPath.TryGetValue(source.assetPath, out var existingTarget) &&
-          !string.Equals(existingTarget, targetRelativePath, StringComparison.OrdinalIgnoreCase)) {
-        errors?.Add(
-          "Authoring source maps to multiple target folders." +
-          " pack_id='" + pack.packId + "'" +
-          " asset='" + source.assetPath + "'" +
-          " first='" + existingTarget + "'" +
-          " second='" + targetRelativePath + "'"
-        );
-        continue;
+      RegisterAuthoringSourceTarget(pack, source.assetPath, source, errors);
+
+      if (!string.IsNullOrWhiteSpace(source.normalAssetPath)) {
+        AddUniquePath(pack.assetDependencies, source.normalAssetPath);
+        var normalDependencies = CollectPackDependencies(new List<string> { source.normalAssetPath }, errors);
+        for (var dependencyIndex = 0; dependencyIndex < normalDependencies.Count; dependencyIndex++) {
+          AddUniquePath(pack.assetDependencies, normalDependencies[dependencyIndex]);
+        }
+
+        RegisterAuthoringSourceTarget(pack, source.normalAssetPath, source, errors);
       }
-      pack.targetRelativePathByAssetPath[source.assetPath] = targetRelativePath;
     }
+  }
+
+  static void RegisterAuthoringSourceTarget(
+    PackDefinition pack,
+    string assetPath,
+    ContentPackAuthoringSourceJson source,
+    List<string> errors
+  ) {
+    if (pack == null || source == null || string.IsNullOrWhiteSpace(assetPath)) return;
+
+    var targetRelativePath = BuildAuthoringSourceTargetRelativePath(source, assetPath);
+    if (string.IsNullOrWhiteSpace(targetRelativePath)) return;
+    if (pack.targetRelativePathByAssetPath.TryGetValue(assetPath, out var existingTarget) &&
+        !string.Equals(existingTarget, targetRelativePath, StringComparison.OrdinalIgnoreCase)) {
+      errors?.Add(
+        "Authoring source maps to multiple target folders." +
+        " pack_id='" + pack.packId + "'" +
+        " asset='" + assetPath + "'" +
+        " first='" + existingTarget + "'" +
+        " second='" + targetRelativePath + "'"
+      );
+      return;
+    }
+
+    pack.targetRelativePathByAssetPath[assetPath] = targetRelativePath;
   }
 
   static bool ValidateAuthoringSource(ContentPackAuthoringSourceJson source, List<string> errors) {
@@ -434,9 +464,35 @@ public static partial class ContentPackPipeline {
     }
 
     var extension = Path.GetExtension(assetPath);
+    if (string.Equals(sourceType, "sprite_sheet", StringComparison.OrdinalIgnoreCase)) {
+      if (!string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) {
+        errors?.Add("Sprite sheet authoring source must be a .png asset. asset='" + assetPath + "'");
+        return false;
+      }
+      if (string.IsNullOrWhiteSpace(source.libraryName) ||
+          string.IsNullOrWhiteSpace(source.category) ||
+          string.IsNullOrWhiteSpace(source.labelPrefix)) {
+        errors?.Add("Sprite sheet authoring source requires libraryName, category, and labelPrefix. asset='" + assetPath + "'");
+        return false;
+      }
+      if (!string.IsNullOrWhiteSpace(source.normalAssetPath)) {
+        var normalAssetPath = NormalizeAssetPath(source.normalAssetPath);
+        if (!File.Exists(Path.GetFullPath(normalAssetPath))) {
+          errors?.Add("Missing sprite sheet normal asset '" + normalAssetPath + "'.");
+          return false;
+        }
+        if (!string.Equals(Path.GetExtension(normalAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) {
+          errors?.Add("Sprite sheet normal authoring source must be a .png asset. asset='" + normalAssetPath + "'");
+          return false;
+        }
+      }
+      return true;
+    }
+
     if (string.Equals(sourceType, "sprite_library", StringComparison.OrdinalIgnoreCase)) {
-      if (!string.Equals(extension, ".spriteLib", StringComparison.OrdinalIgnoreCase)) {
-        errors?.Add("Sprite library authoring source must be a .spriteLib asset. asset='" + assetPath + "'");
+      if (!string.Equals(extension, SpriteStreamingConfig.CustomSpriteLibraryExtension, StringComparison.OrdinalIgnoreCase) &&
+          !string.Equals(extension, SpriteStreamingConfig.LegacySpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+        errors?.Add("Sprite library authoring source must be a " + SpriteStreamingConfig.CustomSpriteLibraryExtension + " asset. asset='" + assetPath + "'");
         return false;
       }
       return true;
@@ -486,9 +542,9 @@ public static partial class ContentPackPipeline {
     return false;
   }
 
-  static string BuildAuthoringSourceTargetRelativePath(ContentPackAuthoringSourceJson source) {
+  static string BuildAuthoringSourceTargetRelativePath(ContentPackAuthoringSourceJson source, string assetPathOverride = null) {
     if (source == null) return "";
-    var assetPath = NormalizeAssetPath(source.assetPath);
+    var assetPath = NormalizeAssetPath(string.IsNullOrWhiteSpace(assetPathOverride) ? source.assetPath : assetPathOverride);
     var targetFolder = NormalizePackTargetFolder(source.targetFolder);
     if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(targetFolder)) return "";
     return NormalizeAssetPath(targetFolder + "/" + Path.GetFileName(assetPath));

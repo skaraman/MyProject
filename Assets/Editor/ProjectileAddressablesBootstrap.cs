@@ -21,6 +21,13 @@ public static class ProjectileAddressablesBootstrap {
   }
 
   static bool EnsureProjectileAddressables(bool logResult, bool saveAndRefresh) {
+    if (!ContentPackPipeline.IsGameplayContentRequestedForConfiguredSelection()) {
+      if (logResult) {
+        Debug.Log("[ProjectileAddressablesBootstrap] Skipped projectile Addressables sync. gameplay_content_requested=false.");
+      }
+      return false;
+    }
+
     if (!RuntimePrefabAddressables.TryGetSettingsAndDefaultGroup(
           nameof(ProjectileAddressablesBootstrap),
           logResult,

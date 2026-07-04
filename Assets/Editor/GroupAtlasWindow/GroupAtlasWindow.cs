@@ -9,6 +9,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   const string SkinGroupKey = "Skin";
   const string SkinFormName = "Skin";
   const string SkinVariantName = "All";
+  const string MixedGroupToken = "Mixed";
+  const int ManualSpriteNameFolderDepth = 3;
   const int DuplicateRebindWarningSampleLimit = 8;
   const int DefaultMaxAtlasSize = 2048;
   const int DefaultMaxSpritesPerAtlasPage = 1024;
@@ -37,7 +39,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     { "HandLeft", "hL" },
     { "HandRight", "hR" },
     { "Head", "h" },
-    { "HeadBack", "hB" },
+    { "HeadBack", "hb" },
     { "Neck", "n" },
     { "Pelvis", "p" },
     { "ShoulderLeft", "sL" },
@@ -46,6 +48,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     { "ThighRight", "tR" },
     { "Torso", "t" }
   };
+  static readonly Dictionary<string, string> PartTokenByCode = BuildPartTokenByCode();
 
   DefaultAsset outputFolder;
   string outputName = "";
@@ -54,8 +57,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   string autoFindSourceAtlasKey = "";
   DefaultAsset autoFindSourceAtlasFolder;
   string autoFindSourceRootPath = "";
-  DefaultAsset rebindSourceFolder;
-  DefaultAsset rebindSpriteLibraryFolder;
   int maxAtlasSize = DefaultMaxAtlasSize;
   int maxSpritesPerAtlasPage = DefaultMaxSpritesPerAtlasPage;
   int padding = DefaultPadding;
@@ -78,7 +79,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     EditorGUILayout.LabelField("Group Esperanza Gear + Skin Atlases", EditorStyles.boldLabel);
     EditorGUILayout.HelpBox(
-      "Export and sprite-library rebinding are separate workflows. Export builds grouped atlases plus JSON metadata. Rebind uses those grouped outputs to update matching sprite-library entries later.",
+      "Export and sprite-library rebinding are separate workflows. Export builds grouped atlases plus JSON metadata. Rebind now lives in Tools/Authoring/Sprite Library Rebinding and uses those grouped outputs to update matching sprite-library entries later.",
       MessageType.Info);
     AtlasAuthoringLog.VerboseLoggingEnabled = EditorGUILayout.Toggle("Verbose Logging", AtlasAuthoringLog.VerboseLoggingEnabled);
     if (GUILayout.Button("Reset Tool")) {
@@ -117,30 +118,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         if (GUILayout.Button("Export Grouped Atlases")) {
           ExportGroupedAtlases();
         }
-      }
-    }
-
-    EditorGUILayout.Space();
-    EditorGUILayout.LabelField("Rebind Sprite Libraries", EditorStyles.boldLabel);
-    EditorGUILayout.HelpBox(
-      "Choose the grouped atlas folder to scan and the target sprite-library folder to update. The rebind pass scans the selected folder recursively for grouped atlas metadata and matches those slices back into the Gear and Skin sprite libraries.",
-      MessageType.None);
-    rebindSourceFolder = (DefaultAsset)EditorGUILayout.ObjectField("Grouped Atlas Folder", rebindSourceFolder, typeof(DefaultAsset), false);
-    rebindSpriteLibraryFolder = (DefaultAsset)EditorGUILayout.ObjectField("Sprite Library Folder", rebindSpriteLibraryFolder, typeof(DefaultAsset), false);
-    if (rebindSourceFolder != null && string.IsNullOrWhiteSpace(ResolveRebindSourceFolderPath())) {
-      EditorGUILayout.HelpBox("Grouped Atlas Folder must be a project folder asset.", MessageType.Warning);
-    }
-    if (rebindSpriteLibraryFolder != null && string.IsNullOrWhiteSpace(ResolveRebindSpriteLibraryFolderPath())) {
-      EditorGUILayout.HelpBox("Sprite Library Folder must be a project folder asset.", MessageType.Warning);
-    }
-
-    using (new EditorGUI.DisabledScope(
-      rebindSourceFolder == null ||
-      rebindSpriteLibraryFolder == null ||
-      string.IsNullOrWhiteSpace(ResolveRebindSourceFolderPath()) ||
-      string.IsNullOrWhiteSpace(ResolveRebindSpriteLibraryFolderPath()))) {
-      if (GUILayout.Button("Rebind Sprite Libraries")) {
-        RebindGroupedSpriteLibraries();
       }
     }
 
@@ -334,8 +311,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     autoFindSourceAtlasKey = "";
     autoFindSourceAtlasFolder = null;
     autoFindSourceRootPath = "";
-    rebindSourceFolder = null;
-    rebindSpriteLibraryFolder = null;
     maxAtlasSize = DefaultMaxAtlasSize;
     maxSpritesPerAtlasPage = DefaultMaxSpritesPerAtlasPage;
     padding = DefaultPadding;
@@ -357,38 +332,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     outputFolderPath = NormalizePath(AssetDatabase.GetAssetPath(outputFolder));
     if (AssetDatabase.IsValidFolder(outputFolderPath)) return true;
     if (showDialog) EditorUtility.DisplayDialog("Invalid Output Folder", "Could not resolve the selected output folder to a project asset path.", "OK");
-    return false;
-  }
-
-  string ResolveRebindSourceFolderPath() {
-    if (rebindSourceFolder == null) return "";
-    var folderPath = NormalizePath(AssetDatabase.GetAssetPath(rebindSourceFolder));
-    return AssetDatabase.IsValidFolder(folderPath) ? folderPath : "";
-  }
-
-  bool TryGetRebindSourceFolderPath(out string sourceFolderPath, bool showDialog) {
-    sourceFolderPath = ResolveRebindSourceFolderPath();
-    if (!string.IsNullOrWhiteSpace(sourceFolderPath)) return true;
-    if (showDialog) {
-      EditorUtility.DisplayDialog("Invalid Grouped Atlas Folder", "Select a project folder that contains the grouped atlas outputs to rebind from.", "OK");
-    }
-
-    return false;
-  }
-
-  string ResolveRebindSpriteLibraryFolderPath() {
-    if (rebindSpriteLibraryFolder == null) return "";
-    var folderPath = NormalizePath(AssetDatabase.GetAssetPath(rebindSpriteLibraryFolder));
-    return AssetDatabase.IsValidFolder(folderPath) ? folderPath : "";
-  }
-
-  bool TryGetRebindSpriteLibraryFolderPath(out string libraryFolderPath, bool showDialog) {
-    libraryFolderPath = ResolveRebindSpriteLibraryFolderPath();
-    if (!string.IsNullOrWhiteSpace(libraryFolderPath)) return true;
-    if (showDialog) {
-      EditorUtility.DisplayDialog("Invalid Sprite Library Folder", "Select a project folder that contains the target Gear or Skin sprite libraries.", "OK");
-    }
-
     return false;
   }
 
@@ -421,7 +364,9 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
   }
 
   static bool IsSkinCandidate(GroupCandidate candidate) {
-    return candidate != null && candidate.isSkin;
+    return candidate != null &&
+           candidate.isSkin &&
+           !candidate.hasMixedSkinGearContract;
   }
 
   static bool IsSkinGroupKey(string groupKey) {
@@ -583,7 +528,6 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     if (tokens.Count == 2 &&
         string.Equals(tokens[0], SkinFormName, StringComparison.OrdinalIgnoreCase)) {
       AddAutoFindHierarchy(hierarchies, tokens[1] + "/" + tokens[0]);
-      AddAutoFindHierarchy(hierarchies, tokens[1]);
     }
   }
 
@@ -680,7 +624,10 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     atlasPaths.Sort(StringComparer.OrdinalIgnoreCase);
-    return outputFolderPath + "|" + sanitizedOutputName + "|" + string.Join("|", atlasPaths);
+    var sourceRootKey = IsValidAutoFindSourceRootPath(atlasPaths)
+      ? NormalizePath(autoFindSourceRootPath).TrimEnd('/')
+      : "";
+    return outputFolderPath + "|" + sanitizedOutputName + "|" + sourceRootKey + "|" + string.Join("|", atlasPaths);
   }
 }
 #endif

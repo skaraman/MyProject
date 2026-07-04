@@ -9,10 +9,10 @@ from app import main as _main
 
 
 def launch_ui(initial_paths: list[str] | None = None) -> int:
-    """Launch the Sprite Library Multi-Editor GUI.
+    """Launch the Sprite Sheet Library Editor GUI.
 
     Args:
-        initial_paths: Optional list of .spriteLib files or directories to open on startup
+        initial_paths: Optional list of sheet library files or directories to open on startup
 
     Returns:
         Exit code (0 for success)

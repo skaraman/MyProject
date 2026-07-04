@@ -21,6 +21,13 @@ public static class GameplayPlayerAddressablesBootstrap {
   }
 
   static bool EnsureGameplayPlayerAddressables(bool logResult, bool saveAndRefresh) {
+    if (!ContentPackPipeline.IsGameplayContentRequestedForConfiguredSelection()) {
+      if (logResult) {
+        Debug.Log("[GameplayPlayerAddressablesBootstrap] Skipped gameplay player Addressables sync. gameplay_content_requested=false.");
+      }
+      return false;
+    }
+
     if (!RuntimePrefabAddressables.TryGetSettingsAndDefaultGroup(
           nameof(GameplayPlayerAddressablesBootstrap),
           logResult,
@@ -55,7 +62,7 @@ public static class GameplayPlayerAddressablesBootstrap {
 
   static string ResolvePreferredPlayerPrefabPath() {
     var resolvedAssetPath = RuntimePrefabAddressables.NormalizeAssetPath(
-      ActiveContentRegistryRuntime.ResolveCoreAssetPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath)
+      ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath)
     );
     if (!string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(resolvedAssetPath))) {
       return resolvedAssetPath;

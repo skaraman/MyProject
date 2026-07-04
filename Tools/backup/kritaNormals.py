@@ -23,6 +23,14 @@ def get_paint_layer(node):
     return None
 
 def process_png(path):
+    base_path = os.path.splitext(path)[0]
+    jpg_path = base_path + ".jpg"
+    jpeg_path = base_path + ".jpeg"
+
+    if os.path.exists(jpg_path) or os.path.exists(jpeg_path):
+        print("Skipping, JPG/JPEG exists:", path)
+        return
+
     print("Processing:", path)
     
     doc = app.openDocument(path)
@@ -55,7 +63,7 @@ def process_png(path):
     
     doc.refreshProjection()
     
-    out_path = os.path.splitext(path)[0] + ".jpg"
+    out_path = jpg_path
     
     # Save without dialog using saveAs
     doc.saveAs(out_path)

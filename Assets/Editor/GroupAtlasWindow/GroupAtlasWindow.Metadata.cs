@@ -491,8 +491,51 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     reservedAssetPaths.Add(editorMetadataAssetPath + ".meta");
   }
 
-  static string BuildGroupedSpriteName(string partCode, string sourceCategory, string sourceSpriteName) {
-    var normalizedCategory = string.IsNullOrWhiteSpace(sourceCategory) ? "Anim" : sourceCategory.Trim();
+  static string ResolveSpriteNameCategory(GroupCandidate candidate, SourceAtlasRecord record) {
+    if (candidate != null && candidate.usesFolderStructureSpriteNames) {
+      var folderCategory = BuildAtlasFolderSpriteNameCategory(record?.atlasPath);
+      if (!string.IsNullOrWhiteSpace(folderCategory)) {
+        return folderCategory;
+      }
+    }
+
+    if (!string.IsNullOrWhiteSpace(candidate?.outputName)) {
+      return candidate.outputName.Trim();
+    }
+
+    return record?.category;
+  }
+
+  static string BuildAtlasFolderSpriteNameCategory(string atlasPath) {
+    var normalizedPath = NormalizePath(atlasPath);
+    if (string.IsNullOrWhiteSpace(normalizedPath)) {
+      return "";
+    }
+
+    var folderPath = NormalizePath(Path.GetDirectoryName(normalizedPath));
+    if (string.IsNullOrWhiteSpace(folderPath)) {
+      return "";
+    }
+
+    var segments = folderPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+    if (segments.Length <= 0) {
+      return "";
+    }
+
+    var startIndex = Math.Max(0, segments.Length - ManualSpriteNameFolderDepth);
+    var tokens = new List<string>();
+    for (var i = startIndex; i < segments.Length; i++) {
+      var token = SanitizeSpriteNameToken(segments[i]);
+      if (!string.IsNullOrWhiteSpace(token)) {
+        tokens.Add(token);
+      }
+    }
+
+    return tokens.Count > 0 ? string.Join("_", tokens) : "";
+  }
+
+  static string BuildGroupedSpriteName(string partCode, string spriteNameCategory, string sourceSpriteName) {
+    var normalizedCategory = string.IsNullOrWhiteSpace(spriteNameCategory) ? "Anim" : spriteNameCategory.Trim();
     var normalizedSpriteName = string.IsNullOrWhiteSpace(sourceSpriteName) ? "sprite" : sourceSpriteName.Trim();
     if (normalizedSpriteName.StartsWith(normalizedCategory + "_", StringComparison.OrdinalIgnoreCase)) {
       return (partCode ?? "part") + "__" + normalizedSpriteName;

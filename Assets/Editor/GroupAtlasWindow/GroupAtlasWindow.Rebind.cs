@@ -7,23 +7,52 @@ using UnityEditor;
 using UnityEngine;
 
 public sealed partial class GroupAtlasWindow : EditorWindow {
-  void RebindGroupedSpriteLibraries() {
-    if (!TryGetRebindSourceFolderPath(out var sourceFolderPath, true)) return;
+  internal static bool TryRunSpriteLibraryRebind(
+    string sourceFolderPath,
+    string libraryPath,
+    out string error) {
+    error = "";
+    var normalizedSourceFolderPath = NormalizePath(sourceFolderPath).TrimEnd('/');
+    var normalizedLibraryPath = NormalizePath(libraryPath);
+    if (string.IsNullOrWhiteSpace(normalizedSourceFolderPath)) {
+      error = "Missing grouped sprite sheet folder.";
+      return false;
+    }
 
-    if (!TryGetRebindSpriteLibraryFolderPath(out var libraryFolderPath, true)) return;
+    if (string.IsNullOrWhiteSpace(normalizedLibraryPath)) {
+      error = "Missing sprite library asset.";
+      return false;
+    }
+
+    if (!AssetDatabase.IsValidFolder(normalizedSourceFolderPath)) {
+      error = "Grouped sprite sheet folder must be a project folder asset.";
+      return false;
+    }
+
+    var libraryExtension = Path.GetExtension(normalizedLibraryPath);
+    if (!string.Equals(libraryExtension, ".spriteLib", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(libraryExtension, ".spriteSheetLib", StringComparison.OrdinalIgnoreCase)) {
+      error = "Sprite library asset must use .spriteLib or .spriteSheetLib.";
+      return false;
+    }
+
+    var libraryFullPath = Path.GetFullPath(normalizedLibraryPath);
+    if (!File.Exists(libraryFullPath)) {
+      error = "Sprite library file does not exist on disk: " + libraryFullPath;
+      return false;
+    }
 
     var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
     var buildIndexStopwatch = System.Diagnostics.Stopwatch.StartNew();
-    if (!TryBuildGroupedSpriteReplacementIndex(sourceFolderPath, out var replacementIndex, out var error)) {
-      EditorUtility.DisplayDialog("Rebind Failed", error, "OK");
-      return;
+    if (!TryBuildGroupedSpriteReplacementIndex(normalizedSourceFolderPath, out var replacementIndex, out error)) {
+      return false;
     }
     buildIndexStopwatch.Stop();
 
     AtlasAuthoringLog.Verbose(
       "[GearGroupAtlas] Prepared rebind index." +
-      " grouped_root='" + sourceFolderPath + "'" +
-      " library_root='" + libraryFolderPath + "'" +
+      " grouped_root='" + normalizedSourceFolderPath + "'" +
+      " library_path='" + normalizedLibraryPath + "'" +
       " metadata_files=" + replacementIndex.metadataFileCount +
       " indexed_sprites=" + replacementIndex.spritesByKey.Count +
       " duplicate_keys=" + replacementIndex.duplicateKeyCount +
@@ -48,8 +77,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       assetEditingStarted = true;
 
       rebindStopwatch.Start();
-      RebindSpriteLibraries(
-        libraryFolderPath,
+      RebindSpriteLibrary(
+        normalizedLibraryPath,
         replacementIndex,
         out touchedLibraries,
         out reboundEntries,
@@ -76,8 +105,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     totalStopwatch.Stop();
     AtlasAuthoringLog.Info(
       "[GearGroupAtlas] Rebind complete." +
-      " grouped_root='" + sourceFolderPath + "'" +
-      " library_root='" + libraryFolderPath + "'" +
+      " grouped_root='" + normalizedSourceFolderPath + "'" +
+      " library_path='" + normalizedLibraryPath + "'" +
       " metadata_files=" + replacementIndex.metadataFileCount +
       " indexed_sprites=" + replacementIndex.spritesByKey.Count +
       " duplicate_keys=" + replacementIndex.duplicateKeyCount +
@@ -94,6 +123,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       " cleanup_ms=" + cleanupStopwatch.ElapsedMilliseconds +
       " total_ms=" + totalStopwatch.ElapsedMilliseconds +
       " deferred_import=True");
+    return true;
   }
 
   static void LogGroupedSpriteReplacementDuplicateSummary(GroupedSpriteReplacementIndex replacementIndex) {
@@ -114,7 +144,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     AtlasAuthoringLog.WarningWithSamples(summary, samples);
   }
 
-  bool TryBuildGroupedSpriteReplacementIndex(
+  static bool TryBuildGroupedSpriteReplacementIndex(
     string sourceFolderPath,
     out GroupedSpriteReplacementIndex replacementIndex,
     out string error) {
@@ -215,6 +245,30 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
           form = payload.form,
           variant = payload.variant
         };
+
+        TryAddFolderStructureFallbackReplacement(
+          replacementIndex,
+          isNormalAtlas,
+          isSkinLibrary,
+          partCode,
+          groupedSprite,
+          replacementSprite);
+
+        if (TryBuildGenericLibraryEntrySequenceKey(
+              payload,
+              groupedSprite,
+              isNormalAtlas,
+              isSkinLibrary,
+              partCode,
+              out var genericSequenceKey)) {
+          if (!sequencedPendingReplacementsByKey.TryGetValue(genericSequenceKey, out var genericPendingReplacements) ||
+              genericPendingReplacements == null) {
+            genericPendingReplacements = new List<PendingGroupedSpriteReplacement>();
+            sequencedPendingReplacementsByKey[genericSequenceKey] = genericPendingReplacements;
+          }
+
+          genericPendingReplacements.Add(pendingReplacement);
+        }
 
         if (TryBuildLibraryEntrySequenceKey(
               payload,
@@ -400,6 +454,27 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     return true;
   }
 
+  static bool TryBuildGenericLibraryEntrySequenceKey(
+    GroupedAtlasMetadataPayload payload,
+    GroupedAtlasSpriteMetadata sprite,
+    bool isNormalAtlas,
+    bool isSkinLibrary,
+    string partCode,
+    out LibraryEntrySequenceKey sequenceKey) {
+    sequenceKey = default;
+    if (isSkinLibrary) return false;
+    if (payload == null || sprite == null) return false;
+    if (!string.Equals(payload.partCode, "Mixed", StringComparison.OrdinalIgnoreCase)) return false;
+    if (string.IsNullOrWhiteSpace(partCode)) return false;
+    if (IsKnownPartCodeToken(partCode)) return false;
+
+    var category = NormalizeGenericLibraryCategoryName(partCode);
+    if (string.IsNullOrWhiteSpace(category)) return false;
+
+    sequenceKey = new LibraryEntrySequenceKey(isNormalAtlas, false, category, "", "");
+    return true;
+  }
+
   static string BuildSequencedLibraryEntryLabel(LibraryEntrySequenceKey sequenceKey, int labelIndex) {
     if (labelIndex <= 0) return "";
 
@@ -421,6 +496,12 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     cleanupPlan.expectedLabels.Add(label);
     if (scopeKey.isSkinLibrary) {
+      cleanupPlan.deleteNumericLabels = true;
+      return;
+    }
+
+    if (string.IsNullOrWhiteSpace(scopeKey.partCode) &&
+        int.TryParse(label.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _)) {
       cleanupPlan.deleteNumericLabels = true;
       return;
     }
@@ -458,8 +539,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     return !string.IsNullOrWhiteSpace(labelPrefix);
   }
 
-  void RebindSpriteLibraries(
-    string libraryFolderPath,
+  static void RebindSpriteLibrary(
+    string libraryPath,
     GroupedSpriteReplacementIndex replacementIndex,
     out int touchedLibraries,
     out int reboundEntries,
@@ -475,13 +556,16 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     createdLabels = 0;
     unchangedEntries = 0;
     processedLibraryKinds = new HashSet<bool>();
-    if (replacementIndex == null || replacementIndex.labelsByScope.Count <= 0) return;
+    if (replacementIndex == null) return;
+    if (replacementIndex.labelsByScope.Count <= 0 &&
+        replacementIndex.folderFallbacksByScope.Count <= 0) {
+      return;
+    }
 
-    var libraryFullPath = Path.GetFullPath(libraryFolderPath);
-    if (!Directory.Exists(libraryFullPath)) return;
+    var normalizedLibraryPath = NormalizePath(libraryPath);
+    if (string.IsNullOrWhiteSpace(normalizedLibraryPath)) return;
 
-    var libraryPaths = Directory.GetFiles(libraryFullPath, "*.spriteLib", SearchOption.AllDirectories);
-    Array.Sort(libraryPaths, StringComparer.OrdinalIgnoreCase);
+    var libraryPaths = new[] { normalizedLibraryPath };
     var parsedLibraryCount = 0;
     var loadFailedCount = 0;
     var missingLibraryPropertyCount = 0;
@@ -491,16 +575,16 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
 
     for (var libraryIndex = 0; libraryIndex < libraryPaths.Length; libraryIndex++) {
       var libraryFullAssetPath = libraryPaths[libraryIndex];
-      if (!TryConvertFullPathToAssetPath(libraryFullAssetPath, out var libraryPath)) continue;
+      if (!TryConvertFullPathToAssetPath(libraryFullAssetPath, out var libraryAssetPath)) continue;
 
-      libraryPath = NormalizePath(libraryPath);
-      if (!TryParseSpriteLibraryDescriptor(libraryPath, out var partCode, out var isNormalLibrary, out var isSkinLibrary)) continue;
+      libraryAssetPath = NormalizePath(libraryAssetPath);
+      if (!TryParseSpriteLibraryDescriptor(libraryAssetPath, out var partCode, out var isNormalLibrary, out var isSkinLibrary)) continue;
       if (isNormalLibrary) continue;
       parsedLibraryCount++;
       processedLibraryKinds.Add(isSkinLibrary);
 
       if (!TryRebindSpriteLibraryText(
-            libraryPath,
+            libraryAssetPath,
             partCode,
             isNormalLibrary,
             isSkinLibrary,
@@ -518,7 +602,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         if (skippedLibraryLogCount < 8) {
           AtlasAuthoringLog.Warning(
             "[GearGroupAtlas] Rebind skipped sprite library because it could not be rewritten." +
-            " path='" + libraryPath + "'" +
+            " path='" + libraryAssetPath + "'" +
             " error='" + rebindError + "'");
           skippedLibraryLogCount++;
         }
@@ -528,7 +612,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       if (libraryMatchedCategoryCount <= 0 && skippedLibraryLogCount < 8) {
         AtlasAuthoringLog.Verbose(
           "[GearGroupAtlas] Rebind found no matching categories for sprite library." +
-          " path='" + libraryPath + "'" +
+          " path='" + libraryAssetPath + "'" +
           " part='" + partCode + "'" +
           " normal=" + isNormalLibrary +
           " skin=" + isSkinLibrary);
@@ -542,7 +626,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
         AtlasAuthoringLog.Verbose(
           "[GearGroupAtlas] Rebind processed sprite library." +
           " index=" + (libraryIndex + 1) + "/" + libraryPaths.Length +
-          " path='" + libraryPath + "'" +
+          " path='" + libraryAssetPath + "'" +
           " matched_categories=" + libraryMatchedCategoryCount +
           " rebound_entries=" + libraryReboundEntries +
           " unchanged_entries=" + libraryUnchangedEntries +
@@ -574,7 +658,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
   }
 
-  bool TryRebindSpriteLibraryText(
+  static bool TryRebindSpriteLibraryText(
     string libraryPath,
     string partCode,
     bool isNormalLibrary,
@@ -622,12 +706,19 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       isNormalLibrary,
       isSkinLibrary,
       partCode);
-    if (categoryPlansByName.Count <= 0 && !deleteGearSkinLabels) {
-      return true;
-    }
 
     var lines = SplitTextIntoLines(originalText);
     var existingCategoryNames = CollectSpriteLibraryCategoryNames(lines);
+    AddFolderFallbackCategoryPlans(
+      categoryPlansByName,
+      existingCategoryNames,
+      replacementIndex,
+      isNormalLibrary,
+      isSkinLibrary,
+      partCode);
+    if (categoryPlansByName.Count <= 0 && !deleteGearSkinLabels) {
+      return true;
+    }
 
     var rewritten = new System.Text.StringBuilder(originalText.Length + 256);
     var insideLibrary = false;
@@ -767,6 +858,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
           lineIndex,
           entryBlockEnd,
           currentCategoryPlan?.replacementsByLabel,
+          currentCategoryPlan?.folderFallbacksByLabel,
+          currentCategoryPlan?.folderFallbackCursorByLabel,
           currentCategoryCleanupPlan,
           deleteGearSkinLabels,
           currentCategoryRetainedLabels,
@@ -822,6 +915,8 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     int startIndex,
     int endIndex,
     Dictionary<string, SpriteAssetReference> replacementsByLabel,
+    Dictionary<string, List<SpriteAssetReference>> folderFallbacksByLabel,
+    Dictionary<string, int> folderFallbackCursorByLabel,
     RebindLabelCleanupPlan cleanupPlan,
     bool deleteGearSkinLabels,
     HashSet<string> retainedLabels,
@@ -844,7 +939,12 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return;
     }
 
-    if (!TryResolveLabelReplacement(replacementsByLabel, entryName, out var replacementSprite) || !replacementSprite.IsValid) {
+    if (!TryResolveLabelReplacement(replacementsByLabel, entryName, out var replacementSprite) &&
+        !TryResolveFolderFallbackReplacement(
+          folderFallbacksByLabel,
+          folderFallbackCursorByLabel,
+          entryName,
+          out replacementSprite)) {
       if (!ShouldDeleteMissingRebindLabel(cleanupPlan, entryName)) {
         retainedLabels?.Add(entryName);
         AppendLineRange(output, lines, startIndex, endIndex, lineEnding);
@@ -941,15 +1041,19 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     bool isSkinLibrary,
     string partCode) {
     var plansByName = new Dictionary<string, SpriteLibraryCategoryPlan>(StringComparer.OrdinalIgnoreCase);
-    if (replacementIndex == null || replacementIndex.labelsByScope.Count <= 0 || string.IsNullOrWhiteSpace(partCode)) {
+    if (replacementIndex == null || replacementIndex.labelsByScope.Count <= 0) {
       return plansByName;
     }
 
+    var normalizedPartCode = (partCode ?? "").Trim();
     foreach (var pair in replacementIndex.labelsByScope) {
       var scopeKey = pair.Key;
       if (scopeKey.isNormal != isNormalLibrary ||
-          scopeKey.isSkinLibrary != isSkinLibrary ||
-          !string.Equals(scopeKey.partCode, partCode, StringComparison.OrdinalIgnoreCase)) {
+          scopeKey.isSkinLibrary != isSkinLibrary) {
+        continue;
+      }
+
+      if (!string.Equals(scopeKey.partCode, normalizedPartCode, StringComparison.OrdinalIgnoreCase)) {
         continue;
       }
 
@@ -965,6 +1069,36 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     return plansByName;
+  }
+
+  static void AddFolderFallbackCategoryPlans(
+    Dictionary<string, SpriteLibraryCategoryPlan> plansByName,
+    HashSet<string> existingCategoryNames,
+    GroupedSpriteReplacementIndex replacementIndex,
+    bool isNormalLibrary,
+    bool isSkinLibrary,
+    string partCode) {
+    if (plansByName == null || existingCategoryNames == null || existingCategoryNames.Count <= 0) return;
+    if (replacementIndex == null || replacementIndex.folderFallbacksByScope.Count <= 0) return;
+
+    var scopeKey = new LibraryEntryScopeKey(isNormalLibrary, isSkinLibrary, "", partCode ?? "");
+    if (!replacementIndex.folderFallbacksByScope.TryGetValue(scopeKey, out var fallbacksByLabel) ||
+        fallbacksByLabel == null ||
+        fallbacksByLabel.Count <= 0) {
+      return;
+    }
+
+    var sharedCursorByLabel = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    foreach (var categoryName in existingCategoryNames) {
+      if (string.IsNullOrWhiteSpace(categoryName)) continue;
+      if (!plansByName.TryGetValue(categoryName, out var plan) || plan == null) {
+        plan = new SpriteLibraryCategoryPlan();
+        plansByName[categoryName] = plan;
+      }
+
+      plan.folderFallbacksByLabel = fallbacksByLabel;
+      plan.folderFallbackCursorByLabel = sharedCursorByLabel;
+    }
   }
 
   static HashSet<string> CollectSpriteLibraryCategoryNames(string[] lines) {
@@ -1036,8 +1170,22 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     if (string.IsNullOrWhiteSpace(categoryName)) return "";
 
     var normalizedCategoryName = categoryName.Trim();
+    normalizedCategoryName = NormalizeGenericLibraryCategoryName(normalizedCategoryName);
     if (string.Equals(normalizedCategoryName, "SuperBlast", StringComparison.OrdinalIgnoreCase)) {
       return "Blast";
+    }
+
+    return normalizedCategoryName;
+  }
+
+  static string NormalizeGenericLibraryCategoryName(string categoryName) {
+    var normalizedCategoryName = (categoryName ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(normalizedCategoryName)) return "";
+
+    const string standSuffix = "Stand";
+    if (normalizedCategoryName.EndsWith(standSuffix, StringComparison.OrdinalIgnoreCase) &&
+        normalizedCategoryName.Length > standSuffix.Length) {
+      return normalizedCategoryName.Substring(0, normalizedCategoryName.Length - standSuffix.Length).Trim();
     }
 
     return normalizedCategoryName;
@@ -1185,6 +1333,56 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     return false;
   }
 
+  static bool TryResolveFolderFallbackReplacement(
+    Dictionary<string, List<SpriteAssetReference>> fallbacksByLabel,
+    Dictionary<string, int> cursorByLabel,
+    string label,
+    out SpriteAssetReference replacementSprite) {
+    replacementSprite = default;
+    if (fallbacksByLabel == null || cursorByLabel == null || string.IsNullOrWhiteSpace(label)) {
+      return false;
+    }
+
+    if (!TryGetFolderFallbackList(fallbacksByLabel, label, out var fallbacks) ||
+        fallbacks == null ||
+        fallbacks.Count <= 0) {
+      return false;
+    }
+
+    var normalizedLabel = label.Trim();
+    cursorByLabel.TryGetValue(normalizedLabel, out var cursor);
+    while (cursor < fallbacks.Count) {
+      replacementSprite = fallbacks[cursor];
+      cursor++;
+      cursorByLabel[normalizedLabel] = cursor;
+      if (replacementSprite.IsValid) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool TryGetFolderFallbackList(
+    Dictionary<string, List<SpriteAssetReference>> fallbacksByLabel,
+    string label,
+    out List<SpriteAssetReference> fallbacks) {
+    fallbacks = null;
+    if (fallbacksByLabel == null || string.IsNullOrWhiteSpace(label)) return false;
+
+    if (fallbacksByLabel.TryGetValue(label.Trim(), out fallbacks) && fallbacks != null) {
+      return true;
+    }
+
+    foreach (var pair in fallbacksByLabel) {
+      if (!SpriteSliceAddressUtility.HasEquivalentNumericLabel(pair.Key, label)) continue;
+      fallbacks = pair.Value;
+      return fallbacks != null;
+    }
+
+    return false;
+  }
+
   static void AppendSpriteLibraryEntryBlock(
     System.Text.StringBuilder output,
     string entryName,
@@ -1245,18 +1443,24 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     var fileName = Path.GetFileNameWithoutExtension(libraryPath ?? "");
     if (string.IsNullOrWhiteSpace(fileName)) return false;
 
-    isNormalLibrary = fileName.EndsWith("N", StringComparison.OrdinalIgnoreCase);
-    var coreName = isNormalLibrary ? fileName.Substring(0, fileName.Length - 1) : fileName;
+    var hasNormalSuffix = fileName.EndsWith("N", StringComparison.OrdinalIgnoreCase);
+    var coreName = hasNormalSuffix ? fileName.Substring(0, fileName.Length - 1) : fileName;
+    var skinIndex = coreName.IndexOf("Skin", StringComparison.OrdinalIgnoreCase);
+    var gearIndex = coreName.IndexOf("Gear", StringComparison.OrdinalIgnoreCase);
+
     string token;
-    if (coreName.StartsWith("Skin", StringComparison.OrdinalIgnoreCase)) {
+    if (skinIndex >= 0 && (gearIndex < 0 || skinIndex < gearIndex)) {
       isSkinLibrary = true;
-      token = coreName.Substring("Skin".Length);
+      isNormalLibrary = hasNormalSuffix;
+      token = coreName.Substring(skinIndex + "Skin".Length);
     }
-    else if (coreName.StartsWith("Gear", StringComparison.OrdinalIgnoreCase)) {
-      token = coreName.Substring("Gear".Length);
+    else if (gearIndex >= 0) {
+      isNormalLibrary = hasNormalSuffix;
+      token = coreName.Substring(gearIndex + "Gear".Length);
     }
     else {
-      return false;
+      partCode = "";
+      return true;
     }
 
     partCode = ResolvePartCode(token);
@@ -1281,6 +1485,130 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     }
 
     return false;
+  }
+
+  static void TryAddFolderStructureFallbackReplacement(
+    GroupedSpriteReplacementIndex replacementIndex,
+    bool isNormalAtlas,
+    bool isSkinLibrary,
+    string partCode,
+    GroupedAtlasSpriteMetadata groupedSprite,
+    SpriteAssetReference replacementSprite) {
+    if (replacementIndex == null || groupedSprite == null || !replacementSprite.IsValid) return;
+    if (!TryBuildFolderStructureRebindLabels(groupedSprite, out var labels)) return;
+
+    var scopePartCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+      "",
+      partCode ?? ""
+    };
+
+    if (TryExtractPartCode(groupedSprite.name, out var groupedPartCode)) {
+      scopePartCodes.Add(groupedPartCode);
+    }
+
+    foreach (var scopePartCode in scopePartCodes) {
+      var scopeKey = new LibraryEntryScopeKey(isNormalAtlas, isSkinLibrary, "", scopePartCode);
+      for (var i = 0; i < labels.Count; i++) {
+        AddFolderStructureFallbackReplacement(
+          replacementIndex,
+          scopeKey,
+          labels[i],
+          replacementSprite);
+      }
+    }
+  }
+
+  static void AddFolderStructureFallbackReplacement(
+    GroupedSpriteReplacementIndex replacementIndex,
+    LibraryEntryScopeKey scopeKey,
+    string label,
+    SpriteAssetReference replacementSprite) {
+    if (replacementIndex == null || string.IsNullOrWhiteSpace(label) || !replacementSprite.IsValid) return;
+
+    if (!replacementIndex.folderFallbacksByScope.TryGetValue(scopeKey, out var fallbacksByLabel) ||
+        fallbacksByLabel == null) {
+      fallbacksByLabel = new Dictionary<string, List<SpriteAssetReference>>(StringComparer.OrdinalIgnoreCase);
+      replacementIndex.folderFallbacksByScope[scopeKey] = fallbacksByLabel;
+    }
+
+    var normalizedLabel = label.Trim();
+    if (!fallbacksByLabel.TryGetValue(normalizedLabel, out var fallbacks) || fallbacks == null) {
+      fallbacks = new List<SpriteAssetReference>();
+      fallbacksByLabel[normalizedLabel] = fallbacks;
+    }
+
+    fallbacks.Add(replacementSprite);
+  }
+
+  static bool TryBuildFolderStructureRebindLabels(GroupedAtlasSpriteMetadata groupedSprite, out List<string> labels) {
+    labels = new List<string>();
+    if (groupedSprite == null) return false;
+    if (!TryExtractSourceSpriteName(groupedSprite.name, out var groupedSourceName)) return false;
+
+    var sourceSpriteName = (groupedSprite.sourceSpriteName ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(sourceSpriteName)) {
+      sourceSpriteName = ResolveGroupedSpriteSourceSortName(groupedSprite);
+    }
+
+    if (string.IsNullOrWhiteSpace(sourceSpriteName)) return false;
+
+    var suffix = "_" + sourceSpriteName;
+    if (!groupedSourceName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var folderTokenText = groupedSourceName.Substring(0, groupedSourceName.Length - suffix.Length).Trim('_');
+    if (!TryBuildFolderStructureBaseLabel(folderTokenText, out var baseLabel)) {
+      return false;
+    }
+
+    AddUniqueLabel(labels, baseLabel);
+    if (SpriteSliceAddressUtility.TryExtractNumericLabelValue(sourceSpriteName, out var numericLabel) &&
+        !string.IsNullOrWhiteSpace(numericLabel)) {
+      AddUniqueLabel(labels, baseLabel + "_" + numericLabel);
+
+      if (sourceSpriteName.StartsWith("atlas_", StringComparison.OrdinalIgnoreCase) &&
+          int.TryParse(
+            numericLabel,
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var zeroBasedIndex)) {
+        AddUniqueLabel(labels, baseLabel + "_" + (zeroBasedIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+      }
+    }
+
+    return labels.Count > 0;
+  }
+
+  static bool TryBuildFolderStructureBaseLabel(string folderTokenText, out string baseLabel) {
+    baseLabel = "";
+    if (string.IsNullOrWhiteSpace(folderTokenText)) return false;
+
+    var tokens = folderTokenText.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
+    if (tokens.Length >= 3 &&
+        (string.Equals(tokens[0], "Gear", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(tokens[0], "Skin", StringComparison.OrdinalIgnoreCase))) {
+      baseLabel = tokens[1] + "_" + tokens[2];
+      return true;
+    }
+
+    if (tokens.Length >= 2) {
+      baseLabel = tokens[tokens.Length - 2] + "_" + tokens[tokens.Length - 1];
+      return true;
+    }
+
+    return false;
+  }
+
+  static void AddUniqueLabel(List<string> labels, string label) {
+    if (labels == null || string.IsNullOrWhiteSpace(label)) return;
+    for (var i = 0; i < labels.Count; i++) {
+      if (string.Equals(labels[i], label, StringComparison.OrdinalIgnoreCase)) {
+        return;
+      }
+    }
+
+    labels.Add(label.Trim());
   }
 
   static int ComparePendingGroupedSpriteReplacements(PendingGroupedSpriteReplacement left, PendingGroupedSpriteReplacement right) {
@@ -1535,7 +1863,7 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     return !string.IsNullOrWhiteSpace(folderPath) && !string.IsNullOrWhiteSpace(filePrefix);
   }
 
-  int CleanupStaleOutputs(List<CleanupPlan> cleanupPlans) {
+  static int CleanupStaleOutputs(List<CleanupPlan> cleanupPlans) {
     if (cleanupPlans == null || cleanupPlans.Count <= 0) return 0;
 
     var deletedAssets = 0;

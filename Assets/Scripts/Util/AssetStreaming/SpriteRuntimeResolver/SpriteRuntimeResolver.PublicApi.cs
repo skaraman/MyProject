@@ -266,8 +266,11 @@ public static partial class SpriteRuntimeResolver {
 
     var normalized = NormalizeToken(value).Replace('\\', '/');
     normalized = CollapseSlashes(normalized).Trim('/');
-    if (normalized.EndsWith(".spriteLib", StringComparison.OrdinalIgnoreCase)) {
-      normalized = normalized.Substring(0, normalized.Length - ".spriteLib".Length);
+    if (normalized.EndsWith(SpriteStreamingConfig.CustomSpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring(0, normalized.Length - SpriteStreamingConfig.CustomSpriteLibraryExtension.Length);
+    }
+    else if (normalized.EndsWith(SpriteStreamingConfig.LegacySpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+      normalized = normalized.Substring(0, normalized.Length - SpriteStreamingConfig.LegacySpriteLibraryExtension.Length);
     }
 
     var root = NormalizeToken(RuntimeConfig.SourceRootFolder).Replace('\\', '/');

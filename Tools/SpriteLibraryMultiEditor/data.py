@@ -7,7 +7,17 @@ from pathlib import Path
 from typing import Any
 from dataclasses import dataclass, field
 
-# Regex patterns for parsing .spriteLib files
+# Regex patterns for parsing Unity-style sprite sheet library files.
+CUSTOM_LIBRARY_EXTENSION = ".spriteSheetLib"
+LEGACY_LIBRARY_EXTENSION = ".spriteLib"
+LEGACY_LIBRARY_MARKER = "Unity.2D.Animation.Runtime::UnityEngine.U2D.Animation.SpriteLibrarySourceAsset"
+CUSTOM_LIBRARY_MARKER = "Esperanza.SpriteSheetLibrary"
+LIBRARY_EXTENSIONS = (
+    CUSTOM_LIBRARY_EXTENSION,
+    LEGACY_LIBRARY_EXTENSION,
+)
+LIBRARY_SUFFIXES = {extension.lower() for extension in LIBRARY_EXTENSIONS}
+
 CATEGORY_RE = re.compile(r"^  - m_Name:\s*(.*?)\s*$")
 ENTRY_RE = re.compile(r"^    - m_Name:\s*(.*?)\s*$")
 HASH_RE = re.compile(r"^\s*m_Hash:\s*(-?\d+)\s*$")
@@ -241,16 +251,46 @@ def is_category_trailer_line(line: str) -> bool:
 
 
 def expand_input_paths(values: list[str]) -> list[Path]:
-    """Expand input paths to find all .spriteLib files in directories or single files."""
+    """Expand input paths to find custom sheet libraries and legacy sprite libraries."""
     result: list[Path] = []
     for value in values:
         path = Path(value).resolve()
         if path.is_dir():
-            for candidate in sorted(path.rglob("*.spriteLib"), key=lambda item: str(item).lower()):
-                add_unique_path(result, candidate)
-        elif path.exists() and path.suffix.lower() == ".spritelib":
+            for extension in LIBRARY_EXTENSIONS:
+                pattern = f"*{extension}"
+                candidates = sorted(path.rglob(pattern), key=lambda item: str(item).lower())
+                for candidate in candidates:
+                    add_unique_path(result, candidate)
+        elif path.exists() and path.suffix.lower() in LIBRARY_SUFFIXES:
             add_unique_path(result, path)
     return result
+
+
+def migrate_sprite_library_file(source_path: Path) -> Path:
+    """Rename one legacy .spriteLib into the custom sheet library format."""
+    source_path = source_path.resolve()
+    if source_path.suffix.lower() != LEGACY_LIBRARY_EXTENSION.lower():
+        raise ValueError(f"Expected a {LEGACY_LIBRARY_EXTENSION} file: {source_path}")
+    if not source_path.exists():
+        raise FileNotFoundError(f"Missing sprite library file: {source_path}")
+
+    target_path = source_path.with_suffix(CUSTOM_LIBRARY_EXTENSION)
+    if target_path.exists():
+        raise FileExistsError(f"Target already exists: {target_path}")
+
+    text = source_path.read_text(encoding="utf-8-sig", errors="replace")
+    text = text.replace(LEGACY_LIBRARY_MARKER, CUSTOM_LIBRARY_MARKER)
+    target_path.write_text(text, encoding="utf-8")
+
+    source_meta = Path(str(source_path) + ".meta")
+    if source_meta.exists():
+        target_meta = Path(str(target_path) + ".meta")
+        if target_meta.exists():
+            raise FileExistsError(f"Target meta already exists: {target_meta}")
+        source_meta.rename(target_meta)
+
+    source_path.unlink()
+    return target_path
 
 
 def add_unique_path(paths: list[Path], path: Path) -> None:

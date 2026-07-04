@@ -8,7 +8,6 @@ preview_manager, data_operations, drag_drop, dialogs, and document_operations.
 
 import sys
 import tkinter as tk  # noqa: F401
-import tkinter.messagebox as messagebox  # noqa: F401
 from typing import Any
 
 # Import shared definitions from data module
@@ -16,6 +15,8 @@ from data import (  # noqa: F401
     SpriteLabel,
     SpriteCategory,
     SpriteLibraryDocument,
+    CUSTOM_LIBRARY_EXTENSION,
+    LEGACY_LIBRARY_EXTENSION,
 )
 
 class SpriteLibraryMultiEditorApp:
@@ -25,7 +26,7 @@ class SpriteLibraryMultiEditorApp:
         self.initial_paths = initial_paths or []
 
         self.root = tk.Tk()
-        self.root.title("Sprite Library Multi-Editor")
+        self.root.title("Sprite Sheet Library Editor")
         self.root.minsize(1024, 768)
         self.ui_scale = 1.0
 
@@ -249,13 +250,18 @@ class SpriteLibraryMultiEditorApp:
         self.preview_label.config(text="No sprite selected")
 
     def open_library(self) -> None:
-        """Open a file dialog to select and load sprite library files."""
+        """Open a file dialog to select and load sheet library files."""
         import tkinter.filedialog as filedialog  # noqa: PLC0415
         from document_manager import load_path as _load_path
 
         file_paths = filedialog.askopenfilenames(
-            title="Open Sprite Library Files",
-            filetypes=[("Sprite Library files", "*.spriteLib"), ("All files", "*.*")],
+            title="Open Sprite Sheet Library Files",
+            filetypes=[
+                ("Sprite sheet libraries", (f"*{CUSTOM_LIBRARY_EXTENSION}", f"*{LEGACY_LIBRARY_EXTENSION}")),
+                ("Custom sheet libraries", f"*{CUSTOM_LIBRARY_EXTENSION}"),
+                ("Legacy sprite libraries", f"*{LEGACY_LIBRARY_EXTENSION}"),
+                ("All files", "*.*"),
+            ],
             parent=self.root,
         )
         if file_paths:
@@ -265,7 +271,7 @@ class SpriteLibraryMultiEditorApp:
                 _load_path(path, self.documents, self._refresh_doc_list, self._refresh_doc_list)
 
     def load_path(self, path: str) -> None:
-        """Load a .spriteLib file from the given path."""
+        """Load a sheet library file from the given path."""
         from document_manager import load_path as _load_path
 
         self.undo_stack.clear()

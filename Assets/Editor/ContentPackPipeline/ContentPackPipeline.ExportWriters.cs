@@ -332,7 +332,11 @@ public static partial class ContentPackPipeline {
         sourceType = NormalizeToken(source.sourceType),
         assetPath = NormalizeAssetPath(source.assetPath),
         label = NormalizeToken(source.label),
-        targetFolder = NormalizePackTargetFolder(source.targetFolder)
+        targetFolder = NormalizePackTargetFolder(source.targetFolder),
+        libraryName = NormalizeAssetPath(source.libraryName),
+        category = NormalizeToken(source.category),
+        labelPrefix = NormalizeToken(source.labelPrefix),
+        normalAssetPath = NormalizeAssetPath(source.normalAssetPath)
       });
     }
 
