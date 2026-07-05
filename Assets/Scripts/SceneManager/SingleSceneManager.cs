@@ -347,6 +347,7 @@ public partial class SingleSceneManager : MonoBehaviour {
   private bool holdBlackscreenOpaqueDuringLoad;
   private bool playerAnimationHeldForLoadingOverlay;
   private string lastPurgedLocationId = "";
+  private string lastRuntimeSceneChangeKey = "";
   private float loadingStallStartedAt = -1f;
   private float loadingZeroPercentStartedAt = -1f;
   private float loadingZeroPercentNextLogAt = -1f;
@@ -595,6 +596,7 @@ public partial class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("closePauseMenu", o => ClosePauseMenu()));
     actions.Add(MessageBus.On("openPauseMenu", o => OpenPauseMenu()));
     actions.Add(MessageBus.On("LocationUpdated", o => OnLocationUpdated(o)));
+    actions.Add(MessageBus.On("runtimeSceneChanged", o => OnRuntimeSceneChanged(o)));
     actions.Add(MessageBus.On("dialog.started", o => OnDialogStarted(o)));
     actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
     actions.Add(MessageBus.On("gearReady", o => RefreshPersistentPlayerBaselineAtlasPins("gear_ready")));

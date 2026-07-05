@@ -1,21 +1,37 @@
 {
   "slices": [
     {
-      "id": "Core",
-      "packs": [
+      "id": "main",
+      "ids": [
         "Core"
       ]
     },
     {
-      "id": "DomeCity_Imp",
-      "packs": []
+      "id": "Episode1_1",
+      "ids": [
+        "EnemyImp",
+        "EnvFlowers",
+        "EnvForestRuins",
+        "EnvRocks",
+        "EnvTrees",
+        "DialogImp",
+        "ObjectiveEpisode1",
+        "DialogEpisode1"
+      ]
+    },
+    {
+      "id": "EsperanzaCore",
+      "ids": [
+        "EsperanzaBounces",
+        "EsperanzaSkinAnimations"
+      ]
     }
   ],
   "episodes": [
     {
       "id": "Episode01",
       "slices": [
-        "Core",
+        "main",
         "DomeCity_Imp"
       ]
     }

@@ -125,6 +125,7 @@ public class CharacterState : MonoBehaviour {
 
     EsperanzaForms.SetActive(resolvedForm);
     var saved = SaveFormsState();
+    RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("form_change:" + (source ?? ""));
 
     if (gearController != null) {
       gearController.RefreshGear();

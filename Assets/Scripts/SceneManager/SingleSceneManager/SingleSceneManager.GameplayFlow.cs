@@ -74,6 +74,7 @@ public partial class SingleSceneManager {
       resolveLocationForStart,
       previousSection
     );
+    ConfigureRuntimeContentPacksForGameplayFlow(warmContext, isNewGame, overlayTag + "_begin");
     var gameplayStateAppliedUnderBlack = false;
     pendingGameplayLocationId = "";
     ResetGameplayLoadStageTracking();
@@ -107,6 +108,7 @@ public partial class SingleSceneManager {
       }
       LogLoadStateDispatch("before_load_game_message");
       ApplySavedGameplayStateUnderLoadingOverlay();
+      RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("after_load_state");
       LogLoadStateDispatch("after_load_game_message");
       yield return null;
       LogLoadStateDispatch("after_load_game_one_frame");
@@ -119,6 +121,7 @@ public partial class SingleSceneManager {
       }
       if (isNewGame) {
         PrepareNewGameRuntimeStateUnderLoadingOverlay();
+        RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("after_new_game_state");
       }
       // Freeze the player on a stable first-contact frame while the overlay is up.
       // Otherwise the runtime loader chases advancing animation frames behind black.
@@ -152,6 +155,15 @@ public partial class SingleSceneManager {
     var revealHandoffStartedAtAfterIdle = Time.realtimeSinceStartup;
     LogRevealHandoff("streaming_idle_complete", revealHandoffStartedAtAfterIdle);
     yield return UnlockGameplayFromBlackRoutine(overlayTag, revealHandoffStartedAtAfterIdle);
+  }
+
+  void ConfigureRuntimeContentPacksForGameplayFlow(WarmGateMode warmContext, bool isNewGame, string source) {
+    if (warmContext == WarmGateMode.GearApplyReturn) {
+      RuntimeContentPackResolver.ConfigureForCurrentRuntimeState(source);
+      return;
+    }
+
+    RuntimeContentPackResolver.ConfigureForGameplayStart(isNewGame, source);
   }
 
   void ApplySavedGameplayStateUnderLoadingOverlay() {

@@ -162,6 +162,7 @@ public static partial class ContentPackPipeline {
 
   static bool IsGameplayPack(PackDefinition pack) {
     if (pack == null) return false;
+    if (IsUiOnlyPackId(pack.packId)) return false;
     if (IsGameplayPackKind(pack.kind)) return true;
     if (!string.IsNullOrWhiteSpace(pack.defaultLocationId)) return true;
     if (pack.ownedLocations != null && pack.ownedLocations.Count > 0) return true;
@@ -182,8 +183,13 @@ public static partial class ContentPackPipeline {
 
   static bool IsGameplayPackKind(string kind) {
     var normalizedKind = NormalizeToken(kind);
-    return string.Equals(normalizedKind, "form", StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(normalizedKind, "gear", StringComparison.OrdinalIgnoreCase) ||
+    return string.Equals(normalizedKind, "gear", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "enemy", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "environment", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "destructible", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "objective", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "dialog", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(normalizedKind, "form", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(normalizedKind, "slice", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(normalizedKind, "episode", StringComparison.OrdinalIgnoreCase);
   }
@@ -193,8 +199,13 @@ public static partial class ContentPackPipeline {
     if (string.IsNullOrWhiteSpace(normalizedPackId)) return false;
     if (IsUiOnlyPackId(normalizedPackId)) return false;
 
-    return normalizedPackId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase) ||
-           normalizedPackId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase) ||
+    return normalizedPackId.StartsWith("Gear", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Enemy", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Environment", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Destructible", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Objective", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Dialog", StringComparison.OrdinalIgnoreCase) ||
+           normalizedPackId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase) ||
            normalizedPackId.StartsWith("Slice_", StringComparison.OrdinalIgnoreCase) ||
            normalizedPackId.StartsWith("Episode_", StringComparison.OrdinalIgnoreCase);
   }

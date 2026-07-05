@@ -15,6 +15,8 @@ using Process = System.Diagnostics.Process;
 using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 public static partial class ContentPackPipeline {
+  static bool loggedLinkedStageRootCleanupSkip;
+
   public static bool StageActivePacks(bool logResult) {
     var selection = LoadOrCreateSelectionAsset(logResult);
     if (selection == null) return false;
@@ -532,6 +534,11 @@ public static partial class ContentPackPipeline {
     EnsureDirectoryAssetPath(StageSlicesAssetPath);
     EnsureDirectoryAssetPath(StageEpisodesAssetPath);
 
+    if (IsProjectStageRootReparsePoint()) {
+      LogSkippedLinkedStageRootCleanup(StageRootAssetPath, NormalizeRawFullPath(StageRootAssetPath));
+      return 0;
+    }
+
     if (RemoveStageLinkIfInactive(StageCoreAssetPath, activePackIds.Contains(CorePackId, StringComparer.OrdinalIgnoreCase))) {
       removedCount++;
     }
@@ -550,6 +557,7 @@ public static partial class ContentPackPipeline {
     for (var i = 0; i < existingPackDirectories.Length; i++) {
       var assetPath = ToProjectAssetPath(existingPackDirectories[i]);
       var packId = Path.GetFileName(assetPath);
+      if (IsReservedStageDirectoryName(packId)) continue;
       if (knownStageFolders.Contains(packId)) continue;
       var keep = activePackIds.Contains(packId, StringComparer.OrdinalIgnoreCase);
       if (RemoveStageLinkIfInactive(assetPath, keep)) {
@@ -730,7 +738,12 @@ public static partial class ContentPackPipeline {
   }
 
   static bool DeleteStagePath(string stageAssetPath) {
-    var fullPath = Path.GetFullPath(stageAssetPath);
+    var fullPath = NormalizeRawFullPath(stageAssetPath);
+    if (IsInsideProjectStageRootReparsePoint(fullPath)) {
+      LogSkippedLinkedStageRootCleanup(stageAssetPath, fullPath);
+      return false;
+    }
+
     if (!Directory.Exists(fullPath) && !File.Exists(fullPath)) {
       return DeleteMetaIfPresent(stageAssetPath);
     }
@@ -751,6 +764,56 @@ public static partial class ContentPackPipeline {
     }
 
     return DeleteMetaIfPresent(stageAssetPath) || deleted;
+  }
+
+  static bool IsReservedStageDirectoryName(string directoryName) {
+    if (string.IsNullOrWhiteSpace(directoryName)) {
+      return true;
+    }
+
+    return directoryName.StartsWith(".", StringComparison.Ordinal);
+  }
+
+  static bool IsInsideProjectStageRootReparsePoint(string fullPath) {
+    if (string.IsNullOrWhiteSpace(fullPath)) {
+      return false;
+    }
+
+    if (!IsProjectStageRootReparsePoint()) {
+      return false;
+    }
+
+    var stageRootFullPath = NormalizeRawFullPath(StageRootAssetPath);
+    return string.Equals(fullPath, stageRootFullPath, StringComparison.OrdinalIgnoreCase) ||
+           fullPath.StartsWith(stageRootFullPath + "/", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool IsProjectStageRootReparsePoint() {
+    var stageRootFullPath = NormalizeRawFullPath(StageRootAssetPath);
+    return Directory.Exists(stageRootFullPath) && IsReparsePoint(stageRootFullPath);
+  }
+
+  static void LogSkippedLinkedStageRootCleanup(string stageAssetPath, string fullPath) {
+    if (loggedLinkedStageRootCleanupSkip) {
+      return;
+    }
+
+    loggedLinkedStageRootCleanupSkip = true;
+    var stageRootFullPath = NormalizeRawFullPath(StageRootAssetPath);
+    var targetFullPath = TryGetLinkTargetFullPath(stageRootFullPath);
+    Debug.LogWarning(
+      "[ContentPackPipeline] Skipped inactive stage cleanup because the package stage root is a filesystem link." +
+      " stage_root='" + stageRootFullPath + "'" +
+      " target='" + (string.IsNullOrWhiteSpace(targetFullPath) ? "-" : targetFullPath) + "'" +
+      " attempted_asset_path='" + (stageAssetPath ?? "") + "'" +
+      " attempted_full_path='" + (fullPath ?? "") + "'"
+    );
+  }
+
+  static string NormalizeRawFullPath(string value) {
+    return string.IsNullOrWhiteSpace(value)
+      ? ""
+      : Path.GetFullPath(value).Replace('\\', '/').TrimEnd('/');
   }
 
   static bool DeleteMetaIfPresent(string assetPath) {

@@ -7,6 +7,7 @@ public partial class GearController {
     EnsureRuntimeInitialized("load_gear");
     EquippedItems.EnsureKnownForms();
     GetSavedGearState();
+    RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("load_gear");
     RefreshGear();
     QueueStartupAppearanceWarmup("load_gear", pauseUntilReady: !equippedStartupWarmupCompleted);
     PrimeEquippedAnimationStartsIfLoading();
@@ -34,6 +35,7 @@ public partial class GearController {
     EquippedItems.AllGearForms[EsperanzaForms.GetActive()][slot] = gearItem;
     gameData.SetComplex("allGear", EquippedItems.AllGearForms);
     SaveSlotManager.Save("equippedGear", gameData);
+    RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("gear_slot_change");
     MarkAppearanceRevision();
   }
 

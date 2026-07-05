@@ -52,15 +52,65 @@ public static partial class ContentPackPipeline {
     var directories = Directory.GetDirectories(normalizedRoot);
     Array.Sort(directories, StringComparer.OrdinalIgnoreCase);
     for (var i = 0; i < directories.Length; i++) {
-      var packId = Path.GetFileName(directories[i]);
-      if (string.IsNullOrWhiteSpace(packId) || knownFolders.Contains(packId)) continue;
+      var directory = directories[i];
+      var packId = Path.GetFileName(directory);
+      if (string.IsNullOrWhiteSpace(packId)) {
+        continue;
+      }
+
+      if (knownFolders.Contains(packId)) {
+        continue;
+      }
+
+      if (!IsExternalRootPackCandidateDirectory(directory)) {
+        continue;
+      }
+
       AddExistingPackDefinition(
         result,
         packId,
         "pack",
-        NormalizeFullPath(directories[i]),
+        NormalizeFullPath(directory),
         StageRootAssetPath + "/" + packId
       );
+    }
+  }
+
+  static bool IsExternalRootPackCandidateDirectory(string directory) {
+    if (string.IsNullOrWhiteSpace(directory)) {
+      return false;
+    }
+
+    if (!Directory.Exists(directory)) {
+      return false;
+    }
+
+    var manifestPath = Path.Combine(directory, ManifestFileName);
+    if (File.Exists(manifestPath)) {
+      return true;
+    }
+
+    try {
+      var files = Directory.GetFiles(directory);
+      for (var i = 0; i < files.Length; i++) {
+        var fileName = Path.GetFileName(files[i]);
+        if (fileName.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) {
+          continue;
+        }
+
+        return true;
+      }
+
+      var childDirectories = Directory.GetDirectories(directory);
+      return childDirectories.Length > 0;
+    }
+    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) {
+      Debug.LogWarning(
+        "[ContentPackPipeline] Ignored unreadable external pack folder." +
+        " path='" + directory + "'" +
+        " error='" + ex.Message + "'"
+      );
+      return false;
     }
   }
 
@@ -82,9 +132,14 @@ public static partial class ContentPackPipeline {
 
   static string InferManifestPackKind(string packId) {
     if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) return "core";
-    if (packId.StartsWith("Form_", StringComparison.OrdinalIgnoreCase)) return "form";
-    if (packId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) return "gear";
-    if (packId.StartsWith("Episode_", StringComparison.OrdinalIgnoreCase)) return "episode";
+    if (packId.StartsWith("Gear", StringComparison.OrdinalIgnoreCase)) return "gear";
+    if (packId.StartsWith("Enemy", StringComparison.OrdinalIgnoreCase)) return "enemy";
+    if (packId.StartsWith("Environment", StringComparison.OrdinalIgnoreCase)) return "environment";
+    if (packId.StartsWith("Destructible", StringComparison.OrdinalIgnoreCase)) return "destructible";
+    if (packId.StartsWith("Dialog", StringComparison.OrdinalIgnoreCase)) return "dialog";
+    if (packId.EndsWith("UI", StringComparison.OrdinalIgnoreCase) ||
+        packId.StartsWith("UI", StringComparison.OrdinalIgnoreCase)) return "ui";
+    if (packId.StartsWith("Objective", StringComparison.OrdinalIgnoreCase)) return "objective";
     return "pack";
   }
 
@@ -92,23 +147,11 @@ public static partial class ContentPackPipeline {
     if (string.Equals(kind, "core", StringComparison.OrdinalIgnoreCase)) {
       return NormalizeFullPath(Path.Combine(normalizedRoot, "Core"));
     }
-    if (string.Equals(kind, "form", StringComparison.OrdinalIgnoreCase)) {
-      return NormalizeFullPath(Path.Combine(normalizedRoot, "Forms", packId));
-    }
-    if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase)) {
-      return NormalizeFullPath(Path.Combine(normalizedRoot, "Gears", packId));
-    }
-    if (string.Equals(kind, "episode", StringComparison.OrdinalIgnoreCase)) {
-      return NormalizeFullPath(Path.Combine(normalizedRoot, "Episodes", packId));
-    }
     return NormalizeFullPath(Path.Combine(normalizedRoot, packId));
   }
 
   static string ResolveManifestPackStageRoot(string kind, string packId) {
     if (string.Equals(kind, "core", StringComparison.OrdinalIgnoreCase)) return StageCoreAssetPath;
-    if (string.Equals(kind, "form", StringComparison.OrdinalIgnoreCase)) return StageFormsAssetPath + "/" + packId;
-    if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase)) return StageGearsAssetPath + "/" + packId;
-    if (string.Equals(kind, "episode", StringComparison.OrdinalIgnoreCase)) return StageEpisodesAssetPath + "/" + packId;
     return StageRootAssetPath + "/" + packId;
   }
 
@@ -128,17 +171,59 @@ public static partial class ContentPackPipeline {
     if (manifest == null) return result;
 
     if (manifest.slices == null) return result;
+    var sliceById = new Dictionary<string, ContentManifestSliceJson>(StringComparer.OrdinalIgnoreCase);
     for (var i = 0; i < manifest.slices.Count; i++) {
-      AddListValues(result, manifest.slices[i]?.packs);
+      var slice = manifest.slices[i];
+      var sliceId = NormalizeToken(slice?.id);
+      if (string.IsNullOrWhiteSpace(sliceId)) continue;
+      if (sliceById.ContainsKey(sliceId)) continue;
+      sliceById.Add(sliceId, slice);
+    }
+
+    for (var i = 0; i < manifest.slices.Count; i++) {
+      AddContentManifestSlicePackIds(
+        result,
+        manifest.slices[i],
+        sliceById,
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+      );
     }
     return result;
   }
 
-  static void AddListValues(List<string> result, List<string> values) {
-    if (result == null || values == null) return;
-    for (var i = 0; i < values.Count; i++) {
-      AddUniquePath(result, values[i]);
+  static void AddContentManifestSlicePackIds(
+    List<string> result,
+    ContentManifestSliceJson slice,
+    Dictionary<string, ContentManifestSliceJson> sliceById,
+    HashSet<string> stack
+  ) {
+    if (result == null || slice == null || sliceById == null || stack == null) return;
+
+    var sliceId = NormalizeToken(slice.id);
+    if (string.IsNullOrWhiteSpace(sliceId)) return;
+    if (stack.Contains(sliceId)) return;
+
+    stack.Add(sliceId);
+    var ids = GetContentManifestSliceIds(slice);
+    for (var i = 0; i < ids.Count; i++) {
+      var manifestId = NormalizeToken(ids[i]);
+      if (string.IsNullOrWhiteSpace(manifestId)) continue;
+      if (
+        !string.Equals(manifestId, sliceId, StringComparison.OrdinalIgnoreCase) &&
+        sliceById.TryGetValue(manifestId, out var childSlice)
+      ) {
+        AddContentManifestSlicePackIds(result, childSlice, sliceById, stack);
+        continue;
+      }
+      AddUniquePath(result, manifestId);
     }
+    stack.Remove(sliceId);
+  }
+
+  static List<string> GetContentManifestSliceIds(ContentManifestSliceJson slice) {
+    if (slice == null) return new List<string>();
+    if (slice.ids != null) return slice.ids;
+    return slice.packs ?? new List<string>();
   }
 
   static void AddExternalPackDefinitions(
@@ -228,8 +313,13 @@ public static partial class ContentPackPipeline {
     if (pack == null || manifest == null) return;
 
     pack.loadedManifest = true;
-    if (!string.IsNullOrWhiteSpace(manifest.kind)) {
-      pack.kind = NormalizeToken(manifest.kind);
+    var manifestKind = NormalizeToken(string.IsNullOrWhiteSpace(manifest.type) ? manifest.kind : manifest.type);
+    if (!string.IsNullOrWhiteSpace(manifestKind) &&
+        !string.Equals(manifestKind, "pack", StringComparison.OrdinalIgnoreCase)) {
+      pack.kind = manifestKind;
+    }
+    else {
+      pack.kind = InferManifestPackKind(pack.packId);
     }
 
     ReplaceListIfPresent(pack.ownedRoots, manifest.ownedRoots);
@@ -513,6 +603,15 @@ public static partial class ContentPackPipeline {
           " asset='" + assetPath + "'" +
           " label='" + source.label + "'"
         );
+        return false;
+      }
+      return true;
+    }
+
+    if (string.Equals(sourceType, "text_asset", StringComparison.OrdinalIgnoreCase)) {
+      if (!string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase) &&
+          !string.Equals(extension, ".txt", StringComparison.OrdinalIgnoreCase)) {
+        errors?.Add("Text authoring source must be a .json or .txt asset. asset='" + assetPath + "'");
         return false;
       }
       return true;

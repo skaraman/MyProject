@@ -93,7 +93,8 @@ public static partial class ContentPackPipeline {
   [Serializable]
   sealed class ContentManifestSliceJson {
     public string id;
-    public List<string> packs = new();
+    public List<string> ids;
+    public List<string> packs;
   }
 
   [Serializable]
@@ -105,6 +106,7 @@ public static partial class ContentPackPipeline {
   [Serializable]
   sealed class ContentPackManifestJson {
     public string packId;
+    public string type;
     public string kind;
     public List<string> ownedRoots = new();
     public List<string> ownedLocations = new();

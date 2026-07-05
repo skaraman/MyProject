@@ -299,6 +299,7 @@ public static partial class ContentPackPipeline {
     try {
       var manifest = new ContentPackManifestJson {
         packId = pack.packId,
+        type = pack.kind,
         kind = pack.kind,
         ownedRoots = new List<string>(pack.ownedRoots),
         ownedLocations = new List<string>(pack.ownedLocations),

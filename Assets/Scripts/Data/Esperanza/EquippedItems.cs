@@ -69,6 +69,10 @@ public static class EquippedItems {
     };
   }
 
+  public static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearFormsSnapshot() {
+    return CloneGearForms(DefaultGearForms);
+  }
+
   public static List<string> GetEquippedGearIds(IEnumerable<string> forms = null) {
     EnsureKnownForms();
 
@@ -110,7 +114,7 @@ public static class EquippedItems {
       return "";
     }
 
-    return "Gear_" + normalizedGearId.Replace(' ', '_') + "_" + normalizedLeafCode.Replace(' ', '_');
+    return "Gear" + normalizedGearId.Replace(' ', '_') + "_" + normalizedLeafCode.Replace(' ', '_');
   }
 
   public static bool TryParseGearPackId(string packId, out string gearForm, out string gearCode, out string leafCode) {
@@ -119,11 +123,17 @@ public static class EquippedItems {
     leafCode = "";
 
     var normalizedPackId = NormalizeToken(packId);
-    if (!normalizedPackId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) {
+    string payload;
+    if (normalizedPackId.StartsWith("Gear_", StringComparison.OrdinalIgnoreCase)) {
+      payload = normalizedPackId.Substring("Gear_".Length);
+    }
+    else if (normalizedPackId.StartsWith("Gear", StringComparison.OrdinalIgnoreCase)) {
+      payload = normalizedPackId.Substring("Gear".Length);
+    }
+    else {
       return false;
     }
 
-    var payload = normalizedPackId.Substring("Gear_".Length);
     var parts = payload.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
     if (parts.Length < 3) {
       return false;

@@ -509,9 +509,72 @@ public partial class SingleSceneManager {
     if (string.IsNullOrWhiteSpace(previousLocationId)) return;
     if (string.Equals(previousLocationId, currentLocationId, StringComparison.OrdinalIgnoreCase)) return;
 
-    // Location transition lifecycle: old environment/enemy/effect sets are no longer
-    // required once switching to a different location. Evict completed unpinned entries.
-    TextureResidencyCache.EvictAllUnpinnedCompleted();
+    var reason = ResolveLocationSceneChangeReason(currentLocationId);
+    if (!ShouldReloadRuntimeContentForLocationSceneChange(currentLocationId)) {
+      TextureResidencyCache.EvictAllUnpinnedCompleted();
+      return;
+    }
+
+    lastRuntimeSceneChangeKey = NormalizeRuntimeSceneChangeKey(currentLocationId);
+    ReloadRuntimeContentForSceneChange(previousLocationId, currentLocationId, reason);
+  }
+
+  void OnRuntimeSceneChanged(object payload) {
+    var sceneKey = NormalizeRuntimeSceneChangeKey(Convert.ToString(payload));
+    if (string.IsNullOrWhiteSpace(sceneKey)) {
+      sceneKey = NormalizeRuntimeSceneChangeKey(LocationManager.currentLocation);
+    }
+
+    if (string.IsNullOrWhiteSpace(sceneKey)) {
+      return;
+    }
+
+    var previousSceneKey = lastRuntimeSceneChangeKey;
+    lastRuntimeSceneChangeKey = sceneKey;
+    ReloadRuntimeContentForSceneChange(previousSceneKey, sceneKey, "zone_entered");
+  }
+
+  void ReloadRuntimeContentForSceneChange(string previousSceneId, string currentSceneId, string reason) {
+    // Scene transition lifecycle: old environment/enemy/effect sets are no longer
+    // required once switching to a different runtime scene. Evict completed unpinned entries.
+    var evicted = TextureResidencyCache.EvictAllUnpinnedCompleted();
+    RuntimeContentPackResolver.ReloadForSceneChange(previousSceneId, currentSceneId, reason);
+
+    Debug.Log(
+      "[SingleSceneManager][RuntimeSceneChange] content_rederived=1" +
+      " reason='" + (reason ?? "") + "'" +
+      " previous='" + (previousSceneId ?? "") + "'" +
+      " current='" + (currentSceneId ?? "") + "'" +
+      " evicted_unpinned=" + evicted
+    );
+  }
+
+  string ResolveLocationSceneChangeReason(string currentLocationId) {
+    if (IsHomebaseLocation(currentLocationId)) {
+      return "teleport_homebase";
+    }
+
+    return "location_change";
+  }
+
+  bool ShouldReloadRuntimeContentForLocationSceneChange(string currentLocationId) {
+    if (IsHomebaseLocation(currentLocationId)) {
+      return true;
+    }
+
+    return IsGameplayLocation(currentLocationId);
+  }
+
+  static bool IsHomebaseLocation(string locationId) {
+    return string.Equals(
+      LocationEnemyData.NormalizeLocationId(locationId),
+      LocationEnemyData.HomebaseLocationId,
+      StringComparison.OrdinalIgnoreCase
+    );
+  }
+
+  static string NormalizeRuntimeSceneChangeKey(string value) {
+    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
   }
 
   void ForceBlackscreenVisible(bool visible) {

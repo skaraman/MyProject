@@ -20,23 +20,51 @@ CUSTOM_LIBRARY_EXTENSION = ".spriteSheetLib"
 LEGACY_LIBRARY_EXTENSION = ".spriteLib"
 UNITY_LOCK_EXIT_CODE = 3
 LAST_LIBRARY_SOURCE_DIR: Path | None = None
+IGNORED_PACK_FOLDER_NAMES = {
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__",
+}
+
+PACK_KIND_ORDER = (
+    "core",
+    "gear",
+    "enemy",
+    "environment",
+    "destructible",
+    "objective",
+    "dialog",
+    "ui",
+)
 
 KIND_FOLDERS = {
-    "pack": "",
     "core": "Core",
-    "form": "Forms",
-    "gear": "Gears",
-    "slice": "Slices",
-    "episode": "Episodes",
+    "gear": "",
+    "enemy": "",
+    "environment": "",
+    "destructible": "",
+    "objective": "",
+    "dialog": "",
+    "ui": "",
+}
+
+LEGACY_KIND_FOLDER_NAMES = {
+    "Forms",
+    "Gears",
+    "Slices",
+    "Episodes",
 }
 
 PACK_TYPE_LABELS = {
-    "pack": "Pack",
     "core": "Core",
-    "form": "Form",
     "gear": "Gear",
-    "slice": "Slice",
-    "episode": "Episode",
+    "enemy": "Enemy",
+    "environment": "Environment",
+    "destructible": "Destructible",
+    "objective": "Objective",
+    "dialog": "Dialog",
+    "ui": "UI",
 }
 
 PACK_LABEL_TO_KIND = {label: kind for kind, label in PACK_TYPE_LABELS.items()}
@@ -45,6 +73,7 @@ SOURCE_TYPE_LABELS = {
     "sprite_sheet": "Sprite Sheet",
     "sprite_library": "Sprite Library",
     "sprite_slice": "Sprite Slice",
+    "text_asset": "Text / JSON",
 }
 
 SOURCE_LABEL_TO_TYPE = {label: key for key, label in SOURCE_TYPE_LABELS.items()}
@@ -178,13 +207,25 @@ class PackOption:
 @dataclass
 class ManifestSliceSpec:
     slice_id: str
-    packs: list[str] = field(default_factory=list)
+    ids: list[str] = field(default_factory=list)
 
     def row_values(self) -> tuple[str, str, str]:
         return (
             self.slice_id,
-            summarize(self.packs, max_count=5),
-            str(len(self.packs)),
+            summarize(self.ids, max_count=5),
+            str(len(self.ids)),
+        )
+
+
+@dataclass
+class ManifestIdSuggestion:
+    manifest_id: str
+    suggestion_type: str
+
+    def row_values(self) -> tuple[str, str]:
+        return (
+            self.suggestion_type,
+            self.manifest_id,
         )
 
 
@@ -200,10 +241,13 @@ def main() -> int:
     parser.add_argument("--unity-exe", default="", help="Override Unity.exe path for --build-smart.")
     parser.add_argument("--manifest-list", action="store_true", help="Print ContentManifest slices.")
     parser.add_argument("--upsert-slice", default="", help="Create or replace a ContentManifest slice id.")
-    parser.add_argument("--slice-packs", default="", help="Comma-separated pack ids for --upsert-slice.")
-    parser.add_argument("--add-pack-to-slice", default="", help="Append a pack id to a ContentManifest slice.")
-    parser.add_argument("--remove-pack-from-slice", default="", help="Remove a pack id from a ContentManifest slice.")
-    parser.add_argument("--to-slice", default="", help="Slice id used with --add-pack-to-slice or --remove-pack-from-slice.")
+    parser.add_argument("--slice-ids", default="", help="Comma-separated pack or slice ids for --upsert-slice.")
+    parser.add_argument("--slice-packs", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--add-id-to-slice", default="", help="Append a pack or slice id to a ContentManifest slice.")
+    parser.add_argument("--add-pack-to-slice", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--remove-id-from-slice", default="", help="Remove a pack or slice id from a ContentManifest slice.")
+    parser.add_argument("--remove-pack-from-slice", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--to-slice", default="", help="Slice id used with --add-id-to-slice or --remove-id-from-slice.")
     parser.add_argument("--remove-slice", default="", help="Remove a ContentManifest slice id.")
     parser.add_argument("--delete-pack", default="", help="Delete an external pack folder and remove pack references.")
     parser.add_argument("--edit-sprite-sheets", action="store_true", help="Open the custom sprite sheet library editor.")
@@ -344,19 +388,6 @@ def build_source_assets(
             form, code, leaf = gear
             add_unique(sources, f"Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/{form}/{code}/{leaf}")
 
-    if kind == "form":
-        form_name = pack_id.removeprefix("Form_")
-        add_form_source_assets(project_root, sources, form_name)
-
-    if kind == "slice":
-        slice_parts = parse_slice_pack_id(pack_id)
-        if slice_parts:
-            location, enemy, form = slice_parts
-            add_unique(sources, f"Assets/Prefabs/Locations/{location}.prefab")
-            add_unique(sources, f"Assets/Prefabs/Enemies/{enemy}.prefab")
-            add_unique(sources, f"Assets/Sprites/Characters/Enemies/{enemy}")
-            add_unique(sources, f"Assets/Sprites/Environments/{location}")
-
     for root in owned_roots:
         add_unique(sources, root)
         mapped = package_asset_to_external_path(external_root, root)
@@ -366,9 +397,6 @@ def build_source_assets(
     if kind == "core":
         add_unique(sources, "Assets/Sprites")
         add_unique(sources, display_path(external_root / "Core"))
-
-    if kind == "episode":
-        add_unique(sources, "Composition only; no sprite ownership expected")
 
     return sources
 
@@ -443,6 +471,7 @@ def write_authoring_manifest(
     manifest = read_json(manifest_path)
     manifest["packId"] = pack_id
     manifest["kind"] = kind
+    manifest["type"] = kind
     manifest.pop("dependencies", None)
     if sources:
         manifest["ownedRoots"] = build_owned_roots(sources)
@@ -547,32 +576,62 @@ def build_status(
 
 def read_external_pack_manifests(external_root: Path) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
-    known_kind_folders = {folder.lower() for folder in KIND_FOLDERS.values() if folder}
+    known_kind_folders = {
+        folder.lower()
+        for folder in list(KIND_FOLDERS.values()) + list(LEGACY_KIND_FOLDER_NAMES)
+        if folder
+    }
     if external_root.exists():
-        for pack_dir in sorted((p for p in external_root.glob("*") if p.is_dir()), key=lambda p: p.name.lower()):
+        for pack_dir in sorted((p for p in external_root.glob("*") if is_pack_candidate_dir(p)), key=lambda p: p.name.lower()):
             if pack_dir.name.lower() in known_kind_folders:
                 continue
             manifest = read_json(pack_dir / "ContentPackManifest.json")
             if manifest:
                 pack_id = str(manifest.get("packId") or pack_dir.name)
-                manifest.setdefault("kind", "pack")
+                manifest["kind"] = infer_kind(pack_id, manifest)
+                manifest["type"] = manifest["kind"]
                 result[pack_id] = manifest
             else:
-                result.setdefault(pack_dir.name, {"packId": pack_dir.name, "kind": "pack"})
+                result.setdefault(pack_dir.name, {"packId": pack_dir.name, "kind": infer_kind(pack_dir.name)})
 
-    for kind in ("core", "form", "gear", "slice", "episode"):
-        root = external_root / KIND_FOLDERS[kind]
-        pack_dirs = [root] if kind == "core" else sorted((p for p in root.glob("*") if p.is_dir()), key=lambda p: p.name.lower())
-        for pack_dir in pack_dirs:
-            manifest = read_json(pack_dir / "ContentPackManifest.json")
-            if not manifest:
-                if kind != "core":
-                    result.setdefault(pack_dir.name, {"packId": pack_dir.name, "kind": kind})
-                continue
-            pack_id = str(manifest.get("packId") or ("Core" if kind == "core" else pack_dir.name))
-            manifest.setdefault("kind", kind)
-            result[pack_id] = manifest
+    core_root = external_root / KIND_FOLDERS["core"]
+    manifest = read_json(core_root / "ContentPackManifest.json")
+    if manifest:
+        pack_id = str(manifest.get("packId") or "Core")
+        manifest["kind"] = "core"
+        manifest["type"] = "core"
+        result[pack_id] = manifest
     return result
+
+
+def is_pack_candidate_dir(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+
+    name = path.name.lower()
+    if name in IGNORED_PACK_FOLDER_NAMES:
+        return False
+
+    if name.startswith("."):
+        return False
+
+    return has_pack_candidate_content(path)
+
+
+def has_pack_candidate_content(path: Path) -> bool:
+    if (path / "ContentPackManifest.json").is_file():
+        return True
+
+    try:
+        for child in path.iterdir():
+            if child.name.lower().endswith(".meta"):
+                continue
+
+            return True
+    except OSError:
+        return False
+
+    return False
 
 
 def update_content_manifest_from_args(project_root: Path, args: argparse.Namespace) -> bool:
@@ -581,19 +640,22 @@ def update_content_manifest_from_args(project_root: Path, args: argparse.Namespa
         remove_content_manifest_slice(project_root, args.remove_slice)
         changed = True
     if args.upsert_slice:
-        upsert_content_manifest_slice(project_root, args.upsert_slice, parse_manifest_pack_ids(args.slice_packs))
+        slice_ids = args.slice_ids or args.slice_packs
+        upsert_content_manifest_slice(project_root, args.upsert_slice, parse_manifest_ids(slice_ids))
         changed = True
-    if args.add_pack_to_slice:
+    id_to_add = args.add_id_to_slice or args.add_pack_to_slice
+    if id_to_add:
         slice_id = args.to_slice or args.upsert_slice
         if not slice_id:
-            raise SystemExit("--add-pack-to-slice requires --to-slice or --upsert-slice.")
-        add_pack_to_content_manifest_slice(project_root, slice_id, args.add_pack_to_slice)
+            raise SystemExit("--add-id-to-slice requires --to-slice or --upsert-slice.")
+        add_id_to_content_manifest_slice(project_root, slice_id, id_to_add)
         changed = True
-    if args.remove_pack_from_slice:
+    id_to_remove = args.remove_id_from_slice or args.remove_pack_from_slice
+    if id_to_remove:
         slice_id = args.to_slice or args.upsert_slice
         if not slice_id:
-            raise SystemExit("--remove-pack-from-slice requires --to-slice or --upsert-slice.")
-        remove_pack_from_content_manifest_slice(project_root, slice_id, args.remove_pack_from_slice)
+            raise SystemExit("--remove-id-from-slice requires --to-slice or --upsert-slice.")
+        remove_id_from_content_manifest_slice(project_root, slice_id, id_to_remove)
         changed = True
     return changed
 
@@ -623,20 +685,23 @@ def normalize_manifest_slices(raw_slices: Any) -> list[ManifestSliceSpec]:
         slice_id = sanitize_identifier(str(raw_slice.get("id") or ""))
         if not slice_id:
             continue
-        packs = parse_manifest_pack_ids(raw_slice.get("packs"))
+        if "ids" in raw_slice:
+            ids = parse_manifest_ids(raw_slice.get("ids"))
+        else:
+            ids = parse_manifest_ids(raw_slice.get("packs"))
         existing_index = find_manifest_slice_index(result, slice_id)
         if existing_index >= 0:
-            for pack_id in packs:
-                add_unique(result[existing_index].packs, pack_id)
+            for manifest_id in ids:
+                add_unique(result[existing_index].ids, manifest_id)
             continue
-        result.append(ManifestSliceSpec(slice_id=slice_id, packs=packs))
+        result.append(ManifestSliceSpec(slice_id=slice_id, ids=ids))
     return result
 
 
 def write_content_manifest_slices(project_root: Path, slices: list[ManifestSliceSpec]) -> Path:
     manifest = read_content_manifest(project_root)
     manifest["slices"] = [serialize_manifest_slice(slice_spec) for slice_spec in normalize_manifest_slices([
-        {"id": slice_spec.slice_id, "packs": slice_spec.packs}
+        {"id": slice_spec.slice_id, "ids": slice_spec.ids}
         for slice_spec in slices
     ])]
     if not isinstance(manifest.get("episodes"), list):
@@ -654,21 +719,19 @@ def write_content_manifest(project_root: Path, manifest: dict[str, Any]) -> Path
 def serialize_manifest_slice(slice_spec: ManifestSliceSpec) -> dict[str, Any]:
     return {
         "id": sanitize_identifier(slice_spec.slice_id),
-        "packs": parse_manifest_pack_ids(slice_spec.packs),
+        "ids": parse_manifest_ids(slice_spec.ids),
     }
 
 
-def upsert_content_manifest_slice(project_root: Path, slice_id: str, pack_ids: Iterable[str]) -> Path:
+def upsert_content_manifest_slice(project_root: Path, slice_id: str, manifest_ids: Iterable[str]) -> Path:
     normalized_slice_id = sanitize_identifier(slice_id)
     if not normalized_slice_id:
         raise SystemExit("Slice id is required.")
-    normalized_packs = parse_manifest_pack_ids(list(pack_ids))
-    if not normalized_packs:
-        raise SystemExit("At least one pack id is required for a slice.")
+    normalized_ids = parse_manifest_ids(list(manifest_ids))
 
     slices = read_content_manifest_slices(project_root)
     index = find_manifest_slice_index(slices, normalized_slice_id)
-    slice_spec = ManifestSliceSpec(normalized_slice_id, normalized_packs)
+    slice_spec = ManifestSliceSpec(normalized_slice_id, normalized_ids)
     if index >= 0:
         slices[index] = slice_spec
     else:
@@ -676,37 +739,37 @@ def upsert_content_manifest_slice(project_root: Path, slice_id: str, pack_ids: I
     return write_content_manifest_slices(project_root, slices)
 
 
-def add_pack_to_content_manifest_slice(project_root: Path, slice_id: str, pack_id: str) -> Path:
+def add_id_to_content_manifest_slice(project_root: Path, slice_id: str, manifest_id: str) -> Path:
     normalized_slice_id = sanitize_identifier(slice_id)
-    normalized_pack_id = sanitize_identifier(pack_id)
+    normalized_id = sanitize_identifier(manifest_id)
     if not normalized_slice_id:
         raise SystemExit("Slice id is required.")
-    if not normalized_pack_id:
-        raise SystemExit("Pack id is required.")
+    if not normalized_id:
+        raise SystemExit("Manifest id is required.")
 
     slices = read_content_manifest_slices(project_root)
     index = find_manifest_slice_index(slices, normalized_slice_id)
     if index < 0:
-        slices.append(ManifestSliceSpec(normalized_slice_id, [normalized_pack_id]))
+        slices.append(ManifestSliceSpec(normalized_slice_id, [normalized_id]))
     else:
-        add_unique(slices[index].packs, normalized_pack_id)
+        add_unique(slices[index].ids, normalized_id)
     return write_content_manifest_slices(project_root, slices)
 
 
-def remove_pack_from_content_manifest_slice(project_root: Path, slice_id: str, pack_id: str) -> Path:
+def remove_id_from_content_manifest_slice(project_root: Path, slice_id: str, manifest_id: str) -> Path:
     normalized_slice_id = sanitize_identifier(slice_id)
-    normalized_pack_id = sanitize_identifier(pack_id)
+    normalized_id = sanitize_identifier(manifest_id)
     if not normalized_slice_id:
         raise SystemExit("Slice id is required.")
-    if not normalized_pack_id:
-        raise SystemExit("Pack id is required.")
+    if not normalized_id:
+        raise SystemExit("Manifest id is required.")
 
     slices = read_content_manifest_slices(project_root)
     index = find_manifest_slice_index(slices, normalized_slice_id)
     if index >= 0:
-        slices[index].packs = [
-            value for value in slices[index].packs
-            if value.lower() != normalized_pack_id.lower()
+        slices[index].ids = [
+            value for value in slices[index].ids
+            if value.lower() != normalized_id.lower()
         ]
     return write_content_manifest_slices(project_root, slices)
 
@@ -729,8 +792,8 @@ def remove_pack_from_all_content_manifest_slices(project_root: Path, pack_id: st
 
     slices = read_content_manifest_slices(project_root)
     for slice_spec in slices:
-        slice_spec.packs = [
-            value for value in slice_spec.packs
+        slice_spec.ids = [
+            value for value in slice_spec.ids
             if value.lower() != normalized_pack_id.lower()
         ]
     return write_content_manifest_slices(project_root, slices)
@@ -761,12 +824,12 @@ def find_first_manifest_slice_for_pack(project_root: Path, pack_id: str) -> str:
     if not normalized_pack_id:
         return ""
     for slice_spec in read_content_manifest_slices(project_root):
-        if any(value.lower() == normalized_pack_id.lower() for value in slice_spec.packs):
+        if any(value.lower() == normalized_pack_id.lower() for value in slice_spec.ids):
             return slice_spec.slice_id
     return ""
 
 
-def parse_manifest_pack_ids(value: Any) -> list[str]:
+def parse_manifest_ids(value: Any) -> list[str]:
     result: list[str] = []
     if isinstance(value, str):
         raw_values = re.split(r"[,;\n]+", value)
@@ -776,24 +839,96 @@ def parse_manifest_pack_ids(value: Any) -> list[str]:
         raw_values = []
 
     for raw_value in raw_values:
-        pack_id = sanitize_identifier(str(raw_value or ""))
-        add_unique(result, pack_id)
+        manifest_id = sanitize_identifier(str(raw_value or ""))
+        add_unique(result, manifest_id)
     return result
+
+
+def parse_manifest_pack_ids(value: Any) -> list[str]:
+    return parse_manifest_ids(value)
 
 
 def print_content_manifest_slices(project_root: Path) -> None:
     slices = read_content_manifest_slices(project_root)
     for slice_spec in slices:
-        print(f"{slice_spec.slice_id:36} | {', '.join(slice_spec.packs)}")
+        print(f"{slice_spec.slice_id:36} | {', '.join(slice_spec.ids)}")
     print(f"slices={len(slices)} manifest={content_manifest_path(project_root)}")
+
+
+def build_manifest_id_suggestions(
+    project_root: Path,
+    external_root: Path,
+    slices: Iterable[ManifestSliceSpec],
+    current_slice_id: str = "",
+    seed_pack_id: str = "",
+) -> list[ManifestIdSuggestion]:
+    result: list[ManifestIdSuggestion] = []
+    seen: set[str] = set()
+
+    add_manifest_id_suggestion(result, seen, seed_pack_id, "Selected")
+
+    current_key = sanitize_identifier(current_slice_id).lower()
+    for slice_spec in slices:
+        if slice_spec.slice_id.lower() == current_key:
+            continue
+
+        add_manifest_id_suggestion(result, seen, slice_spec.slice_id, "Slice")
+
+    for option in build_pack_options(project_root, external_root):
+        add_manifest_id_suggestion(result, seen, option.pack_id, option.pack_type)
+
+    return result
+
+
+def add_manifest_id_suggestion(
+    result: list[ManifestIdSuggestion],
+    seen: set[str],
+    manifest_id: str,
+    suggestion_type: str,
+) -> None:
+    normalized_id = sanitize_identifier(manifest_id)
+    if not normalized_id:
+        return
+
+    key = normalized_id.lower()
+    if key in seen:
+        return
+
+    seen.add(key)
+    result.append(ManifestIdSuggestion(normalized_id, suggestion_type))
 
 
 def read_content_manifest_pack_ids(project_root: Path) -> list[str]:
     result: list[str] = []
-    for slice_spec in read_content_manifest_slices(project_root):
-        for pack_id in slice_spec.packs:
-            add_unique(result, pack_id)
+    slices = read_content_manifest_slices(project_root)
+    slice_by_id = {
+        slice_spec.slice_id.lower(): slice_spec
+        for slice_spec in slices
+    }
+    for slice_spec in slices:
+        add_slice_leaf_pack_ids(result, slice_spec, slice_by_id, set())
     return result
+
+
+def add_slice_leaf_pack_ids(
+    result: list[str],
+    slice_spec: ManifestSliceSpec,
+    slice_by_id: dict[str, ManifestSliceSpec],
+    stack: set[str],
+) -> None:
+    slice_key = slice_spec.slice_id.lower()
+    if slice_key in stack:
+        return
+
+    stack.add(slice_key)
+    for manifest_id in slice_spec.ids:
+        manifest_key = manifest_id.lower()
+        child_slice = slice_by_id.get(manifest_key)
+        if child_slice and manifest_key != slice_key:
+            add_slice_leaf_pack_ids(result, child_slice, slice_by_id, stack)
+        else:
+            add_unique(result, manifest_id)
+    stack.remove(slice_key)
 
 
 def resolve_active_pack_ids(
@@ -809,31 +944,43 @@ def resolve_active_pack_ids(
 
 
 def infer_kind(pack_id: str, manifest: dict[str, Any] | None = None) -> str:
-    manifest_kind = str(manifest.get("kind") or "").lower() if manifest else ""
+    manifest_kind = normalize_pack_kind(str(manifest.get("type") or manifest.get("kind") or "")) if manifest else ""
     if manifest_kind:
         return manifest_kind
     if not pack_id:
         return ""
     if pack_id == "Core":
         return "core"
-    if pack_id.startswith("Form_"):
-        return "form"
-    if pack_id.startswith("Gear_"):
+    if pack_id.startswith("Gear"):
         return "gear"
-    if pack_id.startswith("Slice_"):
-        return "slice"
-    if pack_id.startswith("Episode_"):
-        return "episode"
-    return "pack"
+    if pack_id.startswith("Enemy"):
+        return "enemy"
+    if pack_id.startswith("Environment"):
+        return "environment"
+    if pack_id.startswith("Destructible"):
+        return "destructible"
+    if pack_id.startswith("Dialog"):
+        return "dialog"
+    if pack_id.endswith("UI") or pack_id.startswith("UI"):
+        return "ui"
+    if pack_id.startswith("Objective"):
+        return "objective"
+    return "objective"
+
+
+def normalize_pack_kind(value: str) -> str:
+    normalized = (value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if normalized in PACK_TYPE_LABELS:
+        return normalized
+    if normalized == "pack":
+        return ""
+    return ""
 
 
 def external_pack_root(external_root: Path, kind: str, pack_id: str) -> Path:
-    folder = KIND_FOLDERS.get(kind)
-    if not folder:
-        return external_root / pack_id
     if kind == "core":
-        return external_root / folder
-    return external_root / folder / pack_id
+        return external_root / KIND_FOLDERS["core"]
+    return external_root / pack_id
 
 
 def delete_content_pack(project_root: Path, external_root: Path, pack_id: str) -> list[Path]:
@@ -851,6 +998,12 @@ def delete_content_pack(project_root: Path, external_root: Path, pack_id: str) -
     if safe_pack_root.exists():
         shutil.rmtree(safe_pack_root)
         deleted_paths.append(safe_pack_root)
+
+    meta_path = safe_pack_root.with_suffix(".meta")
+    safe_meta_path = resolve_deletable_pack_root(external_root, meta_path)
+    if safe_meta_path.exists():
+        safe_meta_path.unlink()
+        deleted_paths.append(safe_meta_path)
 
     remove_pack_from_all_content_manifest_slices(project_root, normalized_pack_id)
     remove_pack_from_active_selection(project_root, external_root, normalized_pack_id)
@@ -879,13 +1032,8 @@ def is_relative_to_path(path: Path, root: Path) -> bool:
 
 
 def unity_pack_root(kind: str, pack_id: str) -> str:
-    folder = KIND_FOLDERS.get(kind, "")
-    if kind == "pack":
-        return f"Packages/{PACKAGE_NAME}/{pack_id}"
     if kind == "core":
         return f"Packages/{PACKAGE_NAME}/Core"
-    if folder:
-        return f"Packages/{PACKAGE_NAME}/{folder}/{pack_id}"
     return f"Packages/{PACKAGE_NAME}/{pack_id}"
 
 
@@ -898,9 +1046,13 @@ def package_asset_to_external_path(external_root: Path, asset_path: str) -> Path
 
 
 def parse_gear_pack_id(pack_id: str) -> tuple[str, str, str] | None:
-    if not pack_id.startswith("Gear_"):
+    if pack_id.startswith("Gear_"):
+        body = pack_id[len("Gear_"):]
+    elif pack_id.startswith("Gear"):
+        body = pack_id[len("Gear"):]
+    else:
         return None
-    parts = pack_id[len("Gear_"):].split("_")
+    parts = body.split("_")
     if len(parts) < 3:
         return None
     return "_".join(parts[:-2]), parts[-2], parts[-1]
@@ -1088,7 +1240,7 @@ def filter_options(options: list[PackOption], pack_type: str, search: str) -> li
 
 def pack_sort_key(pack_id: str) -> tuple[int, str]:
     kind = infer_kind(pack_id)
-    order = {"core": 0, "form": 1, "gear": 2, "slice": 3, "episode": 4}.get(kind, 9)
+    order = {kind_name: index for index, kind_name in enumerate(PACK_KIND_ORDER)}.get(kind, 99)
     return order, pack_id.lower()
 
 
@@ -1122,6 +1274,8 @@ def normalize_source_type(value: str) -> str:
         return "sprite_library"
     if normalized in ("slice", "png", "sprite_pointer", "direct_sprite"):
         return "sprite_slice"
+    if normalized in ("text", "json", "txt", "text_asset", "text_file", "data_file"):
+        return "text_asset"
     return ""
 
 
@@ -1274,15 +1428,7 @@ def make_pack_id(kind: str, name_or_id: str) -> str:
     value = sanitize_identifier(name_or_id)
     if kind == "core":
         return "Core"
-    prefix = {
-        "form": "Form_",
-        "gear": "Gear_",
-        "slice": "Slice_",
-        "episode": "Episode_",
-    }.get(kind, "")
-    if prefix and value.lower().startswith(prefix.lower()):
-        return value
-    return prefix + value if prefix else value
+    return value
 
 
 def parse_pack_ids(value: str) -> list[str]:
@@ -1364,7 +1510,7 @@ def verify_pack_option(project_root: Path, external_root: Path, option: PackOpti
     errors: list[str] = []
     info: list[str] = []
     pack_id = sanitize_identifier(option.pack_id)
-    kind = infer_kind(pack_id)
+    kind = PACK_LABEL_TO_KIND.get(option.pack_type, infer_kind(pack_id))
     target_root = external_pack_root(external_root, kind, pack_id)
 
     if not pack_id:
@@ -1459,6 +1605,13 @@ def validate_authoring_source(source: SourceAssetSpec) -> str:
             return "Sprite Slice sources must point at a .png asset."
         if not source.label.strip() and "[" not in source.asset_path:
             return "Sprite Slice sources require a slice label."
+    elif source.source_type == "text_asset":
+        asset_path = source.asset_path.lower()
+        if asset_path.endswith(".json"):
+            return ""
+        if asset_path.endswith(".txt"):
+            return ""
+        return "Text / JSON sources must point at a .json or .txt asset."
     else:
         return "Unknown source type."
     return ""
@@ -1467,8 +1620,6 @@ def validate_authoring_source(source: SourceAssetSpec) -> str:
 def validate_manifest_slice(slice_spec: ManifestSliceSpec) -> str:
     if not sanitize_identifier(slice_spec.slice_id):
         return "Slice id is required."
-    if not parse_manifest_pack_ids(slice_spec.packs):
-        return "At least one pack id is required."
     return ""
 
 
@@ -1715,7 +1866,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
         def edit_manifest(self) -> None:
             option = self.selected_option()
             seed_pack_id = option.pack_id if option else ""
-            dialog = ManifestEditorDialog(self, project_root, seed_pack_id)
+            dialog = ManifestEditorDialog(self, project_root, external_root, seed_pack_id)
             self.wait_window(dialog)
             if dialog.saved:
                 self.refresh()
@@ -1935,9 +2086,10 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 os.startfile(self.path)
 
     class ManifestEditorDialog(tk.Toplevel):
-        def __init__(self, parent: tk.Tk, project_root: Path, seed_pack_id: str = "") -> None:
+        def __init__(self, parent: tk.Tk, project_root: Path, external_root: Path, seed_pack_id: str = "") -> None:
             super().__init__(parent)
             self.project_root = project_root
+            self.external_root = external_root
             self.seed_pack_id = sanitize_identifier(seed_pack_id)
             self.slices = read_content_manifest_slices(project_root)
             self.saved = False
@@ -1962,16 +2114,16 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Button(toolbar, text="New Slice", command=self.new_slice).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Edit Slice", command=self.edit_slice).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Delete Slice", command=self.delete_slice).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(toolbar, text="Add Selected Pack", command=self.add_seed_pack).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Add Selected ID", command=self.add_seed_pack).pack(side=tk.LEFT, padx=(0, 8))
 
-            columns = ("slice", "packs", "count")
+            columns = ("slice", "ids", "count")
             self.slice_tree = ttk.Treeview(root, columns=columns, show="headings", selectmode="browse")
             headings = {
                 "slice": "Slice",
-                "packs": "Packs",
+                "ids": "IDs",
                 "count": "Count",
             }
-            widths = {"slice": 240, "packs": 500, "count": 80}
+            widths = {"slice": 240, "ids": 500, "count": 80}
             for column in columns:
                 self.slice_tree.heading(column, text=headings[column])
                 self.slice_tree.column(column, width=widths[column], minwidth=80, anchor=tk.W, stretch=True)
@@ -2001,7 +2153,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             return index if 0 <= index < len(self.slices) else -1
 
         def new_slice(self) -> None:
-            dialog = ManifestSliceEditorDialog(self, None, self.seed_pack_id)
+            suggestions = self._manifest_id_suggestions("")
+            dialog = ManifestSliceEditorDialog(self, None, self.seed_pack_id, suggestions)
             self.wait_window(dialog)
             if dialog.slice_spec:
                 self._upsert_slice(dialog.slice_spec)
@@ -2010,7 +2163,9 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             index = self._selected_slice_index()
             if index < 0:
                 return
-            dialog = ManifestSliceEditorDialog(self, self.slices[index], "")
+            slice_spec = self.slices[index]
+            suggestions = self._manifest_id_suggestions(slice_spec.slice_id)
+            dialog = ManifestSliceEditorDialog(self, slice_spec, "", suggestions)
             self.wait_window(dialog)
             if dialog.slice_spec:
                 self.slices[index] = dialog.slice_spec
@@ -2033,12 +2188,13 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 return
             index = self._selected_slice_index()
             if index < 0:
-                dialog = ManifestSliceEditorDialog(self, None, self.seed_pack_id)
+                suggestions = self._manifest_id_suggestions("")
+                dialog = ManifestSliceEditorDialog(self, None, self.seed_pack_id, suggestions)
                 self.wait_window(dialog)
                 if dialog.slice_spec:
                     self._upsert_slice(dialog.slice_spec)
                 return
-            add_unique(self.slices[index].packs, self.seed_pack_id)
+            add_unique(self.slices[index].ids, self.seed_pack_id)
             self._refresh_slices()
 
         def _upsert_slice(self, slice_spec: ManifestSliceSpec) -> None:
@@ -2050,9 +2206,18 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self._dedupe_slices()
             self._refresh_slices()
 
+        def _manifest_id_suggestions(self, current_slice_id: str) -> list[ManifestIdSuggestion]:
+            return build_manifest_id_suggestions(
+                self.project_root,
+                self.external_root,
+                self.slices,
+                current_slice_id,
+                self.seed_pack_id,
+            )
+
         def _dedupe_slices(self) -> None:
             self.slices = normalize_manifest_slices([
-                {"id": slice_spec.slice_id, "packs": slice_spec.packs}
+                {"id": slice_spec.slice_id, "ids": slice_spec.ids}
                 for slice_spec in self.slices
             ])
 
@@ -2073,30 +2238,33 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             parent: tk.Toplevel,
             slice_spec: ManifestSliceSpec | None,
             seed_pack_id: str = "",
+            suggestions: list[ManifestIdSuggestion] | None = None,
         ) -> None:
             super().__init__(parent)
             self.slice_spec: ManifestSliceSpec | None = None
-            initial_packs = list(slice_spec.packs) if slice_spec else parse_manifest_pack_ids(seed_pack_id)
+            self.suggestions = suggestions or []
+            initial_ids = list(slice_spec.ids) if slice_spec else parse_manifest_ids(seed_pack_id)
             self.slice_text = tk.StringVar(value=slice_spec.slice_id if slice_spec else "")
             self.title("Manifest Slice")
-            self.geometry("680x380")
-            self.minsize(560, 320)
+            self.geometry("820x520")
+            self.minsize(680, 420)
             self.configure(bg="#101418")
             self.transient(parent)
             self.grab_set()
-            self._build_layout(initial_packs)
+            self._build_layout(initial_ids)
 
-        def _build_layout(self, initial_packs: list[str]) -> None:
+        def _build_layout(self, initial_ids: list[str]) -> None:
             root = ttk.Frame(self, padding=(14, 14, 14, 14))
             root.pack(fill=tk.BOTH, expand=True)
             root.columnconfigure(1, weight=1)
             root.rowconfigure(1, weight=1)
+            root.rowconfigure(2, weight=1)
 
             ttk.Label(root, text="Slice ID").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
             ttk.Entry(root, textvariable=self.slice_text).grid(row=0, column=1, sticky="ew", pady=(0, 8))
 
-            ttk.Label(root, text="Packs").grid(row=1, column=0, sticky="nw", padx=(0, 10))
-            self.packs_text = tk.Text(
+            ttk.Label(root, text="IDs").grid(row=1, column=0, sticky="nw", padx=(0, 10))
+            self.ids_text = tk.Text(
                 root,
                 bg="#151a20",
                 fg="#e6edf3",
@@ -2108,18 +2276,91 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 font=("Consolas", 10),
                 height=10,
             )
-            self.packs_text.grid(row=1, column=1, sticky="nsew")
-            self.packs_text.insert(tk.END, "\n".join(initial_packs))
+            self.ids_text.grid(row=1, column=1, sticky="nsew")
+            self.ids_text.insert(tk.END, "\n".join(initial_ids))
+
+            ttk.Label(root, text="Suggestions").grid(row=2, column=0, sticky="nw", padx=(0, 10), pady=(10, 0))
+            suggestions_root = ttk.Frame(root)
+            suggestions_root.grid(row=2, column=1, sticky="nsew", pady=(10, 0))
+            suggestions_root.rowconfigure(0, weight=1)
+            suggestions_root.columnconfigure(0, weight=1)
+
+            columns = ("type", "id")
+            self.suggestion_tree = ttk.Treeview(
+                suggestions_root,
+                columns=columns,
+                show="headings",
+                selectmode="browse",
+                height=8,
+            )
+            self.suggestion_tree.heading("type", text="Type")
+            self.suggestion_tree.heading("id", text="ID")
+            self.suggestion_tree.column("type", width=120, minwidth=80, anchor=tk.W, stretch=False)
+            self.suggestion_tree.column("id", width=420, minwidth=180, anchor=tk.W, stretch=True)
+            self.suggestion_tree.grid(row=0, column=0, sticky="nsew")
+            self.suggestion_tree.bind("<Double-1>", lambda _event: self.add_selected_suggestion())
+
+            suggestion_scroll = ttk.Scrollbar(
+                suggestions_root,
+                orient=tk.VERTICAL,
+                command=self.suggestion_tree.yview,
+            )
+            suggestion_scroll.grid(row=0, column=1, sticky="ns")
+            self.suggestion_tree.configure(yscrollcommand=suggestion_scroll.set)
+
+            ttk.Button(
+                suggestions_root,
+                text="Add ID",
+                command=self.add_selected_suggestion,
+            ).grid(row=1, column=0, sticky="e", pady=(8, 0))
 
             footer = ttk.Frame(root)
-            footer.grid(row=2, column=0, columnspan=2, sticky="e", pady=(12, 0))
+            footer.grid(row=3, column=0, columnspan=2, sticky="e", pady=(12, 0))
             ttk.Button(footer, text="Save Slice", command=self.save_slice).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(footer, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
+            self._refresh_suggestions()
+
+        def _refresh_suggestions(self) -> None:
+            self.suggestion_tree.delete(*self.suggestion_tree.get_children())
+            for index, suggestion in enumerate(self.suggestions):
+                self.suggestion_tree.insert("", tk.END, iid=str(index), values=suggestion.row_values())
+
+            if self.suggestions:
+                self.suggestion_tree.selection_set("0")
+                self.suggestion_tree.focus("0")
+
+        def add_selected_suggestion(self) -> None:
+            selection = self.suggestion_tree.selection()
+            if not selection:
+                return
+
+            index = int(selection[0])
+            if index < 0 or index >= len(self.suggestions):
+                return
+
+            self.add_id_to_text(self.suggestions[index].manifest_id)
+
+        def add_id_to_text(self, manifest_id: str) -> None:
+            normalized_id = sanitize_identifier(manifest_id)
+            if not normalized_id:
+                return
+
+            existing_ids = parse_manifest_ids(self.ids_text.get("1.0", tk.END))
+            for existing_id in existing_ids:
+                if existing_id.lower() == normalized_id.lower():
+                    return
+
+            current_text = self.ids_text.get("1.0", "end-1c")
+            if current_text.strip() and not current_text.endswith("\n"):
+                self.ids_text.insert(tk.END, "\n")
+
+            self.ids_text.insert(tk.END, normalized_id)
+            self.ids_text.focus_set()
 
         def save_slice(self) -> None:
             slice_spec = ManifestSliceSpec(
                 slice_id=sanitize_identifier(self.slice_text.get()),
-                packs=parse_manifest_pack_ids(self.packs_text.get("1.0", tk.END)),
+                ids=parse_manifest_ids(self.ids_text.get("1.0", tk.END)),
             )
             error = validate_manifest_slice(slice_spec)
             if error:
@@ -2143,8 +2384,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self.transient(parent)
             self.grab_set()
 
-            initial_kind = infer_kind(option.pack_id) if option else "pack"
-            self.kind_label = tk.StringVar(value=PACK_TYPE_LABELS.get(initial_kind, "Pack"))
+            initial_kind = PACK_LABEL_TO_KIND.get(option.pack_type, infer_kind(option.pack_id)) if option else "objective"
+            self.kind_label = tk.StringVar(value=PACK_TYPE_LABELS.get(initial_kind, "Objective"))
             self.name_text = tk.StringVar(value=option.pack_id if option else "")
             self.slice_text = tk.StringVar(value=find_first_manifest_slice_for_pack(project_root, option.pack_id) if option else "")
             self.target_text = tk.StringVar()
@@ -2165,7 +2406,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 root,
                 textvariable=self.kind_label,
                 state="readonly",
-                values=[PACK_TYPE_LABELS[key] for key in KIND_FOLDERS],
+                values=[PACK_TYPE_LABELS[key] for key in PACK_KIND_ORDER],
                 width=20,
             )
             type_combo.grid(row=0, column=1, sticky="w", pady=(0, 8))
@@ -2187,6 +2428,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Button(source_toolbar, text="Add Sheet Source", command=lambda: self.add_source("sprite_sheet")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Add Library Source", command=lambda: self.add_source("sprite_library")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Add Slice Source", command=lambda: self.add_source("sprite_slice")).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(source_toolbar, text="Add Text Source", command=lambda: self.add_source("text_asset")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Edit Source", command=self.edit_source).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Remove Source", command=self.remove_source).pack(side=tk.LEFT)
 
@@ -2213,7 +2455,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Button(footer, text="Cancel", command=self.destroy).grid(row=0, column=2, padx=(8, 0))
 
         def _kind(self) -> str:
-            return PACK_LABEL_TO_KIND.get(self.kind_label.get(), "form")
+            return PACK_LABEL_TO_KIND.get(self.kind_label.get(), "objective")
 
         def _pack_id(self) -> str:
             return make_pack_id(self._kind(), self.name_text.get())
@@ -2335,7 +2577,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
 
             slice_id = sanitize_identifier(self.slice_text.get())
             if slice_id:
-                add_pack_to_content_manifest_slice(self.project_root, slice_id, pack_id)
+                add_id_to_content_manifest_slice(self.project_root, slice_id, pack_id)
             self.saved = True
             self.status_text.set(f"Saved {manifest_path}")
             self.destroy()
@@ -2427,6 +2669,13 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                     ("Sprite libraries", (f"*{CUSTOM_LIBRARY_EXTENSION}", f"*{LEGACY_LIBRARY_EXTENSION}")),
                     ("Custom sheet libraries", f"*{CUSTOM_LIBRARY_EXTENSION}"),
                     ("Legacy sprite libraries", f"*{LEGACY_LIBRARY_EXTENSION}"),
+                    ("All files", "*.*"),
+                ]
+            elif source_type == "text_asset":
+                filetypes = [
+                    ("Text / JSON", ("*.json", "*.txt")),
+                    ("JSON", "*.json"),
+                    ("Text", "*.txt"),
                     ("All files", "*.*"),
                 ]
             selected = filedialog.askopenfilename(
