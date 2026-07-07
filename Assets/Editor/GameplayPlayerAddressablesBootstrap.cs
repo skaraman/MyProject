@@ -61,13 +61,6 @@ public static class GameplayPlayerAddressablesBootstrap {
   }
 
   static string ResolvePreferredPlayerPrefabPath() {
-    var resolvedAssetPath = RuntimePrefabAddressables.NormalizeAssetPath(
-      ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath)
-    );
-    if (!string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(resolvedAssetPath))) {
-      return resolvedAssetPath;
-    }
-
     return RuntimePrefabAddressables.NormalizeAssetPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath);
   }
 }

@@ -600,6 +600,8 @@ public partial class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("dialog.started", o => OnDialogStarted(o)));
     actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
     actions.Add(MessageBus.On("gearReady", o => RefreshPersistentPlayerBaselineAtlasPins("gear_ready")));
+    actions.Add(MessageBus.On("enemy.defeated", o => OnEnemyDefeatedForEpisodeProgress(o)));
+    actions.Add(MessageBus.On("episode.advance", o => AdvanceEpisodeSlice("message")));
   }
 
   void Update() {

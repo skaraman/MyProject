@@ -234,6 +234,66 @@ public static partial class SpriteIndexBuilder {
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
 
+  static void AddRuntimePinnedTextureEntries(BuildState state) {
+    var forms = EsperanzaForms.KnownForms;
+    for (var i = 0; i < forms.Count; i++) {
+      AddRuntimePinnedTextureEntry(
+        state,
+        SpriteStreamingConfig.BuildEsperanzaExpressionAtlasSourcePath(forms[i], ".png")
+      );
+    }
+  }
+
+  static void AddRuntimePinnedTextureEntry(BuildState state, string sourceAssetPath) {
+    if (state == null) return;
+
+    var normalizedSourcePath = NormalizePath(sourceAssetPath);
+    if (!IsRuntimeTextureAssetPath(normalizedSourcePath)) return;
+
+    var addedStagePath = false;
+    var relativeSpritesPath = GetRelativeSpritesPath(normalizedSourcePath);
+    if (!string.IsNullOrWhiteSpace(relativeSpritesPath)) {
+      var textureRoots = ContentPackPipeline.GetTextureSearchRoots();
+      for (var i = 0; i < textureRoots.Count; i++) {
+        var textureRoot = NormalizePath(textureRoots[i]).TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(textureRoot)) continue;
+
+        var stagedAssetPath = NormalizePath(textureRoot + "/" + relativeSpritesPath);
+        if (AddTextureAssetPathIfPresent(state, stagedAssetPath)) {
+          addedStagePath = true;
+        }
+      }
+    }
+
+    if (!addedStagePath) {
+      AddTextureAssetPathIfPresent(state, normalizedSourcePath);
+    }
+  }
+
+  static string GetRelativeSpritesPath(string assetPath) {
+    var normalizedPath = NormalizePath(assetPath);
+    const string ProjectSpritesRoot = "Assets/Sprites/";
+
+    if (!normalizedPath.StartsWith(ProjectSpritesRoot, StringComparison.OrdinalIgnoreCase)) {
+      return "";
+    }
+
+    return normalizedPath.Substring(ProjectSpritesRoot.Length);
+  }
+
+  static bool AddTextureAssetPathIfPresent(BuildState state, string assetPath) {
+    if (state == null) return false;
+
+    var normalizedPath = NormalizePath(assetPath);
+    if (!IsRuntimeTextureAssetPath(normalizedPath)) return false;
+
+    var guid = AssetDatabase.AssetPathToGUID(normalizedPath);
+    if (string.IsNullOrWhiteSpace(guid)) return false;
+
+    state.activeTextureAssetPaths.Add(normalizedPath);
+    return true;
+  }
+
   static void CleanupStaleTextureEntries(BuildState state) {
     if (state == null) return;
     var settings = state.addressables;
@@ -260,10 +320,28 @@ public static partial class SpriteIndexBuilder {
     var folder = NormalizePath(BuilderConfig.RuntimeIndexFolder);
     if (!Directory.Exists(folder)) return;
 
-    var allFiles = Directory.GetFiles(folder, "*.txt", SearchOption.TopDirectoryOnly);
+    CleanupStaleShardAssetsByExtension(folder, "*.txt", activeShardPaths);
+    CleanupStaleShardAssetsByExtension(folder, "*.bytes", activeShardPaths);
+  }
+
+  static void CleanupStaleShardAssetsByExtension(
+    string folder,
+    string pattern,
+    HashSet<string> activeShardPaths
+  ) {
+    if (string.IsNullOrWhiteSpace(folder) ||
+        string.IsNullOrWhiteSpace(pattern) ||
+        activeShardPaths == null) {
+      return;
+    }
+
+    var allFiles = Directory.GetFiles(folder, pattern, SearchOption.TopDirectoryOnly);
     for (var i = 0; i < allFiles.Length; i++) {
       var path = NormalizePath(allFiles[i]);
-      if (activeShardPaths.Contains(path)) continue;
+      if (activeShardPaths.Contains(path)) {
+        continue;
+      }
+
       AssetDatabase.DeleteAsset(path);
     }
   }

@@ -32,6 +32,8 @@ public static partial class ContentPackPipeline {
     var coreContentRoots = new List<string>();
     var locations = new List<LocationInfo>();
     var dialogs = new List<LocationDialogDefinition>();
+    var objectives = new List<ContentObjectiveDefinition>();
+    ReadContentManifestRuntimeDefinitions(out var slices, out var episodes);
     var defaultLocationId = "";
 
     for (var i = 0; i < activePackIds.Count; i++) {
@@ -67,6 +69,10 @@ public static partial class ContentPackPipeline {
         dialogs.Add(dialogSnapshot);
       }
 
+      if (TryReadObjectiveSnapshot(pack, out var objectiveSnapshot) && objectiveSnapshot != null) {
+        objectives.Add(objectiveSnapshot);
+      }
+
     }
 
     registry.Configure(
@@ -77,7 +83,10 @@ public static partial class ContentPackPipeline {
       stagedSpriteLibraryRoots: stagedSpriteLibraryRoots,
       coreContentRoots: coreContentRoots,
       locations: locations,
-      dialogs: dialogs
+      dialogs: dialogs,
+      slices: slices,
+      episodes: episodes,
+      objectives: objectives
     );
 
     EditorUtility.SetDirty(registry);
@@ -91,7 +100,10 @@ public static partial class ContentPackPipeline {
         " active_form='" + (string.IsNullOrWhiteSpace(activeForm) ? "-" : activeForm) + "'" +
         " default_location='" + (string.IsNullOrWhiteSpace(defaultLocationId) ? "-" : defaultLocationId) + "'" +
         " staged_texture_roots=" + stagedTextureRoots.Count +
-        " staged_library_roots=" + stagedSpriteLibraryRoots.Count
+        " staged_library_roots=" + stagedSpriteLibraryRoots.Count +
+        " slices=" + slices.Count +
+        " episodes=" + episodes.Count +
+        " objectives=" + objectives.Count
       );
     }
 
@@ -114,7 +126,10 @@ public static partial class ContentPackPipeline {
       stagedSpriteLibraryRoots: Array.Empty<string>(),
       coreContentRoots: Array.Empty<string>(),
       locations: Array.Empty<LocationInfo>(),
-      dialogs: Array.Empty<LocationDialogDefinition>()
+      dialogs: Array.Empty<LocationDialogDefinition>(),
+      slices: Array.Empty<ContentSliceDefinition>(),
+      episodes: Array.Empty<ContentEpisodeDefinition>(),
+      objectives: Array.Empty<ContentObjectiveDefinition>()
     );
 
     EditorUtility.SetDirty(registry);
@@ -125,6 +140,93 @@ public static partial class ContentPackPipeline {
     if (logResult) {
       Debug.Log("[ContentPackPipeline] Wrote inactive content registry fallback.");
     }
+  }
+
+  static void ReadContentManifestRuntimeDefinitions(
+    out List<ContentSliceDefinition> slices,
+    out List<ContentEpisodeDefinition> episodes
+  ) {
+    slices = new List<ContentSliceDefinition>();
+    episodes = new List<ContentEpisodeDefinition>();
+
+    var path = Path.Combine(GetProjectRoot(), "Assets", "ContentManifest.json");
+    if (!File.Exists(path)) return;
+
+    ContentManifestJson manifest;
+    try {
+      manifest = JsonUtility.FromJson<ContentManifestJson>(File.ReadAllText(path));
+    }
+    catch (Exception ex) {
+      Debug.LogWarning("[ContentPackPipeline] Failed to read runtime content manifest definitions. error='" + ex.Message + "'");
+      return;
+    }
+
+    if (manifest == null) return;
+    AppendContentManifestSlices(slices, manifest);
+    AppendContentManifestEpisodes(episodes, manifest);
+  }
+
+  static void AppendContentManifestSlices(List<ContentSliceDefinition> target, ContentManifestJson manifest) {
+    if (target == null || manifest == null || manifest.slices == null) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < manifest.slices.Count; i++) {
+      var slice = manifest.slices[i];
+      var sliceId = NormalizeToken(slice?.id);
+      if (string.IsNullOrWhiteSpace(sliceId)) continue;
+      if (!seen.Add(sliceId)) continue;
+
+      target.Add(new ContentSliceDefinition(sliceId, GetContentManifestSliceIds(slice)));
+    }
+  }
+
+  static void AppendContentManifestEpisodes(List<ContentEpisodeDefinition> target, ContentManifestJson manifest) {
+    if (target == null || manifest == null || manifest.episodes == null) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < manifest.episodes.Count; i++) {
+      var episode = manifest.episodes[i];
+      var episodeId = NormalizeToken(episode?.id);
+      if (string.IsNullOrWhiteSpace(episodeId)) continue;
+      if (!seen.Add(episodeId)) continue;
+
+      target.Add(new ContentEpisodeDefinition(episodeId, episode.slices));
+    }
+  }
+
+  [Serializable]
+  sealed class ExportedObjectiveJson {
+    public string id;
+    public string objective;
+  }
+
+  static bool TryReadObjectiveSnapshot(PackDefinition pack, out ContentObjectiveDefinition objectiveInfo) {
+    objectiveInfo = null;
+    if (pack == null) return false;
+    if (!string.Equals(pack.kind, "objective", StringComparison.OrdinalIgnoreCase)) return false;
+    if (pack.ownedRoots == null || pack.ownedRoots.Count <= 0) return false;
+
+    for (var i = 0; i < pack.ownedRoots.Count; i++) {
+      var root = NormalizeAssetPath(pack.ownedRoots[i]);
+      if (string.IsNullOrWhiteSpace(root)) continue;
+      if (!root.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+
+      var snapshotAssetPath = BuildStageAssetPath(pack, root);
+      var snapshotFullPath = GetPhysicalPath(snapshotAssetPath);
+      if (!File.Exists(snapshotFullPath)) continue;
+
+      var json = JsonUtility.FromJson<ExportedObjectiveJson>(File.ReadAllText(snapshotFullPath));
+      if (json == null || string.IsNullOrWhiteSpace(json.objective)) continue;
+
+      objectiveInfo = new ContentObjectiveDefinition(
+        pack.packId,
+        json.id,
+        json.objective
+      );
+      return true;
+    }
+
+    return false;
   }
 
   static bool TryReadLocationSnapshot(PackDefinition pack, out LocationInfo locationInfo) {

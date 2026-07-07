@@ -21,7 +21,8 @@ public class MouseManager : MonoBehaviour {
   string middleReleaseKey;
   string scrollUpKey;
   string scrollDownKey;
-  Vector3 lastScreenPos;
+  Vector2 lastScreenPos;
+  bool hasLastScreenPos;
   string currentMap;
 
   private Camera mainCamera;
@@ -60,8 +61,11 @@ public class MouseManager : MonoBehaviour {
     var screenPos = mouse.position.ReadValue();
     var worldPos = mainCamera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 1f));
     var target = ResolvePointTarget(worldPos);
+    var mouseMoved = !hasLastScreenPos || (screenPos - lastScreenPos).sqrMagnitude > 0.01f;
+    lastScreenPos = screenPos;
+    hasLastScreenPos = true;
 
-    if (target != lastHovered) {
+    if (mouseMoved && target != lastHovered) {
       UpdateHoverTarget(target);
     }
 
@@ -111,6 +115,7 @@ public class MouseManager : MonoBehaviour {
     }
     lastHovered = null;
     lastClickedTarget = null;
+    hasLastScreenPos = false;
     clickCacheTimer = 0f;
     hoverKey = $"{newMap}.hover";
     exitKey = $"{newMap}.unhover";
@@ -167,6 +172,10 @@ public class MouseManager : MonoBehaviour {
       priority += 1000;
     }
 
+    if (IsTargetInCurrentModal(target)) {
+      priority += 10000;
+    }
+
     if (target.layer == 6) {
       priority += 100;
     }
@@ -175,6 +184,19 @@ public class MouseManager : MonoBehaviour {
     }
 
     return priority;
+  }
+
+  bool IsTargetInCurrentModal(GameObject target) {
+    if (target == null) {
+      return false;
+    }
+
+    switch (currentMap) {
+      case "loadMenu":
+        return HasAncestorNamed(target.transform, "deleteConfirm");
+      default:
+        return false;
+    }
   }
 
   bool IsTargetInCurrentUiRoot(GameObject target) {

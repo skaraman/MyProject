@@ -15,6 +15,9 @@ public sealed class ActiveContentRegistry : ScriptableObject {
   [SerializeField] List<string> coreContentRoots = new();
   [SerializeField] List<LocationInfo> locations = new();
   [SerializeField] List<LocationDialogDefinition> dialogs = new();
+  [SerializeField] List<ContentSliceDefinition> slices = new();
+  [SerializeField] List<ContentEpisodeDefinition> episodes = new();
+  [SerializeField] List<ContentObjectiveDefinition> objectives = new();
 
   public bool ExternalContentActive => externalContentActive;
   public string DefaultLocationId => string.IsNullOrWhiteSpace(defaultLocationId) ? "" : defaultLocationId.Trim();
@@ -24,6 +27,9 @@ public sealed class ActiveContentRegistry : ScriptableObject {
   public IReadOnlyList<string> CoreContentRoots => coreContentRoots;
   public IReadOnlyList<LocationInfo> Locations => locations;
   public IReadOnlyList<LocationDialogDefinition> Dialogs => dialogs;
+  public IReadOnlyList<ContentSliceDefinition> Slices => slices;
+  public IReadOnlyList<ContentEpisodeDefinition> Episodes => episodes;
+  public IReadOnlyList<ContentObjectiveDefinition> Objectives => objectives;
 
   public void Configure(
     bool externalContentActive,
@@ -33,7 +39,10 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     IList<string> stagedSpriteLibraryRoots,
     IList<string> coreContentRoots,
     IList<LocationInfo> locations,
-    IList<LocationDialogDefinition> dialogs
+    IList<LocationDialogDefinition> dialogs,
+    IList<ContentSliceDefinition> slices,
+    IList<ContentEpisodeDefinition> episodes,
+    IList<ContentObjectiveDefinition> objectives
   ) {
     this.externalContentActive = externalContentActive;
     this.defaultLocationId = string.IsNullOrWhiteSpace(defaultLocationId) ? "" : defaultLocationId.Trim();
@@ -43,6 +52,9 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     CopyList(this.coreContentRoots, coreContentRoots, NormalizeAssetPath);
     CopyLocations(this.locations, locations);
     CopyDialogs(this.dialogs, dialogs);
+    CopySlices(this.slices, slices);
+    CopyEpisodes(this.episodes, episodes);
+    CopyObjectives(this.objectives, objectives);
   }
 
   public bool TryGetLocation(string locationId, out LocationInfo locationInfo) {
@@ -110,6 +122,84 @@ public sealed class ActiveContentRegistry : ScriptableObject {
       if (clone == null) continue;
       target.Add(clone);
     }
+  }
+
+  static void CopySlices(List<ContentSliceDefinition> target, IList<ContentSliceDefinition> source) {
+    target.Clear();
+    if (source == null || source.Count <= 0) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < source.Count; i++) {
+      var clone = CloneSlice(source[i]);
+      if (clone == null) continue;
+      if (!seen.Add(clone.id)) continue;
+      target.Add(clone);
+    }
+  }
+
+  static void CopyEpisodes(List<ContentEpisodeDefinition> target, IList<ContentEpisodeDefinition> source) {
+    target.Clear();
+    if (source == null || source.Count <= 0) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < source.Count; i++) {
+      var clone = CloneEpisode(source[i]);
+      if (clone == null) continue;
+      if (!seen.Add(clone.id)) continue;
+      target.Add(clone);
+    }
+  }
+
+  static void CopyObjectives(List<ContentObjectiveDefinition> target, IList<ContentObjectiveDefinition> source) {
+    target.Clear();
+    if (source == null || source.Count <= 0) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < source.Count; i++) {
+      var clone = CloneObjective(source[i]);
+      if (clone == null) continue;
+      var key = clone.packId + "|" + clone.id;
+      if (!seen.Add(key)) continue;
+      target.Add(clone);
+    }
+  }
+
+  public static ContentSliceDefinition CloneSlice(ContentSliceDefinition source) {
+    if (source == null) return null;
+
+    var id = NormalizeToken(source.id);
+    if (string.IsNullOrWhiteSpace(id)) return null;
+
+    return new ContentSliceDefinition(
+      id,
+      CloneStringList(source.ids)
+    );
+  }
+
+  public static ContentEpisodeDefinition CloneEpisode(ContentEpisodeDefinition source) {
+    if (source == null) return null;
+
+    var id = NormalizeToken(source.id);
+    if (string.IsNullOrWhiteSpace(id)) return null;
+
+    return new ContentEpisodeDefinition(
+      id,
+      CloneStringList(source.slices)
+    );
+  }
+
+  public static ContentObjectiveDefinition CloneObjective(ContentObjectiveDefinition source) {
+    if (source == null) return null;
+
+    var packId = NormalizeToken(source.packId);
+    var id = NormalizeToken(source.id);
+    if (string.IsNullOrWhiteSpace(packId) && string.IsNullOrWhiteSpace(id)) return null;
+
+    return new ContentObjectiveDefinition(
+      packId,
+      id,
+      NormalizeToken(source.objective)
+    );
   }
 
   public static LocationInfo CloneLocation(LocationInfo source) {
@@ -219,6 +309,76 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     return string.IsNullOrWhiteSpace(assetPath)
       ? ""
       : assetPath.Trim().Replace('\\', '/');
+  }
+}
+
+[Serializable]
+public sealed class ContentSliceDefinition {
+  public string id;
+  public List<string> ids = new();
+
+  public ContentSliceDefinition() {
+  }
+
+  public ContentSliceDefinition(string id, IList<string> ids) {
+    this.id = string.IsNullOrWhiteSpace(id) ? "" : id.Trim();
+    CopyIds(this.ids, ids);
+  }
+
+  static void CopyIds(List<string> target, IList<string> source) {
+    target.Clear();
+    if (source == null) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < source.Count; i++) {
+      var value = string.IsNullOrWhiteSpace(source[i]) ? "" : source[i].Trim();
+      if (string.IsNullOrWhiteSpace(value)) continue;
+      if (!seen.Add(value)) continue;
+      target.Add(value);
+    }
+  }
+}
+
+[Serializable]
+public sealed class ContentEpisodeDefinition {
+  public string id;
+  public List<string> slices = new();
+
+  public ContentEpisodeDefinition() {
+  }
+
+  public ContentEpisodeDefinition(string id, IList<string> slices) {
+    this.id = string.IsNullOrWhiteSpace(id) ? "" : id.Trim();
+    CopySlices(this.slices, slices);
+  }
+
+  static void CopySlices(List<string> target, IList<string> source) {
+    target.Clear();
+    if (source == null) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < source.Count; i++) {
+      var value = string.IsNullOrWhiteSpace(source[i]) ? "" : source[i].Trim();
+      if (string.IsNullOrWhiteSpace(value)) continue;
+      if (!seen.Add(value)) continue;
+      target.Add(value);
+    }
+  }
+}
+
+[Serializable]
+public sealed class ContentObjectiveDefinition {
+  public string packId;
+  public string id;
+  public string objective;
+
+  public ContentObjectiveDefinition() {
+  }
+
+  public ContentObjectiveDefinition(string packId, string id, string objective) {
+    this.packId = string.IsNullOrWhiteSpace(packId) ? "" : packId.Trim();
+    this.id = string.IsNullOrWhiteSpace(id) ? "" : id.Trim();
+    this.objective = string.IsNullOrWhiteSpace(objective) ? "" : objective.Trim();
   }
 }
 
@@ -365,9 +525,17 @@ public static class ActiveContentRegistryRuntime {
       return normalizedAssetPath;
     }
 
-    return NormalizeAssetPath(
+    var stagedCoreAssetPath = NormalizeAssetPath(
       CoreStageRootAssetPath + "/" + normalizedAssetPath.Substring("Assets/".Length)
     );
+
+#if UNITY_EDITOR
+    if (!AssetExistsAtPath(stagedCoreAssetPath)) {
+      return normalizedAssetPath;
+    }
+#endif
+
+    return stagedCoreAssetPath;
   }
 
   public static string ResolveActiveContentAssetPath(string assetPath) {
@@ -619,8 +787,9 @@ public static class RuntimeContentPackResolver {
   public static void ConfigureForGameplayStart(bool isNewGame, string source = "") {
     var activeForm = ResolveActiveFormForGameplayStart(isNewGame);
     var gearForms = ResolveGearFormsForGameplayStart(isNewGame);
-    var packIds = BuildRequestedPackIds(activeForm, gearForms);
     var resolvedSource = string.IsNullOrWhiteSpace(source) ? "gameplay_start" : source;
+    ContentEpisodeProgression.ConfigureForGameplayStart(isNewGame, resolvedSource);
+    var packIds = BuildRequestedPackIds(activeForm, gearForms);
 
     LogResolvedPackIds(isNewGame ? "new_game" : "load_game", resolvedSource, activeForm, packIds);
     ActiveContentRegistryRuntime.ConfigureRuntimeRequestedPackIds(packIds, resolvedSource);
@@ -631,8 +800,9 @@ public static class RuntimeContentPackResolver {
     EquippedItems.EnsureKnownForms();
     EquippedItems.EnsureForm(activeForm);
 
-    var packIds = BuildRequestedPackIds(activeForm, EquippedItems.AllGearForms);
     var resolvedSource = string.IsNullOrWhiteSpace(source) ? "runtime_state" : source;
+    ContentEpisodeProgression.ConfigureForCurrentRuntimeState(resolvedSource);
+    var packIds = BuildRequestedPackIds(activeForm, EquippedItems.AllGearForms);
 
     LogResolvedPackIds("runtime_state", resolvedSource, activeForm, packIds);
     ActiveContentRegistryRuntime.ConfigureRuntimeRequestedPackIds(packIds, resolvedSource);
@@ -671,7 +841,10 @@ public static class RuntimeContentPackResolver {
   }
 
   static void AddBaselinePackIds(List<string> result) {
+    AddEpisodePackIds(result);
+
     var availablePackIds = ActiveContentRegistryRuntime.GetAvailablePackIds();
+    var hasEpisodeProgression = ContentEpisodeProgression.HasRuntimeEpisodes();
     for (var i = 0; i < availablePackIds.Count; i++) {
       var packId = NormalizeToken(availablePackIds[i]);
       if (string.IsNullOrWhiteSpace(packId)) {
@@ -686,7 +859,20 @@ public static class RuntimeContentPackResolver {
         continue;
       }
 
+      if (hasEpisodeProgression && IsEpisodeScopedPackId(packId)) {
+        continue;
+      }
+
       AddUniquePackId(result, packId);
+    }
+  }
+
+  static void AddEpisodePackIds(List<string> result) {
+    var packIds = ContentEpisodeProgression.GetActivePackIds();
+    if (packIds == null) return;
+
+    for (var i = 0; i < packIds.Count; i++) {
+      AddUniquePackId(result, packIds[i]);
     }
   }
 
@@ -849,6 +1035,21 @@ public static class RuntimeContentPackResolver {
     }
 
     return false;
+  }
+
+  static bool IsEpisodeScopedPackId(string packId) {
+    var normalized = NormalizeToken(packId);
+    if (string.IsNullOrWhiteSpace(normalized)) {
+      return false;
+    }
+
+    return normalized.StartsWith("Enemy", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Dialog", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Objective", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Env", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Environment", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Slice_", StringComparison.OrdinalIgnoreCase) ||
+           normalized.StartsWith("Episode_", StringComparison.OrdinalIgnoreCase);
   }
 
   static string ResolveFormOrDefault(string formName) {

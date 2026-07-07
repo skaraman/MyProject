@@ -29,9 +29,16 @@ public static partial class ContentPackPipeline {
       AnalyzePackOwnership(packDefinitions[i], report);
     }
 
-    report.stagedProjectTreeDependencyCount = CountStageDependenciesOutsideStageRoots(packDefinitions);
+    var stageRoots = BuildStageRoots(packDefinitions);
+    var contentPackOwnedRoots = BuildContentPackOwnedAssetRoots(packDefinitions);
+    var mainBuildAssets = BuildMainBuildAssetDependencies(stageRoots, contentPackOwnedRoots);
+
+    report.stagedProjectTreeDependencyCount = CountStageDependenciesOutsideStageRoots(packDefinitions, mainBuildAssets);
     report.stagedDependencyLeaks.Clear();
-    CollectStageDependencyLeaks(packDefinitions, report.stagedDependencyLeaks);
+    CollectStageDependencyLeaks(packDefinitions, report.stagedDependencyLeaks, mainBuildAssets);
+    report.mainBuildDependencyCount = CountStageMainBuildDependencies(packDefinitions, mainBuildAssets);
+    report.mainBuildDependencies.Clear();
+    CollectStageMainBuildDependencies(packDefinitions, report.mainBuildDependencies, mainBuildAssets);
     report.stagedCodeDependencyCount = CountStageCodeDependenciesOutsideStageRoots(packDefinitions);
     report.stagedCodeDependencies.Clear();
     CollectStageCodeDependencies(packDefinitions, report.stagedCodeDependencies);
@@ -151,7 +158,10 @@ public static partial class ContentPackPipeline {
     return report.unknownFindings;
   }
 
-  static int CountStageDependenciesOutsideStageRoots(List<PackDefinition> packDefinitions) {
+  static int CountStageDependenciesOutsideStageRoots(
+    List<PackDefinition> packDefinitions,
+    HashSet<string> mainBuildAssets
+  ) {
     var stageRoots = BuildStageRoots(packDefinitions);
     var stageRootFullPath = GetPhysicalPath(StageRootAssetPath);
     if (!Directory.Exists(stageRootFullPath)) return 0;
@@ -182,6 +192,10 @@ public static partial class ContentPackPipeline {
         }
 
         if (!underStage) {
+          if (IsMainBuildAssetDependency(dependency, mainBuildAssets)) {
+            continue;
+          }
+
           count++;
           break;
         }
@@ -222,7 +236,11 @@ public static partial class ContentPackPipeline {
     return count;
   }
 
-  static void CollectStageDependencyLeaks(List<PackDefinition> packDefinitions, List<string> output) {
+  static void CollectStageDependencyLeaks(
+    List<PackDefinition> packDefinitions,
+    List<string> output,
+    HashSet<string> mainBuildAssets
+  ) {
     if (output == null) return;
 
     var stageRoots = BuildStageRoots(packDefinitions);
@@ -245,8 +263,53 @@ public static partial class ContentPackPipeline {
         }
 
         if (IsUnderStageRoots(dependency, stageRoots)) continue;
+        if (IsMainBuildAssetDependency(dependency, mainBuildAssets)) continue;
 
         output.Add("staged_asset='" + assetPath + "' dependency='" + dependency + "'");
+        break;
+      }
+    }
+  }
+
+  static int CountStageMainBuildDependencies(
+    List<PackDefinition> packDefinitions,
+    HashSet<string> mainBuildAssets
+  ) {
+    var output = new List<string>();
+    CollectStageMainBuildDependencies(packDefinitions, output, mainBuildAssets);
+    return output.Count;
+  }
+
+  static void CollectStageMainBuildDependencies(
+    List<PackDefinition> packDefinitions,
+    List<string> output,
+    HashSet<string> mainBuildAssets
+  ) {
+    if (output == null) return;
+    if (mainBuildAssets == null || mainBuildAssets.Count <= 0) return;
+
+    var stageRoots = BuildStageRoots(packDefinitions);
+    var stageRootFullPath = GetPhysicalPath(StageRootAssetPath);
+    if (!Directory.Exists(stageRootFullPath)) return;
+
+    var files = Directory.GetFiles(stageRootFullPath, "*", SearchOption.AllDirectories);
+    for (var i = 0; i < files.Length; i++) {
+      var assetPath = ToProjectAssetPath(files[i]);
+      if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+      if (AssetDatabase.IsValidFolder(assetPath)) continue;
+
+      var dependencies = AssetDatabase.GetDependencies(new[] { assetPath }, true);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Length; dependencyIndex++) {
+        var dependency = NormalizeAssetPath(dependencies[dependencyIndex]);
+        if (string.IsNullOrWhiteSpace(dependency)) continue;
+        if (string.Equals(dependency, assetPath, StringComparison.OrdinalIgnoreCase)) continue;
+        if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+        if (AssetDatabase.IsValidFolder(dependency)) continue;
+        if (IsCodeDependency(dependency)) continue;
+        if (IsUnderStageRoots(dependency, stageRoots)) continue;
+        if (!IsMainBuildAssetDependency(dependency, mainBuildAssets)) continue;
+
+        output.Add("staged_asset='" + assetPath + "' main_build_dependency='" + dependency + "'");
         break;
       }
     }
@@ -317,6 +380,7 @@ public static partial class ContentPackPipeline {
       " sprite_duplicates=" + report.spriteDuplicateCount +
       " staged_project_tree_dependencies=" + report.stagedProjectTreeDependencyCount +
       " staged_code_dependencies=" + report.stagedCodeDependencyCount +
+      " main_build_dependencies=" + report.mainBuildDependencyCount +
       " ownership_findings=" + report.ownershipViolationCount +
       " placeholder_exemptions=" + report.placeholderExemptionCount +
       " authoritative_external_root='" + NormalizeFullPath(report.authoritativeExternalRoot) + "'" +
@@ -331,6 +395,7 @@ public static partial class ContentPackPipeline {
     LogInfoBucket("Placeholder", report.placeholderFindings);
     LogInfoBucket("StageLeaks", report.stagedDependencyLeaks);
     LogInfoBucket("StageCodeRefs", report.stagedCodeDependencies);
+    LogInfoBucket("MainBuildDeps", report.mainBuildDependencies);
   }
 
   static void LogFindingBucket(string label, List<string> findings) {

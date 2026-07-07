@@ -397,7 +397,11 @@ public partial class SingleSceneManager {
       return "";
     }
 
-    var sourceAssetPath = "Assets/Sprites/Characters/Esperanza/Expressions/Base/atlas" + normalizedExtension;
+    var activeForm = EsperanzaForms.GetActive();
+    var sourceAssetPath = SpriteStreamingConfig.BuildEsperanzaExpressionAtlasSourcePath(
+      activeForm,
+      normalizedExtension
+    );
     return ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(sourceAssetPath);
   }
 

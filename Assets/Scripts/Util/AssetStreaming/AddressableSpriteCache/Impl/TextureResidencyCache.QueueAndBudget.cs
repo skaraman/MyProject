@@ -307,6 +307,15 @@ public static partial class TextureResidencyCache {
     if (queuedEntryCount > 0) queuedEntryCount--;
   }
 
+  static void MarkInFlightStarted(CacheEntry entry) {
+    if (entry == null || entry.countedInFlight) return;
+    entry.countedInFlight = true;
+    inFlightLoads++;
+    SpriteStreamingDiagnostics.RecordLoadStarted();
+    SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
+    SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+  }
+
   static void MarkInFlightComplete(CacheEntry entry) {
     if (entry == null || !entry.countedInFlight) return;
     entry.countedInFlight = false;

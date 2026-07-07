@@ -67,6 +67,7 @@ public static partial class SpriteIndexBuilder {
     var requestedLibraryNames = CollectRequestedLibraryNames(librariesByKey, guidToLibraryName, includeAsset, requestedLibraryReferences);
     BuildActiveTextureGuidIndex(state);
     var customSheetRowsByLibrary = DiscoverCustomSpriteSheetRows(state);
+    AddRuntimePinnedTextureEntries(state);
     foreach (var libraryName in customSheetRowsByLibrary.Keys) {
       requestedLibraryNames.Add(libraryName);
     }

@@ -181,6 +181,7 @@ public static partial class ContentPackPipeline {
   public static IReadOnlyList<string> GetSpriteLibrarySearchRoots() {
     var roots = new List<string>();
     AppendStageSearchRoots(roots, includeSpriteLibraries: true, includeTextures: false);
+    AppendRegistryStageSearchRoots(roots, includeSpriteLibraries: true, includeTextures: false);
     if (!IsExternalContentEnabled()) {
       AddUniquePath(roots, SpriteStreamingConfig.SourceRootFolder);
     }
@@ -190,6 +191,7 @@ public static partial class ContentPackPipeline {
   public static IReadOnlyList<string> GetTextureSearchRoots() {
     var roots = new List<string>();
     AppendStageSearchRoots(roots, includeSpriteLibraries: false, includeTextures: true);
+    AppendRegistryStageSearchRoots(roots, includeSpriteLibraries: false, includeTextures: true);
     if (!IsExternalContentEnabled()) {
       AddUniquePath(roots, SpriteStreamingConfig.TextureSourceRootFolder);
     }
@@ -200,18 +202,19 @@ public static partial class ContentPackPipeline {
     var roots = new List<string>();
 
     var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(SelectionAssetPath);
-    if (selection == null || !selection.ExternalContentEnabled) return roots;
+    if (selection != null && selection.ExternalContentEnabled) {
+      var packDefinitions = BuildPackDefinitions(selection.ExternalRoot);
+      var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
+      var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
 
-    var packDefinitions = BuildPackDefinitions(selection.ExternalRoot);
-    var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
-    var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
-
-    for (var i = 0; i < activePackIds.Count; i++) {
-      var stageRoot = GetStageAssetRoot(activePackIds[i], packById);
-      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
-      AddUniquePath(roots, stageRoot);
+      for (var i = 0; i < activePackIds.Count; i++) {
+        var stageRoot = GetStageAssetRoot(activePackIds[i], packById);
+        if (string.IsNullOrWhiteSpace(stageRoot)) continue;
+        AddUniquePath(roots, stageRoot);
+      }
     }
 
+    AppendRegistryActiveStageAssetRoots(roots);
     return roots;
   }
 
@@ -238,7 +241,7 @@ public static partial class ContentPackPipeline {
     var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
     var selectedPackIds = selection.GetNormalizedActivePackIds();
     for (var i = 0; i < selectedPackIds.Count; i++) {
-      if (!packById.TryGetValue(selectedPackIds[i], out var pack)) {
+      if (!packById.ContainsKey(selectedPackIds[i]) && !IsContentManifestSelectionId(selectedPackIds[i])) {
         Debug.LogError("[ContentPackPipeline] Unknown selected pack id '" + selectedPackIds[i] + "'.");
         return false;
       }
@@ -250,8 +253,8 @@ public static partial class ContentPackPipeline {
       return true;
     }
 
-    for (var i = 0; i < selectedPackIds.Count; i++) {
-      var pack = packById[selectedPackIds[i]];
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var pack = packById[activePackIds[i]];
       if (!Directory.Exists(pack.externalRootPath)) {
         Debug.LogError(
           "[ContentPackPipeline] Selected pack directory is missing." +
@@ -396,7 +399,7 @@ public static partial class ContentPackPipeline {
 
     var packDefinitions = BuildPackDefinitions(externalRoot);
     var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
-    var activePackIds = selection.GetNormalizedActivePackIds();
+    var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
 
     for (var i = 0; i < activePackIds.Count; i++) {
       if (!packById.TryGetValue(activePackIds[i], out var pack)) return false;
@@ -452,9 +455,9 @@ public static partial class ContentPackPipeline {
 
     var packDefinitions = BuildPackDefinitions(externalRoot);
     var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
-    var selectedPackIds = selection.GetNormalizedActivePackIds();
-    for (var i = 0; i < selectedPackIds.Count; i++) {
-      if (!packById.TryGetValue(selectedPackIds[i], out var pack) || pack == null) {
+    var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
+    for (var i = 0; i < activePackIds.Count; i++) {
+      if (!packById.TryGetValue(activePackIds[i], out var pack) || pack == null) {
         continue;
       }
 
@@ -489,6 +492,45 @@ public static partial class ContentPackPipeline {
       if (includeSpriteLibraries) {
         AddUniquePath(output, stageRoot + "/Sprites/SpriteLibraries");
       }
+    }
+  }
+
+  static void AppendRegistryStageSearchRoots(List<string> output, bool includeSpriteLibraries, bool includeTextures) {
+    if (output == null) return;
+
+    var registry = AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ActiveRegistryAssetPath);
+    if (registry == null || !registry.ExternalContentActive) return;
+
+    if (includeTextures) {
+      AppendRegistryRoots(output, registry.StagedTextureRoots);
+    }
+
+    if (includeSpriteLibraries) {
+      AppendRegistryRoots(output, registry.StagedSpriteLibraryRoots);
+    }
+  }
+
+  static void AppendRegistryRoots(List<string> output, IReadOnlyList<string> roots) {
+    if (output == null || roots == null) return;
+
+    for (var i = 0; i < roots.Count; i++) {
+      AddUniquePath(output, roots[i]);
+    }
+  }
+
+  static void AppendRegistryActiveStageAssetRoots(List<string> output) {
+    if (output == null) return;
+
+    var registry = AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ActiveRegistryAssetPath);
+    if (registry == null || !registry.ExternalContentActive) return;
+
+    var activePackIds = registry.ActivePackIds;
+    if (activePackIds == null) return;
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var stageRoot = GetStageAssetRoot(activePackIds[i]);
+      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
+      AddUniquePath(output, stageRoot);
     }
   }
 

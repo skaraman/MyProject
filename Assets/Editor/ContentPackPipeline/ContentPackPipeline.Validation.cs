@@ -56,7 +56,9 @@ public static partial class ContentPackPipeline {
     for (var i = 0; i < selectedPackIds.Count; i++) {
       var packId = selectedPackIds[i];
       if (!packById.TryGetValue(packId, out var pack) || pack == null) {
-        Debug.LogError("[ContentPackPipeline] Audit missing pack definition. pack_id='" + packId + "'");
+        if (!IsContentManifestSelectionId(packId)) {
+          Debug.LogError("[ContentPackPipeline] Audit missing pack definition. pack_id='" + packId + "'");
+        }
         continue;
       }
 
@@ -140,12 +142,14 @@ public static partial class ContentPackPipeline {
   static List<string> CollectStageValidationErrors(Dictionary<string, PackDefinition> packById, List<string> activePackIds) {
     var errors = new List<string>();
     var stageRoots = BuildActiveStageRoots(packById, activePackIds);
+    var contentPackOwnedRoots = BuildContentPackOwnedAssetRoots(packById?.Values);
+    var mainBuildAssets = BuildMainBuildAssetDependencies(stageRoots, contentPackOwnedRoots);
 
     for (var i = 0; i < activePackIds.Count; i++) {
       if (!packById.TryGetValue(activePackIds[i], out var pack) || pack == null) continue;
       var stagedOwnedRoots = ExpandStagedOwnedRoots(pack);
       for (var rootIndex = 0; rootIndex < stagedOwnedRoots.Count; rootIndex++) {
-        ValidateStagedRoot(stagedOwnedRoots[rootIndex], stageRoots, errors);
+        ValidateStagedRoot(stagedOwnedRoots[rootIndex], stageRoots, mainBuildAssets, errors);
       }
     }
 
@@ -234,7 +238,6 @@ public static partial class ContentPackPipeline {
       return errors;
     }
 
-    ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath, "player_prefab", activePackIds, errors);
     ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath, "player_gear_material", activePackIds, errors);
     ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath, "player_hair_material", activePackIds, errors);
     ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath, "player_body_material", activePackIds, errors);
@@ -243,23 +246,13 @@ public static partial class ContentPackPipeline {
       var projectileAssetPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
       if (string.IsNullOrWhiteSpace(projectileAssetPath)) {
         errors.Add("Projectile '" + projectile.Key + "' is missing a prefab asset path.");
-        continue;
       }
-
-      ValidateActivePackAssetExists(projectileAssetPath, "projectile_prefab:" + projectile.Key, activePackIds, errors);
     }
 
-    ValidateActivePackAddressable(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath, "player_prefab", activePackIds, errors);
     ValidateActivePackAddressable(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath, "player_gear_material", activePackIds, errors);
     ValidateActivePackAddressable(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath, "player_hair_material", activePackIds, errors);
     ValidateActivePackAddressable(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath, "player_body_material", activePackIds, errors);
     ValidateGameplayPlayerMaterialReferences(activePackIds, errors);
-
-    foreach (var projectile in Projectiles.EnumerateAll()) {
-      var projectileAssetPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
-      if (string.IsNullOrWhiteSpace(projectileAssetPath)) continue;
-      ValidateActivePackAddressable(projectileAssetPath, "projectile_prefab:" + projectile.Key, activePackIds, errors);
-    }
 
     return errors;
   }
@@ -784,6 +777,112 @@ public static partial class ContentPackPipeline {
     return stageRoots;
   }
 
+  static HashSet<string> BuildContentPackOwnedAssetRoots(IEnumerable<PackDefinition> packDefinitions) {
+    var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (packDefinitions == null) {
+      return result;
+    }
+
+    foreach (var pack in packDefinitions) {
+      if (pack == null || pack.ownedRoots == null) continue;
+      for (var i = 0; i < pack.ownedRoots.Count; i++) {
+        var ownedRoot = NormalizeAssetPath(pack.ownedRoots[i]);
+        if (string.IsNullOrWhiteSpace(ownedRoot)) continue;
+        if (!ownedRoot.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+
+        result.Add(ownedRoot);
+      }
+    }
+
+    return result;
+  }
+
+  static HashSet<string> BuildMainBuildAssetDependencies(
+    HashSet<string> stageRoots,
+    HashSet<string> contentPackOwnedRoots
+  ) {
+    var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var scenePaths = CollectMainBuildScenePaths();
+
+    for (var i = 0; i < scenePaths.Count; i++) {
+      var scenePath = NormalizeAssetPath(scenePaths[i]);
+      if (string.IsNullOrWhiteSpace(scenePath)) continue;
+
+      var dependencies = AssetDatabase.GetDependencies(new[] { scenePath }, true);
+      for (var dependencyIndex = 0; dependencyIndex < dependencies.Length; dependencyIndex++) {
+        var dependency = NormalizeAssetPath(dependencies[dependencyIndex]);
+        if (string.IsNullOrWhiteSpace(dependency)) continue;
+        if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
+        if (AssetDatabase.IsValidFolder(dependency)) continue;
+        if (ShouldIgnoreDependency(dependency)) continue;
+        if (IsUnderStageRoots(dependency, stageRoots)) continue;
+        if (IsUnderContentPackOwnedRoot(dependency, contentPackOwnedRoots)) continue;
+
+        result.Add(dependency);
+      }
+    }
+
+    return result;
+  }
+
+  static List<string> CollectMainBuildScenePaths() {
+    var result = new List<string>();
+    var buildScenes = EditorBuildSettings.scenes;
+
+    for (var i = 0; i < buildScenes.Length; i++) {
+      var scene = buildScenes[i];
+      if (scene == null) continue;
+      if (!scene.enabled) continue;
+
+      AddUniquePath(result, scene.path);
+    }
+
+    if (result.Count > 0) {
+      return result;
+    }
+
+    var guids = AssetDatabase.FindAssets("t:Scene", new[] { "Assets" });
+    Array.Sort(guids, StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < guids.Length; i++) {
+      AddUniquePath(result, AssetDatabase.GUIDToAssetPath(guids[i]));
+    }
+
+    return result;
+  }
+
+  static bool IsMainBuildAssetDependency(string dependency, HashSet<string> mainBuildAssets) {
+    var normalized = NormalizeAssetPath(dependency);
+    if (string.IsNullOrWhiteSpace(normalized)) {
+      return false;
+    }
+
+    return mainBuildAssets != null && mainBuildAssets.Contains(normalized);
+  }
+
+  static bool IsUnderContentPackOwnedRoot(string assetPath, HashSet<string> contentPackOwnedRoots) {
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) {
+      return false;
+    }
+
+    if (contentPackOwnedRoots == null || contentPackOwnedRoots.Count <= 0) {
+      return false;
+    }
+
+    foreach (var ownedRoot in contentPackOwnedRoots) {
+      if (string.IsNullOrWhiteSpace(ownedRoot)) continue;
+      if (string.Equals(normalizedAssetPath, ownedRoot, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+
+      if (normalizedAssetPath.StartsWith(ownedRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   static List<string> ExpandStagedOwnedRoots(PackDefinition pack) {
     var result = new List<string>();
     if (pack == null || pack.ownedRoots == null) return result;
@@ -799,7 +898,12 @@ public static partial class ContentPackPipeline {
     return result;
   }
 
-  static void ValidateStagedRoot(string stagedAssetPath, HashSet<string> stageRoots, List<string> errors) {
+  static void ValidateStagedRoot(
+    string stagedAssetPath,
+    HashSet<string> stageRoots,
+    HashSet<string> mainBuildAssets,
+    List<string> errors
+  ) {
     if (string.IsNullOrWhiteSpace(stagedAssetPath) || stageRoots == null || errors == null) return;
     if (!File.Exists(GetPhysicalPath(stagedAssetPath))) return;
 
@@ -810,12 +914,12 @@ public static partial class ContentPackPipeline {
       if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) continue;
       if (AssetDatabase.IsValidFolder(dependency)) continue;
       if (ShouldIgnoreDependency(dependency)) continue;
-      ValidateDependencyUnderStageRoots(stagedAssetPath, dependency, stageRoots, errors);
+      ValidateDependencyUnderStageRoots(stagedAssetPath, dependency, stageRoots, mainBuildAssets, errors);
     }
 
     var includeDependencies = CollectLocalTextIncludeDependencies(stagedAssetPath, errors);
     for (var i = 0; i < includeDependencies.Count; i++) {
-      ValidateDependencyUnderStageRoots(stagedAssetPath, includeDependencies[i], stageRoots, errors);
+      ValidateDependencyUnderStageRoots(stagedAssetPath, includeDependencies[i], stageRoots, mainBuildAssets, errors);
     }
   }
 
@@ -843,22 +947,14 @@ public static partial class ContentPackPipeline {
     string stagedAssetPath,
     string dependency,
     HashSet<string> stageRoots,
+    HashSet<string> mainBuildAssets,
     List<string> errors
   ) {
     if (string.IsNullOrWhiteSpace(dependency) || stageRoots == null || errors == null) return;
     if (IsCodeDependency(dependency)) return;
 
-    var isStaged = false;
-    foreach (var stageRoot in stageRoots) {
-      if (string.IsNullOrWhiteSpace(stageRoot)) continue;
-      if (dependency.StartsWith(stageRoot + "/", StringComparison.OrdinalIgnoreCase) ||
-          string.Equals(stageRoot, dependency, StringComparison.OrdinalIgnoreCase)) {
-        isStaged = true;
-        break;
-      }
-    }
-
-    if (isStaged) return;
+    if (IsUnderStageRoots(dependency, stageRoots)) return;
+    if (IsMainBuildAssetDependency(dependency, mainBuildAssets)) return;
 
     errors.Add(
       "Staged asset leaked an original project dependency." +

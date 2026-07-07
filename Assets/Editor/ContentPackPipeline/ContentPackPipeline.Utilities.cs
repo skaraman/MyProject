@@ -128,7 +128,7 @@ public static partial class ContentPackPipeline {
     for (var i = 0; i < activePackIds.Count; i++) {
       var packId = NormalizeToken(activePackIds[i]);
       if (string.IsNullOrWhiteSpace(packId)) continue;
-      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) continue;
+      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) return true;
       if (IsUiOnlyPackId(packId)) continue;
       if (IsGameplayPackId(packId)) return true;
     }
@@ -145,7 +145,7 @@ public static partial class ContentPackPipeline {
     for (var i = 0; i < activePackIds.Count; i++) {
       var packId = NormalizeToken(activePackIds[i]);
       if (string.IsNullOrWhiteSpace(packId)) continue;
-      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) continue;
+      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) return true;
 
       if (packById != null &&
           packById.TryGetValue(packId, out var pack) &&
@@ -244,7 +244,8 @@ public static partial class ContentPackPipeline {
     if (selection != null && selection.ExternalContentEnabled) {
       var packDefinitions = BuildPackDefinitions(selection.ExternalRoot);
       var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
-      return IsGameplayContentRequested(packById, selection.GetNormalizedActivePackIds());
+      var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
+      return IsGameplayContentRequested(packById, activePackIds);
     }
 
     var registry = AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ActiveRegistryAssetPath);
@@ -389,6 +390,7 @@ public static partial class ContentPackPipeline {
       " legacy_generated_refs=" + report.legacyGeneratedReferenceCount +
       " staged_project_tree_dependencies=" + report.stagedProjectTreeDependencyCount +
       " staged_code_dependencies=" + report.stagedCodeDependencyCount +
+      " main_build_dependencies=" + report.mainBuildDependencyCount +
       " ownership_findings=" + report.ownershipViolationCount;
   }
 

@@ -8,11 +8,13 @@ public class SaveSlot : MonoBehaviour {
   public string playtime;
   public string level;
   public string location;
+  public string episode;
 
   public FontText SaveNumberText;
   public FontText PlaytimeText;
   public FontText LevelText;
   public FontText LocationText;
+  public FontText EpisodeText;
   [SerializeField] bool enableDebugLogs;
 
   void Start() {
@@ -30,6 +32,7 @@ public class SaveSlot : MonoBehaviour {
     UpdateFontText(PlaytimeText, "Playtime - " + playtime);
     UpdateFontText(LevelText, "Level - " + level);
     UpdateFontText(LocationText, "Location - " + location);
+    UpdateFontText(EnsureEpisodeText(), "Episode - " + episode);
 
     if (!enableDebugLogs) return;
     Debug.Log(
@@ -37,10 +40,51 @@ public class SaveSlot : MonoBehaviour {
       " playtime=" + playtime +
       " level=" + level +
       " location=" + location +
+      " episode=" + episode +
       " saveNumberText={" + DescribeTextRendererState(SaveNumberText) + "}" +
       " playtimeText={" + DescribeTextRendererState(PlaytimeText) + "}" +
       " levelText={" + DescribeTextRendererState(LevelText) + "}" +
       " locationText={" + DescribeTextRendererState(LocationText) + "}"
+    );
+  }
+
+  FontText EnsureEpisodeText() {
+    if (EpisodeText != null) {
+      return EpisodeText;
+    }
+
+    var existing = transform.Find("Episode");
+    if (existing != null) {
+      EpisodeText = existing.GetComponent<FontText>();
+      if (EpisodeText != null) {
+        return EpisodeText;
+      }
+    }
+
+    if (!Application.isPlaying) {
+      return null;
+    }
+
+    if (LocationText == null) {
+      return null;
+    }
+
+    var sourceTransform = LocationText.transform;
+    var parent = sourceTransform.parent;
+    var episodeObject = Instantiate(LocationText.gameObject, parent);
+    episodeObject.name = "Episode";
+    episodeObject.transform.localPosition = ResolveEpisodeLocalPosition(sourceTransform.localPosition);
+    episodeObject.transform.localRotation = sourceTransform.localRotation;
+    episodeObject.transform.localScale = sourceTransform.localScale;
+    EpisodeText = episodeObject.GetComponent<FontText>();
+    return EpisodeText;
+  }
+
+  static Vector3 ResolveEpisodeLocalPosition(Vector3 sourcePosition) {
+    return new Vector3(
+      sourcePosition.x,
+      sourcePosition.y - 0.9f,
+      sourcePosition.z
     );
   }
 

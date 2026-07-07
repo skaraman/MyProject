@@ -18,20 +18,14 @@ public class SaveSlotView : MonoBehaviour {
   public int SavesCount { set; get; } = 0;
 
   private float initialY = 5.34f;
+  private int knownMaxSlotNumber;
   private readonly List<Action> actions = new();
 
   void Start() {
     actions.Add(MessageBus.On("openLoadMenu", o => ArrangeSlots()));
+    actions.Add(MessageBus.On("loadMenu.deleteConfirmed", RebuildSlots));
     ConfigureLoadButtonState(false);
-
-    var slotDirectories = FindSlotDirectories();
-    SavesCount = slotDirectories.Count;
-    ConfigureLoadButtonState(SavesCount > 0);
-
-    BuildSlotItems(slotDirectories);
-
-    SaveSlotManager.SetSlot(SavesCount + 1);
-    //Debug.Log($"Slot set {SaveSlotManager.slot}");
+    RebuildSlots();
   }
 
   void OnDestroy() {
@@ -41,16 +35,11 @@ public class SaveSlotView : MonoBehaviour {
     actions.Clear();
   }
 
-  List<string> FindSlotDirectories() {
+  SortedDictionary<int, string> FindSlotDirectories() {
     var sortedSlots = new SortedDictionary<int, string>();
     CollectSlotDirectories(Path.Combine(Application.persistentDataPath, "Saves"), sortedSlots);
     CollectSlotDirectories(Application.persistentDataPath, sortedSlots);
-
-    var ordered = new List<string>(sortedSlots.Count);
-    foreach (var pair in sortedSlots) {
-      ordered.Add(pair.Value);
-    }
-    return ordered;
+    return sortedSlots;
   }
 
   void CollectSlotDirectories(string rootPath, SortedDictionary<int, string> slotsByNumber) {
@@ -69,30 +58,45 @@ public class SaveSlotView : MonoBehaviour {
     }
   }
 
-  void BuildSlotItems(List<string> slotDirectories) {
+  public void RebuildSlots(object payload = null) {
+    var deletedSlotNumber = CoercePositiveInt(payload);
+    if (deletedSlotNumber > 0) {
+      knownMaxSlotNumber = Mathf.Max(knownMaxSlotNumber, deletedSlotNumber);
+    }
+
+    var slotDirectories = FindSlotDirectories();
+    TrackKnownSlotNumbers(slotDirectories);
+
+    SavesCount = slotDirectories.Count;
+    var renderedSlotCount = ResolveRenderedSlotCount(slotDirectories);
+    ConfigureLoadButtonState(renderedSlotCount > 0);
+    BuildSlotItems(slotDirectories, renderedSlotCount);
+    SaveSlotManager.SetSlot(ResolveNextNewSlotNumber(slotDirectories));
+
+    if (deletedSlotNumber > 0 && loadMenuGroup != null) {
+      loadMenuGroup.SetActiveSlotNumber(deletedSlotNumber);
+    }
+  }
+
+  void BuildSlotItems(SortedDictionary<int, string> slotDirectories, int renderedSlotCount) {
     if (saveSlotPrefab == null || saveSlotWrap == null || loadMenuGroup == null) return;
 
+    ClearSlotItems();
     loadMenuGroup.buttons.Clear();
+    loadMenuGroup.ResetSelection();
 
-    for (int i = 0; i < slotDirectories.Count; i++) {
-      var directory = slotDirectories[i];
-      var folderName = Path.GetFileName(directory);
-      if (!int.TryParse(folderName, out var slotNumber)) continue;
-
+    for (int slotNumber = 1; slotNumber <= renderedSlotCount; slotNumber++) {
+      var slotIndex = slotNumber - 1;
+      slotDirectories.TryGetValue(slotNumber, out var directory);
       var go = Instantiate(saveSlotPrefab, saveSlotWrap.transform);
       var transformRef = go.transform;
-      transformRef.localPosition = new Vector3(-0.11f, initialY, -0.01f * i);
+      transformRef.localPosition = ResolveSlotLocalPosition(slotIndex);
       transformRef.localScale = new Vector3(1.85f, 1.85f, 1.85f);
-      ApplySlotSortingBand(go, i);
+      ApplySlotSortingBand(go, slotIndex);
 
       var slot = go.GetComponent<SaveSlot>();
       if (slot != null) {
-        var loaded = LoadSlotData(slotNumber, directory);
-        slot.saveNumber = folderName;
-        slot.playtime = FormatPlaytime(loaded);
-        slot.level = Convert.ToString(GetValueOrDefault(loaded, "level", "-"));
-        slot.location = Convert.ToString(GetValueOrDefault(loaded, "location", "-"));
-        slot.UpdateSlotInfo();
+        PopulateSlot(slot, slotNumber, directory);
       }
       else {
         Debug.LogWarning("[SaveSlotView] Save slot prefab is missing SaveSlot component.");
@@ -100,6 +104,59 @@ public class SaveSlotView : MonoBehaviour {
 
       loadMenuGroup.buttons.Add(go);
     }
+  }
+
+  void ClearSlotItems() {
+    if (saveSlotWrap == null) return;
+
+    var wrapTransform = saveSlotWrap.transform;
+    for (int i = wrapTransform.childCount - 1; i >= 0; i--) {
+      var child = wrapTransform.GetChild(i).gameObject;
+      child.SetActive(false);
+      Destroy(child);
+    }
+  }
+
+  void PopulateSlot(SaveSlot slot, int slotNumber, string directory) {
+    slot.saveNumber = slotNumber.ToString();
+
+    if (!string.IsNullOrWhiteSpace(directory)) {
+      var loaded = LoadSlotData(slotNumber, directory);
+      slot.playtime = FormatPlaytime(loaded);
+      slot.level = Convert.ToString(GetValueOrDefault(loaded, "level", "-"));
+      slot.location = Convert.ToString(GetValueOrDefault(loaded, "location", "-"));
+      slot.episode = SaveSlotManager.ResolveSlotEpisodeId(loaded);
+      slot.UpdateSlotInfo();
+      return;
+    }
+
+    slot.forms.Clear();
+    slot.playtime = "-";
+    slot.level = "-";
+    slot.location = "-";
+    slot.episode = "-";
+    slot.UpdateSlotInfo();
+  }
+
+  void TrackKnownSlotNumbers(SortedDictionary<int, string> slotDirectories) {
+    foreach (var pair in slotDirectories) {
+      knownMaxSlotNumber = Mathf.Max(knownMaxSlotNumber, pair.Key);
+    }
+  }
+
+  int ResolveRenderedSlotCount(SortedDictionary<int, string> slotDirectories) {
+    TrackKnownSlotNumbers(slotDirectories);
+    return knownMaxSlotNumber;
+  }
+
+  int ResolveNextNewSlotNumber(SortedDictionary<int, string> slotDirectories) {
+    for (int slotNumber = 1; slotNumber <= knownMaxSlotNumber; slotNumber++) {
+      if (!slotDirectories.ContainsKey(slotNumber)) {
+        return slotNumber;
+      }
+    }
+
+    return knownMaxSlotNumber + 1;
   }
 
   void ApplySlotSortingBand(GameObject slotObject, int slotIndex) {
@@ -194,14 +251,30 @@ public class SaveSlotView : MonoBehaviour {
 
   IEnumerator ArrangeSlotsCoroutine() {
     yield return new WaitForSeconds(.1f);
+    ArrangeSlotsImmediate();
+  }
+
+  Vector3 ResolveSlotLocalPosition(int slotIndex) {
+    return new Vector3(-.11f, initialY - ((slotIndex * 8) + padding), -0.01f * slotIndex);
+  }
+
+  void ArrangeSlotsImmediate() {
     for (var i = 0; i < loadMenuGroup.buttons.Count; i++) {
       var item = loadMenuGroup.buttons[i];
-      item.transform.localPosition = new Vector3(-.11f, initialY - ((i * 8) + padding), -0.01f * i);
+      item.transform.localPosition = ResolveSlotLocalPosition(i);
     }
   }
 
   void ArrangeSlots() {
     StartCoroutine(ArrangeSlotsCoroutine());
+  }
+
+  static int CoercePositiveInt(object value) {
+    if (value is int i) return Mathf.Max(i, 0);
+    if (value is string s && int.TryParse(s, out var parsed)) {
+      return Mathf.Max(parsed, 0);
+    }
+    return 0;
   }
 
   public float GetVisualHeight() {

@@ -95,9 +95,9 @@ public class ProjectileData {
   }
 
   public bool TryGetPrefabAddress(out string address) {
-    address = ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(
-      string.IsNullOrWhiteSpace(prefabAddress) ? "" : prefabAddress.Trim()
-    );
+    address = string.IsNullOrWhiteSpace(prefabAddress)
+      ? ""
+      : prefabAddress.Trim().Replace("\\", "/");
     return !string.IsNullOrWhiteSpace(address);
   }
 

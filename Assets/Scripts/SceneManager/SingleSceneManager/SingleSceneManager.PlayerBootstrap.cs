@@ -245,7 +245,7 @@ public partial class SingleSceneManager {
   }
 
   string ResolveGameplayPlayerBootstrapAssetPath() {
-    return ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath);
+    return GameplayCoreAssetPaths.EsperanzaPrefabAssetPath;
   }
 
   GameObject ResolveGameplayPlayerBootstrapPrefab(string source) {

@@ -131,6 +131,15 @@ public class EnemyHealth : MonoBehaviour {
   }
 
   void DespawnAfterDeath() {
+    MessageBus.Send(
+      "enemy.defeated",
+      new EnemyDefeatedEvent(
+        enemyInfo != null ? enemyInfo.enemyType : "",
+        LocationManager.currentLocation,
+        gameObject
+      )
+    );
+
     if (ShouldLogDebug()) {
       Debug.Log(
         "[EnemyHealth][Death]" +

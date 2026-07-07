@@ -19,6 +19,93 @@ public static partial class SpriteRuntimeResolver {
     return rows.TryGetValue(aliasKey, out pair);
   }
 
+  static bool TryBuildGearSplitNamepart(string normalizedNamepart, string labelPrefix, out string splitNamepart) {
+    splitNamepart = "";
+
+    var prefixToken = BuildGearSplitToken(labelPrefix);
+    if (string.IsNullOrWhiteSpace(prefixToken)) return false;
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return false;
+
+    var slash = normalizedNamepart.LastIndexOf('/');
+    var folder = slash >= 0 ? normalizedNamepart.Substring(0, slash) : "";
+    var leaf = slash >= 0 ? normalizedNamepart.Substring(slash + 1) : normalizedNamepart;
+    if (string.IsNullOrWhiteSpace(leaf)) return false;
+    if (!leaf.StartsWith("Gear", StringComparison.OrdinalIgnoreCase)) return false;
+    if (leaf.EndsWith("_split", StringComparison.OrdinalIgnoreCase)) return false;
+
+    var partName = leaf.Substring("Gear".Length);
+    var partToken = BuildGearSplitPartToken(partName);
+    if (string.IsNullOrWhiteSpace(partToken)) return false;
+
+    var splitLeaf = leaf + "_split/" + prefixToken + "_" + partToken;
+    splitNamepart = string.IsNullOrWhiteSpace(folder) ? splitLeaf : folder + "/" + splitLeaf;
+    return true;
+  }
+
+  static string BuildGearSplitToken(string value) {
+    var normalized = NormalizeToken(value);
+    if (string.IsNullOrWhiteSpace(normalized)) return "";
+
+    var builder = new System.Text.StringBuilder(normalized.Length);
+    var previousWasUnderscore = false;
+
+    for (var i = 0; i < normalized.Length; i++) {
+      var ch = normalized[i];
+      if (char.IsWhiteSpace(ch) || ch == '-' || ch == '/') {
+        if (!previousWasUnderscore && builder.Length > 0) {
+          builder.Append('_');
+          previousWasUnderscore = true;
+        }
+        continue;
+      }
+
+      if (ch == '_') {
+        if (!previousWasUnderscore && builder.Length > 0) {
+          builder.Append('_');
+          previousWasUnderscore = true;
+        }
+        continue;
+      }
+
+      builder.Append(char.ToLowerInvariant(ch));
+      previousWasUnderscore = false;
+    }
+
+    return builder.ToString().Trim('_');
+  }
+
+  static string BuildGearSplitPartToken(string value) {
+    var normalized = NormalizeToken(value);
+    if (string.IsNullOrWhiteSpace(normalized)) return "";
+
+    var builder = new System.Text.StringBuilder(normalized.Length + 8);
+    for (var i = 0; i < normalized.Length; i++) {
+      var ch = normalized[i];
+      if (char.IsWhiteSpace(ch) || ch == '-' || ch == '/' || ch == '_') {
+        AppendGearSplitUnderscore(builder);
+        continue;
+      }
+
+      if (char.IsUpper(ch)) {
+        if (builder.Length > 0) {
+          AppendGearSplitUnderscore(builder);
+        }
+        builder.Append(char.ToLowerInvariant(ch));
+        continue;
+      }
+
+      builder.Append(char.ToLowerInvariant(ch));
+    }
+
+    return builder.ToString().Trim('_');
+  }
+
+  static void AppendGearSplitUnderscore(System.Text.StringBuilder builder) {
+    if (builder == null || builder.Length <= 0) return;
+    if (builder[builder.Length - 1] == '_') return;
+    builder.Append('_');
+  }
+
   // TODO: both methods update the cooldown but never emit the message — all resolver diagnostics
   // are silently dropped. Add Debug.Log(message) / Debug.LogWarning(message) after the cooldown update.
   static void RateLimitedLog(string key, string message) {

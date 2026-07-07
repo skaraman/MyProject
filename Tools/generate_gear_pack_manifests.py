@@ -51,6 +51,9 @@ def slice_entries(
     start_key: str,
     end_key: str,
 ) -> list[GearEntry]:
+    if not start_key and not end_key:
+        return entries
+
     start = normalize_key(start_key)
     end = normalize_key(end_key)
     start_index = next(index for index, entry in enumerate(entries) if entry.key == start)
@@ -106,7 +109,8 @@ def make_manifest(
 ) -> dict:
     return {
         "packId": pack_id,
-        "kind": "pack",
+        "kind": "gear",
+        "type": "gear",
         "ownedRoots": sources,
         "ownedLocations": [],
         "ownedEnemyTypes": [],
@@ -176,6 +180,12 @@ def write_pack_manifest(
     write_meta_if_missing(manifest_path.with_suffix(".json.meta"), text_meta_text)
 
 
+def write_pack_meta_if_missing(manifest_path: Path) -> None:
+    pack_root = manifest_path.parent
+    write_meta_if_missing(pack_root.with_suffix(".meta"), folder_meta_text)
+    write_meta_if_missing(manifest_path.with_suffix(".json.meta"), text_meta_text)
+
+
 def build_pack_manifests(
     project_root: Path,
     external_root: Path,
@@ -196,6 +206,8 @@ def build_pack_manifests(
         manifest_path = external_root / pack_id / "ContentPackManifest.json"
         if manifest_path.exists():
             existing.append(pack_id)
+            if write:
+                write_pack_meta_if_missing(manifest_path)
             continue
 
         sources = collect_sources(project_root, entry)
@@ -221,8 +233,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--external-root", default="")
-    parser.add_argument("--start", default="GearBolt_aa_Feet")
-    parser.add_argument("--end", default="GearFire_ac_Shoulders")
+    parser.add_argument("--start", default="")
+    parser.add_argument("--end", default="")
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
 

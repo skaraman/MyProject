@@ -15,12 +15,85 @@ using Process = System.Diagnostics.Process;
 using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 public static partial class ContentPackPipeline {
+  [MenuItem("Tools/Content Packs/Open UI")]
+  public static void OpenContentPackIterationUiFromMenu() {
+    var projectRoot = GetProjectRoot();
+    var scriptPath = Path.Combine(projectRoot, "Tools", "ContentPackIterationUI.py");
+    if (!File.Exists(scriptPath)) {
+      EditorUtility.DisplayDialog("Content Pack UI", "Missing UI script:\n" + scriptPath, "OK");
+      Debug.LogError("[ContentPackPipeline] Missing Content Pack UI script. path='" + scriptPath + "'");
+      return;
+    }
+
+    var error = "";
+    if (TryLaunchContentPackIterationUi("py", "-3", scriptPath, projectRoot, out error)) return;
+    if (TryLaunchContentPackIterationUi("pythonw", "", scriptPath, projectRoot, out error)) return;
+    if (TryLaunchContentPackIterationUi("python", "", scriptPath, projectRoot, out error)) return;
+
+    EditorUtility.DisplayDialog(
+      "Content Pack UI",
+      "Failed to launch Content Pack UI.\n\n" + error,
+      "OK"
+    );
+    Debug.LogError("[ContentPackPipeline] Failed to launch Content Pack UI. " + error);
+  }
+
+  [MenuItem("Tools/Content Packs/Build Smart")]
+  public static void BuildActiveContentSmartFromMenu() {
+    BuildActiveContentSmart();
+  }
+
   public static void BuildActiveContentSmart() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
   }
 
   public static void BuildActiveContentClean() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
+  }
+
+  static bool TryLaunchContentPackIterationUi(
+    string executable,
+    string prefixArguments,
+    string scriptPath,
+    string projectRoot,
+    out string error
+  ) {
+    error = "";
+
+    try {
+      var arguments = "";
+      if (!string.IsNullOrWhiteSpace(prefixArguments)) {
+        arguments = prefixArguments + " ";
+      }
+
+      arguments += QuoteCliArgument(scriptPath);
+      arguments += " --project-root ";
+      arguments += QuoteCliArgument(projectRoot);
+
+      var startInfo = new ProcessStartInfo {
+        FileName = executable,
+        Arguments = arguments,
+        WorkingDirectory = projectRoot,
+        UseShellExecute = false,
+        CreateNoWindow = true
+      };
+
+      Process.Start(startInfo);
+      Debug.Log("[ContentPackPipeline] Opened Content Pack UI using '" + executable + "'.");
+      return true;
+    }
+    catch (Exception ex) {
+      error = executable + ": " + ex.Message;
+      return false;
+    }
+  }
+
+  static string QuoteCliArgument(string value) {
+    if (string.IsNullOrEmpty(value)) {
+      return "\"\"";
+    }
+
+    return "\"" + value.Replace("\"", "\\\"") + "\"";
   }
 
   public static bool PrepareSelectedPacksForRuntimeIndex(string contextLabel, bool logResult) {

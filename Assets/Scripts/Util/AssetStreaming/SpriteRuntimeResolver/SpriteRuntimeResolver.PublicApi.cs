@@ -118,8 +118,26 @@ public static partial class SpriteRuntimeResolver {
     if (!EnsureManifestReady()) return false;
 
     var normalizedNamepart = NormalizeNamePart(key.namepart);
-    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry, logContext)) return false;
+    if (TryResolveFromManifestNamepart(normalizedNamepart, key, out pair, logContext)) {
+      return true;
+    }
 
+    if (TryBuildGearSplitNamepart(normalizedNamepart, key.labelPrefix, out var splitNamepart) &&
+        !string.Equals(splitNamepart, normalizedNamepart, StringComparison.OrdinalIgnoreCase)) {
+      return TryResolveFromManifestNamepart(splitNamepart, key, out pair, logContext);
+    }
+
+    return false;
+  }
+
+  static bool TryResolveFromManifestNamepart(
+    string normalizedNamepart,
+    SpriteLookupKey key,
+    out SpriteAddressPair pair,
+    Object logContext = null
+  ) {
+    pair = default;
+    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry, logContext)) return false;
     var shardKey = string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
     var cacheKey = new LookupCacheKey(shardKey, key.labelPrefix, key.category, key.frame);
     if (lookupHitCache.TryGetValue(cacheKey, out pair)) {
@@ -169,19 +187,44 @@ public static partial class SpriteRuntimeResolver {
     }
 
     var normalizedNamepart = NormalizeNamePart(key.namepart);
-    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry, logContext)) return false;
-
-    var shardKey = string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
-    if (loadedShards.ContainsKey(shardKey)) return false;
-
-    if (shardParses.TryGetValue(shardKey, out var shardParseTask)) {
-      return !shardParseTask.IsCompleted;
+    if (TryGetLookupPendingForNamepart(normalizedNamepart, logContext, out var pending) && pending) {
+      return true;
     }
 
-    if (shardLoads.ContainsKey(shardKey)) return true;
-    if (string.IsNullOrWhiteSpace(shardEntry.address)) return false;
+    if (TryBuildGearSplitNamepart(normalizedNamepart, key.labelPrefix, out var splitNamepart) &&
+        !string.Equals(splitNamepart, normalizedNamepart, StringComparison.OrdinalIgnoreCase) &&
+        TryGetLookupPendingForNamepart(splitNamepart, logContext, out pending) &&
+        pending) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool TryGetLookupPendingForNamepart(
+    string normalizedNamepart,
+    Object logContext,
+    out bool pending
+  ) {
+    pending = false;
+    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var shardEntry, logContext)) return false;
+    var shardKey = string.IsNullOrWhiteSpace(shardEntry.namepart) ? normalizedNamepart : shardEntry.namepart;
+    if (loadedShards.ContainsKey(shardKey)) return true;
+
+    if (shardParses.TryGetValue(shardKey, out var shardParseTask)) {
+      pending = !shardParseTask.IsCompleted;
+      return true;
+    }
+
+    if (shardLoads.ContainsKey(shardKey)) {
+      pending = true;
+      return true;
+    }
+
+    if (string.IsNullOrWhiteSpace(shardEntry.address)) return true;
 
     StartShardLoad(shardKey, shardEntry);
+    pending = true;
     return true;
   }
 
@@ -192,6 +235,14 @@ public static partial class SpriteRuntimeResolver {
     var normalizedNamepart = NormalizeNamePart(key.namepart);
     if (string.IsNullOrWhiteSpace(normalizedNamepart)) return;
 
+    InvalidateLookupForNamepart(normalizedNamepart, key, reloadShard);
+    if (TryBuildGearSplitNamepart(normalizedNamepart, key.labelPrefix, out var splitNamepart) &&
+        !string.Equals(splitNamepart, normalizedNamepart, StringComparison.OrdinalIgnoreCase)) {
+      InvalidateLookupForNamepart(splitNamepart, key, reloadShard);
+    }
+  }
+
+  static void InvalidateLookupForNamepart(string normalizedNamepart, SpriteLookupKey key, bool reloadShard) {
     var shardKey = ResolveShardKey(normalizedNamepart);
     InvalidateLookupCacheEntry(new LookupCacheKey(shardKey, key.labelPrefix, key.category, key.frame));
     if (key.frame != 0) {

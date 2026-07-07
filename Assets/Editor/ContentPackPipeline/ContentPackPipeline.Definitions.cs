@@ -84,6 +84,13 @@ public static partial class ContentPackPipeline {
     ".shader"
   };
 
+  static readonly HashSet<string> IgnoredExternalRootFolderNames = new(StringComparer.OrdinalIgnoreCase) {
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__"
+  };
+
   [Serializable]
   sealed class ContentManifestJson {
     public List<ContentManifestSliceJson> slices = new();
@@ -248,6 +255,7 @@ public static partial class ContentPackPipeline {
     public int placeholderExemptionCount;
     public int stagedProjectTreeDependencyCount;
     public int stagedCodeDependencyCount;
+    public int mainBuildDependencyCount;
     public readonly List<string> coreFindings = new();
     public readonly List<string> formFindings = new();
     public readonly List<string> gearFindings = new();
@@ -258,6 +266,7 @@ public static partial class ContentPackPipeline {
     public readonly List<string> placeholderFindings = new();
     public readonly List<string> stagedDependencyLeaks = new();
     public readonly List<string> stagedCodeDependencies = new();
+    public readonly List<string> mainBuildDependencies = new();
   }
 
   sealed class TransitionRunSummary {

@@ -7,6 +7,8 @@ public static class SpriteStreamingConfig {
   public const string LegacySpriteLibraryExtension = ".spriteLib";
   public const string SourceRootFolder = "Packages/com.skaraman.myprojectcontent/Core/Sprites/SpriteLibraries";
   public const string TextureSourceRootFolder = "Packages/com.skaraman.myprojectcontent/Core/Sprites";
+  public const string EsperanzaExpressionAtlasSourceRoot = "Assets/Sprites/Characters/Esperanza/_Expressions";
+  public const string EsperanzaExpressionAtlasSourcePathWithoutExtension = EsperanzaExpressionAtlasSourceRoot + "/Base/atlas_atlas";
   public const string GroupedAtlasBuildSurrogateRootFolder = "Assets/Generated/SpriteStreamingBuildSurrogates";
   public const string RuntimeIndexFolder = "Assets/Sprites/SpriteLibraries/RuntimeIndex";
   public const string ManifestAssetPath = "Assets/Sprites/SpriteLibraries/SpriteIndexManifest.bytes";
@@ -17,6 +19,27 @@ public static class SpriteStreamingConfig {
   public const string IndexAddressablesGroupName = "SpriteRuntimeIndex";
   public const string DefaultManifestAddress = "SpriteRuntimeIndex/Manifest";
   public const string AtlasMetadataAddressablesLabel = "ss_atlas_metadata";
+
+  public static string BuildEsperanzaExpressionAtlasSourcePath(string extension) {
+    return BuildEsperanzaExpressionAtlasSourcePath("Base", extension);
+  }
+
+  public static string BuildEsperanzaExpressionAtlasSourcePath(string form, string extension) {
+    var normalizedExtension = string.IsNullOrWhiteSpace(extension)
+      ? ".png"
+      : extension.Trim();
+
+    if (!normalizedExtension.StartsWith(".", StringComparison.Ordinal)) {
+      normalizedExtension = "." + normalizedExtension;
+    }
+
+    var normalizedForm = EsperanzaForms.ResolveFormKey(form);
+    if (string.IsNullOrWhiteSpace(normalizedForm)) {
+      normalizedForm = "Base";
+    }
+
+    return EsperanzaExpressionAtlasSourceRoot + "/" + normalizedForm + "/atlas_atlas" + normalizedExtension;
+  }
 }
 
 public static class GeneratedAtlasBuildSurrogateUtility {

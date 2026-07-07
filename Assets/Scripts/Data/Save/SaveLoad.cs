@@ -448,6 +448,10 @@ public class SaveData : Dictionary<string, object> {
 
 
 public static class SaveSlotManager {
+  public const string SlotEpisodeIdKey = "episodeId";
+  public const string DefaultEpisodeId = "Episode01";
+  const string LegacySlotEpisodeKey = "episode";
+
   static int _slot = 1;
   public static int slot {
     get => _slot;
@@ -487,6 +491,7 @@ public static class SaveSlotManager {
   }
 
   public static void Save(string name, SaveData table) {
+    NormalizeBeforeSave(name, table);
     var path = BuildSavePath(BuildSlotDirectory(slot), name);
     table.Save(path);
   }
@@ -495,11 +500,14 @@ public static class SaveSlotManager {
     var mainPath = BuildSavePath(BuildSlotDirectory(slot), name);
     var mainData = SaveData.Load(mainPath);
     if (mainData.Count > 0 || File.Exists(mainPath)) {
+      MigrateAfterLoad(name, mainData, mainPath);
       return mainData;
     }
 
     var legacyPath = BuildSavePath(BuildLegacySlotDirectory(slot), name);
-    return SaveData.Load(legacyPath);
+    var legacyData = SaveData.Load(legacyPath);
+    MigrateAfterLoad(name, legacyData, legacyPath);
+    return legacyData;
   }
 
   public static void Delete(int deleteSlot) {
@@ -512,6 +520,103 @@ public static class SaveSlotManager {
     if (Directory.Exists(legacyDirectory)) {
       Directory.Delete(legacyDirectory, true);
     }
+  }
+
+  public static string ResolveSlotEpisodeId(SaveData table) {
+    var episodeId = ReadString(table, SlotEpisodeIdKey);
+    if (IsKnownEpisodeId(episodeId)) {
+      return episodeId;
+    }
+
+    episodeId = ReadString(table, LegacySlotEpisodeKey);
+    if (IsKnownEpisodeId(episodeId)) {
+      return episodeId;
+    }
+
+    return ResolveDefaultEpisodeId();
+  }
+
+  static void NormalizeBeforeSave(string name, SaveData table) {
+    if (!IsSlotSummarySave(name)) return;
+    EnsureSlotEpisodeId(table);
+  }
+
+  static void MigrateAfterLoad(string name, SaveData table, string sourcePath) {
+    if (!IsSlotSummarySave(name)) return;
+    if (table == null) return;
+    if (table.Count <= 0 && !File.Exists(sourcePath)) return;
+
+    if (!EnsureSlotEpisodeId(table)) return;
+    table.Save(BuildSavePath(BuildSlotDirectory(slot), name));
+  }
+
+  static bool EnsureSlotEpisodeId(SaveData table) {
+    if (table == null) return false;
+
+    var episodeId = ResolveSlotEpisodeId(table);
+    if (string.IsNullOrWhiteSpace(episodeId)) {
+      episodeId = DefaultEpisodeId;
+    }
+
+    var current = ReadString(table, SlotEpisodeIdKey);
+    var legacy = ReadString(table, LegacySlotEpisodeKey);
+    var currentMatches = string.Equals(current, episodeId, StringComparison.Ordinal);
+    var legacyMatches = string.Equals(legacy, episodeId, StringComparison.Ordinal);
+    if (currentMatches && legacyMatches) {
+      return false;
+    }
+
+    table[SlotEpisodeIdKey] = episodeId;
+    table[LegacySlotEpisodeKey] = episodeId;
+    return true;
+  }
+
+  static string ResolveDefaultEpisodeId() {
+    var registry = ActiveContentRegistryRuntime.Registry;
+    var episodes = registry != null ? registry.Episodes : null;
+    if (episodes != null && episodes.Count > 0 && episodes[0] != null) {
+      var firstEpisodeId = episodes[0].id;
+      if (!string.IsNullOrWhiteSpace(firstEpisodeId)) {
+        return firstEpisodeId.Trim();
+      }
+    }
+
+    return DefaultEpisodeId;
+  }
+
+  static bool IsKnownEpisodeId(string episodeId) {
+    if (string.IsNullOrWhiteSpace(episodeId)) {
+      return false;
+    }
+
+    var normalizedEpisodeId = episodeId.Trim();
+    var registry = ActiveContentRegistryRuntime.Registry;
+    var episodes = registry != null ? registry.Episodes : null;
+    if (episodes == null || episodes.Count <= 0) {
+      return true;
+    }
+
+    for (var i = 0; i < episodes.Count; i++) {
+      var episode = episodes[i];
+      if (episode == null) continue;
+      if (string.Equals(episode.id, normalizedEpisodeId, StringComparison.OrdinalIgnoreCase)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool IsSlotSummarySave(string name) {
+    return string.Equals(name, "slot", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static string ReadString(SaveData table, string key) {
+    if (table == null) return "";
+    if (string.IsNullOrWhiteSpace(key)) return "";
+    if (!table.TryGetValue(key, out var value)) return "";
+    if (value == null) return "";
+    return Convert.ToString(value);
   }
 
 }

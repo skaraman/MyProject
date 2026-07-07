@@ -8,6 +8,7 @@ public class LoadMenuInput : ButtonGroup {
   [SerializeField, Min(0.01f)] float mouseWheelScrollUnitsPerTick = 3f;
   [SerializeField, Min(0.01f)] float gamepadStickScrollUnitsPerSecond = 18f;
   [SerializeField, Range(0f, 0.99f)] float gamepadStickDeadzone = 0.25f;
+  [SerializeField, Min(0f)] float keyboardScrollMargin = 0.5f;
   int activeIndexLoadMenu = -1;
   List<Action> actions = new();
   public GameObject scrollWrap;
@@ -24,7 +25,7 @@ public class LoadMenuInput : ButtonGroup {
   void Start() {
     actions.Add(MessageBus.On("openLoadMenu", o => ResetSaveSlotInteractionLock()));
     actions.Add(MessageBus.On("loadMenu.cancel", o => { if (InputMessageValue.IsPressed(o)) BackOut(); }));
-    actions.Add(MessageBus.On("loadMenu.delete", o => { if (InputMessageValue.IsPressed(o)) DeleteDir(); }));
+    actions.Add(MessageBus.On("loadMenu.delete", o => { if (InputMessageValue.IsPressed(o)) RequestDeleteConfirm(); }));
     actions.Add(MessageBus.On("loadMenu.down", o => { if (InputMessageValue.IsPressed(o)) MenuDown(); }));
     actions.Add(MessageBus.On("loadMenu.scrollDown", o => ScrollFromMouseWheel(o, direction: -1f)));
     actions.Add(MessageBus.On("loadMenu.select", o => { if (InputMessageValue.IsPressed(o)) Select(); }));
@@ -179,7 +180,9 @@ public class LoadMenuInput : ButtonGroup {
         if (hit.gameObject.name == "Delete") {
           var slotIndex = ResolveButtonIndex(hit.gameObject);
           if (slotIndex >= 0) {
-            Debug.Log("Delete Confirm Box");
+            activeIndexLoadMenu = slotIndex;
+            SetActiveIndex(slotIndex);
+            RequestDeleteConfirm();
             return;
           }
         }
@@ -207,13 +210,15 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void BackOut() {
+    if (slotSelectionLocked) return;
     MessageBus.Send("closeLoadMenu");
   }
 
-  void DeleteDir() {
+  void RequestDeleteConfirm() {
     if (slotSelectionLocked) return;
     if (TryResolveSelectedSlotNumber(out var slotNumber)) {
-      SaveSlotManager.Delete(slotNumber);
+      if (!SaveSlotManager.SlotExists(slotNumber)) return;
+      MessageBus.Send("loadMenu.deleteConfirmOpen", slotNumber);
     }
   }
 
@@ -246,6 +251,7 @@ public class LoadMenuInput : ButtonGroup {
     else activeIndexLoadMenu = (activeIndexLoadMenu + 1) % buttons.Count;
 
     SetActiveIndex(activeIndexLoadMenu);
+    ScrollActiveSlotIntoView();
   }
 
   void MenuUp() {
@@ -256,6 +262,56 @@ public class LoadMenuInput : ButtonGroup {
     else activeIndexLoadMenu = (activeIndexLoadMenu - 1 + buttons.Count) % buttons.Count;
 
     SetActiveIndex(activeIndexLoadMenu);
+    ScrollActiveSlotIntoView();
+  }
+
+  void ScrollActiveSlotIntoView() {
+    if (scrollWrap == null) return;
+    if (activeIndexLoadMenu < 0 || activeIndexLoadMenu >= buttons.Count) return;
+
+    var selectedButton = buttons[activeIndexLoadMenu];
+    if (selectedButton == null) return;
+
+    if (!TryResolveViewportBounds(out var viewportBounds)) return;
+    if (!TryResolveSlotBounds(selectedButton, out var selectedBounds)) return;
+
+    var topLimit = viewportBounds.max.y - keyboardScrollMargin;
+    var bottomLimit = viewportBounds.min.y + keyboardScrollMargin;
+    var deltaY = 0f;
+
+    if (selectedBounds.max.y > topLimit) {
+      deltaY = topLimit - selectedBounds.max.y;
+    }
+    else if (selectedBounds.min.y < bottomLimit) {
+      deltaY = bottomLimit - selectedBounds.min.y;
+    }
+
+    ScrollContent(deltaY);
+  }
+
+  bool TryResolveViewportBounds(out Bounds bounds) {
+    bounds = default;
+    if (scrollWrap == null) return false;
+
+    var collider = scrollWrap.GetComponent<Collider2D>();
+    if (collider == null) return false;
+
+    bounds = collider.bounds;
+    return true;
+  }
+
+  bool TryResolveSlotBounds(GameObject target, out Bounds bounds) {
+    bounds = default;
+    if (target == null) return false;
+
+    var collider = target.GetComponent<Collider2D>();
+    if (collider != null) {
+      bounds = collider.bounds;
+      return true;
+    }
+
+    bounds = new Bounds(target.transform.position, Vector3.zero);
+    return true;
   }
 
   void Select() {
@@ -269,14 +325,42 @@ public class LoadMenuInput : ButtonGroup {
   }
 
   void ResetSaveSlotInteractionLock() {
-    slotSelectionLocked = false;
-    SetSaveSlotInteractionEnabled(true);
+    SetSlotSelectionLocked(false);
+  }
+
+  public void ResetSelection() {
+    activeIndexLoadMenu = -1;
+    SetActiveIndex(-1);
+  }
+
+  public void SetActiveSlotNumber(int slotNumber) {
+    for (int i = 0; i < buttons.Count; i++) {
+      var button = buttons[i];
+      if (button == null) continue;
+
+      var slot = button.GetComponent<SaveSlot>();
+      if (slot == null) continue;
+      if (!int.TryParse(slot.saveNumber, out var resolvedSlotNumber)) continue;
+      if (resolvedSlotNumber != slotNumber) continue;
+
+      activeIndexLoadMenu = i;
+      SetActiveIndex(activeIndexLoadMenu);
+      ScrollActiveSlotIntoView();
+      return;
+    }
+
+    ResetSelection();
   }
 
   void LockSaveSlotInteraction() {
     if (slotSelectionLocked) return;
-    slotSelectionLocked = true;
-    SetSaveSlotInteractionEnabled(false);
+    SetSlotSelectionLocked(true);
+  }
+
+  public void SetSlotSelectionLocked(bool locked) {
+    slotSelectionLocked = locked;
+    SetSaveSlotInteractionEnabled(!locked);
+    if (!locked) return;
     pressed = false;
     dragging = false;
   }
@@ -317,7 +401,7 @@ public class LoadMenuInput : ButtonGroup {
     return hitObject == targetRoot || hitObject.transform.IsChildOf(targetRoot.transform);
   }
 
-  bool TryResolveSelectedSlotNumber(out int slotNumber) {
+  public bool TryResolveSelectedSlotNumber(out int slotNumber) {
     slotNumber = -1;
 
     if (activeIndexLoadMenu < 0 || activeIndexLoadMenu >= buttons.Count) return false;

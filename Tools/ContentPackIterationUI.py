@@ -78,6 +78,13 @@ SOURCE_TYPE_LABELS = {
 
 SOURCE_LABEL_TO_TYPE = {label: key for key, label in SOURCE_TYPE_LABELS.items()}
 
+MAPPED_STATUS = "Mapped"
+NOT_MAPPED_STATUS = "Not mapped"
+PLANNED_MISSING_STATUS = "Planned missing"
+FOLDER_ONLY_STATUS = "Folder only"
+SLICE_PACK_TYPE = "Slice"
+EPISODE_PACK_TYPE = "Episode"
+
 FORM_CHARACTER_SOURCE_FOLDERS = (
     "Blast",
     "Block",
@@ -218,6 +225,19 @@ class ManifestSliceSpec:
 
 
 @dataclass
+class ManifestEpisodeSpec:
+    episode_id: str
+    slices: list[str] = field(default_factory=list)
+
+    def row_values(self) -> tuple[str, str, str]:
+        return (
+            self.episode_id,
+            summarize(self.slices, max_count=5),
+            str(len(self.slices)),
+        )
+
+
+@dataclass
 class ManifestIdSuggestion:
     manifest_id: str
     suggestion_type: str
@@ -236,7 +256,8 @@ def main() -> int:
     parser.add_argument("--list", action="store_true", help="Print rows instead of opening the UI.")
     parser.add_argument("--pack-type", default="All", help="Filter rows for --list.")
     parser.add_argument("--search", default="", help="Search filter for --list.")
-    parser.add_argument("--set-active", default="", help="Comma-separated pack ids to write into ContentPackSelection.asset.")
+    parser.add_argument("--set-mapped", default="", help="Comma-separated pack ids to map in ContentPackSelection.asset.")
+    parser.add_argument("--set-active", default="", help=argparse.SUPPRESS)
     parser.add_argument("--build-smart", action="store_true", help="Run Unity Smart content-pack build from this Python tool.")
     parser.add_argument("--unity-exe", default="", help="Override Unity.exe path for --build-smart.")
     parser.add_argument("--manifest-list", action="store_true", help="Print ContentManifest slices.")
@@ -255,14 +276,17 @@ def main() -> int:
 
     project_root = Path(args.project_root).resolve()
     external_root = Path(args.external_root).resolve() if args.external_root else resolve_external_root(project_root)
+    mapped_arg = args.set_mapped or args.set_active
     manifest_command = update_content_manifest_from_args(project_root, args)
     if args.manifest_list or manifest_command:
         print_content_manifest_slices(project_root)
-        if not (args.list or args.set_active or args.build_smart):
+        if not (args.list or mapped_arg or args.build_smart):
             return 0
 
-    if args.set_active:
-        active_pack_ids = parse_pack_ids(args.set_active)
+    if mapped_arg:
+        active_pack_ids = read_active_pack_ids(project_root)
+        for pack_id in parse_pack_ids(mapped_arg):
+            add_unique(active_pack_ids, pack_id)
         selection_path = write_content_pack_selection(project_root, external_root, active_pack_ids)
         print(f"wrote_selection={selection_path}")
 
@@ -324,18 +348,65 @@ def default_external_root(project_root: Path) -> Path:
 
 def build_pack_options(project_root: Path, external_root: Path) -> list[PackOption]:
     selected_pack_ids = read_active_pack_ids(project_root)
+    slices = read_content_manifest_slices(project_root)
+    episodes = read_content_manifest_episodes(project_root)
 
     manifest_by_pack = read_external_pack_manifests(external_root)
     referenced_pack_ids = read_content_manifest_pack_ids(project_root)
     all_ids = sorted(set(referenced_pack_ids) | set(manifest_by_pack), key=pack_sort_key)
-    active_ids = resolve_active_pack_ids(selected_pack_ids, all_ids)
+    active_ids = resolve_active_manifest_ids(selected_pack_ids, all_ids, slices, episodes)
 
     options = [
         build_pack_option(project_root, external_root, pack_id, manifest_by_pack.get(pack_id), active_ids)
         for pack_id in all_ids
     ]
+    options.extend(build_manifest_flow_options(project_root, slices, episodes, selected_pack_ids))
 
     return [option for option in options if option is not None]
+
+
+def build_manifest_flow_options(
+    project_root: Path,
+    slices: list[ManifestSliceSpec],
+    episodes: list[ManifestEpisodeSpec],
+    selected_ids: Iterable[str],
+) -> list[PackOption]:
+    selected = {value.lower() for value in selected_ids}
+    options: list[PackOption] = []
+
+    for episode in episodes:
+        details = [
+            f"Episode flow: {episode.episode_id}",
+            "Slices: " + summarize(episode.slices, max_count=12),
+            f"Manifest: {content_manifest_path(project_root)}",
+        ]
+        options.append(PackOption(
+            pack_type=EPISODE_PACK_TYPE,
+            pack_id=episode.episode_id,
+            source_assets=list(episode.slices),
+            target_root="",
+            unity_asset_root="",
+            status=MAPPED_STATUS if episode.episode_id.lower() in selected else NOT_MAPPED_STATUS,
+            details=details,
+        ))
+
+    for slice_spec in slices:
+        details = [
+            f"Slice: {slice_spec.slice_id}",
+            "IDs: " + summarize(slice_spec.ids, max_count=12),
+            f"Manifest: {content_manifest_path(project_root)}",
+        ]
+        options.append(PackOption(
+            pack_type=SLICE_PACK_TYPE,
+            pack_id=slice_spec.slice_id,
+            source_assets=list(slice_spec.ids),
+            target_root="",
+            unity_asset_root="",
+            status=MAPPED_STATUS if slice_spec.slice_id.lower() in selected else NOT_MAPPED_STATUS,
+            details=details,
+        ))
+
+    return options
 
 
 def build_pack_option(
@@ -566,12 +637,12 @@ def build_status(
     active_ids: set[str],
 ) -> str:
     if pack_id in active_ids:
-        return "Active"
+        return MAPPED_STATUS
     if not target_root.exists():
-        return "Planned missing"
+        return PLANNED_MISSING_STATUS
     if not manifest:
-        return "Folder only"
-    return "External"
+        return FOLDER_ONLY_STATUS
+    return NOT_MAPPED_STATUS
 
 
 def read_external_pack_manifests(external_root: Path) -> dict[str, dict[str, Any]]:
@@ -674,6 +745,11 @@ def read_content_manifest_slices(project_root: Path) -> list[ManifestSliceSpec]:
     return normalize_manifest_slices(manifest.get("slices"))
 
 
+def read_content_manifest_episodes(project_root: Path) -> list[ManifestEpisodeSpec]:
+    manifest = read_content_manifest(project_root)
+    return normalize_manifest_episodes(manifest.get("episodes"))
+
+
 def normalize_manifest_slices(raw_slices: Any) -> list[ManifestSliceSpec]:
     result: list[ManifestSliceSpec] = []
     if not isinstance(raw_slices, list):
@@ -698,6 +774,27 @@ def normalize_manifest_slices(raw_slices: Any) -> list[ManifestSliceSpec]:
     return result
 
 
+def normalize_manifest_episodes(raw_episodes: Any) -> list[ManifestEpisodeSpec]:
+    result: list[ManifestEpisodeSpec] = []
+    if not isinstance(raw_episodes, list):
+        return result
+
+    for raw_episode in raw_episodes:
+        if not isinstance(raw_episode, dict):
+            continue
+        episode_id = sanitize_identifier(str(raw_episode.get("id") or ""))
+        if not episode_id:
+            continue
+        slices = parse_manifest_ids(raw_episode.get("slices"))
+        existing_index = find_manifest_episode_index(result, episode_id)
+        if existing_index >= 0:
+            for slice_id in slices:
+                add_unique(result[existing_index].slices, slice_id)
+            continue
+        result.append(ManifestEpisodeSpec(episode_id=episode_id, slices=slices))
+    return result
+
+
 def write_content_manifest_slices(project_root: Path, slices: list[ManifestSliceSpec]) -> Path:
     manifest = read_content_manifest(project_root)
     manifest["slices"] = [serialize_manifest_slice(slice_spec) for slice_spec in normalize_manifest_slices([
@@ -706,6 +803,23 @@ def write_content_manifest_slices(project_root: Path, slices: list[ManifestSlice
     ])]
     if not isinstance(manifest.get("episodes"), list):
         manifest["episodes"] = []
+    return write_content_manifest(project_root, manifest)
+
+
+def write_content_manifest_flow(
+    project_root: Path,
+    slices: list[ManifestSliceSpec],
+    episodes: list[ManifestEpisodeSpec],
+) -> Path:
+    manifest = read_content_manifest(project_root)
+    manifest["slices"] = [serialize_manifest_slice(slice_spec) for slice_spec in normalize_manifest_slices([
+        {"id": slice_spec.slice_id, "ids": slice_spec.ids}
+        for slice_spec in slices
+    ])]
+    manifest["episodes"] = [serialize_manifest_episode(episode_spec) for episode_spec in normalize_manifest_episodes([
+        {"id": episode_spec.episode_id, "slices": episode_spec.slices}
+        for episode_spec in episodes
+    ])]
     return write_content_manifest(project_root, manifest)
 
 
@@ -720,6 +834,13 @@ def serialize_manifest_slice(slice_spec: ManifestSliceSpec) -> dict[str, Any]:
     return {
         "id": sanitize_identifier(slice_spec.slice_id),
         "ids": parse_manifest_ids(slice_spec.ids),
+    }
+
+
+def serialize_manifest_episode(episode_spec: ManifestEpisodeSpec) -> dict[str, Any]:
+    return {
+        "id": sanitize_identifier(episode_spec.episode_id),
+        "slices": parse_manifest_ids(episode_spec.slices),
     }
 
 
@@ -815,6 +936,14 @@ def find_manifest_slice_index(slices: list[ManifestSliceSpec], slice_id: str) ->
     normalized_slice_id = sanitize_identifier(slice_id).lower()
     for index, slice_spec in enumerate(slices):
         if slice_spec.slice_id.lower() == normalized_slice_id:
+            return index
+    return -1
+
+
+def find_manifest_episode_index(episodes: list[ManifestEpisodeSpec], episode_id: str) -> int:
+    normalized_episode_id = sanitize_identifier(episode_id).lower()
+    for index, episode_spec in enumerate(episodes):
+        if episode_spec.episode_id.lower() == normalized_episode_id:
             return index
     return -1
 
@@ -940,6 +1069,54 @@ def resolve_active_pack_ids(
     for selected in selected_pack_ids:
         if selected in all_ids:
             active.add(selected)
+    return active
+
+
+def resolve_active_manifest_ids(
+    selected_ids: Iterable[str],
+    all_pack_ids: Iterable[str],
+    slices: list[ManifestSliceSpec],
+    episodes: list[ManifestEpisodeSpec],
+) -> set[str]:
+    all_ids = {value.lower(): value for value in all_pack_ids}
+    slice_by_id = {slice_spec.slice_id.lower(): slice_spec for slice_spec in slices}
+    episode_by_id = {episode.episode_id.lower(): episode for episode in episodes}
+    active: set[str] = set()
+
+    def add_id(value: str, stack: set[str]) -> None:
+        key = sanitize_identifier(value).lower()
+        if not key:
+            return
+
+        episode = episode_by_id.get(key)
+        if episode:
+            stack_key = f"episode:{key}"
+            if stack_key in stack:
+                return
+            stack.add(stack_key)
+            for slice_id in episode.slices:
+                add_id(slice_id, stack)
+            stack.remove(stack_key)
+            return
+
+        slice_spec = slice_by_id.get(key)
+        if slice_spec:
+            stack_key = f"slice:{key}"
+            if stack_key in stack:
+                return
+            stack.add(stack_key)
+            for manifest_id in slice_spec.ids:
+                add_id(manifest_id, stack)
+            stack.remove(stack_key)
+            return
+
+        pack_id = all_ids.get(key)
+        if pack_id:
+            active.add(pack_id)
+
+    for selected in selected_ids:
+        add_id(selected, set())
+
     return active
 
 
@@ -1180,9 +1357,9 @@ def get_unity_project_lock_message(project_root: Path) -> str:
         return ""
 
     lines = [
-        "Build Smart is blocked because this Unity project is already open.",
+        "Build Smart cannot launch batchmode because this Unity project is already open.",
         f"Lock file: {lock_path}",
-        "Close Unity for this project, then run Build Smart again.",
+        "Run Tools > Content Packs > Build Smart inside the open Unity editor.",
         "If Unity is fully closed and this file remains, delete the stale lock file."
     ]
     return "\n".join(lines)
@@ -1366,17 +1543,25 @@ def migrate_sprite_library_reference(project_root: Path, asset_path: str) -> str
     return normalize_asset_reference(str(migrated_path), project_root)
 
 
-def launch_sprite_sheet_editor(project_root: Path, wait: bool) -> int:
+def launch_sprite_sheet_editor(
+    project_root: Path,
+    wait: bool,
+    initial_paths: Iterable[Path | str] | None = None,
+) -> int:
     editor_path = Path(__file__).resolve().parent / "SpriteLibraryMultiEditor" / "editor.py"
     if not editor_path.exists():
         raise FileNotFoundError(f"Missing sprite sheet editor: {editor_path}")
 
-    initial_paths = find_custom_sprite_sheet_libraries(project_root)
+    if initial_paths is None:
+        editor_paths = find_custom_sprite_sheet_libraries(project_root)
+    else:
+        editor_paths = [Path(path) for path in initial_paths]
+
     command = [
         sys.executable,
         str(editor_path),
     ]
-    command.extend(str(path) for path in initial_paths)
+    command.extend(str(path) for path in editor_paths)
     process = subprocess.Popen(command, cwd=str(project_root))
     if wait:
         return process.wait()
@@ -1393,6 +1578,97 @@ def find_custom_sprite_sheet_libraries(project_root: Path) -> list[Path]:
         assets_root.rglob(pattern),
         key=lambda path: str(path).lower(),
     )
+
+
+def collect_pack_sprite_sheet_editor_paths(project_root: Path, sources: Iterable[SourceAssetSpec]) -> list[Path]:
+    paths: list[Path] = []
+    for source in sources:
+        for path in source_sprite_sheet_editor_paths(project_root, source):
+            add_unique_resolved_path(paths, path)
+    return paths
+
+
+def collect_source_asset_sprite_sheet_editor_paths(project_root: Path, source_assets: Iterable[str]) -> list[Path]:
+    paths: list[Path] = []
+    for source_asset in source_assets:
+        asset_path = strip_source_asset_suffix(source_asset)
+        for path in existing_sprite_library_paths(project_root, asset_path):
+            add_unique_resolved_path(paths, path)
+    return paths
+
+
+def source_sprite_sheet_editor_paths(project_root: Path, source: SourceAssetSpec) -> list[Path]:
+    source_type = normalize_source_type(source.source_type)
+    if source_type == "sprite_library":
+        return existing_sprite_library_paths(project_root, source.asset_path)
+    if source_type == "sprite_sheet":
+        return existing_sprite_library_name_paths(project_root, source.library_name)
+    return []
+
+
+def existing_sprite_library_paths(project_root: Path, value: str) -> list[Path]:
+    normalized = normalize_slashes(value)
+    if not normalized:
+        return []
+
+    lower = normalized.lower()
+    has_library_extension = lower.endswith(CUSTOM_LIBRARY_EXTENSION.lower())
+    has_legacy_extension = lower.endswith(LEGACY_LIBRARY_EXTENSION.lower())
+    if not has_library_extension and not has_legacy_extension:
+        return existing_sprite_library_name_paths(project_root, normalized)
+
+    path = resolve_project_or_absolute_path(project_root, normalized)
+    if path.exists():
+        return [path]
+    return []
+
+
+def existing_sprite_library_name_paths(project_root: Path, library_name: str) -> list[Path]:
+    normalized = normalize_slashes(library_name)
+    lower = normalized.lower()
+    if lower.endswith(CUSTOM_LIBRARY_EXTENSION.lower()) or lower.endswith(LEGACY_LIBRARY_EXTENSION.lower()):
+        path = resolve_project_or_absolute_path(project_root, normalized)
+        if path.exists():
+            return [path]
+
+    normalized_name = normalize_sprite_library_name(library_name)
+    if not normalized_name:
+        return []
+
+    root = project_root / "Assets" / "Sprites" / "SpriteLibraries"
+    candidates = [
+        root / f"{normalized_name}{CUSTOM_LIBRARY_EXTENSION}",
+        root / f"{normalized_name}{LEGACY_LIBRARY_EXTENSION}",
+    ]
+    return [path for path in candidates if path.exists()]
+
+
+def normalize_sprite_library_name(value: str) -> str:
+    normalized = normalize_slashes(value).strip("/")
+    if not normalized:
+        return ""
+
+    lower = normalized.lower()
+    for extension in (CUSTOM_LIBRARY_EXTENSION, LEGACY_LIBRARY_EXTENSION):
+        if lower.endswith(extension.lower()):
+            normalized = normalized[: -len(extension)]
+            break
+
+    root = "Assets/Sprites/SpriteLibraries"
+    if normalized.lower() == root.lower():
+        return ""
+    if normalized.lower().startswith(root.lower() + "/"):
+        normalized = normalized[len(root) + 1:]
+
+    return normalized.strip("/")
+
+
+def add_unique_resolved_path(paths: list[Path], path: Path) -> None:
+    resolved = path.resolve()
+    for existing in paths:
+        if existing.resolve() == resolved:
+            return
+    paths.append(resolved)
 
 
 def resolve_project_or_absolute_path(project_root: Path, value: str) -> Path:
@@ -1560,6 +1836,52 @@ def verify_pack_option(project_root: Path, external_root: Path, option: PackOpti
     return not errors, errors or info
 
 
+def verify_mapped_pack_paths(project_root: Path, external_root: Path, options: Iterable[PackOption]) -> list[str]:
+    errors: list[str] = []
+    for option in options:
+        if option.status != MAPPED_STATUS:
+            continue
+
+        if is_manifest_flow_pack_type(option.pack_type):
+            continue
+
+        errors.extend(verify_pack_missing_paths(project_root, external_root, option))
+
+    return errors
+
+
+def is_manifest_flow_pack_type(pack_type: str) -> bool:
+    return pack_type in {SLICE_PACK_TYPE, EPISODE_PACK_TYPE}
+
+
+def verify_pack_missing_paths(project_root: Path, external_root: Path, option: PackOption) -> list[str]:
+    errors: list[str] = []
+    pack_id = sanitize_identifier(option.pack_id)
+    kind = PACK_LABEL_TO_KIND.get(option.pack_type, infer_kind(pack_id))
+    target_root = external_pack_root(external_root, kind, pack_id)
+    manifest_path = target_root / "ContentPackManifest.json"
+
+    if not manifest_path.exists():
+        errors.append(f"{pack_id}: missing manifest '{manifest_path}'")
+
+    for source in option.authoring_sources:
+        source_path = resolve_source_asset_path(project_root, external_root, source.asset_path)
+        if source_path is None or not source_path.exists():
+            errors.append(f"{pack_id}: missing asset '{source.asset_path}'")
+
+        if source.source_type != "sprite_sheet":
+            continue
+
+        if not source.normal_asset_path:
+            continue
+
+        normal_path = resolve_source_asset_path(project_root, external_root, source.normal_asset_path)
+        if normal_path is None or not normal_path.exists():
+            errors.append(f"{pack_id}: missing normal asset '{source.normal_asset_path}'")
+
+    return errors
+
+
 def normalize_target_relative_path(target_folder: str, asset_path: str) -> str:
     normalized = normalize_slashes(target_folder).strip("/")
     if normalized.lower().startswith("assets/"):
@@ -1623,6 +1945,19 @@ def validate_manifest_slice(slice_spec: ManifestSliceSpec) -> str:
     return ""
 
 
+def validate_manifest_episode(episode_spec: ManifestEpisodeSpec, slices: list[ManifestSliceSpec]) -> str:
+    if not sanitize_identifier(episode_spec.episode_id):
+        return "Episode id is required."
+    if not episode_spec.slices:
+        return f"Episode '{episode_spec.episode_id}' must contain at least one slice."
+
+    slice_ids = {slice_spec.slice_id.lower() for slice_spec in slices}
+    for slice_id in episode_spec.slices:
+        if slice_id.lower() not in slice_ids:
+            return f"Episode '{episode_spec.episode_id}' references missing slice '{slice_id}'."
+    return ""
+
+
 def add_unique(values: list[str], value: str) -> None:
     if value and value not in values:
         values.append(value)
@@ -1676,17 +2011,14 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             search_entry.pack(side=tk.LEFT, padx=(0, 14))
             search_entry.bind("<KeyRelease>", lambda _event: self.apply_filter())
 
-            ttk.Button(toolbar, text="Refresh", command=self.refresh).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Verify", command=self.verify_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="New Pack", command=self.new_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Edit Pack", command=self.edit_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Delete Pack", command=self.delete_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Edit Manifest", command=self.edit_manifest).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(toolbar, text="Edit Sheets", command=self.edit_sheets).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(toolbar, text="Set Active", command=self.set_active).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(toolbar, text="Verify", command=self.verify_pack).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Set Mapped", command=self.set_mapped).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Set Not Mapped", command=self.set_not_mapped).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Build Smart", command=self.build_smart).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(toolbar, text="Copy Target", command=self.copy_target).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(toolbar, text="Open Target", command=self.open_target).pack(side=tk.LEFT)
             ttk.Label(toolbar, textvariable=self.status_text).pack(side=tk.RIGHT)
 
             body = ttk.Frame(self, padding=(14, 0, 14, 14))
@@ -1723,8 +2055,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             x_scroll.grid(row=1, column=0, sticky="ew")
             self.tree.bind("<<TreeviewSelect>>", lambda _event: self.update_details())
             self.tree.bind("<Double-1>", lambda _event: self.edit_pack())
-            self.tree.tag_configure("Active", foreground="#7dd3fc")
-            self.tree.tag_configure("Planned missing", foreground="#fca5a5")
+            self.tree.tag_configure(MAPPED_STATUS, foreground="#22c55e")
+            self.tree.tag_configure(PLANNED_MISSING_STATUS, foreground="#fca5a5")
 
             detail_frame = ttk.Frame(body, padding=(12, 0, 0, 0))
             detail_frame.grid(row=0, column=1, rowspan=2, sticky="nsew")
@@ -1801,22 +2133,6 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self.detail.insert(tk.END, "\n".join(lines))
             self.detail.configure(state=tk.DISABLED)
 
-        def copy_target(self) -> None:
-            option = self.selected_option()
-            if not option:
-                return
-            self.clipboard_clear()
-            self.clipboard_append(option.target_root)
-            self.status_text.set("Copied target root")
-
-        def open_target(self) -> None:
-            option = self.selected_option()
-            if not option or not option.target_root:
-                return
-            path = Path(option.target_root)
-            if path.exists():
-                os.startfile(path)
-
         def open_sources(self) -> None:
             option = self.selected_option()
             if not option:
@@ -1833,14 +2149,96 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             option = self.selected_option()
             if not option:
                 return
+            if option.pack_type == SLICE_PACK_TYPE:
+                self.edit_selected_slice(option.pack_id)
+                return
+            if option.pack_type == EPISODE_PACK_TYPE:
+                self.edit_selected_episode(option.pack_id)
+                return
+            if not self.can_edit_mapped_pack(option, "Edit Pack"):
+                return
             dialog = PackEditorDialog(self, project_root, external_root, option)
             self.wait_window(dialog)
             if dialog.saved:
                 self.refresh()
 
+        def edit_selected_slice(self, slice_id: str) -> None:
+            slices = read_content_manifest_slices(project_root)
+            episodes = read_content_manifest_episodes(project_root)
+            index = find_manifest_slice_index(slices, slice_id)
+            if index < 0:
+                return
+
+            slice_spec = slices[index]
+            suggestions = build_manifest_id_suggestions(
+                project_root,
+                external_root,
+                slices,
+                slice_spec.slice_id,
+                "",
+            )
+            dialog = ManifestSliceEditorDialog(self, slice_spec, "", suggestions)
+            self.wait_window(dialog)
+            if not dialog.slice_spec:
+                return
+
+            slices[index] = dialog.slice_spec
+            slices = normalize_manifest_slices([
+                {"id": item.slice_id, "ids": item.ids}
+                for item in slices
+            ])
+            if not self.save_manifest_flow(slices, episodes):
+                return
+            self.refresh()
+
+        def edit_selected_episode(self, episode_id: str) -> None:
+            slices = read_content_manifest_slices(project_root)
+            episodes = read_content_manifest_episodes(project_root)
+            index = find_manifest_episode_index(episodes, episode_id)
+            if index < 0:
+                return
+
+            suggestions = [
+                ManifestIdSuggestion(slice_spec.slice_id, "Slice")
+                for slice_spec in slices
+            ]
+            dialog = ManifestEpisodeEditorDialog(self, episodes[index], suggestions)
+            self.wait_window(dialog)
+            if not dialog.episode_spec:
+                return
+
+            episodes[index] = dialog.episode_spec
+            episodes = normalize_manifest_episodes([
+                {"id": item.episode_id, "slices": item.slices}
+                for item in episodes
+            ])
+            if not self.save_manifest_flow(slices, episodes):
+                return
+            self.refresh()
+
+        def save_manifest_flow(
+            self,
+            slices: list[ManifestSliceSpec],
+            episodes: list[ManifestEpisodeSpec],
+        ) -> bool:
+            for slice_spec in slices:
+                error = validate_manifest_slice(slice_spec)
+                if error:
+                    messagebox.showerror("Content Manifest", error, parent=self)
+                    return False
+            for episode_spec in episodes:
+                error = validate_manifest_episode(episode_spec, slices)
+                if error:
+                    messagebox.showerror("Content Manifest", error, parent=self)
+                    return False
+            write_content_manifest_flow(project_root, slices, episodes)
+            return True
+
         def delete_pack(self) -> None:
             option = self.selected_option()
             if not option:
+                return
+            if not self.can_edit_mapped_pack(option, "Delete Pack"):
                 return
             if not self.confirm_delete_pack(option):
                 return
@@ -1859,7 +2257,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 "",
                 option.target_root,
                 "",
-                "This also removes it from active selection and manifest slices.",
+                "This also removes it from mapped selection and manifest slices.",
             ]
             return messagebox.askyesno("Delete Pack", "\n".join(lines), parent=self)
 
@@ -1871,42 +2269,75 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             if dialog.saved:
                 self.refresh()
 
-        def edit_sheets(self) -> None:
-            try:
-                launch_sprite_sheet_editor(project_root, wait=False)
-            except (OSError, RuntimeError) as ex:
-                messagebox.showerror("Edit Sheets", str(ex), parent=self)
-                return
-            self.status_text.set("Opened sprite sheet editor")
+        def can_edit_mapped_pack(self, option: PackOption, title: str) -> bool:
+            if option.status != MAPPED_STATUS:
+                return True
+            messagebox.showerror(
+                title,
+                f"'{option.pack_id}' is mapped. Set it, or the flow that maps it, to Not Mapped before editing.",
+                parent=self,
+            )
+            return False
 
-        def set_active(self) -> None:
+        def set_mapped(self) -> None:
             options = self.selected_options()
             if not options:
                 return
             pack_ids = read_active_pack_ids(project_root)
+            mapped_pack_ids: list[str] = []
             for option in options:
                 add_unique(pack_ids, option.pack_id)
+                add_unique(mapped_pack_ids, option.pack_id)
             write_content_pack_selection(project_root, external_root, pack_ids)
-            self.status_text.set(f"Active packs: {', '.join(pack_ids)}")
+            self.status_text.set(f"Mapped packs: {', '.join(mapped_pack_ids)}")
+            self.refresh()
+
+        def set_not_mapped(self) -> None:
+            options = self.selected_options()
+            if not options:
+                return
+            selected = {option.pack_id.lower() for option in options}
+            current_pack_ids = read_active_pack_ids(project_root)
+            pack_ids = [
+                pack_id
+                for pack_id in current_pack_ids
+                if pack_id.lower() not in selected
+            ]
+            if len(pack_ids) == len(current_pack_ids):
+                self.status_text.set("No direct mapped rows changed")
+                messagebox.showinfo(
+                    "Set Not Mapped",
+                    "Selected rows are not directly mapped. If a pack is mapped through a flow, unmap the flow row.",
+                    parent=self,
+                )
+                return
+            write_content_pack_selection(project_root, external_root, pack_ids)
+            self.status_text.set(f"Not mapped: {', '.join(option.pack_id for option in options)}")
             self.refresh()
 
         def verify_pack(self) -> None:
-            option = self.selected_option()
-            if not option:
+            errors = verify_mapped_pack_paths(project_root, external_root, self.options)
+            mapped_count = sum(
+                1
+                for option in self.options
+                if option.status == MAPPED_STATUS and not is_manifest_flow_pack_type(option.pack_type)
+            )
+            if not errors:
+                self.status_text.set(f"Verified mapped packs: {mapped_count}")
+                messagebox.showinfo(
+                    "Verify Mapped",
+                    f"No missing paths or assets in {mapped_count} mapped pack(s).",
+                    parent=self,
+                )
                 return
-            valid, lines = verify_pack_option(project_root, external_root, option)
-            message = "\n".join(lines)
-            if valid:
-                self.status_text.set(f"Verified: {option.pack_id}")
-                messagebox.showinfo("Verify Pack", message, parent=self)
-            else:
-                self.status_text.set(f"Verify failed: {option.pack_id}")
-                messagebox.showerror("Verify Pack", message, parent=self)
+
+            self.status_text.set(f"Mapped verify failed: {len(errors)} error(s)")
+            messagebox.showerror("Verify Mapped", "\n".join(errors), parent=self)
 
         def build_smart(self) -> None:
             lock_message = get_unity_project_lock_message(project_root)
             if lock_message:
-                self.status_text.set("Smart build blocked: Unity project is open")
+                self.status_text.set("Use Unity menu: Tools > Content Packs > Build Smart")
                 messagebox.showerror("Build Smart", lock_message, parent=self)
                 return
 
@@ -2086,12 +2517,19 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 os.startfile(self.path)
 
     class ManifestEditorDialog(tk.Toplevel):
-        def __init__(self, parent: tk.Tk, project_root: Path, external_root: Path, seed_pack_id: str = "") -> None:
+        def __init__(
+            self,
+            parent: tk.Tk,
+            project_root: Path,
+            external_root: Path,
+            seed_pack_id: str = "",
+        ) -> None:
             super().__init__(parent)
             self.project_root = project_root
             self.external_root = external_root
             self.seed_pack_id = sanitize_identifier(seed_pack_id)
             self.slices = read_content_manifest_slices(project_root)
+            self.episodes = read_content_manifest_episodes(project_root)
             self.saved = False
             self.status_text = tk.StringVar()
             self.title("Content Manifest")
@@ -2106,6 +2544,28 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
         def _build_layout(self) -> None:
             root = ttk.Frame(self, padding=(14, 14, 14, 14))
             root.pack(fill=tk.BOTH, expand=True)
+            root.rowconfigure(1, weight=1)
+            root.columnconfigure(0, weight=1)
+
+            notebook = ttk.Notebook(root)
+            notebook.grid(row=1, column=0, sticky="nsew")
+
+            slices_tab = ttk.Frame(notebook, padding=(0, 8, 0, 0))
+            episodes_tab = ttk.Frame(notebook, padding=(0, 8, 0, 0))
+            notebook.add(slices_tab, text="Slices")
+            notebook.add(episodes_tab, text="Episodes")
+
+            self._build_slices_tab(slices_tab)
+            self._build_episodes_tab(episodes_tab)
+
+            footer = ttk.Frame(root)
+            footer.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+            footer.columnconfigure(0, weight=1)
+            ttk.Label(footer, textvariable=self.status_text).grid(row=0, column=0, sticky="w")
+            ttk.Button(footer, text="Save Manifest", command=self.save_manifest).grid(row=0, column=1, padx=(8, 0))
+            ttk.Button(footer, text="Close", command=self.destroy).grid(row=0, column=2, padx=(8, 0))
+
+        def _build_slices_tab(self, root: ttk.Frame) -> None:
             root.rowconfigure(1, weight=1)
             root.columnconfigure(0, weight=1)
 
@@ -2129,12 +2589,28 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self.slice_tree.column(column, width=widths[column], minwidth=80, anchor=tk.W, stretch=True)
             self.slice_tree.grid(row=1, column=0, sticky="nsew")
 
-            footer = ttk.Frame(root)
-            footer.grid(row=2, column=0, sticky="ew", pady=(12, 0))
-            footer.columnconfigure(0, weight=1)
-            ttk.Label(footer, textvariable=self.status_text).grid(row=0, column=0, sticky="w")
-            ttk.Button(footer, text="Save Manifest", command=self.save_manifest).grid(row=0, column=1, padx=(8, 0))
-            ttk.Button(footer, text="Close", command=self.destroy).grid(row=0, column=2, padx=(8, 0))
+        def _build_episodes_tab(self, root: ttk.Frame) -> None:
+            root.rowconfigure(1, weight=1)
+            root.columnconfigure(0, weight=1)
+
+            toolbar = ttk.Frame(root)
+            toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+            ttk.Button(toolbar, text="New Episode", command=self.new_episode).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Edit Episode", command=self.edit_episode).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Delete Episode", command=self.delete_episode).pack(side=tk.LEFT, padx=(0, 8))
+
+            columns = ("episode", "slices", "count")
+            self.episode_tree = ttk.Treeview(root, columns=columns, show="headings", selectmode="browse")
+            headings = {
+                "episode": "Episode",
+                "slices": "Slice Flow",
+                "count": "Count",
+            }
+            widths = {"episode": 240, "slices": 500, "count": 80}
+            for column in columns:
+                self.episode_tree.heading(column, text=headings[column])
+                self.episode_tree.column(column, width=widths[column], minwidth=80, anchor=tk.W, stretch=True)
+            self.episode_tree.grid(row=1, column=0, sticky="nsew")
 
         def _refresh_slices(self) -> None:
             self.slice_tree.delete(*self.slice_tree.get_children())
@@ -2143,7 +2619,18 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             if self.slices:
                 self.slice_tree.selection_set("0")
                 self.slice_tree.focus("0")
-            self.status_text.set(f"{len(self.slices)} slices | manifest: {content_manifest_path(self.project_root)}")
+            self._refresh_episodes()
+
+        def _refresh_episodes(self) -> None:
+            self.episode_tree.delete(*self.episode_tree.get_children())
+            for index, episode_spec in enumerate(self.episodes):
+                self.episode_tree.insert("", tk.END, iid=str(index), values=episode_spec.row_values())
+            if self.episodes:
+                self.episode_tree.selection_set("0")
+                self.episode_tree.focus("0")
+            self.status_text.set(
+                f"{len(self.slices)} slices | {len(self.episodes)} episodes | manifest: {content_manifest_path(self.project_root)}"
+            )
 
         def _selected_slice_index(self) -> int:
             selection = self.slice_tree.selection()
@@ -2151,6 +2638,13 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 return -1
             index = int(selection[0])
             return index if 0 <= index < len(self.slices) else -1
+
+        def _selected_episode_index(self) -> int:
+            selection = self.episode_tree.selection()
+            if not selection:
+                return -1
+            index = int(selection[0])
+            return index if 0 <= index < len(self.episodes) else -1
 
         def new_slice(self) -> None:
             suggestions = self._manifest_id_suggestions("")
@@ -2197,6 +2691,34 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             add_unique(self.slices[index].ids, self.seed_pack_id)
             self._refresh_slices()
 
+        def new_episode(self) -> None:
+            dialog = ManifestEpisodeEditorDialog(self, None, self._slice_suggestions())
+            self.wait_window(dialog)
+            if dialog.episode_spec:
+                self._upsert_episode(dialog.episode_spec)
+
+        def edit_episode(self) -> None:
+            index = self._selected_episode_index()
+            if index < 0:
+                return
+            episode_spec = self.episodes[index]
+            dialog = ManifestEpisodeEditorDialog(self, episode_spec, self._slice_suggestions())
+            self.wait_window(dialog)
+            if dialog.episode_spec:
+                self.episodes[index] = dialog.episode_spec
+                self._dedupe_episodes()
+                self._refresh_episodes()
+
+        def delete_episode(self) -> None:
+            index = self._selected_episode_index()
+            if index < 0:
+                return
+            episode_id = self.episodes[index].episode_id
+            if not messagebox.askyesno("Content Manifest", f"Delete episode '{episode_id}'?", parent=self):
+                return
+            del self.episodes[index]
+            self._refresh_episodes()
+
         def _upsert_slice(self, slice_spec: ManifestSliceSpec) -> None:
             index = find_manifest_slice_index(self.slices, slice_spec.slice_id)
             if index >= 0:
@@ -2205,6 +2727,15 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self.slices.append(slice_spec)
             self._dedupe_slices()
             self._refresh_slices()
+
+        def _upsert_episode(self, episode_spec: ManifestEpisodeSpec) -> None:
+            index = find_manifest_episode_index(self.episodes, episode_spec.episode_id)
+            if index >= 0:
+                self.episodes[index] = episode_spec
+            else:
+                self.episodes.append(episode_spec)
+            self._dedupe_episodes()
+            self._refresh_episodes()
 
         def _manifest_id_suggestions(self, current_slice_id: str) -> list[ManifestIdSuggestion]:
             return build_manifest_id_suggestions(
@@ -2215,10 +2746,22 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self.seed_pack_id,
             )
 
+        def _slice_suggestions(self) -> list[ManifestIdSuggestion]:
+            return [
+                ManifestIdSuggestion(slice_spec.slice_id, "Slice")
+                for slice_spec in self.slices
+            ]
+
         def _dedupe_slices(self) -> None:
             self.slices = normalize_manifest_slices([
                 {"id": slice_spec.slice_id, "ids": slice_spec.ids}
                 for slice_spec in self.slices
+            ])
+
+        def _dedupe_episodes(self) -> None:
+            self.episodes = normalize_manifest_episodes([
+                {"id": episode_spec.episode_id, "slices": episode_spec.slices}
+                for episode_spec in self.episodes
             ])
 
         def save_manifest(self) -> None:
@@ -2227,7 +2770,12 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 if error:
                     messagebox.showerror("Content Manifest", error, parent=self)
                     return
-            path = write_content_manifest_slices(self.project_root, self.slices)
+            for episode_spec in self.episodes:
+                error = validate_manifest_episode(episode_spec, self.slices)
+                if error:
+                    messagebox.showerror("Content Manifest", error, parent=self)
+                    return
+            path = write_content_manifest_flow(self.project_root, self.slices, self.episodes)
             self.saved = True
             self.status_text.set(f"Saved {path}")
             self.destroy()
@@ -2369,6 +2917,117 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self.slice_spec = slice_spec
             self.destroy()
 
+    class ManifestEpisodeEditorDialog(tk.Toplevel):
+        def __init__(
+            self,
+            parent: tk.Toplevel,
+            episode_spec: ManifestEpisodeSpec | None,
+            suggestions: list[ManifestIdSuggestion] | None = None,
+        ) -> None:
+            super().__init__(parent)
+            self.episode_spec: ManifestEpisodeSpec | None = None
+            self.suggestions = suggestions or []
+            initial_slices = list(episode_spec.slices) if episode_spec else []
+            self.episode_text = tk.StringVar(value=episode_spec.episode_id if episode_spec else "")
+            self.title("Episode Flow")
+            self.geometry("760x500")
+            self.minsize(640, 400)
+            self.configure(bg="#101418")
+            self.transient(parent)
+            self.grab_set()
+            self._build_layout(initial_slices)
+
+        def _build_layout(self, initial_slices: list[str]) -> None:
+            root = ttk.Frame(self, padding=(14, 14, 14, 14))
+            root.pack(fill=tk.BOTH, expand=True)
+            root.columnconfigure(1, weight=1)
+            root.rowconfigure(1, weight=1)
+            root.rowconfigure(2, weight=1)
+
+            ttk.Label(root, text="Episode ID").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.episode_text).grid(row=0, column=1, sticky="ew", pady=(0, 8))
+
+            ttk.Label(root, text="Slice Flow").grid(row=1, column=0, sticky="nw", padx=(0, 10))
+            self.slices_text = tk.Text(
+                root,
+                bg="#151a20",
+                fg="#e6edf3",
+                insertbackground="#e6edf3",
+                relief=tk.FLAT,
+                wrap=tk.WORD,
+                padx=10,
+                pady=8,
+                font=("Consolas", 10),
+                height=10,
+            )
+            self.slices_text.grid(row=1, column=1, sticky="nsew")
+            self.slices_text.insert(tk.END, "\n".join(initial_slices))
+
+            ttk.Label(root, text="Slices").grid(row=2, column=0, sticky="nw", padx=(0, 10), pady=(10, 0))
+            suggestions_root = ttk.Frame(root)
+            suggestions_root.grid(row=2, column=1, sticky="nsew", pady=(10, 0))
+            suggestions_root.rowconfigure(0, weight=1)
+            suggestions_root.columnconfigure(0, weight=1)
+
+            columns = ("type", "id")
+            self.suggestion_tree = ttk.Treeview(
+                suggestions_root,
+                columns=columns,
+                show="headings",
+                selectmode="browse",
+                height=8,
+            )
+            self.suggestion_tree.heading("type", text="Type")
+            self.suggestion_tree.heading("id", text="ID")
+            self.suggestion_tree.column("type", width=120, minwidth=80, anchor=tk.W, stretch=False)
+            self.suggestion_tree.column("id", width=420, minwidth=180, anchor=tk.W, stretch=True)
+            self.suggestion_tree.grid(row=0, column=0, sticky="nsew")
+            self.suggestion_tree.bind("<Double-1>", lambda _event: self.add_selected_slice())
+
+            for index, suggestion in enumerate(self.suggestions):
+                self.suggestion_tree.insert("", tk.END, iid=str(index), values=suggestion.row_values())
+
+            button_row = ttk.Frame(root)
+            button_row.grid(row=3, column=1, sticky="e", pady=(12, 0))
+            ttk.Button(button_row, text="Add Slice", command=self.add_selected_slice).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(button_row, text="Save", command=self.save_episode).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(button_row, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
+
+        def add_selected_slice(self) -> None:
+            selection = self.suggestion_tree.selection()
+            if not selection:
+                return
+            index = int(selection[0])
+            if index < 0 or index >= len(self.suggestions):
+                return
+            self.add_slice_to_text(self.suggestions[index].manifest_id)
+
+        def add_slice_to_text(self, slice_id: str) -> None:
+            normalized_id = sanitize_identifier(slice_id)
+            if not normalized_id:
+                return
+
+            current_text = self.slices_text.get("1.0", "end-1c")
+            if current_text.strip() and not current_text.endswith("\n"):
+                self.slices_text.insert(tk.END, "\n")
+
+            self.slices_text.insert(tk.END, normalized_id)
+            self.slices_text.focus_set()
+
+        def save_episode(self) -> None:
+            episode_spec = ManifestEpisodeSpec(
+                episode_id=sanitize_identifier(self.episode_text.get()),
+                slices=parse_manifest_ids(self.slices_text.get("1.0", tk.END)),
+            )
+            if not episode_spec.episode_id:
+                messagebox.showerror("Episode Flow", "Episode id is required.", parent=self)
+                return
+            if not episode_spec.slices:
+                messagebox.showerror("Episode Flow", "Episode must contain at least one slice.", parent=self)
+                return
+            self.episode_spec = episode_spec
+            self.destroy()
+
     class PackEditorDialog(tk.Toplevel):
         def __init__(self, parent: tk.Tk, project_root: Path, external_root: Path, option: PackOption | None) -> None:
             super().__init__(parent)
@@ -2429,6 +3088,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Button(source_toolbar, text="Add Library Source", command=lambda: self.add_source("sprite_library")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Add Slice Source", command=lambda: self.add_source("sprite_slice")).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Add Text Source", command=lambda: self.add_source("text_asset")).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(source_toolbar, text="Edit Sheets", command=self.edit_sheets).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Edit Source", command=self.edit_source).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(source_toolbar, text="Remove Source", command=self.remove_source).pack(side=tk.LEFT)
 
@@ -2531,6 +3191,34 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             if dialog.source:
                 self.sources[index] = dialog.source
                 self._refresh_sources()
+
+        def edit_sheets(self) -> None:
+            paths = collect_pack_sprite_sheet_editor_paths(self.project_root, self.sources)
+            if not paths and self.option:
+                paths = collect_source_asset_sprite_sheet_editor_paths(
+                    self.project_root,
+                    self.option.source_assets,
+                )
+
+            if not paths:
+                messagebox.showerror(
+                    "Edit Sheets",
+                    "Pack has no existing sprite sheet library source.",
+                    parent=self,
+                )
+                return
+
+            try:
+                launch_sprite_sheet_editor(
+                    self.project_root,
+                    wait=False,
+                    initial_paths=paths,
+                )
+            except (OSError, RuntimeError) as ex:
+                messagebox.showerror("Edit Sheets", str(ex), parent=self)
+                return
+
+            self.status_text.set(f"Opened {len(paths)} sheet library file(s)")
 
         def preview_source(self) -> None:
             index = self._selected_source_index()

@@ -242,7 +242,7 @@ public static partial class SpriteIndexBuilder {
     riskCandidates.Sort((a, b) => b.sliceCount.CompareTo(a.sliceCount));
     var sb = new StringBuilder();
     sb.Append("[SpriteIndexBuilder] [").Append(contextLabel)
-      .Append("] WARNING: Estimated sprite slice count exceeds budget.")
+      .Append("] ERROR: Estimated sprite slice count exceeds budget.")
       .Append(" estimated=").Append(totalEstimatedSlices)
       .Append(" budget=").Append(BuilderConfig.MaxEstimatedSpriteSlicesForPackedBuild);
 
@@ -251,8 +251,8 @@ public static partial class SpriteIndexBuilder {
       sb.Append("\n  ").Append(riskCandidates[i].assetPath).Append(" slices~").Append(riskCandidates[i].sliceCount);
     }
 
-    Debug.LogWarning(sb.ToString());
-    return true; // warn but don't block
+    Debug.LogError(sb.ToString());
+    return false;
   }
 
   static int EstimateSpriteSliceCount(string assetPath) {

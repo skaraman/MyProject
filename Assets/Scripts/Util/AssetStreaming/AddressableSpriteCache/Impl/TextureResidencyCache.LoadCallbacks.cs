@@ -43,11 +43,7 @@ public static partial class TextureResidencyCache {
           var groupedExpectedSiblingSliceCount = entry.pendingAssetLoadExpectedSiblingSliceCount;
           entry.pendingAssetLoadStart = false;
 
-          entry.countedInFlight = true;
-          inFlightLoads++;
-          SpriteStreamingDiagnostics.RecordLoadStarted();
-          SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
-          SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+          MarkInFlightStarted(entry);
           RecordAssetTraceStart(entry, "grouped_generated_atlas", groupedResourceLocationCount, groupedExpectedSiblingSliceCount);
 
           entry.groupedAtlasTextureHandle.Completed += _ => {
@@ -93,11 +89,7 @@ public static partial class TextureResidencyCache {
           var metadataExpectedSiblingSliceCount = entry.pendingAssetLoadExpectedSiblingSliceCount;
           entry.pendingAssetLoadStart = false;
 
-          entry.countedInFlight = true;
-          inFlightLoads++;
-          SpriteStreamingDiagnostics.RecordLoadStarted();
-          SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
-          SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+          MarkInFlightStarted(entry);
           RecordAssetTraceStart(entry, "metadata_synthesized_atlas", metadataResourceLocationCount, metadataExpectedSiblingSliceCount);
 
           entry.metadataAtlasTextureHandle.Completed += _ => {
@@ -151,26 +143,28 @@ public static partial class TextureResidencyCache {
             out var directKeyCount,
             out var directSiblingSliceCount
           )) {
-            entry.handle = Addressables.LoadAssetsAsync<Sprite>(
+            entry.locationHandle = Addressables.LoadResourceLocationsAsync(
               directLoadKeys,
-              null,
               Addressables.MergeMode.Union,
-              false
+              typeof(Sprite)
             );
             directLoadTraceMode = "atlas_slice_keys";
             directResourceLocationCount = Math.Max(directKeyCount, 1);
             directExpectedSiblingSliceCount = Math.Max(directSiblingSliceCount, 0);
             MaybeLogSlowLoadStart(
-              phase: "load_atlas_slice_keys",
+              phase: "resolve_atlas_slice_keys",
               address: entry.address,
               startedAt: directLoadStartedAt,
               locationCount: directResourceLocationCount
             );
           }
           else {
-            entry.handle = Addressables.LoadAssetsAsync<Sprite>(directLoadAddress, null, false);
+            entry.locationHandle = Addressables.LoadResourceLocationsAsync(
+              directLoadAddress,
+              typeof(Sprite)
+            );
             MaybeLogSlowLoadStart(
-              phase: "load_subassets",
+              phase: "resolve_subasset_locations",
               address: directLoadAddress,
               startedAt: directLoadStartedAt,
               locationCount: 1
@@ -178,48 +172,16 @@ public static partial class TextureResidencyCache {
           }
           ClearPendingAssetLoadStart(entry);
 
-          entry.countedInFlight = true;
-          inFlightLoads++;
-          SpriteStreamingDiagnostics.RecordLoadStarted();
-          SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
-          SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+          MarkInFlightStarted(entry);
           RecordAssetTraceStart(entry, directLoadTraceMode, directResourceLocationCount, directExpectedSiblingSliceCount);
 
-          entry.handle.Completed += assetOp => {
-            var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
-            var callbackStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
-            MarkInFlightComplete(entry);
-
-            if (entry.queuedAtTicks > 0) {
-              var latencyMs = (float)((DateTime.UtcNow.Ticks - entry.queuedAtTicks) * (1000.0 / TimeSpan.TicksPerSecond));
-              RecordLoadCompleteLatency(latencyMs);
-              entry.queuedAtTicks = 0;
-            }
-
-            var loadSucceeded = HasAnyLoadedSprite(assetOp.Result);
-            SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
-            ClearActiveAssetLoadLocations(entry);
-
-            if (entry.isEvicted) {
-              ClearPendingLoadFinalize(entry);
-              entry.loadStarted = false;
-              pendingQueueStateRecord = true;
-              if (diagnosticsEnabled) {
-                var evictedMs = ComputeElapsedMs(callbackStartedAt);
-                RecordLoadCompletionFrameCost(evictedMs, 0f, 0f, entry.address);
-              }
-              return;
-            }
-
-            EnqueuePendingLoadFinalize(entry, loadSucceeded, directResourceLocationCount, directExpectedSiblingSliceCount);
-            pendingQueueStateRecord = true;
-
-            if (diagnosticsEnabled) {
-              var callbackMs = ComputeElapsedMs(callbackStartedAt);
-              if (callbackMs > 0.1f) {
-                RecordLoadCompletionFrameCost(callbackMs, 0f, 0f, entry.address + " (callback_enqueue)");
-              }
-            }
+          entry.locationHandle.Completed += locationOp => {
+            CompleteDirectSpriteLocationResolve(
+              entry,
+              locationOp,
+              directResourceLocationCount,
+              directExpectedSiblingSliceCount
+            );
           };
 
           processed++;
@@ -253,11 +215,7 @@ public static partial class TextureResidencyCache {
         ClearPendingAssetLoadStart(entry);
         ReleaseLocationHandle(entry);
 
-        entry.countedInFlight = true;
-        inFlightLoads++;
-        SpriteStreamingDiagnostics.RecordLoadStarted();
-        SpriteStreamingDiagnostics.RecordAtlasLoadStarted();
-        SpriteStreamingDiagnostics.RecordQueueState(queuedEntryCount, inFlightLoads);
+        MarkInFlightStarted(entry);
         RecordAssetTraceStart(entry, "resolved_locations", resourceLocationCount, expectedSiblingSliceCount);
 
         entry.handle.Completed += assetOp => {
@@ -304,6 +262,73 @@ public static partial class TextureResidencyCache {
         ClearPendingAssetLoadStart(entry);
         FinalizeLoadFailure(entry, diagnosticsEnabled: ShouldLogLoadCompletionDiagnostics(), completionStartedAt: Time.realtimeSinceStartup);
         ReleaseLocationHandle(entry);
+      }
+    }
+  }
+
+  static void CompleteDirectSpriteLocationResolve(
+    CacheEntry entry,
+    AsyncOperationHandle<IList<IResourceLocation>> locationOp,
+    int resourceLocationCount,
+    int expectedSiblingSliceCount
+  ) {
+    if (entry == null) return;
+
+    var diagnosticsEnabled = ShouldLogLoadCompletionDiagnostics();
+    var callbackStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
+
+    if (entry.isEvicted) {
+      ReleaseLocationHandle(entry);
+      MarkInFlightComplete(entry);
+      ClearPendingLoadFinalize(entry);
+      entry.loadStarted = false;
+      SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
+      pendingQueueStateRecord = true;
+      if (diagnosticsEnabled) {
+        var evictedMs = ComputeElapsedMs(callbackStartedAt);
+        RecordLoadCompletionFrameCost(evictedMs, 0f, 0f, entry.address);
+      }
+      return;
+    }
+
+    var locations = locationOp.Result;
+    var hasLocations =
+      locationOp.Status == AsyncOperationStatus.Succeeded &&
+      locations != null &&
+      locations.Count > 0;
+
+    if (!hasLocations) {
+      FinalizeLoadFailure(
+        entry,
+        diagnosticsEnabled,
+        callbackStartedAt
+      );
+      ReleaseLocationHandle(entry);
+      return;
+    }
+
+    var resolvedLocationCount = Math.Max(
+      resourceLocationCount,
+      locations.Count
+    );
+
+    EnqueuePendingAssetLoadStart(
+      entry,
+      locations,
+      resolvedLocationCount,
+      expectedSiblingSliceCount
+    );
+    pendingQueueStateRecord = true;
+
+    if (diagnosticsEnabled) {
+      var callbackMs = ComputeElapsedMs(callbackStartedAt);
+      if (callbackMs > 0.1f) {
+        RecordLoadCompletionFrameCost(
+          callbackMs,
+          0f,
+          0f,
+          entry.address + " (location_resolve_enqueue)"
+        );
       }
     }
   }

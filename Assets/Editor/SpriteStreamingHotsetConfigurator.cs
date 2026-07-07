@@ -330,7 +330,7 @@ public static class SpriteStreamingHotsetConfigurator {
       var physicalRoot = ContentPackPipeline.GetPhysicalPath(sourceRoot);
       if (string.IsNullOrWhiteSpace(physicalRoot) || !Directory.Exists(physicalRoot)) continue;
 
-      var files = Directory.GetFiles(physicalRoot, "*.spriteLib", SearchOption.AllDirectories);
+      var files = FindSpriteLibraryFiles(physicalRoot);
       Array.Sort(files, StringComparer.Ordinal);
 
       for (var i = 0; i < files.Length; i++) {
@@ -365,11 +365,29 @@ public static class SpriteStreamingHotsetConfigurator {
     return byNamepart.ContainsKey(colorCandidate);
   }
 
+  static string[] FindSpriteLibraryFiles(string physicalRoot) {
+    var customFiles = Directory.GetFiles(
+      physicalRoot,
+      "*" + SpriteStreamingConfig.CustomSpriteLibraryExtension,
+      SearchOption.AllDirectories
+    );
+    var legacyFiles = Directory.GetFiles(
+      physicalRoot,
+      "*" + SpriteStreamingConfig.LegacySpriteLibraryExtension,
+      SearchOption.AllDirectories
+    );
+    return customFiles.Concat(legacyFiles).ToArray();
+  }
+
   static string RemoveExtension(string value) {
     var normalized = NormalizePath(value);
-    return normalized.EndsWith(".spriteLib", StringComparison.OrdinalIgnoreCase)
-      ? normalized.Substring(0, normalized.Length - ".spriteLib".Length)
-      : normalized;
+    if (normalized.EndsWith(SpriteStreamingConfig.CustomSpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+      return normalized.Substring(0, normalized.Length - SpriteStreamingConfig.CustomSpriteLibraryExtension.Length);
+    }
+    if (normalized.EndsWith(SpriteStreamingConfig.LegacySpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
+      return normalized.Substring(0, normalized.Length - SpriteStreamingConfig.LegacySpriteLibraryExtension.Length);
+    }
+    return normalized;
   }
 
   static Dictionary<string, string> LoadManifestShardMap() {
