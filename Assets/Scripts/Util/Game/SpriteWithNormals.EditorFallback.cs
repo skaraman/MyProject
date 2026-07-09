@@ -11,7 +11,8 @@ public partial class SpriteWithNormals {
     if (loadedSprite == null) return null;
     if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out _, out var expectedSpriteName)) return loadedSprite;
     if (string.Equals(loadedSprite.name, expectedSpriteName, StringComparison.Ordinal)) return loadedSprite;
-    if (SpriteSliceAddressUtility.HasEquivalentNumericLabel(loadedSprite.name, expectedSpriteName)) return loadedSprite;
+    if (SpriteSliceAddressUtility.CanUseNumericLabelFallback(expectedSpriteName) &&
+        SpriteSliceAddressUtility.HasEquivalentNumericLabel(loadedSprite.name, expectedSpriteName)) return loadedSprite;
 
 #if UNITY_EDITOR
     if (!ShouldAvoidBlockingEditorSpriteFallback() &&

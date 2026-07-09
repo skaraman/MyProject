@@ -67,6 +67,7 @@ public partial class AnimationController {
   private bool hadEnabledSpriteTargetsLastTick;
   private string activeSpriteCategory;
   private int lastAppliedSpriteFrame = int.MinValue;
+  private string lastAppliedSpriteCategory;
   private bool activePunchTrace;
   private string activePunchTraceAnimation;
   private string activePunchTraceCategory;

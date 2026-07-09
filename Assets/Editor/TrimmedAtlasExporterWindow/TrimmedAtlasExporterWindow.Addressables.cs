@@ -30,6 +30,7 @@ public sealed partial class TrimmedAtlasExporterWindow {
     var guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
     if (string.IsNullOrWhiteSpace(guid)) return;
 
+    RemoveStaleEntriesWithAddress(settings, guid, normalizedAssetPath);
     var entry = settings.FindAssetEntry(guid);
     if (entry == null || entry.parentGroup != group) {
       entry = settings.CreateOrMoveEntry(guid, group, false, false);
@@ -46,6 +47,34 @@ public sealed partial class TrimmedAtlasExporterWindow {
     EditorUtility.SetDirty(settings);
     if (saveAssets) {
       AssetDatabase.SaveAssets();
+    }
+  }
+
+  static void RemoveStaleEntriesWithAddress(
+    UnityEditor.AddressableAssets.Settings.AddressableAssetSettings settings,
+    string activeGuid,
+    string address
+  ) {
+    if (settings == null || string.IsNullOrWhiteSpace(activeGuid) || string.IsNullOrWhiteSpace(address)) return;
+
+    var staleGuids = new System.Collections.Generic.List<string>();
+    var groups = settings.groups;
+    if (groups == null) return;
+
+    for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++) {
+      var candidateGroup = groups[groupIndex];
+      if (candidateGroup == null || candidateGroup.entries == null) continue;
+
+      foreach (var candidateEntry in candidateGroup.entries) {
+        if (candidateEntry == null) continue;
+        if (string.Equals(candidateEntry.guid, activeGuid, StringComparison.OrdinalIgnoreCase)) continue;
+        if (!string.Equals(candidateEntry.address, address, StringComparison.Ordinal)) continue;
+        staleGuids.Add(candidateEntry.guid);
+      }
+    }
+
+    for (var i = 0; i < staleGuids.Count; i++) {
+      settings.RemoveAssetEntry(staleGuids[i], false);
     }
   }
 }

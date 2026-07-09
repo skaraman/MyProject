@@ -135,6 +135,7 @@ public static partial class SpriteIndexBuilder {
   sealed class CustomSheetSource {
     public string sourceType;
     public string assetPath;
+    public string label;
     public string targetFolder;
     public string libraryName;
     public string category;
@@ -477,6 +478,9 @@ public static partial class SpriteIndexBuilder {
 
       AssetDatabase.SaveAssets();
       AssetDatabase.Refresh();
+      if (!ValidateBuilderManagedAddressableNamingContract(settings, contextLabel, logResult)) {
+        return false;
+      }
       LogAddressablesBuildMemorySnapshot(contextLabel, "after_refresh");
 
       if (cleanCachesBeforeBuild) {
@@ -485,24 +489,44 @@ public static partial class SpriteIndexBuilder {
         LogAddressablesBuildMemorySnapshot(contextLabel, "after_clean_caches");
       }
 
-      LogAddressablesBuildPlan(settings, contextLabel);
-      if (!ValidateAddressablesPackedBuildSpriteSliceRisk(settings, contextLabel)) {
-        return false;
-      }
-      ReleaseEditorBuildPrepMemory(contextLabel);
-      if (useChunkedWarmup && !WarmManagedTextureGroupBuildCache(settings, contextLabel, logResult)) {
-        return false;
-      }
+      var originalIncludeStates = CaptureIncludeInBuildStates(settings);
+      try {
+        var optionalPackCatalogs = ContentPackPipeline.GetActiveOptionalRuntimePackCatalogBuilds();
+        if (!BuildOptionalContentPackCatalogs(
+              settings,
+              originalIncludeStates,
+              optionalPackCatalogs,
+              contextLabel,
+              logResult)) {
+          return false;
+        }
 
-      ReleaseEditorBuildPrepMemory(contextLabel + " Final");
-      if (!RunAddressablesPlayerBuildPass(
-            contextLabel,
-            passLabel: "final",
-            progressText: "Building Addressables content...",
-            progress: 0.85f,
-            logResult: logResult,
-            out var result)) {
-        return false;
+        ApplyHybridBaseIncludeInBuildSelection(settings, originalIncludeStates, optionalPackCatalogs);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        LogAddressablesBuildPlan(settings, contextLabel);
+        if (!ValidateAddressablesPackedBuildSpriteSliceRisk(settings, contextLabel)) {
+          return false;
+        }
+        ReleaseEditorBuildPrepMemory(contextLabel);
+        if (useChunkedWarmup && !WarmManagedTextureGroupBuildCache(settings, contextLabel, logResult)) {
+          return false;
+        }
+
+        ReleaseEditorBuildPrepMemory(contextLabel + " Final");
+        if (!RunAddressablesPlayerBuildPass(
+              contextLabel,
+              passLabel: "final",
+              progressText: "Building base Addressables content...",
+              progress: 0.85f,
+              logResult: logResult,
+              out var result)) {
+          return false;
+        }
+      }
+      finally {
+        RestoreIncludeInBuildStates(settings, originalIncludeStates);
+        AssetDatabase.SaveAssets();
       }
 
       return true;

@@ -508,8 +508,13 @@ public partial class SingleSceneManager {
           !hasBlockingProgress &&
           queueFullyDrained &&
           !locationActivationPending;
-        if ((allowStreamingIdleTimeoutBypass || forcedByBlockingReady || forcedByLegacyDrain) && IsCriticalScopeReadyForReveal()) {
-          if (warmAnimationsBeforeUnlock && !warmupDone) {
+        var softTimeoutRelease =
+          (allowStreamingIdleTimeoutBypass || forcedByBlockingReady || forcedByLegacyDrain) &&
+          IsCriticalScopeReadyForReveal();
+        var hardTimeoutSeconds = Mathf.Max(loadingStallEmergencyUnlockSeconds, timeoutSeconds);
+        var hardTimeoutRelease = elapsed >= hardTimeoutSeconds;
+        if (softTimeoutRelease || hardTimeoutRelease) {
+          if (!hardTimeoutRelease && warmAnimationsBeforeUnlock && !warmupDone) {
             warmupDone = true;
             SetLoadingStatusOverride("Warming animations");
             if (TryGetRemainingPreUnlockBlockingBudget(preUnlockBlockingDeadline, out _)) {
@@ -528,10 +533,10 @@ public partial class SingleSceneManager {
             continue;
           }
           SetLoadingStatusOverride("Finalizing reveal");
-          CommitPreUnlockResidentPins("timeout_release");
+          CommitPreUnlockResidentPins(hardTimeoutRelease ? "hard_timeout_release" : "timeout_release");
           LogGameplayLoadTiming(
             "pre_unlock",
-            "timeout_release",
+            hardTimeoutRelease ? "hard_timeout_release" : "timeout_release",
             preUnlockStartedAt,
             "queued=" + queue.queuedCount +
             " in_flight=" + queue.inFlightCount +
@@ -541,6 +546,8 @@ public partial class SingleSceneManager {
             " blocking_ready=" + (blockingReady ? 1 : 0) +
             " stable_frames=" + stableFrames +
             " warmup_done=" + (warmupDone ? 1 : 0) +
+            " location_activation_pending=" + (locationActivationPending ? 1 : 0) +
+            " hard_timeout=" + (hardTimeoutRelease ? 1 : 0) +
             BuildPreUnlockThresholdFields()
           );
           if (ShouldLogLoadFlowWarnings()) {
@@ -580,7 +587,7 @@ public partial class SingleSceneManager {
 
   bool IsCriticalScopeReadyForReveal() {
     return IsPlayerFirstFrameReady() &&
-           !LocationManager.HasPendingBlockingActivationWork &&
+           !LocationManager.HasPendingActivationWork &&
            IsCriticalEnemiesReady() &&
            IsGameplayUiReadyForLoadingProgress() &&
            IsGameplayDialogReadyForLoadingProgress();
@@ -603,6 +610,9 @@ public partial class SingleSceneManager {
     if (!resolverIdle || !playerReady || !uiReady || !dialogReady || locationActivationPending || !IsCriticalEnemiesReady()) {
       return false;
     }
+    if (LocationManager.HasPendingDeferredActivationWork) {
+      return false;
+    }
     return IsQueueWithinBlockingReadyThresholds(queue, deferredPending);
   }
 
@@ -617,6 +627,9 @@ public partial class SingleSceneManager {
   ) {
     if (locationActivationPending) {
       return "Activating gameplay";
+    }
+    if (LocationManager.HasPendingDeferredActivationWork) {
+      return "Finishing environment";
     }
     if (!playerReady) {
       return "Preparing player";
@@ -803,10 +816,15 @@ public partial class SingleSceneManager {
       }
 
       var elapsed = Time.realtimeSinceStartup - startedAt;
-      if (timeoutSeconds > 0f && elapsed >= timeoutSeconds && IsCriticalScopeReadyForReveal()) {
+      var softTimeoutRelease = timeoutSeconds > 0f &&
+                               elapsed >= timeoutSeconds &&
+                               IsCriticalScopeReadyForReveal();
+      var hardTimeoutSeconds = Mathf.Max(timeoutSeconds, loadingStallEmergencyUnlockSeconds);
+      var hardTimeoutRelease = elapsed >= hardTimeoutSeconds;
+      if (softTimeoutRelease || hardTimeoutRelease) {
         LogGameplayLoadTiming(
           "reveal_settle",
-          "timeout",
+          hardTimeoutRelease ? "hard_timeout" : "timeout",
           startedAt,
           "status=" + ResolveLoadFlowValue(statusDetail) +
           " queued=" + queue.queuedCount +
@@ -817,11 +835,12 @@ public partial class SingleSceneManager {
           " ui_ready=" + (uiReady ? 1 : 0) +
           " dialog_ready=" + (dialogReady ? 1 : 0) +
           " location_activation_pending=" + (locationActivationPending ? 1 : 0) +
-          " location_deferred_pending=" + (locationDeferredPending ? 1 : 0)
+          " location_deferred_pending=" + (locationDeferredPending ? 1 : 0) +
+          " hard_timeout=" + (hardTimeoutRelease ? 1 : 0)
         );
         if (ShouldLogLoadFlowWarnings()) {
           Debug.LogWarning(
-            "[SingleSceneManager][RevealSettle] timeout" +
+            "[SingleSceneManager][RevealSettle] " + (hardTimeoutRelease ? "hard_timeout" : "timeout") +
             " elapsed_s=" + elapsed.ToString("0.000") +
             " queued=" + queue.queuedCount +
             " in_flight=" + queue.inFlightCount +

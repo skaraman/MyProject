@@ -160,6 +160,7 @@ public partial class SingleSceneManager : MonoBehaviour {
   const float LoadingStageStallLogIntervalSeconds = 2.0f;
   const float LoadingHeartbeatLogIntervalSeconds = 1.0f;
   const float LoadingHeartbeatAcceptableGapSeconds = 2.0f;
+  const float GameplayWarmGatePrereqTimeoutSeconds = 4.0f;
   const float GameplayWarmGateEnemyArchetypeWaitSeconds = 0.5f;
   const float GameplayWarmGatePrereqLogIntervalSeconds = 1.0f;
   const int RevealOpaqueSettleFrames = 2;

@@ -39,30 +39,49 @@ public static partial class SpriteRuntimeResolver {
     if (manifestAsset != null && !string.IsNullOrWhiteSpace(manifestAsset.text)) {
       var manifestRows = ParseManifestRows(manifestAsset.text);
       if (manifestRows.Count > 0) {
-        var normalizedNamepart = NormalizeNamePart(key.namepart);
-        if (TryGetManifestEntryForNamepart(manifestRows, normalizedNamepart, out var shardEntry, logContext) &&
-            !string.IsNullOrWhiteSpace(shardEntry.assetPath)) {
-          var shardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(shardEntry.assetPath);
-          if (shardAsset != null && !string.IsNullOrWhiteSpace(shardAsset.text)) {
-            var parsedShard = ParseShardRows(shardAsset.text);
-            var rows = parsedShard.rows;
-            if (rows != null && rows.Count > 0) {
-              var exactKey = BuildRowKey(key.labelPrefix, key.category, key.frame);
-              if (rows.TryGetValue(exactKey, out pair)) return true;
+        if (TryResolveEditorFromManifestRows(manifestRows, key, out pair, logContext)) {
+          return true;
+        }
 
-              if (key.frame != 0) {
-                var frameZeroKey = BuildRowKey(key.labelPrefix, key.category, 0);
-                if (rows.TryGetValue(frameZeroKey, out pair)) return true;
-              }
-
-              if (TryResolveNumericFormFallback(rows, key, out pair)) return true;
-            }
-          }
+        if (TryBuildLegacyFormUiKey(key, out var formUiAliasKey) &&
+            TryResolveEditorFromManifestRows(manifestRows, formUiAliasKey, out pair, logContext)) {
+          return true;
         }
       }
     }
 
     return false;
+  }
+
+  static bool TryResolveEditorFromManifestRows(
+    Dictionary<string, ManifestEntry> manifestRows,
+    SpriteLookupKey key,
+    out SpriteAddressPair pair,
+    Object logContext = null
+  ) {
+    pair = default;
+    if (manifestRows == null || manifestRows.Count <= 0) return false;
+
+    var normalizedNamepart = NormalizeNamePart(key.namepart);
+    if (!TryGetManifestEntryForNamepart(manifestRows, normalizedNamepart, out var shardEntry, logContext)) return false;
+    if (string.IsNullOrWhiteSpace(shardEntry.assetPath)) return false;
+
+    var shardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(shardEntry.assetPath);
+    if (shardAsset == null || string.IsNullOrWhiteSpace(shardAsset.text)) return false;
+
+    var parsedShard = ParseShardRows(shardAsset.text);
+    var rows = parsedShard.rows;
+    if (rows == null || rows.Count <= 0) return false;
+
+    var exactKey = BuildRowKey(key.labelPrefix, key.category, key.frame);
+    if (rows.TryGetValue(exactKey, out pair)) return true;
+
+    if (key.frame != 0) {
+      var frameZeroKey = BuildRowKey(key.labelPrefix, key.category, 0);
+      if (rows.TryGetValue(frameZeroKey, out pair)) return true;
+    }
+
+    return TryResolveNumericFormFallback(rows, key, out pair);
   }
 
   static TextAsset LoadEditorManifestAsset() {
@@ -112,6 +131,7 @@ public static partial class SpriteRuntimeResolver {
     sprite = null;
     if (assets == null || assets.Length == 0) return false;
 
+    var allowNumericFallback = SpriteSliceAddressUtility.CanUseNumericLabelFallback(spriteName);
     Sprite numericMatch = null;
     for (var i = 0; i < assets.Length; i++) {
       var candidate = assets[i] as Sprite;
@@ -121,6 +141,7 @@ public static partial class SpriteRuntimeResolver {
         return true;
       }
 
+      if (!allowNumericFallback) continue;
       if (!SpriteSliceAddressUtility.HasEquivalentNumericLabel(candidate.name, spriteName)) continue;
       if (numericMatch != null && numericMatch != candidate) {
         numericMatch = null;

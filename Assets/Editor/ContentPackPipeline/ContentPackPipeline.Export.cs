@@ -43,6 +43,7 @@ public static partial class ContentPackPipeline {
       LogErrors("export_assignment", errors);
       return false;
     }
+    ApplyAssignedRuntimeAddressMetadata(packDefinitions, assignedAssets);
 
     try {
       for (var i = 0; i < packDefinitions.Count; i++) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -16,9 +17,11 @@ from typing import Any, Iterable
 
 PACKAGE_NAME = "com.skaraman.myprojectcontent"
 DEFAULT_EXTERNAL_ROOT_NAME = "MyProjectContent"
+INTERFACE_INFO_CSV_NAME = "ContentPackIterationUI_interface_info.csv"
 CUSTOM_LIBRARY_EXTENSION = ".spriteSheetLib"
 LEGACY_LIBRARY_EXTENSION = ".spriteLib"
 UNITY_LOCK_EXIT_CODE = 3
+RUNTIME_OUTPUT_VERIFY_EXIT_CODE = 4
 LAST_LIBRARY_SOURCE_DIR: Path | None = None
 IGNORED_PACK_FOLDER_NAMES = {
     ".git",
@@ -353,7 +356,14 @@ def build_pack_options(project_root: Path, external_root: Path) -> list[PackOpti
 
     manifest_by_pack = read_external_pack_manifests(external_root)
     referenced_pack_ids = read_content_manifest_pack_ids(project_root)
-    all_ids = sorted(set(referenced_pack_ids) | set(manifest_by_pack), key=pack_sort_key)
+    manifest_flow_ids = {slice_spec.slice_id.lower() for slice_spec in slices}
+    manifest_flow_ids.update(episode.episode_id.lower() for episode in episodes)
+    selected_concrete_pack_ids = [
+        pack_id
+        for pack_id in selected_pack_ids
+        if pack_id.lower() not in manifest_flow_ids
+    ]
+    all_ids = sorted(set(selected_concrete_pack_ids) | set(referenced_pack_ids) | set(manifest_by_pack), key=pack_sort_key)
     active_ids = resolve_active_manifest_ids(selected_pack_ids, all_ids, slices, episodes)
 
     options = [
@@ -363,6 +373,48 @@ def build_pack_options(project_root: Path, external_root: Path) -> list[PackOpti
     options.extend(build_manifest_flow_options(project_root, slices, episodes, selected_pack_ids))
 
     return [option for option in options if option is not None]
+
+
+def export_interface_info_csv(project_root: Path, external_root: Path) -> Path:
+    output_path = project_root / "Tools" / INTERFACE_INFO_CSV_NAME
+    options = build_pack_options(project_root, external_root)
+    field_names = [
+        "pack_type",
+        "pack_id",
+        "status",
+        "source_assets",
+        "target_root",
+        "unity_asset_root",
+        "source_revision",
+        "authoring_sources",
+        "details",
+    ]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=field_names)
+        writer.writeheader()
+        for option in options:
+            source_assets = "\n".join(option.source_assets)
+            authoring_sources: list[str] = []
+            for source in option.authoring_sources:
+                authoring_sources.append(
+                    f"{source.source_type}: {source.source_label()} -> {source.target_folder}"
+                )
+
+            writer.writerow({
+                "pack_type": option.pack_type,
+                "pack_id": option.pack_id,
+                "status": option.status,
+                "source_assets": source_assets,
+                "target_root": option.target_root,
+                "unity_asset_root": option.unity_asset_root,
+                "source_revision": option.source_revision,
+                "authoring_sources": "\n".join(authoring_sources),
+                "details": "\n".join(option.details),
+            })
+
+    return output_path
 
 
 def build_manifest_flow_options(
@@ -543,7 +595,7 @@ def write_authoring_manifest(
     manifest["packId"] = pack_id
     manifest["kind"] = kind
     manifest["type"] = kind
-    manifest.pop("dependencies", None)
+    manifest.setdefault("dependencies", [])
     if sources:
         manifest["ownedRoots"] = build_owned_roots(sources)
     else:
@@ -601,6 +653,8 @@ def build_details(
     target_root = external_pack_root(external_root, kind, pack_id)
     details.append(f"External pack exists: {target_root.exists()}")
     details.append(f"Unity package asset root: {unity_pack_root(kind, pack_id)}")
+    group_name = "SpriteTextures" if kind == "core" else f"SpriteTextures__{pack_id}"
+    details.append(f"Addressable group: {group_name}")
 
     if manifest:
         details.append("Manifest found: ContentPackManifest.json")
@@ -1120,6 +1174,60 @@ def resolve_active_manifest_ids(
     return active
 
 
+def remove_selected_mapping_ids(
+    current_ids: Iterable[str],
+    selected_options: Iterable[PackOption],
+    all_pack_ids: Iterable[str],
+    slices: list[ManifestSliceSpec],
+    episodes: list[ManifestEpisodeSpec],
+) -> tuple[list[str], list[str]]:
+    direct_ids_to_remove: set[str] = set()
+    concrete_ids_to_remove: set[str] = set()
+
+    for option in selected_options:
+        normalized_id = sanitize_identifier(option.pack_id)
+        if not normalized_id:
+            continue
+
+        direct_ids_to_remove.add(normalized_id.lower())
+
+        if is_manifest_flow_pack_type(option.pack_type):
+            continue
+
+        concrete_ids_to_remove.add(normalized_id.lower())
+
+    remaining_ids: list[str] = []
+    removed_ids: list[str] = []
+
+    for current_id in current_ids:
+        normalized_id = sanitize_identifier(current_id)
+        should_remove = normalized_id.lower() in direct_ids_to_remove
+
+        if not should_remove and concrete_ids_to_remove:
+            resolved_ids = resolve_active_manifest_ids(
+                [normalized_id],
+                all_pack_ids,
+                slices,
+                episodes,
+            )
+            resolved_keys: set[str] = set()
+            for resolved_id in resolved_ids:
+                resolved_keys.add(resolved_id.lower())
+
+            for concrete_id in concrete_ids_to_remove:
+                if concrete_id not in resolved_keys:
+                    continue
+                should_remove = True
+                break
+
+        if should_remove:
+            add_unique(removed_ids, current_id)
+        else:
+            add_unique(remaining_ids, current_id)
+
+    return remaining_ids, removed_ids
+
+
 def infer_kind(pack_id: str, manifest: dict[str, Any] | None = None) -> str:
     manifest_kind = normalize_pack_kind(str(manifest.get("type") or manifest.get("kind") or "")) if manifest else ""
     if manifest_kind:
@@ -1313,6 +1421,7 @@ def write_content_pack_selection(project_root: Path, external_root: Path, active
             encoding="utf-8",
         )
 
+    export_interface_info_csv(project_root, external_root)
     return selection_path
 
 
@@ -1348,6 +1457,18 @@ def run_unity_smart_build(project_root: Path, unity_exe_override: str = "") -> i
     print("running=" + " ".join(command))
     completed = subprocess.run(command, cwd=project_root)
     print(f"unity_exit_code={completed.returncode} log={log_path}")
+    if completed.returncode != 0:
+        return completed.returncode
+
+    external_root = resolve_external_root(project_root)
+    runtime_errors = verify_runtime_pack_outputs(project_root, external_root)
+    if runtime_errors:
+        print(f"runtime_output_errors={len(runtime_errors)}", file=sys.stderr)
+        for error in runtime_errors:
+            print(f"runtime_output_error={error}", file=sys.stderr)
+        return RUNTIME_OUTPUT_VERIFY_EXIT_CODE
+
+    print("runtime_output_verify=ok")
     return completed.returncode
 
 
@@ -1393,6 +1514,86 @@ def read_json(path: Path) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}
+
+
+def verify_runtime_pack_outputs(project_root: Path, external_root: Path) -> list[str]:
+    errors: list[str] = []
+    options = build_pack_options(project_root, external_root)
+    for option in options:
+        if option.status != MAPPED_STATUS:
+            continue
+        if is_manifest_flow_pack_type(option.pack_type):
+            continue
+
+        pack_id = sanitize_identifier(option.pack_id)
+        kind = PACK_LABEL_TO_KIND.get(option.pack_type, infer_kind(pack_id))
+        if not pack_id or kind == "core":
+            continue
+
+        target_root = external_pack_root(external_root, kind, pack_id)
+        manifest_path = target_root / "ContentPackManifest.json"
+        manifest = read_json(manifest_path)
+        if not manifest:
+            errors.append(f"{pack_id}: missing readable runtime manifest '{manifest_path}'")
+            continue
+
+        if not pack_requires_runtime_catalog(option, manifest):
+            continue
+
+        catalog_path = normalize_slashes(str(manifest.get("catalogPath") or ""))
+        bundle_root = normalize_slashes(str(manifest.get("bundleRoot") or ""))
+        exported_addresses = manifest.get("exportedAddresses")
+
+        if not catalog_path:
+            errors.append(f"{pack_id}: missing catalogPath after Smart build")
+        elif not (target_root / catalog_path).is_file():
+            errors.append(f"{pack_id}: missing catalog file '{target_root / catalog_path}'")
+
+        if not bundle_root:
+            errors.append(f"{pack_id}: missing bundleRoot after Smart build")
+        elif not (target_root / bundle_root).is_dir():
+            errors.append(f"{pack_id}: missing bundle root '{target_root / bundle_root}'")
+
+        if not isinstance(exported_addresses, list) or not exported_addresses:
+            errors.append(f"{pack_id}: missing exportedAddresses after Smart build")
+
+    return errors
+
+
+def pack_requires_runtime_catalog(option: PackOption, manifest: dict[str, Any]) -> bool:
+    for source in option.authoring_sources:
+        if source.source_type in {"sprite_sheet", "sprite_library", "sprite_slice"}:
+            return True
+
+    raw_sources = manifest.get("authoringSources")
+    if isinstance(raw_sources, list):
+        for raw_source in raw_sources:
+            if not isinstance(raw_source, dict):
+                continue
+            source_type = normalize_source_type(str(raw_source.get("sourceType") or raw_source.get("type") or ""))
+            if source_type in {"sprite_sheet", "sprite_library", "sprite_slice"}:
+                return True
+
+    raw_roots = manifest.get("ownedRoots")
+    if isinstance(raw_roots, list):
+        for raw_root in raw_roots:
+            if path_looks_like_sprite_payload(str(raw_root)):
+                return True
+
+    for source_asset in option.source_assets:
+        if path_looks_like_sprite_payload(source_asset):
+            return True
+
+    return False
+
+
+def path_looks_like_sprite_payload(value: str) -> bool:
+    normalized = normalize_slashes(value).lower()
+    return (
+        normalized.startswith("assets/sprites/")
+        or normalized.startswith("sprites/")
+        or "/sprites/" in normalized
+    )
 
 
 def read_text(path: Path) -> str:
@@ -1832,6 +2033,8 @@ def verify_pack_option(project_root: Path, external_root: Path, option: PackOpti
     if not errors:
         info.append(f"Pack will export to: {target_root}")
         info.append(f"Unity package root: {unity_pack_root(kind, pack_id)}")
+        group_name = "SpriteTextures" if kind == "core" else f"SpriteTextures__{pack_id}"
+        info.append(f"Addressable group: {group_name}")
         info.append(f"Authoring sources: {len(option.authoring_sources)}")
     return not errors, errors or info
 
@@ -2296,23 +2499,34 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             options = self.selected_options()
             if not options:
                 return
-            selected = {option.pack_id.lower() for option in options}
+
+            all_pack_ids: list[str] = []
+            for option in self.options:
+                if is_manifest_flow_pack_type(option.pack_type):
+                    continue
+                add_unique(all_pack_ids, option.pack_id)
+
+            slices = read_content_manifest_slices(project_root)
+            episodes = read_content_manifest_episodes(project_root)
             current_pack_ids = read_active_pack_ids(project_root)
-            pack_ids = [
-                pack_id
-                for pack_id in current_pack_ids
-                if pack_id.lower() not in selected
-            ]
+            pack_ids, removed_ids = remove_selected_mapping_ids(
+                current_pack_ids,
+                options,
+                all_pack_ids,
+                slices,
+                episodes,
+            )
+
             if len(pack_ids) == len(current_pack_ids):
-                self.status_text.set("No direct mapped rows changed")
+                self.status_text.set("No mapped rows changed")
                 messagebox.showinfo(
                     "Set Not Mapped",
-                    "Selected rows are not directly mapped. If a pack is mapped through a flow, unmap the flow row.",
+                    "Selected rows are not currently mapped.",
                     parent=self,
                 )
                 return
             write_content_pack_selection(project_root, external_root, pack_ids)
-            self.status_text.set(f"Not mapped: {', '.join(option.pack_id for option in options)}")
+            self.status_text.set(f"Not mapped: {', '.join(removed_ids)}")
             self.refresh()
 
         def verify_pack(self) -> None:

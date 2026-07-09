@@ -132,6 +132,12 @@ public class LoadMenuInput : ButtonGroup {
 
   void ScrollContent(float deltaY) {
     if (Mathf.Abs(deltaY) <= Mathf.Epsilon) return;
+
+    if (scrollView != null) {
+      scrollView.ScrollBy(deltaY);
+      return;
+    }
+
     if (scrollWrap == null) return;
 
     var wrapTransform = scrollWrap.transform;
@@ -268,6 +274,11 @@ public class LoadMenuInput : ButtonGroup {
   void ScrollActiveSlotIntoView() {
     if (scrollWrap == null) return;
     if (activeIndexLoadMenu < 0 || activeIndexLoadMenu >= buttons.Count) return;
+
+    if (scrollView != null &&
+        scrollView.ScrollSlotIntoView(activeIndexLoadMenu, keyboardScrollMargin)) {
+      return;
+    }
 
     var selectedButton = buttons[activeIndexLoadMenu];
     if (selectedButton == null) return;

@@ -449,8 +449,11 @@ public class SaveData : Dictionary<string, object> {
 
 public static class SaveSlotManager {
   public const string SlotEpisodeIdKey = "episodeId";
+  public const string SlotSaveDateKey = "saveDate";
   public const string DefaultEpisodeId = "Episode01";
   const string LegacySlotEpisodeKey = "episode";
+  const string LegacySlotSaveDateKey = "date";
+  const string SlotSaveDateFormat = "yyyy-MM-dd";
 
   static int _slot = 1;
   public static int slot {
@@ -536,9 +539,19 @@ public static class SaveSlotManager {
     return ResolveDefaultEpisodeId();
   }
 
+  public static string ResolveSlotSaveDate(SaveData table) {
+    var saveDate = ReadSlotSaveDate(table);
+    if (!string.IsNullOrWhiteSpace(saveDate)) {
+      return saveDate.Trim();
+    }
+
+    return "-";
+  }
+
   static void NormalizeBeforeSave(string name, SaveData table) {
     if (!IsSlotSummarySave(name)) return;
-    EnsureSlotEpisodeId(table);
+    StampSlotEpisodeId(table);
+    StampSlotSaveDate(table);
   }
 
   static void MigrateAfterLoad(string name, SaveData table, string sourcePath) {
@@ -546,7 +559,17 @@ public static class SaveSlotManager {
     if (table == null) return;
     if (table.Count <= 0 && !File.Exists(sourcePath)) return;
 
-    if (!EnsureSlotEpisodeId(table)) return;
+    var changed = false;
+    if (EnsureSlotEpisodeId(table)) {
+      changed = true;
+    }
+
+    var fallbackSaveDate = ResolveFileSaveDate(sourcePath);
+    if (EnsureSlotSaveDate(table, fallbackSaveDate)) {
+      changed = true;
+    }
+
+    if (!changed) return;
     table.Save(BuildSavePath(BuildSlotDirectory(slot), name));
   }
 
@@ -569,6 +592,78 @@ public static class SaveSlotManager {
     table[SlotEpisodeIdKey] = episodeId;
     table[LegacySlotEpisodeKey] = episodeId;
     return true;
+  }
+
+  static void StampSlotEpisodeId(SaveData table) {
+    if (table == null) return;
+
+    var episodeId = ContentEpisodeProgression.ResolveCurrentEpisodeId();
+    if (!IsKnownEpisodeId(episodeId)) {
+      episodeId = ResolveSlotEpisodeId(table);
+    }
+
+    if (string.IsNullOrWhiteSpace(episodeId)) {
+      episodeId = ResolveDefaultEpisodeId();
+    }
+
+    episodeId = episodeId.Trim();
+    table[SlotEpisodeIdKey] = episodeId;
+    table[LegacySlotEpisodeKey] = episodeId;
+  }
+
+  static void StampSlotSaveDate(SaveData table) {
+    if (table == null) return;
+
+    var saveDate = FormatSlotSaveDate(DateTime.Now);
+    table[SlotSaveDateKey] = saveDate;
+    table[LegacySlotSaveDateKey] = saveDate;
+  }
+
+  static bool EnsureSlotSaveDate(SaveData table, string fallbackSaveDate) {
+    if (table == null) return false;
+
+    var saveDate = ReadSlotSaveDate(table);
+    if (string.IsNullOrWhiteSpace(saveDate)) {
+      saveDate = fallbackSaveDate;
+    }
+
+    if (string.IsNullOrWhiteSpace(saveDate)) {
+      saveDate = FormatSlotSaveDate(DateTime.Now);
+    }
+
+    saveDate = saveDate.Trim();
+    var current = ReadString(table, SlotSaveDateKey);
+    var legacy = ReadString(table, LegacySlotSaveDateKey);
+    var currentMatches = string.Equals(current, saveDate, StringComparison.Ordinal);
+    var legacyMatches = string.Equals(legacy, saveDate, StringComparison.Ordinal);
+    if (currentMatches && legacyMatches) {
+      return false;
+    }
+
+    table[SlotSaveDateKey] = saveDate;
+    table[LegacySlotSaveDateKey] = saveDate;
+    return true;
+  }
+
+  static string ReadSlotSaveDate(SaveData table) {
+    var saveDate = ReadString(table, SlotSaveDateKey);
+    if (!string.IsNullOrWhiteSpace(saveDate)) {
+      return saveDate;
+    }
+
+    return ReadString(table, LegacySlotSaveDateKey);
+  }
+
+  static string ResolveFileSaveDate(string path) {
+    if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) {
+      return FormatSlotSaveDate(File.GetLastWriteTime(path));
+    }
+
+    return FormatSlotSaveDate(DateTime.Now);
+  }
+
+  static string FormatSlotSaveDate(DateTime dateTime) {
+    return dateTime.ToString(SlotSaveDateFormat);
   }
 
   static string ResolveDefaultEpisodeId() {

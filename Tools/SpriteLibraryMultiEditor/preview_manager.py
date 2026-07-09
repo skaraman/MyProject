@@ -1,38 +1,17 @@
-import re
 from pathlib import Path
 import tkinter as tk  # noqa: PLC0415
-from data import SpriteLibraryDocument, resolve_sprite_path
+from data import SpriteLibraryDocument, get_sprite_meta_record, resolve_sprite_path
 
 
 def _get_sprite_rect(meta_path: Path, file_id: str) -> tuple[int, int, int, int] | None:
     """Find the rect (x, y, w, h) for a sprite with the given file_id in the meta file."""
-    if not meta_path.exists():
+    record = get_sprite_meta_record(meta_path, file_id)
+    if record is None:
         return None
-    try:
-        content = meta_path.read_text(encoding="utf-8", errors="ignore")
-        if "spriteSheet:" not in content:
-            return None
-        sprites_part = content.split("spriteSheet:")[1]
-        if "sprites:" not in sprites_part:
-            return None
-        # Split by individual sprite blocks starting with "    - "
-        blocks = sprites_part.split("    - ")
-        for block in blocks:
-            if re.search(rf"internalID:\s*{file_id}\b", block):
-                x_match = re.search(r"\bx:\s*(\d+)", block)
-                y_match = re.search(r"\by:\s*(\d+)", block)
-                w_match = re.search(r"\bwidth:\s*(\d+)", block)
-                h_match = re.search(r"\bheight:\s*(\d+)", block)
-                if x_match and y_match and w_match and h_match:
-                    return (
-                        int(x_match.group(1)),
-                        int(y_match.group(1)),
-                        int(w_match.group(1)),
-                        int(h_match.group(1)),
-                    )
-    except Exception as exc:
-        print(f"[SpriteLibEditor] Error parsing meta file {meta_path}: {exc}")
-    return None
+    rect = record.get("rect")
+    if not isinstance(rect, tuple):
+        return None
+    return rect
 
 
 def update_preview_display(

@@ -164,6 +164,20 @@ public partial class SingleSceneManager {
     return null;
   }
 
+  Transform FindDirectChildByName(Transform root, string name) {
+    if (root == null || string.IsNullOrWhiteSpace(name)) return null;
+
+    for (var i = 0; i < root.childCount; i++) {
+      var child = root.GetChild(i);
+      if (child == null) continue;
+      if (string.Equals(child.name, name, StringComparison.Ordinal)) {
+        return child;
+      }
+    }
+
+    return null;
+  }
+
   static SectionDescriptor GetSectionDescriptor(Section section) {
     switch (section) {
       case Section.MainMenu:
@@ -307,7 +321,16 @@ public partial class SingleSceneManager {
   GameObject ResolveSceneObjectLights() {
     if (sceneObjectLights != null) return sceneObjectLights;
     if (Scene == null) return null;
-    var lights = FindChildByName(Scene.transform, "SCENEOBJECT LIGHTS");
+    var lights = FindDirectChildByName(Scene.transform, "LIGHTS");
+    if (lights == null) {
+      lights = FindDirectChildByName(Scene.transform, "Lights");
+    }
+    if (lights == null) {
+      lights = FindDirectChildByName(Scene.transform, "SCENEOBJECT LIGHTS");
+    }
+    if (lights == null) {
+      lights = FindChildByName(Scene.transform, "SCENEOBJECT LIGHTS");
+    }
     if (lights == null) return null;
     sceneObjectLights = lights.gameObject;
     return sceneObjectLights;

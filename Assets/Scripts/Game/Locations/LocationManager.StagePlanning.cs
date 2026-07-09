@@ -74,7 +74,7 @@ public partial class LocationManager {
   }
 
   static bool ShouldPromoteDeferredStagesDuringOverlay() {
-    return false;
+    return SpriteStreamingLoadingState.IsLoadingOverlayActive;
   }
 
   static void PromoteDeferredStagePlansToBlocking(

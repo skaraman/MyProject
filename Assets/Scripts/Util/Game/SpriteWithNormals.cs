@@ -105,8 +105,6 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static Texture2D _fallbackNormalTexture;
   int _nextInternalRetryFrame;
   readonly HashSet<string> _sliceMismatchWarnings = new(StringComparer.OrdinalIgnoreCase);
-  int _staleCompletionStreak;
-  int _staleFallbackLogFrame = -1;
   int _pendingRetargetAllowedFrame;
   int _deferredOverwriteAllowedFrame;
   ulong _lastAppliedNormalTextureId = ulong.MaxValue;
@@ -685,7 +683,13 @@ public partial class SpriteWithNormals : MonoBehaviour {
       return;
     }
 
-    if (Application.isPlaying && ShouldDeferTargetRetargetForOutstandingMiss(pair)) {
+    if (Application.isPlaying &&
+        ShouldDeferTargetRetargetForOutstandingMiss(
+          pair,
+          lookupLibraryName,
+          lookupLabelPrefix,
+          lookupCategory
+        )) {
       return;
     }
 
@@ -919,20 +923,12 @@ public partial class SpriteWithNormals : MonoBehaviour {
           " requested_normal='" + (pair.normalAddress ?? "") + "' target_normal='" + (_targetNormalAddress ?? "") + "'"
         );
       }
-      if (TryApplyStaleCompletionFallback(colorLease, normalLease, pair)) {
-        if (ShouldLogFetch) LogSpriteFetch("complete_stale_fallback_applied");
-        TryStartDeferredRequest();
-        return;
-      }
-      // Keep one stale-drop before fallback so very short races still favor newest request.
       if (ShouldLogFetch) LogSpriteFetch("complete_stale_dropped");
       ReleaseLease(ref colorLease);
       ReleaseLease(ref normalLease);
       TryStartDeferredRequest();
       return;
     }
-    _staleCompletionStreak = 0;
-
     var colorSliceAddress = string.IsNullOrWhiteSpace(_targetColorSliceAddress) ? pair.colorAddress : _targetColorSliceAddress;
     var normalSliceAddress = string.IsNullOrWhiteSpace(_targetNormalSliceAddress) ? pair.normalAddress : _targetNormalSliceAddress;
     var colorRequestAddress = ResolveWarmupAddress(colorSliceAddress, pair.StreamingColorAddress);
@@ -1066,43 +1062,6 @@ public partial class SpriteWithNormals : MonoBehaviour {
     return true;
   }
 #endif
-
-  bool TryApplyStaleCompletionFallback(
-    TextureResidencyCache.Lease colorLease,
-    TextureResidencyCache.Lease normalLease,
-    SpriteAddressPair pair
-  ) {
-    _staleCompletionStreak++;
-    if (_staleCompletionStreak < 2) return false;
-
-    var colorSprite = ResolveLeaseSprite(colorLease, pair.colorAddress);
-    if (colorSprite == null) return false;
-    colorSprite = ResolveExpectedSliceSprite(colorSprite, pair.colorAddress, "color");
-    if (colorSprite == null) return false;
-    CacheLocalLoadedSprite(pair.colorAddress, colorSprite);
-
-    var normalSprite = ResolveLeaseSprite(normalLease, pair.normalAddress);
-    normalSprite = ResolveExpectedSliceSprite(normalSprite, pair.normalAddress, "normal");
-    if (normalSprite != null) CacheLocalLoadedSprite(pair.normalAddress, normalSprite);
-
-    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(colorSprite, normalSprite, pair.colorAddress);
-
-    if (!ForceDisableDebugLogsForPerfPass && _staleFallbackLogFrame != Time.frameCount) {
-      _staleFallbackLogFrame = Time.frameCount;
-      Debug.LogWarning(
-        "[SpriteWithNormals] Applied stale-frame fallback on " + gameObject.name +
-        " streak=" + _staleCompletionStreak +
-        " requested_frame=" + _lastRequestedFrame
-      );
-    }
-
-    _staleCompletionStreak = 0;
-    ReleaseActiveLeases();
-    _activeColorLease = colorLease;
-    _activeNormalLease = normalLease;
-    return true;
-  }
 
   void WarmupUpcomingAnimationFrames(string libraryName, string labelPrefix, string category, int lookupFrame, SpriteAddressPair currentPair) {
     if (lookupFrame <= 0 || string.IsNullOrWhiteSpace(libraryName) || string.IsNullOrWhiteSpace(category)) return;

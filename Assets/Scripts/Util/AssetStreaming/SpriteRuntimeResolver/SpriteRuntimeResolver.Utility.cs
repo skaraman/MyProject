@@ -5,6 +5,133 @@ using UnityEngine;
 using Object = UnityEngine.Object;
 
 public static partial class SpriteRuntimeResolver {
+  const string LegacyFormUiRoot = "FormUIs/";
+  const string LegacyFormUiSuffix = "UI";
+  static readonly string[] LegacyFormUiForms = {
+    "Aqua",
+    "Base",
+    "Bolt",
+    "Cold",
+    "Dark",
+    "Fire"
+  };
+  static readonly LegacyFormUiAlias[] LegacyFormUiAliases = {
+    new LegacyFormUiAlias("HealthBar/HealthBarUI", "HealthBar"),
+    new LegacyFormUiAlias("Dialog/DialogEsper", "Dialog"),
+    new LegacyFormUiAlias("Dialog/DialogUI", "Dialog")
+  };
+
+  readonly struct LegacyFormUiAlias {
+    public readonly string namepart;
+    public readonly string runtimeCategory;
+
+    public LegacyFormUiAlias(string namepart, string runtimeCategory) {
+      this.namepart = namepart ?? "";
+      this.runtimeCategory = runtimeCategory ?? "";
+    }
+  }
+
+  static bool IsLegacyFormUiNamepart(string normalizedNamepart) {
+    return TryGetLegacyFormUiAlias(normalizedNamepart, out _);
+  }
+
+  static bool TryGetLegacyFormUiAlias(string normalizedNamepart, out LegacyFormUiAlias alias) {
+    alias = default;
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return false;
+
+    for (var i = 0; i < LegacyFormUiAliases.Length; i++) {
+      var candidate = LegacyFormUiAliases[i];
+      if (!string.Equals(candidate.namepart, normalizedNamepart, StringComparison.OrdinalIgnoreCase)) continue;
+      alias = candidate;
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool TryBuildLegacyFormUiKey(SpriteLookupKey key, out SpriteLookupKey aliasKey) {
+    aliasKey = default;
+
+    var normalizedNamepart = NormalizeNamePart(key.namepart);
+    if (!TryGetLegacyFormUiAlias(normalizedNamepart, out var alias)) return false;
+
+    var form = NormalizeToken(key.labelPrefix);
+    var label = NormalizeToken(key.category);
+    if (string.IsNullOrWhiteSpace(form)) return false;
+    if (string.IsNullOrWhiteSpace(label)) return false;
+    if (string.IsNullOrWhiteSpace(alias.runtimeCategory)) return false;
+    if (string.Equals(label, alias.runtimeCategory, StringComparison.OrdinalIgnoreCase)) return false;
+
+    var aliasNamepart = BuildLegacyFormUiNamepart(form);
+    if (string.IsNullOrWhiteSpace(aliasNamepart)) return false;
+
+    aliasKey = new SpriteLookupKey(
+      aliasNamepart,
+      label,
+      alias.runtimeCategory,
+      key.frame
+    );
+    return true;
+  }
+
+  static string BuildLegacyFormUiNamepart(string form) {
+    var normalizedForm = NormalizeToken(form);
+    if (string.IsNullOrWhiteSpace(normalizedForm)) return "";
+    return LegacyFormUiRoot + normalizedForm + LegacyFormUiSuffix;
+  }
+
+  static void QueuePendingWarmupNamepart(string normalizedNamepart) {
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return;
+    if (!pendingWarmupNamepartsSet.Add(normalizedNamepart)) return;
+    pendingWarmupNameparts.Add(normalizedNamepart);
+  }
+
+  static void QueueLegacyFormUiAliasWarmups(string normalizedNamepart) {
+    if (!IsLegacyFormUiNamepart(normalizedNamepart)) return;
+
+    for (var i = 0; i < LegacyFormUiForms.Length; i++) {
+      var aliasNamepart = BuildLegacyFormUiNamepart(LegacyFormUiForms[i]);
+      QueuePendingWarmupNamepart(aliasNamepart);
+    }
+  }
+
+  static void AddLegacyFormUiAliasWarmups(List<string> warmups, string normalizedNamepart) {
+    if (warmups == null) return;
+    if (!IsLegacyFormUiNamepart(normalizedNamepart)) return;
+
+    for (var i = 0; i < LegacyFormUiForms.Length; i++) {
+      var aliasNamepart = BuildLegacyFormUiNamepart(LegacyFormUiForms[i]);
+      if (string.IsNullOrWhiteSpace(aliasNamepart)) continue;
+      warmups.Add(aliasNamepart);
+    }
+  }
+
+  static bool AreLegacyFormUiAliasShardsReady() {
+    for (var i = 0; i < LegacyFormUiForms.Length; i++) {
+      var aliasNamepart = BuildLegacyFormUiNamepart(LegacyFormUiForms[i]);
+      if (IsNamepartShardReady(aliasNamepart)) continue;
+      return false;
+    }
+
+    return true;
+  }
+
+  static bool IsNamepartShardReady(string normalizedNamepart) {
+    if (string.IsNullOrWhiteSpace(normalizedNamepart)) return true;
+    if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalizedNamepart, out var entry)) return true;
+
+    var shardKey = string.IsNullOrWhiteSpace(entry.namepart) ? normalizedNamepart : entry.namepart;
+    if (loadedShards.ContainsKey(shardKey)) return true;
+
+    if (shardParses.TryGetValue(shardKey, out var shardParseTask) &&
+        shardParseTask.IsCompleted &&
+        TryGetShard(shardKey, entry, out _)) {
+      return true;
+    }
+
+    return false;
+  }
+
   static bool TryResolveNumericFormFallback(Dictionary<string, SpriteAddressPair> rows, SpriteLookupKey key, out SpriteAddressPair pair) {
     pair = default;
     if (rows == null || rows.Count == 0) return false;

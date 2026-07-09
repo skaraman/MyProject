@@ -191,6 +191,7 @@ public static partial class TextureResidencyCache {
     }
 
     if (!entry.spriteMapMaterialized) return false;
+    if (!SpriteSliceAddressUtility.CanUseNumericLabelFallback(normalizedName)) return false;
     if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(normalizedName, out var numericLabelValue)) return false;
     return TryGetSpriteByNumericLabelWithoutMaterialization(entry, numericLabelValue, out sprite);
   }
@@ -240,6 +241,7 @@ public static partial class TextureResidencyCache {
       }
     }
 
+    if (!SpriteSliceAddressUtility.CanUseNumericLabelFallback(normalizedName)) return false;
     if (!SpriteSliceAddressUtility.TryExtractNumericLabelValue(normalizedName, out var numericLabelValue)) return false;
 
     if (TryCreateSpriteByNumericLabelLazily(entry, numericLabelValue, out sprite)) {

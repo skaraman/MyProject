@@ -272,6 +272,8 @@ public partial class SingleSceneManager {
     if (!Application.isPlaying) yield break;
     var nextLogAt = -1f;
     var enemyArchetypeWaitStartedAt = -1f;
+    var startedAt = Time.realtimeSinceStartup;
+    var prerequisitesReady = false;
     while (true) {
       var playerBootstrapReady = IsPlayerHierarchyReady();
       var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
@@ -284,6 +286,16 @@ public partial class SingleSceneManager {
       if (!playerBootstrapReady) {
         enemyArchetypeWaitStartedAt = -1f;
         SetLoadingStatusOverride("Preparing player");
+        if (ShouldTimeoutGameplayWarmGatePrerequisites(
+          startedAt,
+          "player",
+          playerBootstrapReady,
+          locationActivationPending,
+          shouldExpectEnemyWarmStage,
+          archetypeCount
+        )) {
+          break;
+        }
         MaybeLogGameplayWarmGatePrereqState(
           ref nextLogAt,
           "player",
@@ -299,6 +311,16 @@ public partial class SingleSceneManager {
       if (locationActivationPending) {
         enemyArchetypeWaitStartedAt = -1f;
         SetLoadingStatusOverride("Activating location");
+        if (ShouldTimeoutGameplayWarmGatePrerequisites(
+          startedAt,
+          "location",
+          playerBootstrapReady,
+          locationActivationPending,
+          shouldExpectEnemyWarmStage,
+          archetypeCount
+        )) {
+          break;
+        }
         MaybeLogGameplayWarmGatePrereqState(
           ref nextLogAt,
           "location",
@@ -332,6 +354,7 @@ public partial class SingleSceneManager {
       }
 
       ClearLoadingStatusOverride();
+      prerequisitesReady = true;
       MaybeLogGameplayWarmGatePrereqState(
         ref nextLogAt,
         "ready",
@@ -343,6 +366,10 @@ public partial class SingleSceneManager {
       break;
     }
 
+    if (!prerequisitesReady) {
+      ClearLoadingStatusOverride();
+      yield break;
+    }
     if (!sendReadyForSpawns || gameplayReadyForSpawnsSentForLoad) yield break;
     gameplayReadyForSpawnsSentForLoad = true;
     if (ShouldLogLoadFlowDebug()) {
@@ -353,6 +380,37 @@ public partial class SingleSceneManager {
       );
     }
     MessageBus.Send("ReadyForSpawns");
+  }
+
+  bool ShouldTimeoutGameplayWarmGatePrerequisites(
+    float startedAt,
+    string stage,
+    bool playerBootstrapReady,
+    bool locationActivationPending,
+    bool shouldExpectEnemyWarmStage,
+    int archetypeCount
+  ) {
+    var timeoutSeconds = Mathf.Max(GameplayWarmGatePrereqTimeoutSeconds, 1f);
+    var elapsed = Time.realtimeSinceStartup - startedAt;
+    if (elapsed < timeoutSeconds) {
+      return false;
+    }
+
+    if (ShouldLogLoadFlowWarnings()) {
+      Debug.LogWarning(
+        "[SingleSceneManager][WarmGatePrereq] timeout" +
+        " stage=" + ResolveLoadFlowValue(stage) +
+        " elapsed_s=" + elapsed.ToString("0.000") +
+        " timeout_s=" + timeoutSeconds.ToString("0.000") +
+        " player_bootstrap_ready=" + (playerBootstrapReady ? 1 : 0) +
+        " location_activation_pending=" + (locationActivationPending ? 1 : 0) +
+        " expect_enemy_stage=" + (shouldExpectEnemyWarmStage ? 1 : 0) +
+        " enemy_archetype_count=" + archetypeCount +
+        " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation)
+      );
+    }
+
+    return true;
   }
 
   void HoldPlayerAnimationForLoadingOverlay(string reason) {

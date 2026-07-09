@@ -396,7 +396,7 @@ public static class ActiveContentRegistryRuntime {
   static bool runtimeRequestedPackIdsConfigured;
   static readonly List<string> runtimeRequestedPackIds = new();
 
-  public static int ReloadVersion => reloadVersion;
+  public static int ReloadVersion => reloadVersion + ContentPackCatalogLoader.ReadyVersion;
   public static ActiveContentRegistry Registry => LoadRegistry();
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -419,9 +419,11 @@ public static class ActiveContentRegistryRuntime {
   public static void ConfigureRuntimeRequestedPackIds(IEnumerable<string> packIds, string source = "") {
     var nextPackIds = NormalizePackIds(packIds);
     if (ArePackIdListsEqual(runtimeRequestedPackIds, nextPackIds) && runtimeRequestedPackIdsConfigured) {
+      ContentPackCatalogLoader.RequestLoadPacks(nextPackIds, source);
       return;
     }
 
+    ContentPackCatalogLoader.RequestLoadPacks(nextPackIds, source);
     runtimeRequestedPackIdsConfigured = true;
     runtimeRequestedPackIds.Clear();
     runtimeRequestedPackIds.AddRange(nextPackIds);
@@ -455,13 +457,33 @@ public static class ActiveContentRegistryRuntime {
   }
 
   public static IReadOnlyList<string> GetAvailablePackIds() {
-    return EnumerateRegistryPackIds();
+    var result = EnumerateRegistryPackIds();
+    var seen = new HashSet<string>(result, StringComparer.OrdinalIgnoreCase);
+    var manifestPackIds = ContentPackCatalogLoader.GetAvailablePackIds();
+    for (var i = 0; i < manifestPackIds.Count; i++) {
+      var normalized = NormalizePackId(manifestPackIds[i]);
+      if (string.IsNullOrWhiteSpace(normalized)) {
+        continue;
+      }
+
+      if (!seen.Add(normalized)) {
+        continue;
+      }
+
+      result.Add(normalized);
+    }
+
+    return result;
   }
 
   public static bool IsPackAvailable(string packId) {
     var normalizedPackId = NormalizePackId(packId);
     if (string.IsNullOrWhiteSpace(normalizedPackId)) {
       return false;
+    }
+
+    if (ContentPackCatalogLoader.IsPackAvailable(normalizedPackId)) {
+      return true;
     }
 
     var availablePackIds = EnumerateRegistryPackIds();
@@ -529,6 +551,14 @@ public static class ActiveContentRegistryRuntime {
       CoreStageRootAssetPath + "/" + normalizedAssetPath.Substring("Assets/".Length)
     );
 
+    if (ContentPackCatalogLoader.TryResolveExportedAddress(
+      normalizedAssetPath,
+      new[] { "Core" },
+      out var coreAddress
+    )) {
+      return coreAddress;
+    }
+
 #if UNITY_EDITOR
     if (!AssetExistsAtPath(stagedCoreAssetPath)) {
       return normalizedAssetPath;
@@ -552,9 +582,18 @@ public static class ActiveContentRegistryRuntime {
       return normalizedAssetPath;
     }
 
-    var relativePath = normalizedAssetPath.Substring("Assets/".Length);
     var activePackIds = EnumerateRuntimeActivePackIds();
 
+    if (ContentPackCatalogLoader.TryResolveExportedAddress(
+      normalizedAssetPath,
+      activePackIds,
+      out var exportedAddress
+    )) {
+      return exportedAddress;
+    }
+
+#if UNITY_EDITOR
+    var relativePath = normalizedAssetPath.Substring("Assets/".Length);
     for (var i = 0; i < activePackIds.Count; i++) {
       var packId = NormalizeAssetPath(activePackIds[i]);
       if (string.IsNullOrWhiteSpace(packId) || string.Equals(packId, "Core", StringComparison.OrdinalIgnoreCase)) {
@@ -566,6 +605,7 @@ public static class ActiveContentRegistryRuntime {
         return stagedPath;
       }
     }
+#endif
 
     return ResolveCoreAssetPath(normalizedAssetPath);
   }
@@ -573,7 +613,7 @@ public static class ActiveContentRegistryRuntime {
   static List<string> EnumerateRuntimeActivePackIds() {
     var registryPackIds = EnumerateRegistryPackIds();
     if (!runtimeRequestedPackIdsConfigured) {
-      return registryPackIds;
+      return FilterPackIdsByCatalogReadiness(EnumerateDefaultRuntimePackIds(registryPackIds));
     }
 
     var result = new List<string>();
@@ -586,6 +626,41 @@ public static class ActiveContentRegistryRuntime {
       }
 
       if (!requested.Contains(normalized)) {
+        continue;
+      }
+
+      result.Add(normalized);
+    }
+
+    return FilterPackIdsByCatalogReadiness(result);
+  }
+
+  static List<string> EnumerateDefaultRuntimePackIds(List<string> registryPackIds) {
+    var result = new List<string>();
+    if (ContainsPackId(registryPackIds, "Core")) {
+      result.Add("Core");
+    }
+
+    return result;
+  }
+
+  static List<string> FilterPackIdsByCatalogReadiness(List<string> packIds) {
+    if (!SpriteStreamingRuntimeSettings.EnableLocalContentPackCatalogs) {
+      return packIds;
+    }
+
+    var result = new List<string>();
+    if (packIds == null) {
+      return result;
+    }
+
+    for (var i = 0; i < packIds.Count; i++) {
+      var normalized = NormalizePackId(packIds[i]);
+      if (string.IsNullOrWhiteSpace(normalized)) {
+        continue;
+      }
+
+      if (!ContentPackCatalogLoader.IsPackReady(normalized)) {
         continue;
       }
 
@@ -835,9 +910,99 @@ public static class RuntimeContentPackResolver {
   ) {
     var result = new List<string>();
     AddBaselinePackIds(result);
-    AddUniquePackId(result, BuildUiPackId(activeForm));
-    AddEquippedGearPackIds(result, activeForm, gearForms);
+
+    var saveDrivenPackIds = BuildSaveDrivenPackIds(
+      activeForm,
+      gearForms,
+      ActiveContentRegistryRuntime.GetAvailablePackIds()
+    );
+    for (var i = 0; i < saveDrivenPackIds.Count; i++) {
+      AddUniquePackId(result, saveDrivenPackIds[i]);
+    }
+
     return result;
+  }
+
+  public static List<string> BuildSaveDrivenPackIds(
+    string activeForm,
+    Dictionary<string, Dictionary<string, GearItem>> gearForms,
+    IEnumerable<string> availablePackIds
+  ) {
+    var result = new List<string>();
+    var available = BuildAvailablePackSet(availablePackIds);
+    activeForm = ResolveFormOrDefault(activeForm);
+
+    AddAvailablePackId(result, BuildUiPackId(activeForm), available);
+
+    if (gearForms == null) {
+      return result;
+    }
+
+    if (!gearForms.TryGetValue(activeForm, out var slots) || slots == null) {
+      return result;
+    }
+
+    foreach (var slotEntry in slots) {
+      var slot = NormalizeToken(slotEntry.Key);
+      if (string.IsNullOrWhiteSpace(slot)) {
+        continue;
+      }
+
+      var gearItem = slotEntry.Value;
+      if (gearItem == null) {
+        var nullPackId = EquippedItems.BuildGearPackId(activeForm + "_no", slot);
+        AddAvailablePackId(result, nullPackId, available);
+        continue;
+      }
+
+      var gearId = NormalizeToken(gearItem.gearId);
+      var packId = EquippedItems.BuildGearPackId(gearId, slot);
+      if (!AddAvailablePackId(result, packId, available)) {
+        WarnMissingGearPack(packId, activeForm, slot, gearId);
+      }
+    }
+
+    return result;
+  }
+
+  static HashSet<string> BuildAvailablePackSet(IEnumerable<string> packIds) {
+    var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    if (packIds == null) {
+      return result;
+    }
+
+    foreach (var packId in packIds) {
+      var normalized = NormalizeToken(packId);
+      if (string.IsNullOrWhiteSpace(normalized)) {
+        continue;
+      }
+
+      result.Add(normalized);
+    }
+
+    return result;
+  }
+
+  static bool AddAvailablePackId(
+    List<string> result,
+    string packId,
+    HashSet<string> availablePackIds
+  ) {
+    var normalized = NormalizeToken(packId);
+    if (string.IsNullOrWhiteSpace(normalized)) {
+      return false;
+    }
+
+    if (availablePackIds == null) {
+      return false;
+    }
+
+    if (!availablePackIds.Contains(normalized)) {
+      return false;
+    }
+
+    AddUniquePackId(result, normalized);
+    return true;
   }
 
   static void AddBaselinePackIds(List<string> result) {
@@ -876,68 +1041,7 @@ public static class RuntimeContentPackResolver {
     }
   }
 
-  static void AddEquippedGearPackIds(
-    List<string> result,
-    string activeForm,
-    Dictionary<string, Dictionary<string, GearItem>> gearForms
-  ) {
-    if (gearForms == null) {
-      return;
-    }
-
-    activeForm = ResolveFormOrDefault(activeForm);
-    if (!gearForms.TryGetValue(activeForm, out var slots) || slots == null) {
-      return;
-    }
-
-    foreach (var slotEntry in slots) {
-      var slot = NormalizeToken(slotEntry.Key);
-      if (string.IsNullOrWhiteSpace(slot)) {
-        continue;
-      }
-
-      var gearItem = slotEntry.Value;
-      if (gearItem == null) {
-        AddNullSlotPackIfAvailable(result, activeForm, slot);
-        continue;
-      }
-
-      var gearId = NormalizeToken(gearItem.gearId);
-      var packId = EquippedItems.BuildGearPackId(gearId, slot);
-      AddGearPackIfAvailable(result, packId, activeForm, slot, gearId);
-    }
-  }
-
-  static void AddNullSlotPackIfAvailable(List<string> result, string activeForm, string slot) {
-    var gearId = activeForm + "_no";
-    var packId = EquippedItems.BuildGearPackId(gearId, slot);
-    if (!ActiveContentRegistryRuntime.IsPackAvailable(packId)) {
-      return;
-    }
-
-    AddUniquePackId(result, packId);
-  }
-
-  static void AddGearPackIfAvailable(
-    List<string> result,
-    string packId,
-    string activeForm,
-    string slot,
-    string gearId
-  ) {
-    if (string.IsNullOrWhiteSpace(packId)) {
-      return;
-    }
-
-    if (ActiveContentRegistryRuntime.IsPackAvailable(packId)) {
-      AddUniquePackId(result, packId);
-      return;
-    }
-
-    WarnMissingGearPack(packId, activeForm, slot, gearId);
-  }
-
-  static string ResolveActiveFormForGameplayStart(bool isNewGame) {
+  public static string ResolveActiveFormForGameplayStart(bool isNewGame) {
     if (isNewGame) {
       return DefaultForm;
     }
@@ -950,7 +1054,7 @@ public static class RuntimeContentPackResolver {
     return ResolveFormOrDefault(Convert.ToString(loadedForms["activeForm"]));
   }
 
-  static Dictionary<string, Dictionary<string, GearItem>> ResolveGearFormsForGameplayStart(bool isNewGame) {
+  public static Dictionary<string, Dictionary<string, GearItem>> ResolveGearFormsForGameplayStart(bool isNewGame) {
     var gearForms = EquippedItems.CreateDefaultGearFormsSnapshot();
     if (isNewGame) {
       return gearForms;
@@ -1004,16 +1108,16 @@ public static class RuntimeContentPackResolver {
   }
 
   static string BuildUiPackId(string activeForm) {
-    return ResolveFormOrDefault(activeForm) + "UI";
+    return "UI" + ResolveFormOrDefault(activeForm);
   }
 
   static bool IsSaveDrivenUiPackId(string packId) {
     var normalized = NormalizeToken(packId);
-    if (!normalized.EndsWith("UI", StringComparison.OrdinalIgnoreCase)) {
+    if (!normalized.StartsWith("UI", StringComparison.OrdinalIgnoreCase)) {
       return false;
     }
 
-    var form = normalized.Substring(0, normalized.Length - "UI".Length);
+    var form = normalized.Substring("UI".Length);
     return !string.IsNullOrWhiteSpace(EsperanzaForms.ResolveFormKey(form));
   }
 

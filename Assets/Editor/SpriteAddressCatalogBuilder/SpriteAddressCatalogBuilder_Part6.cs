@@ -147,6 +147,7 @@ public static partial class SpriteIndexBuilder {
     var libraryName = SpriteAddressResolver.NormalizeNamePart(source.libraryName);
     var category = (source.category ?? "").Trim();
     var labelPrefix = (source.labelPrefix ?? "").Trim();
+    string labelFilter = (source.label ?? "").Trim();
     if (string.IsNullOrWhiteSpace(libraryName) ||
         string.IsNullOrWhiteSpace(category) ||
         string.IsNullOrWhiteSpace(labelPrefix)) {
@@ -196,6 +197,7 @@ public static partial class SpriteIndexBuilder {
     for (var i = 0; i < colorSpriteNames.Count; i++) {
       var spriteName = colorSpriteNames[i];
       if (string.IsNullOrWhiteSpace(spriteName)) continue;
+      if (!ShouldIncludeCustomSpriteSheetSprite(spriteName, labelFilter)) continue;
 
       ParseLabel(spriteName, out _, out var frame);
       var colorAddress = SpriteSliceAddressUtility.BuildSliceAddress(colorAssetPath, spriteName);
@@ -214,6 +216,17 @@ public static partial class SpriteIndexBuilder {
 
       rows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
     }
+  }
+
+  static bool ShouldIncludeCustomSpriteSheetSprite(string spriteName, string labelFilter) {
+    if (string.IsNullOrWhiteSpace(labelFilter)) return true;
+    if (string.IsNullOrWhiteSpace(spriteName)) return false;
+
+    return string.Equals(
+      spriteName.Trim(),
+      labelFilter.Trim(),
+      StringComparison.Ordinal
+    );
   }
 
   static string BuildStagedAuthoringSourceAssetPath(string stageRoot, string targetFolder, string assetPath) {

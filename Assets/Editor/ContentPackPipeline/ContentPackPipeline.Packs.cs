@@ -349,6 +349,8 @@ public static partial class ContentPackPipeline {
     ReplaceListIfPresent(pack.ownedLocations, manifest.ownedLocations);
     ReplaceListIfPresent(pack.ownedEnemyTypes, manifest.ownedEnemyTypes);
     ReplaceListIfPresent(pack.dialogIds, manifest.dialogIds);
+    ReplaceListIfPresent(pack.dependencies, manifest.dependencies);
+    ReplaceExportedAddressesIfPresent(pack.exportedAddresses, manifest.exportedAddresses);
 
     pack.authoringSources.Clear();
     if (manifest.authoringSources == null || manifest.authoringSources.Count <= 0) {
@@ -441,6 +443,34 @@ public static partial class ContentPackPipeline {
     }
   }
 
+  static void ReplaceExportedAddressesIfPresent(
+    List<ContentPackExportedAddressJson> target,
+    List<ContentPackExportedAddressJson> source
+  ) {
+    if (target == null || source == null) return;
+
+    target.Clear();
+    for (var i = 0; i < source.Count; i++) {
+      var entry = source[i];
+      if (entry == null) continue;
+
+      var sourceAssetPath = NormalizeAssetPath(entry.sourceAssetPath);
+      var assetPath = NormalizeAssetPath(entry.assetPath);
+      var address = NormalizeAssetPath(entry.address);
+      if (string.IsNullOrWhiteSpace(sourceAssetPath) ||
+          string.IsNullOrWhiteSpace(assetPath) ||
+          string.IsNullOrWhiteSpace(address)) {
+        continue;
+      }
+
+      target.Add(new ContentPackExportedAddressJson {
+        sourceAssetPath = sourceAssetPath,
+        assetPath = assetPath,
+        address = address
+      });
+    }
+  }
+
   static List<PackDefinition> DiscoverGearPackDefinitions(string normalizedExternalRoot) {
     var result = new List<PackDefinition>();
     var groupedGearFullPath = GetPhysicalPath(EsperanzaGroupedGearRoot);
@@ -482,6 +512,82 @@ public static partial class ContentPackPipeline {
     AddUniquePath(output, "Assets/Sprites/GameInterface");
   }
 
+  static void AddCoreEsperanzaSkinOwnedRoots(List<string> output) {
+    if (output == null) return;
+
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/Esperanza/Skin");
+
+    var groupedRoot = "Assets/Sprites/Characters/Esperanza/_Grouped";
+    var groupedFullPath = Path.GetFullPath(groupedRoot);
+    if (!Directory.Exists(groupedFullPath)) return;
+
+    var directories = Directory.GetDirectories(groupedFullPath, "Skin_*", SearchOption.TopDirectoryOnly);
+    Array.Sort(directories, StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < directories.Length; i++) {
+      var assetPath = ToProjectAssetPath(directories[i]);
+      if (string.IsNullOrWhiteSpace(assetPath)) continue;
+      AddUniquePath(output, assetPath);
+    }
+  }
+
+  sealed class CoreHealthBarSliceBinding {
+    public readonly string category;
+    public readonly string[] sliceNames;
+
+    public CoreHealthBarSliceBinding(string category, string[] sliceNames) {
+      this.category = category ?? "";
+      this.sliceNames = sliceNames ?? Array.Empty<string>();
+    }
+  }
+
+  static readonly string[] CoreHealthBarForms = {
+    "Aqua",
+    "Base",
+    "Bolt",
+    "Cold",
+    "Dark",
+    "Fire"
+  };
+
+  static readonly CoreHealthBarSliceBinding[] CoreHealthBarSliceBindings = {
+    new CoreHealthBarSliceBinding(
+      "AvatarBG",
+      new[] { "av", "avatar" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "HpCurveBot",
+      new[] { "hpcb", "hcb" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "HpCurveTop",
+      new[] { "hpct", "hct" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "HpExtendBot",
+      new[] { "hpb", "hpbb", "hpbot", "hb" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "HpExtendTop",
+      new[] { "hpt", "hptop", "ht" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "NrgCurveBot",
+      new[] { "nrgcb", "ncb" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "NrgCurveTop",
+      new[] { "nrgct", "nrgctop" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "NrgExtendBot",
+      new[] { "nrgb", "nrgbot", "nb" }
+    ),
+    new CoreHealthBarSliceBinding(
+      "NrgExtendTop",
+      new[] { "nrgt", "nrgtop", "nt" }
+    )
+  };
+
   static void ApplyCorePackDefaults(List<PackDefinition> packDefinitions) {
     if (packDefinitions == null) return;
 
@@ -490,10 +596,127 @@ public static partial class ContentPackPipeline {
       if (pack == null) continue;
       if (!string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) continue;
 
+      AddCoreUiOwnedRoots(pack.seedRoots);
+      AddCoreUiOwnedRoots(pack.ownedRoots);
+      AddCoreEsperanzaSkinOwnedRoots(pack.seedRoots);
+      AddCoreEsperanzaSkinOwnedRoots(pack.ownedRoots);
       AddCoreGameplayMaterialOwnedRoots(pack.seedRoots);
       AddCoreGameplayMaterialOwnedRoots(pack.ownedRoots);
+      AddCoreHealthBarAuthoringSources(pack);
       return;
     }
+  }
+
+  static void AddCoreHealthBarAuthoringSources(PackDefinition pack) {
+    if (pack == null) return;
+
+    for (var formIndex = 0; formIndex < CoreHealthBarForms.Length; formIndex++) {
+      var form = CoreHealthBarForms[formIndex];
+      var assetPath = BuildCoreHealthBarAtlasPath(form);
+      if (string.IsNullOrWhiteSpace(assetPath)) continue;
+      if (!File.Exists(Path.GetFullPath(assetPath))) continue;
+
+      for (var bindingIndex = 0; bindingIndex < CoreHealthBarSliceBindings.Length; bindingIndex++) {
+        var binding = CoreHealthBarSliceBindings[bindingIndex];
+        if (binding == null) continue;
+
+        if (!TryResolveHealthBarSliceName(assetPath, binding.sliceNames, out var sliceName)) {
+          continue;
+        }
+
+        AddCoreHealthBarAuthoringSource(
+          pack,
+          form,
+          assetPath,
+          binding.category,
+          sliceName
+        );
+      }
+    }
+  }
+
+  static string BuildCoreHealthBarAtlasPath(string form) {
+    var normalizedForm = NormalizeToken(form);
+    if (string.IsNullOrWhiteSpace(normalizedForm)) return "";
+
+    return "Assets/Sprites/GameInterface/Gameplay/HealthBar/" +
+           normalizedForm +
+           "/atlas.png";
+  }
+
+  static bool TryResolveHealthBarSliceName(
+    string assetPath,
+    string[] sliceNames,
+    out string sliceName
+  ) {
+    sliceName = "";
+    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+    if (sliceNames == null || sliceNames.Length <= 0) return false;
+
+    for (var i = 0; i < sliceNames.Length; i++) {
+      var candidate = NormalizeToken(sliceNames[i]);
+      if (string.IsNullOrWhiteSpace(candidate)) continue;
+      if (!TextureContainsSpriteSlice(assetPath, candidate)) continue;
+
+      sliceName = candidate;
+      return true;
+    }
+
+    return false;
+  }
+
+  static void AddCoreHealthBarAuthoringSource(
+    PackDefinition pack,
+    string form,
+    string assetPath,
+    string category,
+    string sliceName
+  ) {
+    var targetFolder = "Sprites/GameInterface/Gameplay/HealthBar/" + NormalizeToken(form);
+    if (HasCoreHealthBarAuthoringSource(pack, assetPath, category, form, sliceName)) return;
+
+    pack.authoringSources.Add(new ContentPackAuthoringSourceJson {
+      sourceType = "sprite_sheet",
+      assetPath = NormalizeAssetPath(assetPath),
+      label = NormalizeToken(sliceName),
+      targetFolder = NormalizePackTargetFolder(targetFolder),
+      libraryName = "HealthBar/HealthBarUI",
+      category = NormalizeToken(category),
+      labelPrefix = NormalizeToken(form),
+      normalAssetPath = ""
+    });
+
+    AddUniquePath(pack.seedRoots, assetPath);
+    AddUniquePath(pack.ownedRoots, assetPath);
+  }
+
+  static bool HasCoreHealthBarAuthoringSource(
+    PackDefinition pack,
+    string assetPath,
+    string category,
+    string form,
+    string sliceName
+  ) {
+    if (pack == null || pack.authoringSources == null) return false;
+
+    var normalizedAssetPath = NormalizeAssetPath(assetPath);
+    var normalizedCategory = NormalizeToken(category);
+    var normalizedForm = NormalizeToken(form);
+    var normalizedSliceName = NormalizeToken(sliceName);
+
+    for (var i = 0; i < pack.authoringSources.Count; i++) {
+      var source = pack.authoringSources[i];
+      if (source == null) continue;
+      if (!string.Equals(source.sourceType, "sprite_sheet", StringComparison.OrdinalIgnoreCase)) continue;
+      if (!string.Equals(NormalizeAssetPath(source.assetPath), normalizedAssetPath, StringComparison.OrdinalIgnoreCase)) continue;
+      if (!string.Equals(NormalizeToken(source.category), normalizedCategory, StringComparison.Ordinal)) continue;
+      if (!string.Equals(NormalizeToken(source.labelPrefix), normalizedForm, StringComparison.Ordinal)) continue;
+      if (!string.Equals(NormalizeToken(source.label), normalizedSliceName, StringComparison.Ordinal)) continue;
+
+      return true;
+    }
+
+    return false;
   }
 
   static void AddCoreGameplayMaterialOwnedRoots(List<string> output) {
@@ -623,6 +846,16 @@ public static partial class ContentPackPipeline {
           string.IsNullOrWhiteSpace(source.category) ||
           string.IsNullOrWhiteSpace(source.labelPrefix)) {
         errors?.Add("Sprite sheet authoring source requires libraryName, category, and labelPrefix. asset='" + assetPath + "'");
+        return false;
+      }
+      var sliceLabel = NormalizeToken(source.label);
+      if (!string.IsNullOrWhiteSpace(sliceLabel) &&
+          !TextureContainsSpriteSlice(assetPath, sliceLabel)) {
+        errors?.Add(
+          "Sprite sheet authoring source label was not found." +
+          " asset='" + assetPath + "'" +
+          " label='" + sliceLabel + "'"
+        );
         return false;
       }
       if (!string.IsNullOrWhiteSpace(source.normalAssetPath)) {
@@ -787,6 +1020,144 @@ public static partial class ContentPackPipeline {
     return resolved;
   }
 
+  public static List<ContentPackRuntimeCatalogBuildInfo> GetActiveOptionalRuntimePackCatalogBuilds() {
+    var result = new List<ContentPackRuntimeCatalogBuildInfo>();
+    var selection = AssetDatabase.LoadAssetAtPath<ContentPackSelection>(SelectionAssetPath);
+    if (selection == null || !selection.ExternalContentEnabled) {
+      return result;
+    }
+
+    var packDefinitions = BuildPackDefinitions(selection.ExternalRoot);
+    var packById = new Dictionary<string, PackDefinition>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null) continue;
+      if (string.IsNullOrWhiteSpace(pack.packId)) continue;
+      if (packById.ContainsKey(pack.packId)) continue;
+      packById.Add(pack.packId, pack);
+    }
+
+    var activePackIds = ResolveConcreteActivePackIds(selection.GetNormalizedActivePackIds(), packById);
+
+    for (var i = 0; i < activePackIds.Count; i++) {
+      var packId = NormalizeToken(activePackIds[i]);
+      if (string.IsNullOrWhiteSpace(packId)) continue;
+      if (string.Equals(packId, CorePackId, StringComparison.OrdinalIgnoreCase)) continue;
+      if (!packById.TryGetValue(packId, out var pack) || pack == null) continue;
+      if (!PackRequiresOptionalRuntimeCatalog(pack)) continue;
+
+      result.Add(new ContentPackRuntimeCatalogBuildInfo(
+        pack.packId,
+        pack.externalRootPath,
+        SpriteStreamingConfig.TextureAddressablesGroupName + "__" + pack.packId,
+        BuildRuntimeCatalogRelativePath(),
+        BuildRuntimeCatalogBundleRootRelativePath()
+      ));
+    }
+
+    return result;
+  }
+
+  static bool PackRequiresOptionalRuntimeCatalog(PackDefinition pack) {
+    if (pack == null) return false;
+
+    if (PackHasExportedRuntimeTexture(pack)) {
+      return true;
+    }
+
+    if (PackHasRuntimeTextureAuthoringSource(pack)) {
+      return true;
+    }
+
+    if (PackHasRuntimeTextureRoot(pack.ownedRoots)) {
+      return true;
+    }
+
+    if (PackRootHasRuntimeTextureFiles(pack.stageAssetRoot)) {
+      return true;
+    }
+
+    return PackRootHasRuntimeTextureFiles(pack.externalRootPath);
+  }
+
+  static bool PackHasExportedRuntimeTexture(PackDefinition pack) {
+    if (pack == null || pack.exportedAddresses == null) return false;
+
+    for (var i = 0; i < pack.exportedAddresses.Count; i++) {
+      var entry = pack.exportedAddresses[i];
+      if (entry == null) continue;
+
+      if (IsRuntimeTexturePath(entry.assetPath)) {
+        return true;
+      }
+
+      if (IsRuntimeTexturePath(entry.address)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool PackHasRuntimeTextureAuthoringSource(PackDefinition pack) {
+    if (pack == null || pack.authoringSources == null) return false;
+
+    for (var i = 0; i < pack.authoringSources.Count; i++) {
+      var source = pack.authoringSources[i];
+      if (source == null) continue;
+      if (IsRuntimeTexturePath(source.assetPath)) return true;
+      if (IsRuntimeTexturePath(source.normalAssetPath)) return true;
+    }
+
+    return false;
+  }
+
+  static bool PackHasRuntimeTextureRoot(List<string> roots) {
+    if (roots == null) return false;
+
+    for (var i = 0; i < roots.Count; i++) {
+      if (IsRuntimeTexturePath(roots[i])) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool PackRootHasRuntimeTextureFiles(string rootPath) {
+    var normalizedRoot = NormalizeAssetPath(rootPath);
+    if (string.IsNullOrWhiteSpace(normalizedRoot)) return false;
+
+    var physicalRoot = normalizedRoot;
+    if (normalizedRoot.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+        normalizedRoot.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)) {
+      physicalRoot = GetPhysicalPath(normalizedRoot);
+    }
+
+    if (string.IsNullOrWhiteSpace(physicalRoot)) return false;
+    if (!Directory.Exists(physicalRoot)) return false;
+
+    foreach (var file in Directory.EnumerateFiles(physicalRoot, "*", SearchOption.AllDirectories)) {
+      if (IsRuntimeTexturePath(file)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool IsRuntimeTexturePath(string assetPath) {
+    var normalized = NormalizeAssetPath(StripAuthoringSliceSuffix(assetPath));
+    if (string.IsNullOrWhiteSpace(normalized)) return false;
+
+    var extension = Path.GetExtension(normalized);
+    if (string.IsNullOrWhiteSpace(extension)) return false;
+
+    return string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) ||
+      string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
+      string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase);
+  }
+
   static void AddSaveDrivenRuntimePackIds(
     List<string> resolved,
     Dictionary<string, PackDefinition> packById
@@ -799,24 +1170,14 @@ public static partial class ContentPackPipeline {
       return;
     }
 
-    var packIds = new List<string>();
-    foreach (var entry in packById) {
-      var pack = entry.Value;
-      if (!IsSaveDrivenRuntimePack(pack)) {
-        continue;
-      }
-
-      var packId = NormalizeToken(pack.packId);
-      if (string.IsNullOrWhiteSpace(packId)) {
-        continue;
-      }
-
-      if (packIds.Contains(packId, StringComparer.OrdinalIgnoreCase)) {
-        continue;
-      }
-
-      packIds.Add(packId);
-    }
+    var isNewGame = !SaveSlotManager.CurrentSlotExists();
+    var activeForm = RuntimeContentPackResolver.ResolveActiveFormForGameplayStart(isNewGame);
+    var gearForms = RuntimeContentPackResolver.ResolveGearFormsForGameplayStart(isNewGame);
+    var packIds = RuntimeContentPackResolver.BuildSaveDrivenPackIds(
+      activeForm,
+      gearForms,
+      packById.Keys
+    );
 
     packIds.Sort(StringComparer.OrdinalIgnoreCase);
     for (var i = 0; i < packIds.Count; i++) {
@@ -851,11 +1212,11 @@ public static partial class ContentPackPipeline {
 
   static bool IsFormUiRuntimePackId(string packId) {
     var normalizedPackId = NormalizeToken(packId);
-    if (!normalizedPackId.EndsWith("UI", StringComparison.OrdinalIgnoreCase)) {
+    if (!normalizedPackId.StartsWith("UI", StringComparison.OrdinalIgnoreCase)) {
       return false;
     }
 
-    var form = normalizedPackId.Substring(0, normalizedPackId.Length - "UI".Length);
+    var form = normalizedPackId.Substring("UI".Length);
     return !string.IsNullOrWhiteSpace(EsperanzaForms.ResolveFormKey(form));
   }
 

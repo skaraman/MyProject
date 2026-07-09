@@ -69,6 +69,13 @@ public static class ContentEpisodeProgression {
     return result;
   }
 
+  public static string ResolveCurrentEpisodeId() {
+    if (!HasRuntimeEpisodes()) return "";
+
+    var state = ResolveSavedOrInitialState();
+    return NormalizeToken(state.episodeId);
+  }
+
   public static bool TryAdvanceForEnemyDefeated(EnemyDefeatedEvent defeatedEvent, string source) {
     if (defeatedEvent == null) return false;
     if (!HasRuntimeEpisodes()) return false;

@@ -35,6 +35,7 @@ public partial class AnimationController {
 
   public void InvalidateSpriteFrameCache() {
     lastAppliedSpriteFrame = int.MinValue;
+    lastAppliedSpriteCategory = null;
   }
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

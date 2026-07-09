@@ -34,6 +34,8 @@ public static partial class ContentPackPipeline {
 
   const string ManifestFileName = "ContentPackManifest.json";
   const string PackDataFolderName = "_PackData";
+  const string RuntimeCatalogFolderName = "_Addressables";
+  const string RuntimeCatalogFileName = "catalog.bin";
   const string EsperanzaSnapshotFileName = "esperanza_base_snapshot.json";
   const string DomeCityLocationSnapshotFileName = "location_DomeCity.json";
   const string DomeCityDialogSnapshotFileName = "dialog_DomeCity.json";
@@ -115,13 +117,25 @@ public static partial class ContentPackPipeline {
     public string packId;
     public string type;
     public string kind;
+    public string catalogPath;
+    public string bundleRoot;
+    public string addressPrefix;
     public List<string> ownedRoots = new();
     public List<string> ownedLocations = new();
     public List<string> ownedEnemyTypes = new();
     public List<string> dialogIds = new();
+    public List<string> dependencies = new();
+    public List<ContentPackExportedAddressJson> exportedAddresses = new();
     public List<ContentPackAuthoringSourceJson> authoringSources = new();
     public string exportedFromProject;
     public string sourceRevision;
+  }
+
+  [Serializable]
+  sealed class ContentPackExportedAddressJson {
+    public string sourceAssetPath;
+    public string assetPath;
+    public string address;
   }
 
   [Serializable]
@@ -214,12 +228,36 @@ public static partial class ContentPackPipeline {
     public List<string> ownedLocations = new();
     public List<string> ownedEnemyTypes = new();
     public List<string> dialogIds = new();
+    public List<string> dependencies = new();
+    public List<ContentPackExportedAddressJson> exportedAddresses = new();
     public List<ContentPackAuthoringSourceJson> authoringSources = new();
     public Dictionary<string, string> targetRelativePathByAssetPath = new(StringComparer.OrdinalIgnoreCase);
     public bool loadedManifest;
     public string defaultLocationId = "";
     public string snapshotRelativePath = "";
     public string dialogSnapshotRelativePath = "";
+  }
+
+  public sealed class ContentPackRuntimeCatalogBuildInfo {
+    public readonly string packId;
+    public readonly string externalRootPath;
+    public readonly string groupName;
+    public readonly string catalogRelativePath;
+    public readonly string bundleRootRelativePath;
+
+    public ContentPackRuntimeCatalogBuildInfo(
+      string packId,
+      string externalRootPath,
+      string groupName,
+      string catalogRelativePath,
+      string bundleRootRelativePath
+    ) {
+      this.packId = packId ?? "";
+      this.externalRootPath = externalRootPath ?? "";
+      this.groupName = groupName ?? "";
+      this.catalogRelativePath = catalogRelativePath ?? "";
+      this.bundleRootRelativePath = bundleRootRelativePath ?? "";
+    }
   }
 
   sealed class AssignedAsset {

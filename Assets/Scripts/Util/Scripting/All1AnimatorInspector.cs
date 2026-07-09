@@ -113,10 +113,10 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   public List<ColorAnimation> activeColorAnimations = new();
   public List<VectorAnimation> activeVectorAnimations = new();
 
-  public Dictionary<string, FloatAnimation> floatAnimDict = new();
-  public Dictionary<string, ColorAnimation> colorAnimDict = new();
-  public Dictionary<string, VectorAnimation> vectorAnimDict = new();
-  public Dictionary<string, KeywordToggle> keywordDict = new();
+  public Dictionary<string, FloatAnimation> floatAnimDict { get; set; } = new();
+  public Dictionary<string, ColorAnimation> colorAnimDict { get; set; } = new();
+  public Dictionary<string, VectorAnimation> vectorAnimDict { get; set; } = new();
+  public Dictionary<string, KeywordToggle> keywordDict { get; set; } = new();
 
   public void Refresh() {
     ApplyAllProperties(true);

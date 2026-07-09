@@ -17,6 +17,7 @@ from data import (  # noqa: F401
     SpriteLibraryDocument,
     CUSTOM_LIBRARY_EXTENSION,
     LEGACY_LIBRARY_EXTENSION,
+    resolve_sprite_slice_name,
 )
 
 class SpriteLibraryMultiEditorApp:
@@ -235,8 +236,18 @@ class SpriteLibraryMultiEditorApp:
 
     def _update_label_info(self, doc_index: int, cat_index: int, label_index: int) -> None:
         """Update the label info display."""
+        document = self.documents[doc_index]
         label = self.documents[doc_index].categories[cat_index].entries[label_index]
-        self.info_labels[2].config(text=f"Label: {label.name}\nHash: {label.hash_text or '0'}\nRef: {label.sprite_ref}")
+        slice_name = resolve_sprite_slice_name(label.sprite_ref, document.path)
+        slice_text = slice_name or "(unresolved)"
+        self.info_labels[2].config(
+            text=(
+                f"Label: {label.name}\n"
+                f"Hash: {label.hash_text or '0'}\n"
+                f"Slice: {slice_text}\n"
+                f"Ref: {label.sprite_ref}"
+            )
+        )
 
     def _update_preview(self, sprite_ref: str | None, doc_index: int = 0) -> None:
         """Update the sprite preview display."""

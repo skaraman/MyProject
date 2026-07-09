@@ -28,6 +28,9 @@ public class SpriteStreamingSettings : ScriptableObject {
   [Min(0)] public int animationSwitchGateMs = 150;
   public bool keepLoadedSpritesForSession = true;
   public bool enableStreamingDiagnostics = false;
+  [Header("Content Packs")]
+  public bool enableLocalContentPackCatalogs = true;
+  public string localContentPackRoot = "";
   [Header("Runtime Console Logging")]
   public bool enableVerboseRuntimeConsoleLogs = false;
   [Header("Loading Screen Logs")]
@@ -134,6 +137,18 @@ public static class SpriteStreamingRuntimeSettings {
 
   public static bool EnableVerboseRuntimeConsoleLogs {
     get { return GetBoolSetting(Asset != null && Asset.enableVerboseRuntimeConsoleLogs, false); }
+  }
+
+  public static bool EnableLocalContentPackCatalogs {
+    get { return GetBoolSetting(Asset != null && Asset.enableLocalContentPackCatalogs, true); }
+  }
+
+  public static string LocalContentPackRoot {
+    get {
+      return Asset != null && Asset.localContentPackRoot != null
+        ? Asset.localContentPackRoot.Trim()
+        : "";
+    }
   }
 
   public static bool KeepLoadedSpritesForSession {

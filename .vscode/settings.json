@@ -1,4 +1,15 @@
 {
+    "files.watcherExclude": {
+        "**/Library/**": true,
+        "**/Temp/**": true,
+        "**/Obj/**": true,
+        "**/Build/**": true,
+        "**/Builds/**": true,
+        "**/Logs/**": false,
+        "**/UserSettings/**": true,
+        "**/bin/**": true,
+        "**/obj/**": true
+    },
     "files.exclude": {
         "**/.DS_Store": true,
         "**/.git": true,
@@ -49,8 +60,8 @@
         "library/": true,
         "obj/": true,
         "Obj/": true,
-        "Logs/": true,
-        "logs/": true,
+        "Logs/": false,
+        "logs/": false,
         "ProjectSettings/": true,
         "UserSettings/": true,
         "temp/": true,

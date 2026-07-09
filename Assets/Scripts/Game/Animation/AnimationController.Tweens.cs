@@ -27,7 +27,6 @@ public partial class AnimationController {
   private void StartBounceSequence(GameObject bounceParent, List<BounceFrame> sequence, int index) {
     if (!isPlaying || sequence == null || index >= sequence.Count || bounceParent == null) {
       ClearTweensFor(bounceParent);
-      if (SlowDown) TogglePause("true");
       return;
     }
     if (!activeTweens.ContainsKey(bounceParent)) {
@@ -77,7 +76,6 @@ public partial class AnimationController {
   private void StartHBoxSequence(GameObject go, PolygonCollider2D collider, List<HBox> sequence, int index) {
     if (!isPlaying || sequence == null || index >= sequence.Count || go == null || collider == null) {
       ClearTweensFor(go);
-      if (SlowDown) TogglePause("true");
       return;
     }
     if (!activeTweens.ContainsKey(go)) {

@@ -152,6 +152,44 @@ public static partial class ContentPackPipeline {
     }
   }
 
+  static void ApplyAssignedRuntimeAddressMetadata(
+    List<PackDefinition> packDefinitions,
+    Dictionary<string, AssignedAsset> assignedAssets
+  ) {
+    if (packDefinitions == null) return;
+
+    var packById = new Dictionary<string, PackDefinition>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null) continue;
+
+      pack.exportedAddresses.Clear();
+      if (string.IsNullOrWhiteSpace(pack.packId)) continue;
+      if (packById.ContainsKey(pack.packId)) continue;
+
+      packById.Add(pack.packId, pack);
+    }
+
+    if (assignedAssets == null || assignedAssets.Count <= 0) return;
+
+    var orderedAssets = assignedAssets.Values
+      .OrderBy(asset => asset.packId, StringComparer.OrdinalIgnoreCase)
+      .ThenBy(asset => asset.stageAssetPath, StringComparer.OrdinalIgnoreCase)
+      .ToList();
+
+    for (var i = 0; i < orderedAssets.Count; i++) {
+      var assigned = orderedAssets[i];
+      if (assigned == null) continue;
+      if (!packById.TryGetValue(assigned.packId, out var pack) || pack == null) continue;
+
+      pack.exportedAddresses.Add(new ContentPackExportedAddressJson {
+        sourceAssetPath = NormalizeAssetPath(assigned.assetPath),
+        assetPath = NormalizeAssetPath(assigned.stageAssetPath),
+        address = NormalizeAssetPath(assigned.stageAssetPath)
+      });
+    }
+  }
+
   static Dictionary<string, string> BuildGuidMap(Dictionary<string, AssignedAsset> assignedAssets) {
     var guidMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     foreach (var assigned in assignedAssets.Values) {
@@ -297,14 +335,34 @@ public static partial class ContentPackPipeline {
     if (pack == null) return;
 
     try {
+      var writesRuntimeCatalog = false;
+      if (!string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) {
+        writesRuntimeCatalog = PackRequiresOptionalRuntimeCatalog(pack);
+      }
+
+      var catalogPath = "";
+      if (writesRuntimeCatalog) {
+        catalogPath = BuildRuntimeCatalogRelativePath();
+      }
+
+      var bundleRoot = "";
+      if (writesRuntimeCatalog) {
+        bundleRoot = BuildRuntimeCatalogBundleRootRelativePath();
+      }
+
       var manifest = new ContentPackManifestJson {
         packId = pack.packId,
         type = pack.kind,
         kind = pack.kind,
+        catalogPath = catalogPath,
+        bundleRoot = bundleRoot,
+        addressPrefix = NormalizeAssetPath(pack.stageAssetRoot),
         ownedRoots = new List<string>(pack.ownedRoots),
         ownedLocations = new List<string>(pack.ownedLocations),
         ownedEnemyTypes = new List<string>(pack.ownedEnemyTypes),
         dialogIds = new List<string>(pack.dialogIds),
+        dependencies = new List<string>(pack.dependencies),
+        exportedAddresses = CloneExportedAddresses(pack.exportedAddresses),
         authoringSources = CloneAuthoringSources(pack.authoringSources),
         exportedFromProject = new DirectoryInfo(GetProjectRoot()).Name,
         sourceRevision = TryGetGitRevision()
@@ -338,6 +396,24 @@ public static partial class ContentPackPipeline {
         category = NormalizeToken(source.category),
         labelPrefix = NormalizeToken(source.labelPrefix),
         normalAssetPath = NormalizeAssetPath(source.normalAssetPath)
+      });
+    }
+
+    return result;
+  }
+
+  static List<ContentPackExportedAddressJson> CloneExportedAddresses(List<ContentPackExportedAddressJson> addresses) {
+    var result = new List<ContentPackExportedAddressJson>();
+    if (addresses == null) return result;
+
+    for (var i = 0; i < addresses.Count; i++) {
+      var address = addresses[i];
+      if (address == null) continue;
+
+      result.Add(new ContentPackExportedAddressJson {
+        sourceAssetPath = NormalizeAssetPath(address.sourceAssetPath),
+        assetPath = NormalizeAssetPath(address.assetPath),
+        address = NormalizeAssetPath(address.address)
       });
     }
 

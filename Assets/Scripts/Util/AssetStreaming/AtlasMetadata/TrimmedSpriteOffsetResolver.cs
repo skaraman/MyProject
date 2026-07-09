@@ -47,6 +47,10 @@ public static class TrimmedSpriteOffsetResolver {
       if (string.IsNullOrWhiteSpace(normalizedSpriteName)) return false;
       if (exactOffsetsBySpriteName.TryGetValue(normalizedSpriteName, out offsetPx)) return true;
 
+      if (!SpriteSliceAddressUtility.CanUseNumericLabelFallback(normalizedSpriteName)) {
+        return false;
+      }
+
       if (TryExtractNumericLabel(normalizedSpriteName, out var queryNumeric)) {
         if (offsetsByNumericLabel.TryGetValue(queryNumeric, out offsetPx)) {
           return true;
@@ -370,7 +374,7 @@ public static class TrimmedSpriteOffsetResolver {
     if (ShouldSkipOptionalOffsetAtlas(atlasAssetPath, "editor_load")) return false;
     if (missingAtlasOffsets.Contains(atlasAssetPath)) return false;
 
-    var metadataAssetPath = BuildOptionalOffsetMetadataAssetPath(atlasAssetPath);
+    var metadataAssetPath = ResolveEditorMetadataAssetPath(atlasAssetPath);
     var metadataAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(metadataAssetPath);
     if (metadataAsset == null || string.IsNullOrWhiteSpace(metadataAsset.text)) {
       missingAtlasOffsets.Add(atlasAssetPath);
@@ -769,6 +773,21 @@ public static class TrimmedSpriteOffsetResolver {
     return GeneratedAtlasBuildSurrogateUtility.BuildMetadataAssetPath(atlasAssetPath);
   }
 
+#if UNITY_EDITOR
+  static string ResolveEditorMetadataAssetPath(string atlasAssetPath) {
+    var normalizedAtlasAssetPath = NormalizeAtlasPath(atlasAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) {
+      return "";
+    }
+
+    if (ContentPackCatalogLoader.TryResolveSourceAssetPath(normalizedAtlasAssetPath, out var sourceAtlasAssetPath)) {
+      return BuildOptionalOffsetMetadataAssetPath(sourceAtlasAssetPath);
+    }
+
+    return BuildOptionalOffsetMetadataAssetPath(normalizedAtlasAssetPath);
+  }
+#endif
+
   static string NormalizeAtlasPath(string atlasAssetPath) {
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return "";
 
@@ -795,6 +814,12 @@ public static class TrimmedSpriteOffsetResolver {
 #if UNITY_EDITOR
   static bool OptionalOffsetMetadataAssetExistsInEditor(string metadataAssetPath) {
     var normalizedMetadataAssetPath = NormalizeAtlasPath(metadataAssetPath);
+    if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return false;
+    if (ContentPackCatalogLoader.TryResolveSourceAssetPath(
+      Path.ChangeExtension(normalizedMetadataAssetPath, ".png"),
+      out var sourceAtlasAssetPath)) {
+      normalizedMetadataAssetPath = BuildOptionalOffsetMetadataAssetPath(sourceAtlasAssetPath);
+    }
     if (string.IsNullOrWhiteSpace(normalizedMetadataAssetPath)) return false;
     if (!string.IsNullOrWhiteSpace(AssetDatabase.AssetPathToGUID(normalizedMetadataAssetPath))) return true;
     return File.Exists(Path.GetFullPath(normalizedMetadataAssetPath));

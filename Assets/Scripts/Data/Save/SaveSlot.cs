@@ -1,7 +1,11 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class SaveSlot : MonoBehaviour {
+  const int SortingOrderBandSize = 128;
+  const int DetailTextSortingOrder = 45;
+
   public string saveNumber;
   public string avatar;
   public List<string> forms = new List<string> { "Base" };
@@ -9,12 +13,14 @@ public class SaveSlot : MonoBehaviour {
   public string level;
   public string location;
   public string episode;
+  public string saveDate;
 
   public FontText SaveNumberText;
   public FontText PlaytimeText;
   public FontText LevelText;
   public FontText LocationText;
   public FontText EpisodeText;
+  public FontText DateText;
   [SerializeField] bool enableDebugLogs;
 
   void Start() {
@@ -28,11 +34,12 @@ public class SaveSlot : MonoBehaviour {
       bool shouldBeActive = forms.Contains(child.name);
       child.gameObject.SetActive(shouldBeActive);
     }
-    UpdateFontText(SaveNumberText, "No ." + saveNumber);
-    UpdateFontText(PlaytimeText, "Playtime - " + playtime);
-    UpdateFontText(LevelText, "Level - " + level);
-    UpdateFontText(LocationText, "Location - " + location);
-    UpdateFontText(EnsureEpisodeText(), "Episode - " + episode);
+    UpdateMaskedFontText(SaveNumberText, "No ." + saveNumber);
+    UpdateDetailFontText(PlaytimeText, "Playtime - " + playtime);
+    UpdateDetailFontText(LevelText, "Level - " + level);
+    UpdateDetailFontText(LocationText, "Location - " + location);
+    UpdateDetailFontText(EnsureEpisodeText(), "Episode - " + episode);
+    UpdateDetailFontText(EnsureDateText(), "Date - " + saveDate);
 
     if (!enableDebugLogs) return;
     Debug.Log(
@@ -41,43 +48,61 @@ public class SaveSlot : MonoBehaviour {
       " level=" + level +
       " location=" + location +
       " episode=" + episode +
+      " saveDate=" + saveDate +
       " saveNumberText={" + DescribeTextRendererState(SaveNumberText) + "}" +
       " playtimeText={" + DescribeTextRendererState(PlaytimeText) + "}" +
       " levelText={" + DescribeTextRendererState(LevelText) + "}" +
-      " locationText={" + DescribeTextRendererState(LocationText) + "}"
+      " locationText={" + DescribeTextRendererState(LocationText) + "}" +
+      " episodeText={" + DescribeTextRendererState(EpisodeText) + "}" +
+      " dateText={" + DescribeTextRendererState(DateText) + "}"
     );
   }
 
   FontText EnsureEpisodeText() {
-    if (EpisodeText != null) {
-      return EpisodeText;
+    return EnsureNamedText(
+      ref EpisodeText,
+      "Episode",
+      LocationText,
+      ResolveEpisodeLocalPosition
+    );
+  }
+
+  FontText EnsureDateText() {
+    return EnsureNamedText(
+      ref DateText,
+      "Date",
+      EnsureEpisodeText(),
+      ResolveDateLocalPosition
+    );
+  }
+
+  FontText EnsureNamedText(
+    ref FontText target,
+    string childName,
+    FontText cloneSource,
+    Func<Vector3, Vector3> resolveClonePosition
+  ) {
+    if (target != null) {
+      return target;
     }
 
-    var existing = transform.Find("Episode");
-    if (existing != null) {
-      EpisodeText = existing.GetComponent<FontText>();
-      if (EpisodeText != null) {
-        return EpisodeText;
-      }
+    target = FindFontTextByName(transform, childName);
+    if (target != null) {
+      return target;
     }
 
-    if (!Application.isPlaying) {
-      return null;
-    }
+    if (!Application.isPlaying) return null;
+    if (cloneSource == null) return null;
 
-    if (LocationText == null) {
-      return null;
-    }
-
-    var sourceTransform = LocationText.transform;
+    var sourceTransform = cloneSource.transform;
     var parent = sourceTransform.parent;
-    var episodeObject = Instantiate(LocationText.gameObject, parent);
-    episodeObject.name = "Episode";
-    episodeObject.transform.localPosition = ResolveEpisodeLocalPosition(sourceTransform.localPosition);
-    episodeObject.transform.localRotation = sourceTransform.localRotation;
-    episodeObject.transform.localScale = sourceTransform.localScale;
-    EpisodeText = episodeObject.GetComponent<FontText>();
-    return EpisodeText;
+    var textObject = Instantiate(cloneSource.gameObject, parent);
+    textObject.name = childName;
+    textObject.transform.localPosition = resolveClonePosition(sourceTransform.localPosition);
+    textObject.transform.localRotation = sourceTransform.localRotation;
+    textObject.transform.localScale = sourceTransform.localScale;
+    target = textObject.GetComponent<FontText>();
+    return target;
   }
 
   static Vector3 ResolveEpisodeLocalPosition(Vector3 sourcePosition) {
@@ -88,10 +113,85 @@ public class SaveSlot : MonoBehaviour {
     );
   }
 
-  static void UpdateFontText(FontText target, string value) {
+  static Vector3 ResolveDateLocalPosition(Vector3 sourcePosition) {
+    return new Vector3(
+      sourcePosition.x,
+      sourcePosition.y - 0.9f,
+      sourcePosition.z
+    );
+  }
+
+  static FontText FindFontTextByName(Transform root, string childName) {
+    if (root == null) return null;
+    if (string.IsNullOrWhiteSpace(childName)) return null;
+
+    for (var i = 0; i < root.childCount; i++) {
+      var child = root.GetChild(i);
+      if (child == null) continue;
+
+      if (string.Equals(child.name, childName, StringComparison.OrdinalIgnoreCase)) {
+        var fontText = child.GetComponent<FontText>();
+        if (fontText != null) {
+          return fontText;
+        }
+      }
+    }
+
+    for (var i = 0; i < root.childCount; i++) {
+      var child = root.GetChild(i);
+      if (child == null) continue;
+
+      var nested = FindFontTextByName(child, childName);
+      if (nested != null) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  static void UpdateMaskedFontText(FontText target, string value) {
     if (!target) return;
+    ApplyMaskedTextRendererContract(target);
     target.content = value;
     target.Generate();
+    ApplyMaskedTextRendererContract(target);
+  }
+
+  static void UpdateDetailFontText(FontText target, string value) {
+    if (!target) return;
+    ApplyDetailTextRendererContract(target);
+    target.content = value;
+    target.Generate();
+    ApplyDetailTextRendererContract(target);
+  }
+
+  static void ApplyMaskedTextRendererContract(FontText target) {
+    if (!target) return;
+
+    var renderers = target.GetComponentsInChildren<SpriteRenderer>(true);
+    for (var i = 0; i < renderers.Length; i++) {
+      var renderer = renderers[i];
+      if (renderer == null) continue;
+      renderer.maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
+    }
+  }
+
+  static void ApplyDetailTextRendererContract(FontText target) {
+    if (!target) return;
+
+    var renderers = target.GetComponentsInChildren<SpriteRenderer>(true);
+    for (var i = 0; i < renderers.Length; i++) {
+      var renderer = renderers[i];
+      if (renderer == null) continue;
+      renderer.maskInteraction = SpriteMaskInteraction.None;
+      renderer.sortingOrder = ResolveDetailTextSortingOrder(renderer.sortingOrder);
+    }
+  }
+
+  static int ResolveDetailTextSortingOrder(int currentSortingOrder) {
+    var bandOffset = Mathf.FloorToInt(currentSortingOrder / (float)SortingOrderBandSize) * SortingOrderBandSize;
+    return bandOffset + DetailTextSortingOrder;
   }
 
   static string DescribeTextRendererState(FontText target) {

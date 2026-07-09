@@ -135,7 +135,7 @@ public static partial class ContentPackPipeline {
       "Content Pipeline Transition",
       logResult,
       cleanCachesBeforeBuild,
-      useChunkedWarmup: false
+      useChunkedWarmup: true
     );
   }
 

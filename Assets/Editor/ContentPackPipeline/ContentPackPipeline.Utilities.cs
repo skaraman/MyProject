@@ -122,6 +122,14 @@ public static partial class ContentPackPipeline {
     return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
   }
 
+  static string BuildRuntimeCatalogBundleRootRelativePath() {
+    return NormalizeAssetPath(RuntimeCatalogFolderName + "/" + EditorUserBuildSettings.activeBuildTarget);
+  }
+
+  static string BuildRuntimeCatalogRelativePath() {
+    return NormalizeAssetPath(BuildRuntimeCatalogBundleRootRelativePath() + "/" + RuntimeCatalogFileName);
+  }
+
   public static bool IsGameplayContentRequested(IReadOnlyList<string> activePackIds) {
     if (activePackIds == null || activePackIds.Count <= 0) return false;
 

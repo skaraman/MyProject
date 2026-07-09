@@ -50,6 +50,11 @@ public static class SpriteSliceAddressUtility {
     return string.Equals(leftNumeric, rightNumeric, StringComparison.Ordinal);
   }
 
+  public static bool CanUseNumericLabelFallback(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return false;
+    return TryNormalizeNumericToken(value.Trim(), out _);
+  }
+
   public static int CompareNaturally(string left, string right) {
     var normalizedLeft = left ?? "";
     var normalizedRight = right ?? "";

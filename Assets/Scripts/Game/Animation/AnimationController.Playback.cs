@@ -147,7 +147,7 @@ public partial class AnimationController {
       currentFrame = anim.end - frameOffset;
       if (currentFrame <= anim.start) {
         isPlaying = true;
-        currentFrame = anim.start - 1;
+        currentFrame = anim.start;
         pingPong = false;
         animationTimer = 0f;
         SetBounces();
@@ -251,6 +251,9 @@ public partial class AnimationController {
     if (holdOnStartFrameUntilReady) {
       PrimeTargetsForAnimation(targetCategory, currentFrame, currentFrame);
     }
+    else if (ShouldDeferInitialVisualApply(targetCategory, currentFrame)) {
+      PrimeTargetsForAnimation(targetCategory, currentFrame, currentFrame);
+    }
     else {
       UpdateSprites(currentFrame);
     }
@@ -260,6 +263,22 @@ public partial class AnimationController {
     lastFrame = currentFrame;
     MarkAnimationCategorySeen(targetCategory);
     BeginActivePunchTrace(anim, targetCategory);
+  }
+
+  bool ShouldDeferInitialVisualApply(string targetCategory, int frame) {
+    if (!Application.isPlaying) return false;
+    if (string.IsNullOrWhiteSpace(targetCategory)) return false;
+    if (spriteTargets.Count <= 1) return false;
+
+    var loadingOverlayWarmGateActive =
+      SpriteStreamingLoadingState.IsLoadingOverlayActive &&
+      StreamingWarmOrchestrator.IsWarmGateRunning;
+    if (loadingOverlayWarmGateActive) return false;
+    if (spriteTargets.Count > MaxTargetsForGateReadinessChecks) return false;
+    if (!HasMixedVisibleSpriteTargets()) return false;
+    if (AreAllTargetsReadyForFrame(targetCategory, frame)) return false;
+
+    return true;
   }
 
   static string ResolveAnimationCategory(string animationName, AnimData anim) {

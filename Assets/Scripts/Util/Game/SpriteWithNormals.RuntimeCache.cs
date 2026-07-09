@@ -25,7 +25,6 @@ public partial class SpriteWithNormals {
     _pendingSupplementWaitStartedAt = -1f;
     _pendingLoadRequestVersion = 0;
     _pendingLoadPair = default;
-    _staleCompletionStreak = 0;
     _hasDeferredRequest = false;
     _deferredRequest = default;
     _requestVersion++;
@@ -166,9 +165,17 @@ public partial class SpriteWithNormals {
     return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
   }
 
-  bool ShouldDeferTargetRetargetForOutstandingMiss(SpriteAddressPair nextPair) {
+  bool ShouldDeferTargetRetargetForOutstandingMiss(
+    SpriteAddressPair nextPair,
+    string lookupLibraryName,
+    string lookupLabelPrefix,
+    string lookupCategory
+  ) {
     if (_pendingColorLease == null || _pendingColorLease.IsDone) return false;
     if (Time.frameCount >= _pendingRetargetAllowedFrame) return false;
+    if (!string.Equals(lookupLibraryName, _lastLookupLibraryName, StringComparison.OrdinalIgnoreCase)) return false;
+    if (!string.Equals(lookupLabelPrefix, _lastLookupLabelPrefix, StringComparison.Ordinal)) return false;
+    if (!string.Equals(lookupCategory, _lastLookupCategory, StringComparison.Ordinal)) return false;
     if (AddressEquals(nextPair.RuntimeColorAddress, _pendingColorAddress) &&
         AddressEquals(nextPair.RuntimeNormalAddress, _pendingNormalAddress)) {
       return false;

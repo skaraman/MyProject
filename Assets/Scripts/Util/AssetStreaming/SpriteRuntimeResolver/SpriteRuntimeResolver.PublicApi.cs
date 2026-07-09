@@ -26,9 +26,8 @@ public static partial class SpriteRuntimeResolver {
       var normalizedNamepart = NormalizeNamePart(namepart);
       if (string.IsNullOrWhiteSpace(normalizedNamepart)) continue;
       if (!manifestReadyNow) {
-        if (pendingWarmupNamepartsSet.Add(normalizedNamepart)) {
-          pendingWarmupNameparts.Add(normalizedNamepart);
-        }
+        QueuePendingWarmupNamepart(normalizedNamepart);
+        QueueLegacyFormUiAliasWarmups(normalizedNamepart);
         continue;
       }
 
@@ -36,6 +35,7 @@ public static partial class SpriteRuntimeResolver {
         immediateWarmups = new List<string>();
       }
       immediateWarmups.Add(normalizedNamepart);
+      AddLegacyFormUiAliasWarmups(immediateWarmups, normalizedNamepart);
     }
 
     if (immediateWarmups != null && immediateWarmups.Count > 1) {
@@ -95,15 +95,10 @@ public static partial class SpriteRuntimeResolver {
     foreach (var namepart in nameparts) {
       var normalized = NormalizeNamePart(namepart);
       if (string.IsNullOrWhiteSpace(normalized)) continue;
-      if (!TryGetManifestEntryForNamepart(manifestByNamepart, normalized, out var entry)) continue;
 
-      var shardKey = string.IsNullOrWhiteSpace(entry.namepart) ? normalized : entry.namepart;
-      if (!loadedShards.ContainsKey(shardKey)) {
-        if (shardParses.TryGetValue(shardKey, out var shardParseTask) && shardParseTask.IsCompleted) {
-          if (TryGetShard(shardKey, entry, out _)) {
-            continue;
-          }
-        }
+      if (!IsNamepartShardReady(normalized)) return false;
+      if (IsLegacyFormUiNamepart(normalized) &&
+          !AreLegacyFormUiAliasShardsReady()) {
         return false;
       }
     }
@@ -119,6 +114,11 @@ public static partial class SpriteRuntimeResolver {
 
     var normalizedNamepart = NormalizeNamePart(key.namepart);
     if (TryResolveFromManifestNamepart(normalizedNamepart, key, out pair, logContext)) {
+      return true;
+    }
+
+    if (TryBuildLegacyFormUiKey(key, out var formUiAliasKey) &&
+        TryResolveFromManifestNamepart(NormalizeNamePart(formUiAliasKey.namepart), formUiAliasKey, out pair, logContext)) {
       return true;
     }
 
@@ -191,6 +191,12 @@ public static partial class SpriteRuntimeResolver {
       return true;
     }
 
+    if (TryBuildLegacyFormUiKey(key, out var formUiAliasKey) &&
+        TryGetLookupPendingForNamepart(NormalizeNamePart(formUiAliasKey.namepart), logContext, out pending) &&
+        pending) {
+      return true;
+    }
+
     if (TryBuildGearSplitNamepart(normalizedNamepart, key.labelPrefix, out var splitNamepart) &&
         !string.Equals(splitNamepart, normalizedNamepart, StringComparison.OrdinalIgnoreCase) &&
         TryGetLookupPendingForNamepart(splitNamepart, logContext, out pending) &&
@@ -239,6 +245,11 @@ public static partial class SpriteRuntimeResolver {
     if (TryBuildGearSplitNamepart(normalizedNamepart, key.labelPrefix, out var splitNamepart) &&
         !string.Equals(splitNamepart, normalizedNamepart, StringComparison.OrdinalIgnoreCase)) {
       InvalidateLookupForNamepart(splitNamepart, key, reloadShard);
+    }
+
+    if (TryBuildLegacyFormUiKey(key, out var formUiAliasKey)) {
+      var formUiAliasNamepart = NormalizeNamePart(formUiAliasKey.namepart);
+      InvalidateLookupForNamepart(formUiAliasNamepart, formUiAliasKey, reloadShard);
     }
   }
 

@@ -80,7 +80,8 @@ public static partial class SpriteIndexBuilder {
     for (var i = 0; i < groupInfos.Count; i++) {
       var info = groupInfos[i];
       if (currentChunk == null ||
-          (currentChunk.approxSourceBytes >= BuilderConfig.ChunkedTextureBuildTargetApproxBytes && currentChunk.groups.Count > 0)) {
+          (currentChunk.approxSourceBytes >= BuilderConfig.ChunkedTextureBuildTargetApproxBytes && currentChunk.groups.Count > 0) ||
+          currentChunk.groups.Count >= 20) {
         currentChunk = new TextureBuildChunk();
         chunks.Add(currentChunk);
       }
@@ -124,6 +125,222 @@ public static partial class SpriteIndexBuilder {
     }
 
     return states;
+  }
+
+  static bool BuildOptionalContentPackCatalogs(
+    AddressableAssetSettings settings,
+    Dictionary<AddressableAssetGroup, bool> originalStates,
+    List<ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo> optionalPackCatalogs,
+    string contextLabel,
+    bool logResult
+  ) {
+    if (settings == null || optionalPackCatalogs == null || optionalPackCatalogs.Count <= 0) {
+      return true;
+    }
+
+    for (var i = 0; i < optionalPackCatalogs.Count; i++) {
+      var catalog = optionalPackCatalogs[i];
+      if (catalog == null || string.IsNullOrWhiteSpace(catalog.groupName)) {
+        continue;
+      }
+
+      var group = settings.FindGroup(catalog.groupName);
+      if (group == null || group.entries.Count <= 0) {
+        Debug.LogError(
+          "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Missing Addressables group entries for required content pack catalog." +
+          " pack_id='" + (catalog.packId ?? "") + "'" +
+          " group='" + (catalog.groupName ?? "") + "'"
+        );
+        return false;
+      }
+
+      ApplyChunkIncludeInBuildSelection(settings, originalStates, new[] { group });
+      AssetDatabase.SaveAssets();
+      AssetDatabase.Refresh();
+
+      var passContextLabel = contextLabel + "][PackCatalog " + (catalog.packId ?? "");
+      if (!ValidateAddressablesPackedBuildSpriteSliceRisk(settings, passContextLabel)) {
+        return false;
+      }
+
+      var passLabel = "pack_" + SanitizeAddressablesLabel(catalog.packId);
+      ReleaseEditorBuildPrepMemory(contextLabel + " " + catalog.packId);
+      if (!RunAddressablesPlayerBuildPass(
+            contextLabel,
+            passLabel,
+            "Building content pack catalog " + (i + 1) + "/" + optionalPackCatalogs.Count + "...",
+            0.8f,
+            logResult,
+            out var result)) {
+        return false;
+      }
+
+      if (!CopyPackCatalogBuildOutput(result, catalog, contextLabel, logResult)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  static void ApplyHybridBaseIncludeInBuildSelection(
+    AddressableAssetSettings settings,
+    Dictionary<AddressableAssetGroup, bool> originalStates,
+    List<ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo> optionalPackCatalogs
+  ) {
+    if (settings == null || originalStates == null || optionalPackCatalogs == null || optionalPackCatalogs.Count <= 0) {
+      return;
+    }
+
+    var optionalGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < optionalPackCatalogs.Count; i++) {
+      if (optionalPackCatalogs[i] == null) continue;
+      if (string.IsNullOrWhiteSpace(optionalPackCatalogs[i].groupName)) continue;
+      optionalGroupNames.Add(optionalPackCatalogs[i].groupName);
+    }
+
+    foreach (var pair in originalStates) {
+      var group = pair.Key;
+      var schema = group?.GetSchema<BundledAssetGroupSchema>();
+      if (schema == null) continue;
+
+      var include = pair.Value && (group == null || !optionalGroupNames.Contains(group.Name));
+      if (schema.IncludeInBuild == include) continue;
+
+      schema.IncludeInBuild = include;
+      EditorUtility.SetDirty(schema);
+      if (group != null) {
+        EditorUtility.SetDirty(group);
+      }
+    }
+
+    EditorUtility.SetDirty(settings);
+  }
+
+  static bool CopyPackCatalogBuildOutput(
+    AddressablesPlayerBuildResult result,
+    ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo catalog,
+    string contextLabel,
+    bool logResult
+  ) {
+    var outputPath = NormalizePath(result?.OutputPath);
+    if (string.IsNullOrWhiteSpace(outputPath)) {
+      Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Addressables build result had no output path.");
+      return false;
+    }
+
+    var outputRoot = File.Exists(outputPath)
+      ? Path.GetDirectoryName(outputPath)
+      : outputPath;
+    outputRoot = string.IsNullOrWhiteSpace(outputRoot) ? "" : Path.GetFullPath(outputRoot);
+    if (string.IsNullOrWhiteSpace(outputRoot) || !Directory.Exists(outputRoot)) {
+      Debug.LogError(
+        "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Addressables output folder was not found." +
+        " pack_id='" + (catalog?.packId ?? "") + "'" +
+        " output='" + outputPath + "'"
+      );
+      return false;
+    }
+
+    var externalRoot = Path.GetFullPath(catalog.externalRootPath);
+    var targetRoot = Path.GetFullPath(Path.Combine(externalRoot, catalog.bundleRootRelativePath));
+    if (!targetRoot.StartsWith(externalRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
+      Debug.LogError(
+        "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Pack catalog output escaped pack root." +
+        " pack_id='" + (catalog.packId ?? "") + "'" +
+        " target='" + targetRoot + "'"
+      );
+      return false;
+    }
+
+    if (Directory.Exists(targetRoot)) {
+      Directory.Delete(targetRoot, recursive: true);
+    }
+    Directory.CreateDirectory(targetRoot);
+    CopyDirectoryContents(outputRoot, targetRoot);
+    EnsureCatalogAlias(externalRoot, catalog.catalogRelativePath);
+
+    var catalogPath = Path.GetFullPath(Path.Combine(externalRoot, catalog.catalogRelativePath));
+    if (!File.Exists(catalogPath)) {
+      Debug.LogError(
+        "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Expected content pack catalog was not written." +
+        " pack_id='" + (catalog.packId ?? "") + "'" +
+        " catalog='" + catalogPath.Replace('\\', '/') + "'"
+      );
+      return false;
+    }
+
+    if (logResult) {
+      Debug.Log(
+        "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Wrote content pack catalog." +
+        " pack_id='" + (catalog.packId ?? "") + "'" +
+        " output='" + targetRoot.Replace('\\', '/') + "'" +
+        " catalog='" + (catalog.catalogRelativePath ?? "") + "'"
+      );
+    }
+
+    return true;
+  }
+
+  static void CopyDirectoryContents(string sourceRoot, string targetRoot) {
+    var directories = Directory.GetDirectories(sourceRoot, "*", SearchOption.AllDirectories);
+    for (var i = 0; i < directories.Length; i++) {
+      var relativeDirectory = GetRelativeFileSystemPath(sourceRoot, directories[i]);
+      Directory.CreateDirectory(Path.Combine(targetRoot, relativeDirectory));
+    }
+
+    var files = Directory.GetFiles(sourceRoot, "*", SearchOption.AllDirectories);
+    for (var i = 0; i < files.Length; i++) {
+      var relativeFile = GetRelativeFileSystemPath(sourceRoot, files[i]);
+      var targetFile = Path.Combine(targetRoot, relativeFile);
+      var targetDirectory = Path.GetDirectoryName(targetFile);
+      if (!string.IsNullOrWhiteSpace(targetDirectory)) {
+        Directory.CreateDirectory(targetDirectory);
+      }
+      File.Copy(files[i], targetFile, overwrite: true);
+    }
+  }
+
+  static string GetRelativeFileSystemPath(string root, string path) {
+    if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(path)) {
+      return "";
+    }
+
+    var rootFullPath = Path.GetFullPath(root);
+    if (!rootFullPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) &&
+        !rootFullPath.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)) {
+      rootFullPath += Path.DirectorySeparatorChar;
+    }
+
+    var pathFullPath = Path.GetFullPath(path);
+    var rootUri = new Uri(rootFullPath);
+    var pathUri = new Uri(pathFullPath);
+    var relativeUri = rootUri.MakeRelativeUri(pathUri);
+    return Uri.UnescapeDataString(relativeUri.ToString()).Replace('/', Path.DirectorySeparatorChar);
+  }
+
+  static void EnsureCatalogAlias(string externalRoot, string catalogRelativePath) {
+    var targetCatalogPath = Path.GetFullPath(Path.Combine(externalRoot, catalogRelativePath));
+    if (File.Exists(targetCatalogPath)) {
+      return;
+    }
+
+    var targetFolder = Path.GetDirectoryName(targetCatalogPath);
+    if (string.IsNullOrWhiteSpace(targetFolder) || !Directory.Exists(targetFolder)) {
+      return;
+    }
+
+    var catalogs = Directory.GetFiles(targetFolder, "catalog*.bin", SearchOption.AllDirectories);
+    if (catalogs.Length <= 0) {
+      return;
+    }
+
+    Array.Sort(catalogs, StringComparer.OrdinalIgnoreCase);
+    var targetDirectory = Path.GetDirectoryName(targetCatalogPath);
+    if (!string.IsNullOrWhiteSpace(targetDirectory)) {
+      Directory.CreateDirectory(targetDirectory);
+    }
+    File.Copy(catalogs[0], targetCatalogPath, overwrite: true);
   }
 
   static void ApplyChunkIncludeInBuildSelection(
@@ -184,6 +401,8 @@ public static partial class SpriteIndexBuilder {
     for (var i = 0; i < settings.groups.Count; i++) {
       var group = settings.groups[i];
       if (group == null) continue;
+      var schema = group.GetSchema<BundledAssetGroupSchema>();
+      if (schema == null || !schema.IncludeInBuild) continue;
       if (group.Name.StartsWith(BuilderConfig.ManagedTextureGroupPrefix, StringComparison.OrdinalIgnoreCase)) {
         result.Add(group);
       }
@@ -252,6 +471,95 @@ public static partial class SpriteIndexBuilder {
     }
 
     Debug.LogError(sb.ToString());
+    return false;
+  }
+
+  static bool ValidateBuilderManagedAddressableNamingContract(
+    AddressableAssetSettings settings,
+    string contextLabel,
+    bool logResult
+  ) {
+    if (settings == null) return false;
+
+    var errors = new List<string>();
+    var ownerByAddress = new Dictionary<string, string>(StringComparer.Ordinal);
+    var managedEntryCount = 0;
+
+    for (var groupIndex = 0; groupIndex < settings.groups.Count; groupIndex++) {
+      var group = settings.groups[groupIndex];
+      if (group == null || group.entries == null) continue;
+
+      foreach (var entry in group.entries) {
+        if (entry == null) continue;
+
+        var assetPath = NormalizePath(entry.AssetPath);
+        if (!IsBuilderManagedCanonicalPathAsset(assetPath)) continue;
+
+        managedEntryCount++;
+        var expectedAddress = assetPath;
+        var actualAddress = NormalizePath(entry.address);
+        if (!string.Equals(actualAddress, expectedAddress, StringComparison.Ordinal)) {
+          errors.Add(
+            "Managed runtime asset has a non-canonical Addressables address." +
+            " group='" + group.Name + "'" +
+            " asset_path='" + assetPath + "'" +
+            " address='" + (entry.address ?? "") + "'"
+          );
+          continue;
+        }
+
+        var owner = group.Name + " | " + assetPath;
+        if (ownerByAddress.TryGetValue(actualAddress, out var existingOwner)) {
+          if (!string.Equals(existingOwner, owner, StringComparison.Ordinal)) {
+            errors.Add(
+              "Managed runtime asset address is duplicated." +
+              " address='" + actualAddress + "'" +
+              " first='" + existingOwner + "'" +
+              " second='" + owner + "'"
+            );
+          }
+          continue;
+        }
+
+        ownerByAddress[actualAddress] = owner;
+      }
+    }
+
+    if (errors.Count > 0) {
+      var sb = new StringBuilder();
+      sb.Append("[SpriteIndexBuilder] [").Append(contextLabel).Append("] ERROR: Addressables naming contract failed.");
+      sb.Append(" managedEntries=").Append(managedEntryCount);
+      sb.Append(" errors=").Append(errors.Count);
+      var shown = Math.Min(errors.Count, 20);
+      for (var i = 0; i < shown; i++) {
+        sb.Append("\n  ").Append(errors[i]);
+      }
+      if (errors.Count > shown) {
+        sb.Append("\n  ... ").Append(errors.Count - shown).Append(" more");
+      }
+      Debug.LogError(sb.ToString());
+      return false;
+    }
+
+    if (logResult) {
+      Debug.Log(
+        "[SpriteIndexBuilder] [" + contextLabel + "] Addressables naming contract validated." +
+        " managedEntries=" + managedEntryCount +
+        " uniqueAddresses=" + ownerByAddress.Count
+      );
+    }
+
+    return true;
+  }
+
+  static bool IsBuilderManagedCanonicalPathAsset(string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return false;
+    if (IsRuntimeTextureAssetPath(normalizedAssetPath)) return true;
+    if (!TrimmedAtlasExporterWindow.IsRuntimeMetadataAssetPath(normalizedAssetPath)) return false;
+    if (IsRuntimeTextureAssetPath(Path.ChangeExtension(normalizedAssetPath, ".png"))) return true;
+    if (IsRuntimeTextureAssetPath(Path.ChangeExtension(normalizedAssetPath, ".jpg"))) return true;
+    if (IsRuntimeTextureAssetPath(Path.ChangeExtension(normalizedAssetPath, ".jpeg"))) return true;
     return false;
   }
 

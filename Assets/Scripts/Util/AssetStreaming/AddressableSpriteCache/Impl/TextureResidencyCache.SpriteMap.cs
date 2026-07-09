@@ -449,6 +449,7 @@ public static partial class TextureResidencyCache {
   static bool SpriteMatchesRequestedSlice(Sprite sprite, string requestedSpriteName) {
     if (sprite == null || string.IsNullOrWhiteSpace(requestedSpriteName)) return false;
     if (string.Equals(sprite.name, requestedSpriteName, StringComparison.Ordinal)) return true;
+    if (!SpriteSliceAddressUtility.CanUseNumericLabelFallback(requestedSpriteName)) return false;
     return SpriteSliceAddressUtility.HasEquivalentNumericLabel(sprite.name, requestedSpriteName);
   }
 

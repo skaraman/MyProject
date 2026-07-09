@@ -7,6 +7,11 @@ using UnityEngine;
 public class SaveSlotView : MonoBehaviour {
   const string SaveFileName = "slot.sav";
   const int SortingOrderBandSize = 128;
+  const float SlotX = -0.11f;
+  const float SlotScale = 1.85f;
+  const float SlotSpacingY = 8f;
+  const float SlotZStep = -0.01f;
+  const float OffscreenSlotPadding = 2f;
 
   public GameObject saveSlotPrefab;
   public GameObject saveSlotWrap;
@@ -18,6 +23,7 @@ public class SaveSlotView : MonoBehaviour {
   public int SavesCount { set; get; } = 0;
 
   private float initialY = 5.34f;
+  float scrollOffsetY;
   private int knownMaxSlotNumber;
   private readonly List<Action> actions = new();
 
@@ -84,15 +90,16 @@ public class SaveSlotView : MonoBehaviour {
     ClearSlotItems();
     loadMenuGroup.buttons.Clear();
     loadMenuGroup.ResetSelection();
+    scrollOffsetY = 0f;
 
     for (int slotNumber = 1; slotNumber <= renderedSlotCount; slotNumber++) {
       var slotIndex = slotNumber - 1;
       slotDirectories.TryGetValue(slotNumber, out var directory);
       var go = Instantiate(saveSlotPrefab, saveSlotWrap.transform);
       var transformRef = go.transform;
-      transformRef.localPosition = ResolveSlotLocalPosition(slotIndex);
-      transformRef.localScale = new Vector3(1.85f, 1.85f, 1.85f);
-      ApplySlotSortingBand(go, slotIndex);
+      transformRef.localScale = new Vector3(SlotScale, SlotScale, SlotScale);
+      transformRef.localPosition = ResolveParkedSlotLocalPosition(slotIndex);
+      ApplySlotSortingBand(go, slotIndex, renderedSlotCount);
 
       var slot = go.GetComponent<SaveSlot>();
       if (slot != null) {
@@ -104,6 +111,8 @@ public class SaveSlotView : MonoBehaviour {
 
       loadMenuGroup.buttons.Add(go);
     }
+
+    ArrangeSlotsImmediate();
   }
 
   void ClearSlotItems() {
@@ -126,6 +135,7 @@ public class SaveSlotView : MonoBehaviour {
       slot.level = Convert.ToString(GetValueOrDefault(loaded, "level", "-"));
       slot.location = Convert.ToString(GetValueOrDefault(loaded, "location", "-"));
       slot.episode = SaveSlotManager.ResolveSlotEpisodeId(loaded);
+      slot.saveDate = SaveSlotManager.ResolveSlotSaveDate(loaded);
       slot.UpdateSlotInfo();
       return;
     }
@@ -135,6 +145,7 @@ public class SaveSlotView : MonoBehaviour {
     slot.level = "-";
     slot.location = "-";
     slot.episode = "-";
+    slot.saveDate = "-";
     slot.UpdateSlotInfo();
   }
 
@@ -159,17 +170,18 @@ public class SaveSlotView : MonoBehaviour {
     return knownMaxSlotNumber + 1;
   }
 
-  void ApplySlotSortingBand(GameObject slotObject, int slotIndex) {
+  void ApplySlotSortingBand(GameObject slotObject, int slotIndex, int renderedSlotCount) {
     if (slotObject == null) return;
 
-    var sortingOffset = ResolveSlotSortingOffset(slotIndex);
+    var sortingOffset = ResolveSlotSortingOffset(slotIndex, renderedSlotCount);
     OffsetChildRendererSorting(slotObject, sortingOffset);
     OffsetChildMaskSorting(slotObject, sortingOffset);
   }
 
-  static int ResolveSlotSortingOffset(int slotIndex) {
-    if (slotIndex <= 0) return 0;
-    return slotIndex * SortingOrderBandSize;
+  static int ResolveSlotSortingOffset(int slotIndex, int renderedSlotCount) {
+    var topFirstIndex = renderedSlotCount - slotIndex - 1;
+    if (topFirstIndex <= 0) return 0;
+    return topFirstIndex * SortingOrderBandSize;
   }
 
   static void OffsetChildRendererSorting(GameObject root, int sortingOffset) {
@@ -255,14 +267,116 @@ public class SaveSlotView : MonoBehaviour {
   }
 
   Vector3 ResolveSlotLocalPosition(int slotIndex) {
-    return new Vector3(-.11f, initialY - ((slotIndex * 8) + padding), -0.01f * slotIndex);
+    var y = ResolveSlotVirtualLocalY(slotIndex);
+    return new Vector3(SlotX, y, SlotZStep * slotIndex);
+  }
+
+  float ResolveSlotVirtualLocalY(int slotIndex) {
+    return initialY - padding - (slotIndex * SlotSpacingY) + scrollOffsetY;
+  }
+
+  Vector3 ResolveParkedSlotLocalPosition(int slotIndex) {
+    var y = ResolveParkedSlotLocalY();
+    return new Vector3(SlotX, y, SlotZStep * slotIndex);
+  }
+
+  float ResolveParkedSlotLocalY() {
+    if (TryResolveViewportLocalRange(out var minY, out var unusedMaxY)) {
+      return minY - SlotSpacingY - OffscreenSlotPadding;
+    }
+
+    return initialY - padding - SlotSpacingY - OffscreenSlotPadding;
   }
 
   void ArrangeSlotsImmediate() {
+    if (loadMenuGroup == null) return;
+    ApplyVirtualizedSlotPositions();
+  }
+
+  void ApplyVirtualizedSlotPositions() {
+    var hasViewport = TryResolveViewportLocalRange(out var minY, out var maxY);
+    var parkedPosition = ResolveParkedSlotLocalPosition(0);
+
     for (var i = 0; i < loadMenuGroup.buttons.Count; i++) {
       var item = loadMenuGroup.buttons[i];
-      item.transform.localPosition = ResolveSlotLocalPosition(i);
+      if (item == null) continue;
+
+      var position = ResolveSlotLocalPosition(i);
+      if (hasViewport && !IsSlotNearViewport(position.y, minY, maxY)) {
+        position = parkedPosition;
+        position.z = SlotZStep * i;
+      }
+
+      item.transform.localPosition = position;
     }
+  }
+
+  static bool IsSlotNearViewport(float slotY, float minY, float maxY) {
+    var paddedMinY = minY - SlotSpacingY;
+    var paddedMaxY = maxY + SlotSpacingY;
+    return slotY >= paddedMinY && slotY <= paddedMaxY;
+  }
+
+  public void ScrollBy(float deltaY) {
+    if (Mathf.Abs(deltaY) <= Mathf.Epsilon) return;
+    scrollOffsetY += deltaY;
+    ApplyVirtualizedSlotPositions();
+  }
+
+  public bool ScrollSlotIntoView(int slotIndex, float margin) {
+    if (!TryResolveViewportLocalRange(out var minY, out var maxY)) {
+      return false;
+    }
+
+    var slotCenterY = ResolveSlotVirtualLocalY(slotIndex);
+    var halfHeight = ResolveSlotHalfHeight();
+    var topLimit = maxY - margin;
+    var bottomLimit = minY + margin;
+    var deltaY = 0f;
+
+    if (slotCenterY + halfHeight > topLimit) {
+      deltaY = topLimit - (slotCenterY + halfHeight);
+    }
+    else if (slotCenterY - halfHeight < bottomLimit) {
+      deltaY = bottomLimit - (slotCenterY - halfHeight);
+    }
+
+    ScrollBy(deltaY);
+    return true;
+  }
+
+  float ResolveSlotHalfHeight() {
+    if (saveSlotPrefab != null) {
+      var collider = saveSlotPrefab.GetComponent<BoxCollider2D>();
+      if (collider != null) {
+        return Mathf.Abs(collider.size.y * SlotScale) * 0.5f;
+      }
+    }
+
+    return SlotSpacingY * 0.5f;
+  }
+
+  bool TryResolveViewportLocalRange(out float minY, out float maxY) {
+    minY = 0f;
+    maxY = 0f;
+    if (saveSlotWrap == null) return false;
+
+    var box = saveSlotWrap.GetComponent<BoxCollider2D>();
+    if (box != null) {
+      minY = box.offset.y - (box.size.y * 0.5f);
+      maxY = box.offset.y + (box.size.y * 0.5f);
+      return true;
+    }
+
+    var collider = saveSlotWrap.GetComponent<Collider2D>();
+    if (collider == null) return false;
+
+    var transformRef = saveSlotWrap.transform;
+    var min = transformRef.InverseTransformPoint(collider.bounds.min);
+    var max = transformRef.InverseTransformPoint(collider.bounds.max);
+    minY = Mathf.Min(min.y, max.y);
+    maxY = Mathf.Max(min.y, max.y);
+    return true;
   }
 
   void ArrangeSlots() {
@@ -278,29 +392,33 @@ public class SaveSlotView : MonoBehaviour {
   }
 
   public float GetVisualHeight() {
+    if (TryResolveViewportLocalRange(out var minY, out var maxY)) {
+      return Mathf.Max(maxY - minY, 0.01f);
+    }
+
     var go = gameObject;
     var renderers = go.GetComponentsInChildren<SpriteRenderer>();
     var masks = go.GetComponentsInChildren<SpriteMask>();
 
-    float minY = float.MaxValue;
-    float maxY = float.MinValue;
+    float fallbackMinY = float.MaxValue;
+    float fallbackMaxY = float.MinValue;
 
     foreach (var r in renderers) {
       var b = r.bounds;
-      minY = Mathf.Min(minY, b.min.y);
-      maxY = Mathf.Max(maxY, b.max.y);
+      fallbackMinY = Mathf.Min(fallbackMinY, b.min.y);
+      fallbackMaxY = Mathf.Max(fallbackMaxY, b.max.y);
     }
 
     foreach (var m in masks) {
       var b = m.bounds;
-      minY = Mathf.Min(minY, b.min.y);
-      maxY = Mathf.Max(maxY, b.max.y);
+      fallbackMinY = Mathf.Min(fallbackMinY, b.min.y);
+      fallbackMaxY = Mathf.Max(fallbackMaxY, b.max.y);
     }
 
-    if (minY == float.MaxValue || maxY == float.MinValue) {
+    if (fallbackMinY == float.MaxValue || fallbackMaxY == float.MinValue) {
       throw new Exception("No SpriteRenderer or SpriteMask found for height calculation.");
     }
 
-    return maxY - minY;
+    return fallbackMaxY - fallbackMinY;
   }
 }

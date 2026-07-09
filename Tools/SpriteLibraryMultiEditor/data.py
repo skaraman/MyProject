@@ -25,6 +25,7 @@ SPRITE_REF_RE = re.compile(r"fileID:\s*([^,\s}]+).*?guid:\s*([0-9a-fA-F]{32})")
 
 _GUID_CACHE: dict[str, str] = {}
 _PROJECT_ROOT: Path | None = None
+_SPRITE_META_CACHE: dict[str, dict[str, dict[str, Any]]] = {}
 
 
 def _find_project_root(path: Path) -> Path | None:
@@ -78,6 +79,93 @@ def resolve_sprite_path(guid: str, sprite_lib_path: Path) -> Path | None:
         if full.exists():
             return full
     return None
+
+
+def _read_sprite_meta_records(meta_path: Path) -> dict[str, dict[str, Any]]:
+    """Read sprite slice records from a Unity texture meta file."""
+    resolved = str(meta_path.resolve())
+    cached = _SPRITE_META_CACHE.get(resolved)
+    if cached is not None:
+        return cached
+
+    records: dict[str, dict[str, Any]] = {}
+    if not meta_path.exists():
+        _SPRITE_META_CACHE[resolved] = records
+        return records
+
+    try:
+        content = meta_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        _SPRITE_META_CACHE[resolved] = records
+        return records
+
+    if "spriteSheet:" not in content:
+        _SPRITE_META_CACHE[resolved] = records
+        return records
+
+    sprites_part = content.split("spriteSheet:", 1)[1]
+    if "sprites:" not in sprites_part:
+        _SPRITE_META_CACHE[resolved] = records
+        return records
+
+    sprite_blocks = re.split(r"(?m)^\s*-\s+", sprites_part)
+    for block in sprite_blocks:
+        internal_id_match = re.search(r"(?m)^\s*internalID:\s*(-?\d+)\s*$", block)
+        if not internal_id_match:
+            continue
+
+        internal_id = internal_id_match.group(1)
+        name_match = re.search(r"(?m)^\s*name:\s*(.*?)\s*$", block)
+        rect_match = re.search(
+            r"(?ms)^\s*rect:\s*$.*?^\s*x:\s*(\d+)\s*$.*?^\s*y:\s*(\d+)\s*$.*?^\s*width:\s*(\d+)\s*$.*?^\s*height:\s*(\d+)\s*$",
+            block,
+        )
+
+        record: dict[str, Any] = {}
+        record["name"] = name_match.group(1).strip() if name_match else ""
+        record["rect"] = None
+
+        if rect_match:
+            record["rect"] = (
+                int(rect_match.group(1)),
+                int(rect_match.group(2)),
+                int(rect_match.group(3)),
+                int(rect_match.group(4)),
+            )
+
+        records[internal_id] = record
+
+    _SPRITE_META_CACHE[resolved] = records
+    return records
+
+
+def get_sprite_meta_record(meta_path: Path, file_id: str) -> dict[str, Any] | None:
+    """Get one cached sprite slice record from a Unity texture meta file."""
+    if not file_id:
+        return None
+    records = _read_sprite_meta_records(meta_path)
+    return records.get(file_id)
+
+
+def resolve_sprite_slice_name(sprite_ref: str, sprite_lib_path: Path) -> str:
+    """Resolve the sprite slice name for a sprite reference."""
+    if not sprite_ref or ":" not in sprite_ref:
+        return ""
+
+    guid, file_id = sprite_ref.split(":", 1)
+    if not guid or not file_id:
+        return ""
+
+    sprite_path = resolve_sprite_path(guid, sprite_lib_path)
+    if sprite_path is None or not sprite_path.exists():
+        return ""
+
+    meta_path = Path(str(sprite_path) + ".meta")
+    record = get_sprite_meta_record(meta_path, file_id)
+    if record is None:
+        return ""
+
+    return str(record.get("name") or "")
 
 
 # Dataclasses

@@ -154,7 +154,8 @@ public static partial class SpriteIndexBuilder {
     string groupName,
     string contextLabel,
     bool logResult,
-    out int schemaRepairs
+    out int schemaRepairs,
+    bool includeInBuild = true
   ) {
     schemaRepairs = 0;
     var group = settings.FindGroup(groupName);
@@ -170,8 +171,8 @@ public static partial class SpriteIndexBuilder {
       schemaRepairs++;
     }
 
-    if (!schema.IncludeInBuild) {
-      schema.IncludeInBuild = true;
+    if (schema.IncludeInBuild != includeInBuild) {
+      schema.IncludeInBuild = includeInBuild;
       EditorUtility.SetDirty(schema);
       schemaRepairs++;
     }
@@ -193,13 +194,17 @@ public static partial class SpriteIndexBuilder {
     AddressableAssetSettings settings,
     AddressableAssetGroup group,
     string assetPath,
-    string address
+    string address,
+    string bundleLabel = ""
   ) {
     var normalizedPath = NormalizePath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedPath) || group == null) return;
+    var normalizedAddress = NormalizePath(address);
+    if (string.IsNullOrWhiteSpace(normalizedAddress)) return;
     var guid = AssetDatabase.AssetPathToGUID(normalizedPath);
     if (string.IsNullOrWhiteSpace(guid)) return;
 
+    var removedStaleEntryCount = RemoveStaleEntriesWithAddress(settings, guid, normalizedAddress);
     var existing = settings.FindAssetEntry(guid);
     if (existing == null) {
       existing = settings.CreateOrMoveEntry(guid, group, false, false);
@@ -208,10 +213,53 @@ public static partial class SpriteIndexBuilder {
       settings.MoveEntry(existing, group, false, false);
     }
 
-    if (existing != null && !string.Equals(existing.address, address, StringComparison.Ordinal)) {
-      existing.SetAddress(address);
+    if (existing != null && !string.Equals(existing.address, normalizedAddress, StringComparison.Ordinal)) {
+      existing.SetAddress(normalizedAddress);
       EditorUtility.SetDirty(settings);
     }
+
+    if (removedStaleEntryCount > 0) {
+      Debug.LogWarning(
+        "[SpriteIndexBuilder] [" + group.Name + "] Removed stale Addressables entries sharing address '" + normalizedAddress + "'" +
+        " removed=" + removedStaleEntryCount
+      );
+      EditorUtility.SetDirty(settings);
+    }
+
+    ApplySyntheticTextureBundleLabel(settings, existing, bundleLabel);
+  }
+
+  static int RemoveStaleEntriesWithAddress(
+    AddressableAssetSettings settings,
+    string activeGuid,
+    string address
+  ) {
+    if (settings == null || string.IsNullOrWhiteSpace(activeGuid) || string.IsNullOrWhiteSpace(address)) {
+      return 0;
+    }
+
+    var normalizedAddress = NormalizePath(address);
+    var staleGuids = new List<string>();
+    var groups = settings.groups;
+    if (groups == null) return 0;
+
+    for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++) {
+      var candidateGroup = groups[groupIndex];
+      if (candidateGroup == null || candidateGroup.entries == null) continue;
+
+      foreach (var entry in candidateGroup.entries) {
+        if (entry == null) continue;
+        if (string.Equals(entry.guid, activeGuid, StringComparison.OrdinalIgnoreCase)) continue;
+        if (!string.Equals(NormalizePath(entry.address), normalizedAddress, StringComparison.Ordinal)) continue;
+        staleGuids.Add(entry.guid);
+      }
+    }
+
+    for (var i = 0; i < staleGuids.Count; i++) {
+      settings.RemoveAssetEntry(staleGuids[i], false);
+    }
+
+    return staleGuids.Count;
   }
 
   // ─── Active texture entries ───────────────────────────────────────────────
@@ -219,17 +267,132 @@ public static partial class SpriteIndexBuilder {
   static void EnsureActiveStageTextureEntries(BuildState state) {
     if (state == null) return;
     var settings = state.addressables;
-    var group = settings?.FindGroup(BuilderConfig.TextureAddressablesGroupName);
-    if (group == null) return;
+    if (settings == null) return;
 
     foreach (var assetPath in state.activeTextureAssetPaths) {
       var normalizedPath = NormalizePath(assetPath);
       var guid = AssetDatabase.AssetPathToGUID(normalizedPath);
       if (string.IsNullOrWhiteSpace(guid)) continue;
       var address = normalizedPath;
-      EnsureAddressableEntry(settings, group, normalizedPath, address);
-      state.activeTextureGroupNames.Add(group.Name);
+      var bundleLabel = BuildSyntheticTextureBundleLabel(normalizedPath);
+
+      var packId = ResolveContentPackRootName(normalizedPath);
+      var groupName = string.IsNullOrEmpty(packId)
+        ? BuilderConfig.TextureAddressablesGroupName
+        : BuilderConfig.ManagedTextureGroupPrefix + packId;
+      var includeInBuild =
+        string.IsNullOrEmpty(packId) ||
+        string.Equals(packId, ContentPackPipeline.CorePackId, StringComparison.OrdinalIgnoreCase);
+
+      if (!state.textureGroupsByName.TryGetValue(groupName, out var targetGroup)) {
+        targetGroup = EnsureAddressableGroup(
+          settings,
+          groupName,
+          state.contextLabel,
+          state.logResult,
+          out var repairs,
+          includeInBuild
+        );
+        state.schemaRepairs += repairs;
+        state.textureGroupsByName[groupName] = targetGroup;
+      }
+
+      EnsureAddressableEntry(settings, targetGroup, normalizedPath, address, bundleLabel);
+      if (!string.IsNullOrWhiteSpace(bundleLabel)) {
+        state.syntheticTextureLabelAssignments++;
+        if (!state.syntheticTextureLabelCounts.ContainsKey(bundleLabel)) {
+          state.syntheticTextureLabelCounts[bundleLabel] = 0;
+        }
+        state.syntheticTextureLabelCounts[bundleLabel]++;
+      }
+      state.activeTextureGroupNames.Add(targetGroup.Name);
     }
+  }
+
+  static void ApplySyntheticTextureBundleLabel(
+    AddressableAssetSettings settings,
+    AddressableAssetEntry entry,
+    string bundleLabel
+  ) {
+    if (settings == null || entry == null || string.IsNullOrWhiteSpace(bundleLabel)) return;
+
+    settings.AddLabel(bundleLabel, false);
+
+    var labelsToRemove = new List<string>();
+    if (entry.labels != null) {
+      foreach (var label in entry.labels) {
+        if (string.IsNullOrWhiteSpace(label)) continue;
+        if (!label.StartsWith(BuilderConfig.SyntheticTextureLabelPrefix, StringComparison.Ordinal)) continue;
+        if (string.Equals(label, bundleLabel, StringComparison.Ordinal)) continue;
+        labelsToRemove.Add(label);
+      }
+    }
+
+    for (var i = 0; i < labelsToRemove.Count; i++) {
+      entry.SetLabel(labelsToRemove[i], false, true, false);
+    }
+
+    if (entry.labels == null || !entry.labels.Contains(bundleLabel)) {
+      entry.SetLabel(bundleLabel, true, true, false);
+      EditorUtility.SetDirty(settings);
+    }
+  }
+
+  static string BuildSyntheticTextureBundleLabel(string assetPath) {
+    var normalizedPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedPath)) return "";
+
+    var packId = ResolveContentPackRootName(normalizedPath);
+    if (string.IsNullOrWhiteSpace(packId)) {
+      packId = ResolveProjectTextureRootName(normalizedPath);
+    }
+
+    if (string.IsNullOrWhiteSpace(packId)) return "";
+    return BuilderConfig.SyntheticTextureLabelPrefix + SanitizeAddressablesLabel(packId);
+  }
+
+  static string ResolveContentPackRootName(string assetPath) {
+    var prefix = "Packages/com.skaraman.myprojectcontent/";
+    if (!assetPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return "";
+
+    var remainder = assetPath.Substring(prefix.Length);
+    var segments = remainder.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+    if (segments.Length <= 0) return "";
+
+    if ((string.Equals(segments[0], "Forms", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(segments[0], "Gears", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(segments[0], "Slices", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(segments[0], "Episodes", StringComparison.OrdinalIgnoreCase)) &&
+        segments.Length > 1) {
+      return segments[1];
+    }
+
+    return segments[0];
+  }
+
+  static string ResolveProjectTextureRootName(string assetPath) {
+    var prefix = "Assets/Sprites/";
+    if (!assetPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return "";
+
+    var remainder = assetPath.Substring(prefix.Length);
+    var slash = remainder.IndexOf('/');
+    var root = slash > 0 ? remainder.Substring(0, slash) : remainder;
+    return "Project_" + root;
+  }
+
+  static string SanitizeAddressablesLabel(string value) {
+    var sb = new StringBuilder();
+    for (var i = 0; i < value.Length; i++) {
+      var c = value[i];
+      if (char.IsLetterOrDigit(c)) {
+        sb.Append(c);
+        continue;
+      }
+
+      sb.Append('_');
+    }
+
+    return sb.ToString();
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
@@ -299,21 +462,41 @@ public static partial class SpriteIndexBuilder {
     var settings = state.addressables;
     if (settings == null) return;
 
-    var group = settings.FindGroup(BuilderConfig.TextureAddressablesGroupName);
-    if (group == null) return;
+    var groupsToCleanup = new List<AddressableAssetGroup>();
+    var defaultGroup = settings.FindGroup(BuilderConfig.TextureAddressablesGroupName);
+    if (defaultGroup != null) {
+      groupsToCleanup.Add(defaultGroup);
+    }
 
-    var toRemove = new List<AddressableAssetEntry>();
-    foreach (var entry in group.entries) {
-      if (entry == null) continue;
-      var path = NormalizePath(entry.AssetPath);
-      if (!state.activeTextureAssetPaths.Contains(path)) {
-        toRemove.Add(entry);
+    if (settings.groups != null) {
+      for (var i = 0; i < settings.groups.Count; i++) {
+        var g = settings.groups[i];
+        if (g != null && g.Name.StartsWith(BuilderConfig.ManagedTextureGroupPrefix, StringComparison.OrdinalIgnoreCase)) {
+          groupsToCleanup.Add(g);
+        }
       }
     }
-    for (var i = 0; i < toRemove.Count; i++) {
-      settings.RemoveAssetEntry(toRemove[i].guid, false);
+
+    var removedAny = false;
+    for (var gIndex = 0; gIndex < groupsToCleanup.Count; gIndex++) {
+      var group = groupsToCleanup[gIndex];
+      var toRemove = new List<AddressableAssetEntry>();
+      foreach (var entry in group.entries) {
+        if (entry == null) continue;
+        var path = NormalizePath(entry.AssetPath);
+        if (!state.activeTextureAssetPaths.Contains(path)) {
+          toRemove.Add(entry);
+        }
+      }
+      for (var i = 0; i < toRemove.Count; i++) {
+        settings.RemoveAssetEntry(toRemove[i].guid, false);
+        removedAny = true;
+      }
     }
-    if (toRemove.Count > 0) EditorUtility.SetDirty(settings);
+
+    if (removedAny) {
+      EditorUtility.SetDirty(settings);
+    }
   }
 
   static void CleanupStaleShardAssets(HashSet<string> activeShardPaths) {

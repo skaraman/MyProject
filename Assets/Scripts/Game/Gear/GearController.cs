@@ -43,7 +43,8 @@ public partial class GearController : MonoBehaviour {
   [SerializeField] Material esperanzaGearMaterial;
   [SerializeField] Material esperanzaHairMaterial;
   [SerializeField] Material esperanzaBodyMaterial;
-  public Dictionary<string, Dictionary<string, GearItem>> lastGear = new Dictionary<string, Dictionary<string, GearItem>>();
+  [Dictionary]
+  public GearFormItemMap lastGear = new();
   public bool needsFlip;
   [Header("Streaming Warmup")]
   [SerializeField] bool prewarmAnimationStartsOnLoad = true;
