@@ -56,6 +56,104 @@ public static partial class ContentPackPipeline {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
   }
 
+  [MenuItem("Tools/Content Packs/Build Finalize")]
+  public static void BuildActiveContentFinalizeFromMenu() {
+    BuildActiveContentFinalize();
+  }
+
+  public static void BuildActiveContentFinalize() {
+    var selection = LoadOrCreateSelectionAsset(true);
+    if (selection == null || !selection.ExternalContentEnabled) return;
+
+    if (!EditorUtility.DisplayDialog(
+      "Finalize Content",
+      "This will permanently delete exported assets from the Unity project folder.\n\n" +
+      "These assets will still exist in the external MyProjectContent directory. " +
+      "Ensure you have a backup or are using version control before proceeding.",
+      "Delete Assets",
+      "Cancel"
+    )) {
+      return;
+    }
+
+    var externalRoot = NormalizeFullPath(selection.ExternalRoot);
+    var packDefinitions = BuildPackDefinitions(externalRoot);
+    var projectLibraries = DiscoverProjectLibraryPaths();
+    var errors = new List<string>();
+
+    EditorUtility.DisplayProgressBar("Finalize Content", "Discovering dependencies...", 0f);
+
+    try {
+      for (var i = 0; i < packDefinitions.Count; i++) {
+        PreparePackDependencies(packDefinitions[i], projectLibraries, errors);
+      }
+
+      var assignedAssets = AssignPackAssets(packDefinitions, errors);
+      if (errors.Count > 0) {
+        LogErrors("finalize_assignment", errors);
+        return;
+      }
+
+      int count = 0;
+      int total = assignedAssets.Count;
+      int iAsset = 0;
+
+      AssetDatabase.StartAssetEditing();
+
+      foreach (var kvp in assignedAssets) {
+        var assetPath = kvp.Key;
+        iAsset++;
+
+        if (iAsset % 50 == 0) {
+          EditorUtility.DisplayProgressBar("Finalize Content", "Deleting source assets...", (float)iAsset / total);
+        }
+
+        if (assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) {
+          if (AssetDatabase.DeleteAsset(assetPath)) {
+            count++;
+          }
+        }
+      }
+
+      RemoveEmptyDirectories("Assets");
+
+      Debug.Log("[ContentPackPipeline] Build Finalize removed " + count + " source assets from the project and cleaned up empty folders.");
+    }
+    catch (Exception ex) {
+      Debug.LogError("[ContentPackPipeline] Finalize failed.\n" + ex);
+    }
+    finally {
+      AssetDatabase.StopAssetEditing();
+      EditorUtility.ClearProgressBar();
+      AssetDatabase.Refresh();
+    }
+  }
+
+  static void RemoveEmptyDirectories(string directoryPath) {
+    var fullDirectoryPath = Path.GetFullPath(directoryPath);
+    if (!Directory.Exists(fullDirectoryPath)) return;
+
+    var subDirectories = Directory.GetDirectories(fullDirectoryPath);
+    foreach (var subDir in subDirectories) {
+      RemoveEmptyDirectories(subDir);
+    }
+
+    var entries = Directory.GetFileSystemEntries(fullDirectoryPath);
+    var hasMeaningfulFiles = false;
+    foreach (var entry in entries) {
+      if (entry.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) continue;
+      hasMeaningfulFiles = true;
+      break;
+    }
+
+    if (!hasMeaningfulFiles) {
+      var assetPath = NormalizeAssetPath(directoryPath);
+      if (!string.IsNullOrWhiteSpace(assetPath) && assetPath != "Assets") {
+        AssetDatabase.DeleteAsset(assetPath);
+      }
+    }
+  }
+
   static bool TryLaunchContentPackIterationUi(
     string executable,
     string prefixArguments,
