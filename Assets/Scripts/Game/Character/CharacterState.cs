@@ -22,6 +22,7 @@ public class CharacterState : MonoBehaviour {
   }
 
   void EnsureRuntimeReferences() {
+    // TODO: Avoid using GetComponent at runtime in arbitrary functions (like LoadState). Cache this on Awake() or Start() to prevent potential performance hits if called frequently. - Senior Dev
     gearController ??= GetComponent<GearController>();
   }
 
@@ -43,6 +44,7 @@ public class CharacterState : MonoBehaviour {
     EnsureRuntimeReferences();
     ResetRuntimeState();
 
+    // TODO: Extract magic strings ("forms", "stats", etc.) into a static SaveKeys class to avoid typos. - Senior Dev
     var loadedForms = SaveSlotManager.Load("forms");
     var loadedStats = SaveSlotManager.Load("stats");
     if (ShouldLogLoadStateDebug()) {
@@ -62,6 +64,7 @@ public class CharacterState : MonoBehaviour {
     gearController?.LoadGear();
     GatherAllStatValues();
     SaveFormsState();
+    // TODO: Consider replacing string-based events with typed actions/events or C# Actions for better maintainability, compile-time safety, and performance. - Senior Dev
     MessageBus.Send("dialogStateReady", "load_state");
     NotifyFormStateChanged(EsperanzaForms.GetActive(), "load_state");
 

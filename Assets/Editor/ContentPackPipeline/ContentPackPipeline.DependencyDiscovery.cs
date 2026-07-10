@@ -153,7 +153,29 @@ public static partial class ContentPackPipeline {
     }
 
     CollectSupplementalTextDependencies(result, errors);
+    CollectAtlasMetadataDependencies(result, errors);
     return result;
+  }
+
+  static void CollectAtlasMetadataDependencies(List<string> result, List<string> errors) {
+    if (result == null || result.Count <= 0) return;
+
+    var newDependencies = new List<string>();
+    for (var i = 0; i < result.Count; i++) {
+      var assetPath = result[i];
+      if (assetPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+          assetPath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+          assetPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)) {
+        var metadataAssetPath = Path.ChangeExtension(assetPath, ".json");
+        if (File.Exists(Path.GetFullPath(metadataAssetPath))) {
+          newDependencies.Add(metadataAssetPath);
+        }
+      }
+    }
+
+    for (var i = 0; i < newDependencies.Count; i++) {
+      TryAddExportableDependency(result, newDependencies[i], errors);
+    }
   }
 
   static bool TryAddExportableDependency(List<string> result, string assetPath, List<string> errors) {

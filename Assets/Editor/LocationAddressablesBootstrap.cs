@@ -1,5 +1,4 @@
 #if UNITY_EDITOR
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -30,14 +29,9 @@ public static class LocationAddressablesBootstrap {
       return false;
     }
 
-    var registry = AssetDatabase.LoadAssetAtPath<ActiveContentRegistry>(ContentPackPipeline.ActiveRegistryAssetPath);
-    IEnumerable<LocationInfo> locations = registry != null && registry.ExternalContentActive
-      ? registry.Locations
-      : LocationEnemyData.locations.Values;
-
     var changed = false;
     var syncedCount = 0;
-    foreach (var location in locations) {
+    foreach (var location in LocationEnemyData.locations.Values) {
       var assetPath = RuntimePrefabAddressables.NormalizeAssetPath(
         location?.locationPrefabData != null ? location.locationPrefabData.AssetPath : ""
       );

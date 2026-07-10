@@ -8,6 +8,11 @@ using UnityEngine;
 [InitializeOnLoad]
 public static class RuntimeMaterialAddressablesBootstrap {
   static readonly string[] MaterialOwnerExtensions = { ".prefab", ".unity" };
+  static readonly string[] RequiredGameplayMaterialSourcePaths = {
+    GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath,
+    GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath,
+    GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath
+  };
   static bool initialized;
 
   sealed class RuntimeMaterialAsset {
@@ -83,6 +88,21 @@ public static class RuntimeMaterialAddressablesBootstrap {
     return result;
   }
 
+  public static List<string> CollectRequiredGameplayMaterialAssetPaths() {
+    var result = new List<string>();
+    for (var i = 0; i < RequiredGameplayMaterialSourcePaths.Length; i++) {
+      result.Add(ResolvePreferredActiveAssetPath(RequiredGameplayMaterialSourcePaths[i]));
+    }
+    return result;
+  }
+
+  static void AddRequiredGameplayMaterials(List<RuntimeMaterialAsset> output) {
+    var assetPaths = CollectRequiredGameplayMaterialAssetPaths();
+    for (var i = 0; i < assetPaths.Count; i++) {
+      AddUniqueMaterialIfExists(output, assetPaths[i]);
+    }
+  }
+
   static List<RuntimeMaterialAsset> CollectRuntimeMaterialAssets() {
     var result = new List<RuntimeMaterialAsset>();
     var ownerAssetPaths = new List<string>();
@@ -96,16 +116,12 @@ public static class RuntimeMaterialAddressablesBootstrap {
         AddOwnerFilesUnderRoot(activeStageRoots[i], ownerAssetPaths);
       }
       if (gameplayContentRequested) {
-        AddUniqueMaterialIfExists(result, ResolvePreferredActiveAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath));
-        AddUniqueMaterialIfExists(result, ResolvePreferredActiveAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath));
-        AddUniqueMaterialIfExists(result, ResolvePreferredActiveAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath));
+        AddRequiredGameplayMaterials(result);
       }
     }
     else {
       AddRuntimeFallbackOwners(ownerAssetPaths);
-      AddUniqueMaterialIfExists(result, RuntimePrefabAddressables.NormalizeAssetPath(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath));
-      AddUniqueMaterialIfExists(result, RuntimePrefabAddressables.NormalizeAssetPath(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath));
-      AddUniqueMaterialIfExists(result, RuntimePrefabAddressables.NormalizeAssetPath(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath));
+      AddRequiredGameplayMaterials(result);
     }
 
     AddMaterialDependencies(ownerAssetPaths, result);

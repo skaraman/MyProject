@@ -20,6 +20,12 @@ public static class ContentPackCatalogLoader {
   static readonly Dictionary<string, string> sourceAssetPathByExportedAddress = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, string> localBundlePathByFileName = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> missingCatalogWarnings = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> ignoredDirectoryNames = new(StringComparer.OrdinalIgnoreCase) {
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__"
+  };
   static readonly Func<IResourceLocation, string> localInternalIdTransform = TransformLocalContentPackInternalId;
 
   static Func<IResourceLocation, string> previousInternalIdTransform;
@@ -266,12 +272,19 @@ public static class ContentPackCatalogLoader {
     discoveredRoot = root;
 
     if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) {
+      Debug.LogError(
+        "[ContentPackCatalogLoader] External content root is missing." +
+        " expected_root='" + (root ?? "") + "'" +
+        " player_data_path='" + Application.dataPath.Replace('\\', '/') + "'" +
+        " action='Rebuild the player so the content deployment postprocessor creates MyProjectContent beside the executable, or copy that folder there manually.'"
+      );
       return;
     }
 
-    var manifestPaths = Directory.GetFiles(root, "ContentPackManifest.json", SearchOption.AllDirectories);
-    Array.Sort(manifestPaths, StringComparer.OrdinalIgnoreCase);
-    for (var i = 0; i < manifestPaths.Length; i++) {
+    var manifestPaths = new List<string>();
+    CollectVisibleFiles(root, "ContentPackManifest.json", manifestPaths);
+    manifestPaths.Sort(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < manifestPaths.Count; i++) {
       TryAddManifest(manifestPaths[i]);
     }
   }
@@ -386,12 +399,54 @@ public static class ContentPackCatalogLoader {
       return;
     }
 
-    var files = Directory.GetFiles(bundleRoot, "*", SearchOption.AllDirectories);
-    for (var i = 0; i < files.Length; i++) {
+    var files = new List<string>();
+    CollectVisibleFiles(bundleRoot, "*", files);
+    for (var i = 0; i < files.Count; i++) {
       var fileName = Path.GetFileName(files[i]);
       if (string.IsNullOrWhiteSpace(fileName)) continue;
 
       localBundlePathByFileName[fileName] = Path.GetFullPath(files[i]).Replace('\\', '/');
+    }
+  }
+
+  static void CollectVisibleFiles(string root, string searchPattern, List<string> result) {
+    if (result == null || string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) {
+      return;
+    }
+
+    try {
+      var files = Directory.GetFiles(root, searchPattern, SearchOption.TopDirectoryOnly);
+      for (var i = 0; i < files.Length; i++) {
+        result.Add(files[i]);
+      }
+
+      var directories = Directory.GetDirectories(root, "*", SearchOption.TopDirectoryOnly);
+      for (var i = 0; i < directories.Length; i++) {
+        if (ShouldIgnoreDirectory(directories[i])) continue;
+        CollectVisibleFiles(directories[i], searchPattern, result);
+      }
+    }
+    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) {
+      Debug.LogWarning(
+        "[ContentPackCatalogLoader] Skipped unreadable content directory." +
+        " path='" + root.Replace('\\', '/') + "'" +
+        " error='" + ex.Message + "'"
+      );
+    }
+  }
+
+  static bool ShouldIgnoreDirectory(string path) {
+    var name = Path.GetFileName(path);
+    if (string.IsNullOrWhiteSpace(name)) return true;
+    if (name.StartsWith(".", StringComparison.Ordinal)) return true;
+    if (ignoredDirectoryNames.Contains(name)) return true;
+
+    try {
+      var attributes = File.GetAttributes(path);
+      return (attributes & (FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint)) != 0;
+    }
+    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) {
+      return true;
     }
   }
 

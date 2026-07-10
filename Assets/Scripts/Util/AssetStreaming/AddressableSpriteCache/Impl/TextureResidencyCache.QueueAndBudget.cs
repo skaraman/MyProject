@@ -83,6 +83,13 @@ public static partial class TextureResidencyCache {
             }
             else {
               entry.failedExactSliceSupplementAddresses.Add(sliceAddress);
+              LogSpriteLoadOperationFailureOnce(
+                entry,
+                "exact_slice_supplement",
+                sliceAddress,
+                operation.Status,
+                operation.OperationException
+              );
             }
             pendingQueueStateRecord = true;
           }

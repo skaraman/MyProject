@@ -47,6 +47,11 @@ public static partial class ContentPackPipeline {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Smart);
   }
 
+  [MenuItem("Tools/Content Packs/Build Clean")]
+  public static void BuildActiveContentCleanFromMenu() {
+    BuildActiveContentClean();
+  }
+
   public static void BuildActiveContentClean() {
     RunFullMigrationPass(logResult: true, TransitionPipelineMode.Clean);
   }

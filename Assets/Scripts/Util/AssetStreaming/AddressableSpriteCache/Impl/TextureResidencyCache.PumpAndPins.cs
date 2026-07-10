@@ -92,8 +92,8 @@ public static partial class TextureResidencyCache {
       return;
     }
 
-    // Preserve exact atlas-slice requests. Collapsing them to atlas owners makes
-    // player builds try to load atlas.png as Sprite, which is not a valid slice key.
+    // Preserve exact lease keys so warm readiness is checked for every requested slice.
+    // Cache ownership still normalizes to the parent and loads its Sprite list once.
     desiredOwnerAddressScratch.Clear();
     for (var i = 0; i < addresses.Count; i++) {
       var normalizedAddress = NormalizePinLeaseAddress(addresses[i]);
@@ -430,6 +430,7 @@ public static partial class TextureResidencyCache {
 #endif
     incompleteAtlasLoadWarnings.Clear();
     atlasSynthesisFailureWarnings.Clear();
+    spriteLoadOperationFailureWarnings.Clear();
     deferredRequests.Clear();
     deferredImmediateQueue.Clear();
     deferredWarmupQueue.Clear();

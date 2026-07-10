@@ -29,43 +29,15 @@ public static partial class TextureResidencyCache {
   }
 
   static bool TryGetSpriteFromReadyEntry(CacheEntry entry, string spriteName, out Sprite sprite) {
-    if (TryGetSpriteFromEntry(entry, spriteName, out sprite)) {
-      return true;
-    }
-
-#if UNITY_EDITOR
-    if (!string.IsNullOrWhiteSpace(spriteName)) {
-      return TryGetSpriteFromEntryWithEditorSupplement(entry, spriteName, out sprite);
-    }
-#endif
-
-    sprite = null;
-    return false;
+    return TryGetSpriteFromEntry(entry, spriteName, out sprite);
   }
 
-#if UNITY_EDITOR
-  static bool TryPrimeAtlasBackedEntrySpriteMap(CacheEntry entry) {
+  static bool HasLoadedAtlasSubassetSet(CacheEntry entry) {
     if (entry == null) return false;
     if (!string.Equals(entry.requestStrategy, "atlas_backed", StringComparison.Ordinal)) return false;
-    if (!GeneratedAtlasBuildSurrogateUtility.ShouldUseImportedSpriteSubassets(entry.address)) return false;
-    if (!TryLoadEditorImportedAtlasSprites(entry.address, out var importedSprites)) return false;
-
-    var addedSpriteCount = MergeImportedSpritesIntoEntry(entry, importedSprites);
-    if (entry.primarySprite == null && importedSprites.Count > 0) {
-      entry.primarySprite = importedSprites[0];
-    }
-    if (entry.spritesByName.Count > 1) {
-      entry.spriteMapMaterialized = true;
-      entry.editorAtlasSupplementPending = false;
-      entry.editorAtlasSupplementAttempted = true;
-    }
-    return addedSpriteCount > 0 || entry.spritesByName.Count > 1;
+    if (!entry.handle.IsValid()) return false;
+    return CountLoadedSprites(entry.handle.Result) > 1;
   }
-#else
-  static bool TryPrimeAtlasBackedEntrySpriteMap(CacheEntry entry) {
-    return false;
-  }
-#endif
 
   static bool ShouldLogAtlasNameDiagnostics(string address) {
     if (!SpriteStreamingRuntimeSettings.EnableLoadingScreenLogs) return false;
@@ -160,50 +132,6 @@ public static partial class TextureResidencyCache {
     return count;
   }
 
-  static List<object> BuildAtlasLocationKeys(string atlasAddress, out int siblingSliceCount) {
-    siblingSliceCount = 0;
-    if (string.IsNullOrWhiteSpace(atlasAddress)) return null;
-    if (ShouldUseSingleAddressPrimaryLoad()) return null;
-
-    const int MaxAtlasPrimaryLoadKeys = 512;
-    atlasSiblingAddressScratch.Clear();
-    if (!SpriteRuntimeResolver.TryCollectAtlasSiblingAddresses(atlasAddress, atlasSiblingAddressScratch, MaxAtlasPrimaryLoadKeys)) {
-      atlasSiblingAddressScratch.Clear();
-      return null;
-    }
-
-    if (atlasSiblingAddressScratch.Count <= 0) {
-      atlasSiblingAddressScratch.Clear();
-      return null;
-    }
-
-    var keys = new List<object>(atlasSiblingAddressScratch.Count);
-    for (var i = 0; i < atlasSiblingAddressScratch.Count; i++) {
-      var siblingAddress = atlasSiblingAddressScratch[i];
-      if (string.IsNullOrWhiteSpace(siblingAddress)) continue;
-      keys.Add(siblingAddress);
-      siblingSliceCount++;
-    }
-    atlasSiblingAddressScratch.Clear();
-    return siblingSliceCount > 0 ? keys : null;
-  }
-
-  static bool TryBuildDirectAtlasSliceLoadKeys(
-    CacheEntry entry,
-    out List<object> keys,
-    out int keyCount,
-    out int siblingSliceCount
-  ) {
-    keys = null;
-    keyCount = 0;
-    siblingSliceCount = 0;
-    if (entry == null) return false;
-    if (!string.Equals(entry.requestStrategy, "atlas_backed", StringComparison.Ordinal)) return false;
-    // Shared atlas-backed entries must prove exact-slice readiness one request at a time.
-    // Union-loading sibling slice keys can collapse to a single runtime result.
-    return false;
-  }
-
   static bool ShouldUseAtlasOwnerSubassetLoad(CacheEntry entry) {
     if (entry == null) return false;
     if (!string.Equals(entry.requestStrategy, "atlas_backed", StringComparison.Ordinal)) return false;
@@ -212,39 +140,7 @@ public static partial class TextureResidencyCache {
 
   static string ResolveDirectSpriteLoadAddress(CacheEntry entry) {
     if (entry == null) return "";
-    if (ShouldUseAtlasOwnerSubassetLoad(entry)) {
-      return entry.address;
-    }
     return entry.address;
-  }
-
-  static bool TryResolveRepresentativeAtlasSliceAddress(string atlasAddress, out string sliceAddress) {
-    sliceAddress = "";
-    if (string.IsNullOrWhiteSpace(atlasAddress)) return false;
-
-    atlasSiblingAddressScratch.Clear();
-    if (!SpriteRuntimeResolver.TryCollectAtlasSiblingAddresses(atlasAddress, atlasSiblingAddressScratch, 1)) {
-      atlasSiblingAddressScratch.Clear();
-      return false;
-    }
-
-    for (var i = 0; i < atlasSiblingAddressScratch.Count; i++) {
-      var candidate = atlasSiblingAddressScratch[i];
-      if (string.IsNullOrWhiteSpace(candidate)) continue;
-      if (!SpriteSliceAddressUtility.TryParseSliceAddress(candidate, out _, out _)) continue;
-      sliceAddress = candidate.Trim();
-      atlasSiblingAddressScratch.Clear();
-      return true;
-    }
-
-    atlasSiblingAddressScratch.Clear();
-    return false;
-  }
-
-  static bool ShouldUseSingleAddressPrimaryLoad() {
-    // During the loading overlay, "one request" should stay one addressable load.
-    // Atlas sibling expansion can still happen later through the paced expansion path.
-    return IsProtectedLoadingScreenStreamingContextActive();
   }
 
   static void LogIncompleteAtlasSpriteMap(CacheEntry entry, int expectedSiblingSliceCount, int resourceLocationCount, int loadedSpriteCount) {

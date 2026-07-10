@@ -21,6 +21,7 @@ public static partial class ContentPackPipeline {
     AddContentManifestPackDefinitions(result, normalizedRoot);
     ApplyExistingPackManifests(result);
     ApplyCorePackDefaults(result);
+    ApplyUiHealthBarAuthoringSources(result);
     return result;
   }
 
@@ -86,7 +87,7 @@ public static partial class ContentPackPipeline {
       return false;
     }
 
-    if (IsIgnoredExternalRootFolderName(Path.GetFileName(directory))) {
+    if (IsIgnoredExternalDirectory(directory)) {
       return false;
     }
 
@@ -249,7 +250,7 @@ public static partial class ContentPackPipeline {
     for (var i = 0; i < directories.Length; i++) {
       var packId = Path.GetFileName(directories[i]);
       if (string.IsNullOrWhiteSpace(packId)) continue;
-      if (IsIgnoredExternalRootFolderName(packId)) continue;
+      if (IsIgnoredExternalDirectory(directories[i])) continue;
       AddExistingPackDefinition(
         result,
         packId,
@@ -273,6 +274,29 @@ public static partial class ContentPackPipeline {
     return normalized.StartsWith(".", StringComparison.Ordinal);
   }
 
+  static bool IsIgnoredExternalDirectory(string directory) {
+    if (string.IsNullOrWhiteSpace(directory)) {
+      return true;
+    }
+
+    if (IsIgnoredExternalRootFolderName(Path.GetFileName(directory))) {
+      return true;
+    }
+
+    try {
+      var attributes = File.GetAttributes(directory);
+      return (attributes & (FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint)) != 0;
+    }
+    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) {
+      Debug.LogWarning(
+        "[ContentPackPipeline] Ignored unreadable external content directory." +
+        " path='" + directory + "'" +
+        " error='" + ex.Message + "'"
+      );
+      return true;
+    }
+  }
+
   static void AddExistingPackDefinition(
     List<PackDefinition> result,
     string packId,
@@ -293,6 +317,7 @@ public static partial class ContentPackPipeline {
     string stageAssetRoot
   ) {
     if (result == null || string.IsNullOrWhiteSpace(packId) || string.IsNullOrWhiteSpace(externalRootPath)) return;
+    if (IsIgnoredExternalRootFolderName(packId)) return;
     if (result.Any(pack => string.Equals(pack?.packId, packId, StringComparison.OrdinalIgnoreCase))) return;
     var pack = new PackDefinition {
       packId = packId,
@@ -602,19 +627,22 @@ public static partial class ContentPackPipeline {
       AddCoreEsperanzaSkinOwnedRoots(pack.ownedRoots);
       AddCoreGameplayMaterialOwnedRoots(pack.seedRoots);
       AddCoreGameplayMaterialOwnedRoots(pack.ownedRoots);
-      AddCoreHealthBarAuthoringSources(pack);
       return;
     }
   }
 
-  static void AddCoreHealthBarAuthoringSources(PackDefinition pack) {
-    if (pack == null) return;
+  static void ApplyUiHealthBarAuthoringSources(List<PackDefinition> packDefinitions) {
+    if (packDefinitions == null) return;
 
     for (var formIndex = 0; formIndex < CoreHealthBarForms.Length; formIndex++) {
       var form = CoreHealthBarForms[formIndex];
       var assetPath = BuildCoreHealthBarAtlasPath(form);
       if (string.IsNullOrWhiteSpace(assetPath)) continue;
       if (!File.Exists(Path.GetFullPath(assetPath))) continue;
+
+      var packId = "UI" + form;
+      var targetPack = packDefinitions.FirstOrDefault(p => string.Equals(p?.packId, packId, StringComparison.OrdinalIgnoreCase));
+      if (targetPack == null) continue;
 
       for (var bindingIndex = 0; bindingIndex < CoreHealthBarSliceBindings.Length; bindingIndex++) {
         var binding = CoreHealthBarSliceBindings[bindingIndex];
@@ -625,7 +653,7 @@ public static partial class ContentPackPipeline {
         }
 
         AddCoreHealthBarAuthoringSource(
-          pack,
+          targetPack,
           form,
           assetPath,
           binding.category,

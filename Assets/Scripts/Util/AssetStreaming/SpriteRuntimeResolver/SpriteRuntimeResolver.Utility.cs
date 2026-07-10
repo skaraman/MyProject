@@ -18,7 +18,8 @@ public static partial class SpriteRuntimeResolver {
   static readonly LegacyFormUiAlias[] LegacyFormUiAliases = {
     new LegacyFormUiAlias("HealthBar/HealthBarUI", "HealthBar"),
     new LegacyFormUiAlias("Dialog/DialogEsper", "Dialog"),
-    new LegacyFormUiAlias("Dialog/DialogUI", "Dialog")
+    new LegacyFormUiAlias("Dialog/DialogUI", "Dialog"),
+    new LegacyFormUiAlias("UI/CharUI", "CharUI")
   };
 
   readonly struct LegacyFormUiAlias {

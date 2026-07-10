@@ -132,7 +132,8 @@ public static partial class SpriteIndexBuilder {
     Dictionary<AddressableAssetGroup, bool> originalStates,
     List<ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo> optionalPackCatalogs,
     string contextLabel,
-    bool logResult
+    bool logResult,
+    bool cleanCachesBeforeBuild
   ) {
     if (settings == null || optionalPackCatalogs == null || optionalPackCatalogs.Count <= 0) {
       return true;
@@ -142,6 +143,19 @@ public static partial class SpriteIndexBuilder {
       var catalog = optionalPackCatalogs[i];
       if (catalog == null || string.IsNullOrWhiteSpace(catalog.groupName)) {
         continue;
+      }
+
+      if (!cleanCachesBeforeBuild) {
+        var catalogPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(catalog.externalRootPath, catalog.catalogRelativePath));
+        if (System.IO.File.Exists(catalogPath)) {
+          if (logResult) {
+            UnityEngine.Debug.Log(
+              "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Skipping already built content pack catalog." +
+              " pack_id='" + (catalog.packId ?? "") + "'"
+            );
+          }
+          continue;
+        }
       }
 
       var group = settings.FindGroup(catalog.groupName);
@@ -188,15 +202,17 @@ public static partial class SpriteIndexBuilder {
     Dictionary<AddressableAssetGroup, bool> originalStates,
     List<ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo> optionalPackCatalogs
   ) {
-    if (settings == null || originalStates == null || optionalPackCatalogs == null || optionalPackCatalogs.Count <= 0) {
+    if (settings == null || originalStates == null) {
       return;
     }
 
     var optionalGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    for (var i = 0; i < optionalPackCatalogs.Count; i++) {
-      if (optionalPackCatalogs[i] == null) continue;
-      if (string.IsNullOrWhiteSpace(optionalPackCatalogs[i].groupName)) continue;
-      optionalGroupNames.Add(optionalPackCatalogs[i].groupName);
+    if (optionalPackCatalogs != null) {
+      for (var i = 0; i < optionalPackCatalogs.Count; i++) {
+        if (optionalPackCatalogs[i] == null) continue;
+        if (string.IsNullOrWhiteSpace(optionalPackCatalogs[i].groupName)) continue;
+        optionalGroupNames.Add(optionalPackCatalogs[i].groupName);
+      }
     }
 
     foreach (var pair in originalStates) {
@@ -204,7 +220,16 @@ public static partial class SpriteIndexBuilder {
       var schema = group?.GetSchema<BundledAssetGroupSchema>();
       if (schema == null) continue;
 
-      var include = pair.Value && (group == null || !optionalGroupNames.Contains(group.Name));
+      var include = pair.Value;
+      if (group != null && optionalGroupNames.Contains(group.Name)) {
+        include = false;
+      }
+      if (IsOptionalManagedTextureGroup(group)) {
+        include = false;
+      }
+      if (group == settings.DefaultGroup) {
+        include = true;
+      }
       if (schema.IncludeInBuild == include) continue;
 
       schema.IncludeInBuild = include;
@@ -215,6 +240,208 @@ public static partial class SpriteIndexBuilder {
     }
 
     EditorUtility.SetDirty(settings);
+  }
+
+  static bool IsOptionalManagedTextureGroup(AddressableAssetGroup group) {
+    if (group == null || string.IsNullOrWhiteSpace(group.Name)) {
+      return false;
+    }
+    if (!group.Name.StartsWith(BuilderConfig.ManagedTextureGroupPrefix, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var packId = group.Name.Substring(BuilderConfig.ManagedTextureGroupPrefix.Length);
+    if (string.IsNullOrWhiteSpace(packId)) {
+      return false;
+    }
+
+    return !string.Equals(packId, ContentPackPipeline.CorePackId, StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool ValidateBaseAddressablesBootstrapContract(
+    AddressableAssetSettings settings,
+    string contextLabel,
+    bool logResult
+  ) {
+    var errors = new List<string>();
+    if (settings == null) {
+      errors.Add("Addressables settings were not found.");
+      return LogBaseAddressablesBootstrapValidation(contextLabel, errors, 0, 0, logResult);
+    }
+
+    var bootstrapGroup = settings.DefaultGroup;
+    if (bootstrapGroup == null) {
+      errors.Add("The configured default Addressables bootstrap group was not found.");
+      return LogBaseAddressablesBootstrapValidation(contextLabel, errors, 0, 0, logResult);
+    }
+
+    var bootstrapSchema = bootstrapGroup.GetSchema<BundledAssetGroupSchema>();
+    if (bootstrapSchema == null) {
+      errors.Add("Bootstrap group is missing BundledAssetGroupSchema. group='" + bootstrapGroup.Name + "'");
+    }
+    else if (!bootstrapSchema.IncludeInBuild) {
+      errors.Add("Bootstrap group is excluded from the final base build. group='" + bootstrapGroup.Name + "'");
+    }
+
+    ValidateOptionalTextureGroupsExcludedFromBase(settings, errors);
+
+    var requiredPrefabPaths = CollectRequiredBootstrapPrefabPaths();
+    for (var i = 0; i < requiredPrefabPaths.Count; i++) {
+      ValidateRequiredBootstrapAssetEntry(
+        settings,
+        bootstrapGroup,
+        requiredPrefabPaths[i],
+        "prefab",
+        errors
+      );
+    }
+
+    var requiredMaterialPaths = RuntimeMaterialAddressablesBootstrap.CollectRequiredGameplayMaterialAssetPaths();
+    for (var i = 0; i < requiredMaterialPaths.Count; i++) {
+      ValidateRequiredBootstrapAssetEntry(
+        settings,
+        bootstrapGroup,
+        requiredMaterialPaths[i],
+        "material",
+        errors
+      );
+    }
+
+    return LogBaseAddressablesBootstrapValidation(
+      contextLabel,
+      errors,
+      requiredPrefabPaths.Count,
+      requiredMaterialPaths.Count,
+      logResult
+    );
+  }
+
+  static List<string> CollectRequiredBootstrapPrefabPaths() {
+    var result = new List<string>();
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    AddRequiredBootstrapPrefabPath(GameplayCoreAssetPaths.EsperanzaPrefabAssetPath, result, seen);
+
+    foreach (var location in LocationEnemyData.locations.Values) {
+      var assetPath = location?.locationPrefabData != null
+        ? location.locationPrefabData.AssetPath
+        : "";
+      AddRequiredBootstrapPrefabPath(assetPath, result, seen);
+    }
+
+    foreach (var projectile in Projectiles.EnumerateAll()) {
+      var data = projectile.Value;
+      if (data == null) continue;
+      if (!data.TryGetPrefabAddress(out var assetPath)) continue;
+      AddRequiredBootstrapPrefabPath(assetPath, result, seen);
+    }
+
+    result.Sort(StringComparer.Ordinal);
+    return result;
+  }
+
+  static void AddRequiredBootstrapPrefabPath(
+    string assetPath,
+    List<string> output,
+    HashSet<string> seen
+  ) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (string.IsNullOrWhiteSpace(normalizedAssetPath)) return;
+    if (!seen.Add(normalizedAssetPath)) return;
+    output.Add(normalizedAssetPath);
+  }
+
+  static void ValidateRequiredBootstrapAssetEntry(
+    AddressableAssetSettings settings,
+    AddressableAssetGroup bootstrapGroup,
+    string assetPath,
+    string assetKind,
+    List<string> errors
+  ) {
+    var normalizedAssetKind = string.IsNullOrWhiteSpace(assetKind) ? "asset" : assetKind;
+    if (!RuntimeMaterialAddressablesBootstrap.TryResolveGuid(assetPath, out var guid)) {
+      errors.Add(
+        "Required bootstrap " + normalizedAssetKind + " was not found." +
+        " asset_path='" + assetPath + "'"
+      );
+      return;
+    }
+
+    var entry = settings.FindAssetEntry(guid);
+    if (entry == null) {
+      errors.Add(
+        "Required bootstrap " + normalizedAssetKind + " has no Addressables entry." +
+        " asset_path='" + assetPath + "'"
+      );
+      return;
+    }
+
+    if (entry.parentGroup != bootstrapGroup) {
+      var actualGroupName = entry.parentGroup != null ? entry.parentGroup.Name : "";
+      errors.Add(
+        "Required bootstrap " + normalizedAssetKind + " is outside the included bootstrap group." +
+        " asset_path='" + assetPath + "'" +
+        " expected_group='" + bootstrapGroup.Name + "'" +
+        " actual_group='" + actualGroupName + "'"
+      );
+    }
+
+    var address = NormalizePath(entry.address);
+    if (!string.Equals(address, assetPath, StringComparison.Ordinal)) {
+      errors.Add(
+        "Required bootstrap " + normalizedAssetKind + " address is not its runtime asset key." +
+        " asset_path='" + assetPath + "'" +
+        " address='" + address + "'"
+      );
+    }
+  }
+
+  static void ValidateOptionalTextureGroupsExcludedFromBase(
+    AddressableAssetSettings settings,
+    List<string> errors
+  ) {
+    if (settings.groups == null) return;
+
+    for (var i = 0; i < settings.groups.Count; i++) {
+      var group = settings.groups[i];
+      if (!IsOptionalManagedTextureGroup(group)) continue;
+
+      var schema = group.GetSchema<BundledAssetGroupSchema>();
+      if (schema == null || !schema.IncludeInBuild) continue;
+      errors.Add("Optional texture group leaked into the final base build. group='" + group.Name + "'");
+    }
+  }
+
+  static bool LogBaseAddressablesBootstrapValidation(
+    string contextLabel,
+    List<string> errors,
+    int requiredPrefabCount,
+    int requiredMaterialCount,
+    bool logResult
+  ) {
+    if (errors.Count > 0) {
+      var message = new StringBuilder();
+      message.Append("[SpriteIndexBuilder] [").Append(contextLabel)
+        .Append("] ERROR: Base Addressables bootstrap contract failed.")
+        .Append(" requiredPrefabs=").Append(requiredPrefabCount)
+        .Append(" requiredMaterials=").Append(requiredMaterialCount)
+        .Append(" errors=").Append(errors.Count);
+      for (var i = 0; i < errors.Count; i++) {
+        message.Append("\n  ").Append(errors[i]);
+      }
+      Debug.LogError(message.ToString());
+      return false;
+    }
+
+    if (logResult) {
+      Debug.Log(
+        "[SpriteIndexBuilder] [" + contextLabel + "] Base Addressables bootstrap contract validated." +
+        " requiredPrefabs=" + requiredPrefabCount +
+        " requiredMaterials=" + requiredMaterialCount
+      );
+    }
+
+    return true;
   }
 
   static bool CopyPackCatalogBuildOutput(

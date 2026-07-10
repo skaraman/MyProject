@@ -86,6 +86,7 @@ public static partial class TextureResidencyCache {
 #endif
     incompleteAtlasLoadWarnings.Clear();
     atlasSynthesisFailureWarnings.Clear();
+    spriteLoadOperationFailureWarnings.Clear();
     deferredRequests.Clear();
     deferredImmediateQueue.Clear();
     deferredWarmupQueue.Clear();

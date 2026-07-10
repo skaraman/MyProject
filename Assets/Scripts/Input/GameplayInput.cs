@@ -13,6 +13,7 @@ public class GameplayInput : MonoBehaviour {
   private readonly List<Action> actions = new();
   public GameObject cam;
   private GameObject EsperanzaParent;
+  // TODO: Cache Rigidbody2D references and consider extracting physics movement logic into a dedicated CharacterController component rather than handling it in the Input class. - Senior Dev
   private Rigidbody2D erb;
   private Rigidbody2D cameraRB;
   private GearController gearController;

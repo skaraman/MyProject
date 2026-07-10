@@ -209,13 +209,13 @@ public static partial class TextureResidencyCache {
     public bool TryGetSpriteByAddress(string sliceOrAtlasAddress, out Sprite sprite) {
       sprite = null;
       if (entry == null || !entry.isDone || !entry.isSuccess) return false;
-      return TryGetSpriteByAddressInternal(entry, sliceOrAtlasAddress, allowEditorSupplement: true, out sprite);
+      return TryGetSpriteByAddressInternal(entry, sliceOrAtlasAddress, out sprite);
     }
 
     public bool TryGetSpriteByAddressWithoutEditorSupplement(string sliceOrAtlasAddress, out Sprite sprite) {
       sprite = null;
       if (entry == null || !entry.isDone || !entry.isSuccess) return false;
-      return TryGetSpriteByAddressInternal(entry, sliceOrAtlasAddress, allowEditorSupplement: false, out sprite);
+      return TryGetSpriteByAddressInternal(entry, sliceOrAtlasAddress, out sprite);
     }
 
     public bool NeedsPendingSpriteMapSupplement(string sliceOrAtlasAddress) {
@@ -233,18 +233,13 @@ public static partial class TextureResidencyCache {
              entry.pendingExactSliceSupplementAddresses.Contains(normalizedSliceAddress);
     }
 
-    bool TryGetSpriteByAddressInternal(CacheEntry targetEntry, string sliceOrAtlasAddress, bool allowEditorSupplement, out Sprite sprite) {
+    bool TryGetSpriteByAddressInternal(CacheEntry targetEntry, string sliceOrAtlasAddress, out Sprite sprite) {
       sprite = null;
       if (targetEntry == null || !targetEntry.isDone || !targetEntry.isSuccess) return false;
       if (SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out var atlasAssetPath, out var spriteName)) {
         var normalizedAtlasAddress = NormalizeAddress(atlasAssetPath);
         if (!string.Equals(normalizedAtlasAddress, Address, StringComparison.OrdinalIgnoreCase)) return false;
         if (TryGetSpriteFromEntry(targetEntry, spriteName, out sprite)) return true;
-#if UNITY_EDITOR
-        if (allowEditorSupplement) {
-          return TryGetSpriteFromEntryWithEditorSupplement(targetEntry, spriteName, out sprite);
-        }
-#endif
         EnsureRequestedSliceSupplement(targetEntry, sliceOrAtlasAddress);
         return false;
       }
@@ -318,6 +313,7 @@ public static partial class TextureResidencyCache {
   static readonly List<OwnerPinState> ownerDemoteScratch = new(16);
   static readonly HashSet<string> incompleteAtlasLoadWarnings = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> atlasSynthesisFailureWarnings = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> spriteLoadOperationFailureWarnings = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> unsupportedSpriteAddressWarnings = new(StringComparer.OrdinalIgnoreCase);
 #if UNITY_EDITOR
   static readonly Queue<CacheEntry> pendingEditorAtlasSupplementQueue = new();

@@ -23,12 +23,14 @@ public struct CombatDamageResult {
 
 public static class CombatDamageResolver {
   public static CombatDamageResult ResolveEsperanzaHit(IReadOnlyDictionary<string, float> defenderStats) {
+    // TODO: Consider using an Enum or strongly-typed properties for stats instead of string lookups (e.g., "ARM", "CCHC") to prevent typos and avoid string hashing overhead during combat calculations. - Senior Dev
     var armor = GetStat(defenderStats, "ARM");
 
     var criticalChance = Mathf.Clamp01(GetEsperanzaStat("CCHC"));
     var luckyChance = Mathf.Clamp01(GetEsperanzaStat("LCHC"));
     var directChance = Mathf.Clamp01(GetEsperanzaStat("DCHC"));
 
+    // TODO: Sequential random rolls for Crit, Lucky, and Direct might skew probabilities if they aren't meant to be mutually exclusive. Check if we should use independent rolls or a single weighted roll. - Senior Dev
     var criticalRoll = Random.value;
     if (criticalRoll <= criticalChance) {
       return BuildResult(
@@ -147,6 +149,7 @@ public static class CombatDamageResolver {
   }
 
   static float GetEsperanzaStat(string statName) {
+    // TODO: Avoid hardcoding static state access (AllStatValues.Esperanza) here. Pass the attacker's stats as an argument to make this pure and reusable for different entities, which is crucial for scalable combat systems. - Senior Dev
     return GetStat(AllStatValues.Esperanza, statName);
   }
 

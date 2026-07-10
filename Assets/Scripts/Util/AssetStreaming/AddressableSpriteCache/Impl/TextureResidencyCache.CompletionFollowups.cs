@@ -153,7 +153,7 @@ public static partial class TextureResidencyCache {
       if (loadSucceeded &&
           string.Equals(entry.requestStrategy, "atlas_backed", StringComparison.Ordinal) &&
           string.Equals(ResolvePrimaryLoadMode(entry.address), "direct_subassets", StringComparison.Ordinal)) {
-        entry.atlasFallbackToDirect = !TryPrimeAtlasBackedEntrySpriteMap(entry);
+        entry.atlasFallbackToDirect = !HasLoadedAtlasSubassetSet(entry);
       }
       entry.lastAccessTicks = DateTime.UtcNow.Ticks;
       LogIncompleteAtlasSpriteMap(

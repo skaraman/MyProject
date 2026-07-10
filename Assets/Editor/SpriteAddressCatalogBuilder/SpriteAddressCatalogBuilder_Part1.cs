@@ -497,7 +497,8 @@ public static partial class SpriteIndexBuilder {
               originalIncludeStates,
               optionalPackCatalogs,
               contextLabel,
-              logResult)) {
+              logResult,
+              cleanCachesBeforeBuild)) {
           return false;
         }
 
@@ -510,6 +511,10 @@ public static partial class SpriteIndexBuilder {
         }
         ReleaseEditorBuildPrepMemory(contextLabel);
         if (useChunkedWarmup && !WarmManagedTextureGroupBuildCache(settings, contextLabel, logResult)) {
+          return false;
+        }
+
+        if (!ValidateBaseAddressablesBootstrapContract(settings, contextLabel, logResult)) {
           return false;
         }
 
