@@ -56,8 +56,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     var budget = new WarmPlanSliceBudget(WarmPlanSliceBudgetSeconds, WarmPlanSliceWorkItemBudget);
 
     if (includeStaticSeedWork) {
-      AddLibraries(request.extraCriticalLibraries);
-      AddLibraries(request.extraWarmLibraries);
+      AddLibraries(request.extraCriticalLibraries, markCritical: true);
+      AddLibraries(request.extraWarmLibraries, markCritical: false);
       CollectLabels(request.extraCriticalLabels, markCritical: true);
       CollectLabels(request.extraWarmLabels, markCritical: false);
       CollectLabels(SpriteStreamingRuntimeSettings.CriticalAddressableLabels, markCritical: true);
@@ -480,8 +480,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   }
 
   bool AddReadyAddress(string address, bool markCritical, bool markHighPriority) {
-    // Warm gate runs as a single-tier preload queue: no per-source priority classes.
-    if (!AddWarmAddress(address, markHighPriority: false)) return false;
+    if (!AddWarmAddress(address, markHighPriority)) return false;
     var normalized = NormalizeToken(address);
     if (string.IsNullOrWhiteSpace(normalized)) return false;
     readyAddressSet.Add(normalized);
@@ -499,15 +498,30 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   bool AddWarmAddress(string address, bool markHighPriority) {
     var normalized = NormalizeToken(address);
     if (string.IsNullOrWhiteSpace(normalized)) return false;
-    if (warmAddressSet.Contains(normalized)) {
-      return true;
-    }
-    if (HasReachedWarmAddressCap()) {
+
+    var alreadyScheduled = warmAddressSet.Contains(normalized);
+    if (!alreadyScheduled && HasReachedWarmAddressCap()) {
       warmPlanDroppedAddresses++;
       return false;
     }
-    warmAddressSet.Add(normalized);
+    if (!alreadyScheduled) {
+      warmAddressSet.Add(normalized);
+    }
+    if (markHighPriority) {
+      MarkAddressHighPriority(normalized);
+    }
     return true;
+  }
+
+  void MarkAddressHighPriority(string normalizedAddress) {
+    if (string.IsNullOrWhiteSpace(normalizedAddress)) return;
+    if (highPriorityAddressSet.Contains(normalizedAddress)) return;
+    if (activeHighPriorityAddressCap > 0 &&
+        highPriorityAddressSet.Count >= activeHighPriorityAddressCap) {
+      warmPlanDroppedHighPriorityAddresses++;
+      return;
+    }
+    highPriorityAddressSet.Add(normalizedAddress);
   }
 
   bool HasReachedWarmAddressCap() {
@@ -754,10 +768,10 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     return WarmPlanSliceAction.Yield;
   }
 
-  void AddLibraries(List<string> libraries) {
+  void AddLibraries(List<string> libraries, bool markCritical) {
     if (libraries == null || libraries.Count <= 0) return;
     for (var i = 0; i < libraries.Count; i++) {
-      AddLibrary(libraries[i]);
+      AddLibrary(libraries[i], markCritical);
     }
   }
 
@@ -768,10 +782,13 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     }
   }
 
-  void AddLibrary(string libraryName) {
+  void AddLibrary(string libraryName, bool markCritical = false) {
     var normalized = NormalizeToken(libraryName);
     if (string.IsNullOrWhiteSpace(normalized)) return;
     warmLibrarySet.Add(normalized);
+    if (markCritical) {
+      criticalLibrarySet.Add(normalized);
+    }
   }
 
   void CollectLabels(IReadOnlyList<string> labels, bool markCritical) {
@@ -780,7 +797,10 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       var normalized = NormalizeToken(labels[i]);
       if (string.IsNullOrWhiteSpace(normalized)) continue;
       warmLabelSet.Add(normalized);
-      if (markCritical) criticalReadyLabelSet.Add(normalized);
+      if (markCritical) {
+        criticalReadyLabelSet.Add(normalized);
+        highPriorityLabelSet.Add(normalized);
+      }
     }
   }
 

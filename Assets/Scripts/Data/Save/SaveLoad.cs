@@ -447,6 +447,17 @@ public class SaveData : Dictionary<string, object> {
 //Player player = saveData.GetComplex<Player>("player");  // Complex (Name="Bob", Health=80)
 
 
+public static class SaveKeys {
+  public const string Forms = "forms";
+  public const string Stats = "stats";
+  public const string ActiveForm = "activeForm";
+  public const string UnlockedForms = "unlockedForms";
+  public const string FormProgress = "formProgress";
+  public const string FormStats = "formStats";
+  public const string EquippedGear = "equippedGear";
+  public const string AllGear = "allGear";
+}
+
 public static class SaveSlotManager {
   public const string SlotEpisodeIdKey = "episodeId";
   public const string SlotSaveDateKey = "saveDate";

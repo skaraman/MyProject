@@ -22,20 +22,54 @@ public struct CombatDamageResult {
 }
 
 public static class CombatDamageResolver {
-  public static CombatDamageResult ResolveEsperanzaHit(IReadOnlyDictionary<string, float> defenderStats) {
-    // TODO: Consider using an Enum or strongly-typed properties for stats instead of string lookups (e.g., "ARM", "CCHC") to prevent typos and avoid string hashing overhead during combat calculations. - Senior Dev
-    var armor = GetStat(defenderStats, "ARM");
+  static class CombatStatKeys {
+    public const string Armor = "ARM";
+    public const string Damage = "DMG";
+    public const string CriticalChance = "CCHC";
+    public const string CriticalDamage = "CDMG";
+    public const string LuckyChance = "LCHC";
+    public const string LuckyDamage = "LDMG";
+    public const string DirectChance = "DCHC";
+    public const string DirectDamage = "DDMG";
+  }
 
-    var criticalChance = Mathf.Clamp01(GetEsperanzaStat("CCHC"));
-    var luckyChance = Mathf.Clamp01(GetEsperanzaStat("LCHC"));
-    var directChance = Mathf.Clamp01(GetEsperanzaStat("DCHC"));
+  readonly struct AttackerCombatStats {
+    public float Damage { get; }
+    public float CriticalChance { get; }
+    public float CriticalDamage { get; }
+    public float LuckyChance { get; }
+    public float LuckyDamage { get; }
+    public float DirectChance { get; }
+    public float DirectDamage { get; }
 
-    // TODO: Sequential random rolls for Crit, Lucky, and Direct might skew probabilities if they aren't meant to be mutually exclusive. Check if we should use independent rolls or a single weighted roll. - Senior Dev
+    public AttackerCombatStats(IReadOnlyDictionary<string, float> stats) {
+      Damage = GetStat(stats, CombatStatKeys.Damage);
+      CriticalChance = GetStat(stats, CombatStatKeys.CriticalChance);
+      CriticalDamage = GetStat(stats, CombatStatKeys.CriticalDamage);
+      LuckyChance = GetStat(stats, CombatStatKeys.LuckyChance);
+      LuckyDamage = GetStat(stats, CombatStatKeys.LuckyDamage);
+      DirectChance = GetStat(stats, CombatStatKeys.DirectChance);
+      DirectDamage = GetStat(stats, CombatStatKeys.DirectDamage);
+    }
+  }
+
+  public static CombatDamageResult ResolveEsperanzaHit(
+    IReadOnlyDictionary<string, float> attackerStats,
+    IReadOnlyDictionary<string, float> defenderStats
+  ) {
+    var attacker = new AttackerCombatStats(attackerStats);
+    var armor = GetStat(defenderStats, CombatStatKeys.Armor);
+
+    var criticalChance = Mathf.Clamp01(attacker.CriticalChance);
+    var luckyChance = Mathf.Clamp01(attacker.LuckyChance);
+    var directChance = Mathf.Clamp01(attacker.DirectChance);
+
+    // Special hits use independent rolls with explicit Critical > Lucky > Direct priority.
     var criticalRoll = Random.value;
-    if (criticalRoll <= criticalChance) {
+    if (RollSucceeds(criticalChance, criticalRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Critical,
-        baseDamage: GetEsperanzaStat("CDMG"),
+        baseDamage: attacker.CriticalDamage,
         armorApplied: armor,
         criticalChance: criticalChance,
         luckyChance: luckyChance,
@@ -47,10 +81,10 @@ public static class CombatDamageResolver {
     }
 
     var luckyRoll = Random.value;
-    if (luckyRoll <= luckyChance) {
+    if (RollSucceeds(luckyChance, luckyRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Lucky,
-        baseDamage: GetEsperanzaStat("LDMG"),
+        baseDamage: attacker.LuckyDamage,
         armorApplied: 0f,
         criticalChance: criticalChance,
         luckyChance: luckyChance,
@@ -62,10 +96,10 @@ public static class CombatDamageResolver {
     }
 
     var directRoll = Random.value;
-    if (directRoll <= directChance) {
+    if (RollSucceeds(directChance, directRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Direct,
-        baseDamage: GetEsperanzaStat("DDMG"),
+        baseDamage: attacker.DirectDamage,
         armorApplied: 0f,
         criticalChance: criticalChance,
         luckyChance: luckyChance,
@@ -78,7 +112,7 @@ public static class CombatDamageResolver {
 
     return BuildResult(
       kind: CombatDamageKind.Damage,
-      baseDamage: GetEsperanzaStat("DMG"),
+      baseDamage: attacker.Damage,
       armorApplied: armor,
       criticalChance: criticalChance,
       luckyChance: luckyChance,
@@ -89,11 +123,14 @@ public static class CombatDamageResolver {
     );
   }
 
-  public static CombatDamageResult ResolveEnemyDamage(IReadOnlyDictionary<string, float> attackerStats, IReadOnlyDictionary<string, float> defenderStats) {
+  public static CombatDamageResult ResolveEnemyDamage(
+    IReadOnlyDictionary<string, float> attackerStats,
+    IReadOnlyDictionary<string, float> defenderStats
+  ) {
     return BuildResult(
       kind: CombatDamageKind.Damage,
-      baseDamage: GetStat(attackerStats, "DMG"),
-      armorApplied: GetStat(defenderStats, "ARM"),
+      baseDamage: GetStat(attackerStats, CombatStatKeys.Damage),
+      armorApplied: GetStat(defenderStats, CombatStatKeys.Armor),
       criticalChance: 0f,
       luckyChance: 0f,
       directChance: 0f,
@@ -148,9 +185,10 @@ public static class CombatDamageResolver {
     return Mathf.Max(finalAmount, 0f);
   }
 
-  static float GetEsperanzaStat(string statName) {
-    // TODO: Avoid hardcoding static state access (AllStatValues.Esperanza) here. Pass the attacker's stats as an argument to make this pure and reusable for different entities, which is crucial for scalable combat systems. - Senior Dev
-    return GetStat(AllStatValues.Esperanza, statName);
+  static bool RollSucceeds(float chance, float roll) {
+    if (chance <= 0f) return false;
+    if (chance >= 1f) return true;
+    return roll < chance;
   }
 
   static float GetStat(IReadOnlyDictionary<string, float> stats, string statName) {

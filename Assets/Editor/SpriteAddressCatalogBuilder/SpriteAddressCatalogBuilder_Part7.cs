@@ -195,7 +195,8 @@ public static partial class SpriteIndexBuilder {
     AddressableAssetGroup group,
     string assetPath,
     string address,
-    string bundleLabel = ""
+    string bundleLabel = "",
+    bool isAtlasMetadata = false
   ) {
     var normalizedPath = NormalizePath(assetPath);
     if (string.IsNullOrWhiteSpace(normalizedPath) || group == null) return;
@@ -227,6 +228,7 @@ public static partial class SpriteIndexBuilder {
     }
 
     ApplySyntheticTextureBundleLabel(settings, existing, bundleLabel);
+    ApplyAtlasMetadataLabel(settings, existing, isAtlasMetadata);
   }
 
   static int RemoveStaleEntriesWithAddress(
@@ -269,6 +271,8 @@ public static partial class SpriteIndexBuilder {
     var settings = state.addressables;
     if (settings == null) return;
 
+    AddActiveAtlasMetadataEntries(state);
+
     foreach (var assetPath in state.activeTextureAssetPaths) {
       var normalizedPath = NormalizePath(assetPath);
       var guid = AssetDatabase.AssetPathToGUID(normalizedPath);
@@ -297,7 +301,15 @@ public static partial class SpriteIndexBuilder {
         state.textureGroupsByName[groupName] = targetGroup;
       }
 
-      EnsureAddressableEntry(settings, targetGroup, normalizedPath, address, bundleLabel);
+      var isAtlasMetadata = state.activeAtlasMetadataAssetPaths.Contains(normalizedPath);
+      EnsureAddressableEntry(
+        settings,
+        targetGroup,
+        normalizedPath,
+        address,
+        bundleLabel,
+        isAtlasMetadata
+      );
       if (!string.IsNullOrWhiteSpace(bundleLabel)) {
         state.syntheticTextureLabelAssignments++;
         if (!state.syntheticTextureLabelCounts.ContainsKey(bundleLabel)) {
@@ -306,6 +318,25 @@ public static partial class SpriteIndexBuilder {
         state.syntheticTextureLabelCounts[bundleLabel]++;
       }
       state.activeTextureGroupNames.Add(targetGroup.Name);
+    }
+  }
+
+  static void AddActiveAtlasMetadataEntries(BuildState state) {
+    var metadataPaths = new List<string>();
+
+    foreach (var textureAssetPath in state.activeTextureAssetPaths) {
+      var metadataAssetPath = NormalizePath(Path.ChangeExtension(textureAssetPath, ".json"));
+      if (string.IsNullOrWhiteSpace(metadataAssetPath)) continue;
+
+      var metadataGuid = AssetDatabase.AssetPathToGUID(metadataAssetPath);
+      if (string.IsNullOrWhiteSpace(metadataGuid)) continue;
+
+      metadataPaths.Add(metadataAssetPath);
+      state.activeAtlasMetadataAssetPaths.Add(metadataAssetPath);
+    }
+
+    for (var i = 0; i < metadataPaths.Count; i++) {
+      state.activeTextureAssetPaths.Add(metadataPaths[i]);
     }
   }
 
@@ -336,6 +367,21 @@ public static partial class SpriteIndexBuilder {
       entry.SetLabel(bundleLabel, true, true, false);
       EditorUtility.SetDirty(settings);
     }
+  }
+
+  static void ApplyAtlasMetadataLabel(
+    AddressableAssetSettings settings,
+    AddressableAssetEntry entry,
+    bool isAtlasMetadata
+  ) {
+    if (!isAtlasMetadata || settings == null || entry == null) return;
+
+    var label = SpriteStreamingConfig.AtlasMetadataAddressablesLabel;
+    settings.AddLabel(label, false);
+    if (entry.labels != null && entry.labels.Contains(label)) return;
+
+    entry.SetLabel(label, true, true, false);
+    EditorUtility.SetDirty(settings);
   }
 
   static string BuildSyntheticTextureBundleLabel(string assetPath) {

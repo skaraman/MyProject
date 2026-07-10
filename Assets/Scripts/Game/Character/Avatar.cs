@@ -15,7 +15,7 @@ public class Avatar : MonoBehaviour {
   }
 
   void Awake() {
-    actions.Add(MessageBus.On("gearReady", o => UpdateSprite()));
+    actions.Add(MessageBus.On(CharacterMessageTopics.GearReady, _ => UpdateSprite()));
   }
 
   private void UpdateSprite() {

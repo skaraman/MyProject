@@ -67,7 +67,6 @@ public partial class AnimationController {
   private bool hadEnabledSpriteTargetsLastTick;
   private string activeSpriteCategory;
   private int lastAppliedSpriteFrame = int.MinValue;
-  private string lastAppliedSpriteCategory;
   private bool activePunchTrace;
   private string activePunchTraceAnimation;
   private string activePunchTraceCategory;
@@ -295,8 +294,8 @@ public partial class AnimationController {
     // Prevent movement-loop requests from stomping pending action switches (e.g. attacks)
     // while readiness gating is still warming required frames.
     if (hasPendingAnimationSwitch &&
-        IsLocomotionAnimationName(resolvedAnimation) &&
-        !IsLocomotionAnimationName(pendingAnimation)) {
+        IsLocomotionAnimation(resolvedAnimation) &&
+        !IsLocomotionAnimation(pendingAnimation)) {
       if (EnableAttackTraceLogs) LogAttackTrace("skip_locomotion_during_pending", requestedAnimation: requestedAnimation, resolvedAnimation: resolvedAnimation, queuedAnimationName: queued);
       return true;
     }
@@ -346,7 +345,7 @@ public partial class AnimationController {
       else {
         var shouldPrimeFullWindow =
           !HasSeenAnimationCategory(category) &&
-          !IsLocomotionAnimationName(resolvedAnimation);
+          !IsLocomotionAnimation(resolvedAnimation);
         PrimeTargetsForAnimation(category, anim.start, anim.end, primeFullWindow: shouldPrimeFullWindow);
       }
       if (shouldHoldInitialPlayerStartFrame) {

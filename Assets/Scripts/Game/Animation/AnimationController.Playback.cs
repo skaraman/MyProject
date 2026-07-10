@@ -27,6 +27,7 @@ public partial class AnimationController {
     animationTimer = 0f;
     currentFrame = 0;
     CancelAllTweens();
+    ResetOffensiveHBoxes();
     if (resetToDefault && !string.IsNullOrEmpty(defaultAnimation)) {
       PlayAnimation(defaultAnimation, true);
     }
@@ -71,6 +72,7 @@ public partial class AnimationController {
     ClearPendingAnimationSwitch();
     ClearStartFrameHold();
     CancelAllTweens();
+    ResetOffensiveHBoxes();
     if (resetLeanTweenManager && !hasResetLeanTween) {
       LeanTween.reset();
       hasResetLeanTween = true;
@@ -128,7 +130,7 @@ public partial class AnimationController {
           currentFrame = anim.start;
           pingPong = false;
           animationTimer = 0f;
-          SetBounces();
+          SetBounces(resetOffensiveHBoxes: true);
           cycleReset = true;
         }
         else {
@@ -150,7 +152,7 @@ public partial class AnimationController {
         currentFrame = anim.start;
         pingPong = false;
         animationTimer = 0f;
-        SetBounces();
+        SetBounces(resetOffensiveHBoxes: true);
         cycleReset = true;
       }
     }
@@ -257,7 +259,7 @@ public partial class AnimationController {
     else {
       UpdateSprites(currentFrame);
     }
-    SetBounces();
+    SetBounces(resetOffensiveHBoxes: true);
     ResetAnimationEvents(anim);
     TryTriggerFrameEvents(anim, lastFrame, currentFrame);
     lastFrame = currentFrame;

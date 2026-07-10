@@ -100,9 +100,12 @@ public static partial class SpriteRuntimeResolver {
       lookupHitCache.Clear();
       lookupMissCache.Clear();
       var parsed = manifestParse.Result;
-      foreach (var pair in parsed) {
-        manifestByNamepart[pair.Key] = pair.Value;
+      if (parsed != null && parsed.rows != null) {
+        foreach (var pair in parsed.rows) {
+          manifestByNamepart[pair.Key] = pair.Value;
+        }
       }
+      ApplyParsedManifestAmbiguities(parsed);
 
       manifestParse = null;
       manifestReady = true;
@@ -131,7 +134,7 @@ public static partial class SpriteRuntimeResolver {
         }
 
         var manifestText = operation.Result.text ?? "";
-        manifestParse = Task.Run(() => ParseManifestRows(manifestText, allowUnityLogging: false));
+        manifestParse = Task.Run(() => ParseManifestData(manifestText, allowUnityLogging: false));
         if (operation.IsValid()) {
           Addressables.Release(operation);
         }
@@ -142,8 +145,19 @@ public static partial class SpriteRuntimeResolver {
   }
 
   static Dictionary<string, ManifestEntry> ParseManifestRows(string text, bool allowUnityLogging = true) {
+    var parsed = ParseManifestData(text, allowUnityLogging);
+    ApplyParsedManifestAmbiguities(parsed);
+    return parsed.rows;
+  }
+
+  static ParsedManifestData ParseManifestData(string text, bool allowUnityLogging) {
     var rows = new Dictionary<string, ManifestEntry>(StringComparer.OrdinalIgnoreCase);
-    if (string.IsNullOrWhiteSpace(text)) return rows;
+    var ambiguousMatches = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+    var parsed = new ParsedManifestData {
+      rows = rows,
+      ambiguousShortNamepartMatches = ambiguousMatches
+    };
+    if (string.IsNullOrWhiteSpace(text)) return parsed;
 
     var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
     for (var i = 0; i < lines.Length; i++) {
@@ -153,9 +167,9 @@ public static partial class SpriteRuntimeResolver {
       var cols = line.Split('\t');
       if (cols.Length < 3) continue;
 
-      var normalizedNamepart = NormalizeNamePart(Unescape(cols[0]));
-      var address = NormalizeToken(Unescape(cols[1]));
-      var assetPath = NormalizeToken(Unescape(cols[2]));
+      var normalizedNamepart = NormalizeNamePartUncached(Unescape(cols[0]));
+      var address = NormalizeTokenUncached(Unescape(cols[1]));
+      var assetPath = NormalizeTokenUncached(Unescape(cols[2]));
       if (string.IsNullOrWhiteSpace(normalizedNamepart) || string.IsNullOrWhiteSpace(address)) continue;
 
       if (allowUnityLogging && rows.ContainsKey(normalizedNamepart)) {
@@ -172,13 +186,15 @@ public static partial class SpriteRuntimeResolver {
       };
     }
 
-    AddShortNamepartAliases(rows);
-    return rows;
+    AddShortNamepartAliases(rows, ambiguousMatches);
+    return parsed;
   }
 
-  static void AddShortNamepartAliases(Dictionary<string, ManifestEntry> rows) {
+  static void AddShortNamepartAliases(
+    Dictionary<string, ManifestEntry> rows,
+    Dictionary<string, List<string>> ambiguousMatches
+  ) {
     if (rows.Count == 0) return;
-    ambiguousShortNamepartMatches.Clear();
 
     var canonicalKeys = new List<string>(rows.Keys);
     var aliasCandidates = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -189,7 +205,7 @@ public static partial class SpriteRuntimeResolver {
       var slash = canonical.LastIndexOf('/');
       if (slash < 0 || slash >= canonical.Length - 1) continue;
 
-      var alias = NormalizeNamePart(canonical.Substring(slash + 1));
+      var alias = NormalizeNamePartUncached(canonical.Substring(slash + 1));
       if (string.IsNullOrWhiteSpace(alias)) continue;
       if (rows.ContainsKey(alias)) continue;
 
@@ -214,7 +230,16 @@ public static partial class SpriteRuntimeResolver {
         continue;
       }
 
-      ambiguousShortNamepartMatches[alias] = new List<string>(candidates);
+      ambiguousMatches[alias] = new List<string>(candidates);
+    }
+  }
+
+  static void ApplyParsedManifestAmbiguities(ParsedManifestData parsed) {
+    ambiguousShortNamepartMatches.Clear();
+    if (parsed == null || parsed.ambiguousShortNamepartMatches == null) return;
+
+    foreach (var pair in parsed.ambiguousShortNamepartMatches) {
+      ambiguousShortNamepartMatches[pair.Key] = new List<string>(pair.Value);
     }
   }
 

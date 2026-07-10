@@ -25,16 +25,31 @@ public class HurtBox2D : MonoBehaviour {
     if (collider != null) collider.isTrigger = true;
   }
 
+  public static bool TryResolve(Collider2D collider, out HurtBox2D hurtBox) {
+    hurtBox = null;
+    if (collider == null) return false;
+
+    if (collider.TryGetComponent(out hurtBox)) {
+      return true;
+    }
+
+    var parent = collider.transform.parent;
+    if (parent == null) return false;
+
+    hurtBox = parent.GetComponentInParent<HurtBox2D>();
+    return hurtBox != null;
+  }
+
   /// <summary>
   /// Receives a hit from a HitBox and validates it.
   /// </summary>
-  public void ReceiveHit(HitBox2D hitBox) {
-    if (!isActiveAndEnabled || hitBox == null) return;
+  public bool TryReceiveHit(HitBox2D hitBox) {
+    if (!isActiveAndEnabled || hitBox == null) return false;
 
     // Validate the hit is true (basic validation - hurtbox is active and hitbox is valid)
-    if (!hitBox.isActiveAndEnabled) return;
+    if (!hitBox.isActiveAndEnabled) return false;
 
-    if (ignoreEnemyHitBoxes && hitBox.GetComponentInParent<EnemyInfo>() != null) return;
+    if (ignoreEnemyHitBoxes && hitBox.GetComponentInParent<EnemyInfo>() != null) return false;
 
     // Hit is validated as true - invoke event with context
     OnHit?.Invoke(hitBox);
@@ -42,6 +57,12 @@ public class HurtBox2D : MonoBehaviour {
     if (launchRandomOnHit) {
       LaunchRandom();
     }
+
+    return true;
+  }
+
+  public void ReceiveHit(HitBox2D hitBox) {
+    TryReceiveHit(hitBox);
   }
 
   private void LaunchRandom() {

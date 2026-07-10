@@ -69,7 +69,7 @@ public class PauseMenuInput : MonoBehaviour {
     actions.Add(MessageBus.On("pauseMenu.right", o => right()));
     actions.Add(MessageBus.On("pauseMenu.up", o => up()));
     actions.Add(MessageBus.On("pauseMenu.down", o => down()));
-    actions.Add(MessageBus.On("formChanged", o => OnFormChanged(o)));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, form => OnFormChanged(form)));
   }
 
   void OnDestroy() {

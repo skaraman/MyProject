@@ -26,18 +26,75 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     }
   }
 
-  // helper used by TODO sorting and batching
   static int CompareByLifecycleLabel(string a, string b) {
-    // simple priority order; addresses containing these substrings
-    // will be requested earlier.  more sophisticated label lookup can
-    // be added when the data model exposes it.
     int Rank(string addr) {
+      if (string.IsNullOrWhiteSpace(addr)) return 4;
       if (addr.IndexOf("spawn", StringComparison.OrdinalIgnoreCase) >= 0) return 0;
       if (addr.IndexOf("locomotion", StringComparison.OrdinalIgnoreCase) >= 0) return 1;
       if (addr.IndexOf("idle", StringComparison.OrdinalIgnoreCase) >= 0) return 2;
       return 3;
     }
-    return Rank(a).CompareTo(Rank(b));
+
+    var rankComparison = Rank(a).CompareTo(Rank(b));
+    if (rankComparison != 0) return rankComparison;
+
+    var caseInsensitiveComparison = string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+    if (caseInsensitiveComparison != 0) return caseInsensitiveComparison;
+    return string.Compare(a, b, StringComparison.Ordinal);
+  }
+
+  static List<string> BuildOrderedWarmAddressBatch(
+    List<string> warmAddresses,
+    HashSet<string> highPriorityAddresses,
+    HashSet<string> criticalAddresses
+  ) {
+    var addressCount = warmAddresses != null ? warmAddresses.Count : 0;
+    var criticalBatch = new List<string>();
+    var highPriorityBatch = new List<string>();
+    var backgroundBatch = new List<string>();
+
+    for (var i = 0; i < addressCount; i++) {
+      var address = NormalizeToken(warmAddresses[i]);
+      if (string.IsNullOrWhiteSpace(address)) continue;
+
+      if (criticalAddresses != null && criticalAddresses.Contains(address)) {
+        criticalBatch.Add(address);
+        continue;
+      }
+      if (highPriorityAddresses != null && highPriorityAddresses.Contains(address)) {
+        highPriorityBatch.Add(address);
+        continue;
+      }
+      backgroundBatch.Add(address);
+    }
+
+    criticalBatch.Sort(CompareByLifecycleLabel);
+    highPriorityBatch.Sort(CompareByLifecycleLabel);
+    backgroundBatch.Sort(CompareByLifecycleLabel);
+
+    var ordered = new List<string>(addressCount);
+    ordered.AddRange(criticalBatch);
+    ordered.AddRange(highPriorityBatch);
+    ordered.AddRange(backgroundBatch);
+    return ordered;
+  }
+
+  int CompareWarmLabels(string a, string b) {
+    var aIsHighPriority = highPriorityLabelSet.Contains(a);
+    var bIsHighPriority = highPriorityLabelSet.Contains(b);
+    if (aIsHighPriority != bIsHighPriority) {
+      return aIsHighPriority ? -1 : 1;
+    }
+    return CompareByLifecycleLabel(a, b);
+  }
+
+  int CompareWarmLibraries(string a, string b) {
+    var aIsCritical = criticalLibrarySet.Contains(a);
+    var bIsCritical = criticalLibrarySet.Contains(b);
+    if (aIsCritical != bIsCritical) {
+      return aIsCritical ? -1 : 1;
+    }
+    return CompareByLifecycleLabel(a, b);
   }
 
   IEnumerator FinalizeWarmPlanForEnqueue(WarmContext context, float hardTimeoutAt, bool debugLogs) {
@@ -47,9 +104,15 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     }
 
     var warmAddresses = new List<string>(warmAddressSet);
+    var highPriorityAddresses = new List<string>(highPriorityAddressSet);
     var readyAddresses = new List<string>(readyAddressSet);
     var criticalReadyAddresses = new List<string>(criticalReadyAddressSet);
-    var finalizeTask = Task.Run(() => BuildThreadedWarmPlanSnapshot(warmAddresses, readyAddresses, criticalReadyAddresses));
+    var finalizeTask = Task.Run(() => BuildThreadedWarmPlanSnapshot(
+      warmAddresses,
+      highPriorityAddresses,
+      readyAddresses,
+      criticalReadyAddresses
+    ));
     var waitedFrames = 0;
 
     while (!finalizeTask.IsCompleted) {
@@ -107,22 +170,34 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
   void BuildWarmPlanBatchesSync() {
     warmAddressBatch.Clear();
-    warmAddressBatch.AddRange(warmAddressSet);
-    if (warmAddressBatch.Count > 1) {
-      warmAddressBatch.Sort(CompareByLifecycleLabel);
-    }
+    var ordered = BuildOrderedWarmAddressBatch(
+      new List<string>(warmAddressSet),
+      highPriorityAddressSet,
+      criticalReadyAddressSet
+    );
+    warmAddressBatch.AddRange(ordered);
     BuildScheduledAddressSets();
   }
 
   static ThreadedWarmPlanSnapshot BuildThreadedWarmPlanSnapshot(
     List<string> warmAddresses,
+    List<string> highPriorityAddresses,
     List<string> readyAddresses,
     List<string> criticalReadyAddresses
   ) {
-    var batch = warmAddresses ?? new List<string>();
-    if (batch.Count > 1) {
-      batch.Sort(CompareByLifecycleLabel);
-    }
+    var highPriorityAddressLookup = new HashSet<string>(
+      highPriorityAddresses ?? new List<string>(),
+      StringComparer.OrdinalIgnoreCase
+    );
+    var criticalReadyAddressLookup = new HashSet<string>(
+      criticalReadyAddresses ?? new List<string>(),
+      StringComparer.OrdinalIgnoreCase
+    );
+    var batch = BuildOrderedWarmAddressBatch(
+      warmAddresses,
+      highPriorityAddressLookup,
+      criticalReadyAddressLookup
+    );
 
     var scheduledAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     for (var i = 0; i < batch.Count; i++) {
@@ -289,10 +364,14 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     sortedLabelBuffer.Clear();
     sortedLabelBuffer.AddRange(warmLibrarySet);
     var libraries = sortedLabelBuffer;
+    if (libraries.Count > 1) {
+      libraries.Sort(CompareWarmLibraries);
+    }
 
     for (var i = 0; i < libraries.Count; i++) {
       if (Time.realtimeSinceStartup >= hardTimeoutAt) yield break;
       var libKey = libraries[i];
+      var isCritical = criticalLibrarySet.Contains(libKey);
       // Library keys are used only to discover dependent sprite addresses.
       // Actual texture residency still goes through address-based cache loads.
       var locHandle = Addressables.LoadResourceLocationsAsync(libKey);
@@ -303,14 +382,31 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       }
 
       if (locHandle.Status == AsyncOperationStatus.Succeeded && locHandle.Result != null) {
+        libraryDependencyAddressBuffer.Clear();
         var locations = locHandle.Result;
         foreach (var loc in locations) {
-          if (loc.Dependencies == null) continue;
+          if (loc == null || loc.Dependencies == null) continue;
           foreach (var dep in loc.Dependencies) {
-            if (HasReachedWarmAddressCap()) break;
-            AddWarmAddress(dep.PrimaryKey, markHighPriority: false);
+            if (dep == null) continue;
+            if (string.IsNullOrWhiteSpace(dep.PrimaryKey)) continue;
+            libraryDependencyAddressBuffer.Add(dep.PrimaryKey);
           }
         }
+        if (libraryDependencyAddressBuffer.Count > 1) {
+          libraryDependencyAddressBuffer.Sort(CompareByLifecycleLabel);
+        }
+        for (var dependencyIndex = 0;
+             dependencyIndex < libraryDependencyAddressBuffer.Count;
+             dependencyIndex++) {
+          if (HasReachedWarmAddressCap()) break;
+          var dependencyAddress = libraryDependencyAddressBuffer[dependencyIndex];
+          if (isCritical) {
+            AddReadyAddress(dependencyAddress, markCritical: true, markHighPriority: true);
+            continue;
+          }
+          AddWarmAddress(dependencyAddress, markHighPriority: false);
+        }
+        libraryDependencyAddressBuffer.Clear();
       }
       Addressables.Release(locHandle);
     }
@@ -322,7 +418,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     sortedLabelBuffer.AddRange(warmLabelSet);
     var labels = sortedLabelBuffer;
     if (labels.Count > 1) {
-      labels.Sort(CompareByLifecycleLabel);
+      labels.Sort(CompareWarmLabels);
     }
     for (var i = 0; i < labels.Count; i++) {
       if (Time.realtimeSinceStartup >= hardTimeoutAt) yield break;
@@ -332,8 +428,8 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       // resolves atlas asset locations directly to avoid exploding warm plans into
       // every slice representation.
       var locHandle = Addressables.LoadResourceLocationsAsync(label);
-      // TODO(smooth-first-play): If a critical label resolves a very large location list, split
-      // the resulting address set into deterministic chunks and enqueue high-value chunks first.
+      // Finalization orders critical addresses first, then the existing batched enqueuer
+      // submits that deterministic plan without introducing a second load-priority queue.
       while (!locHandle.IsDone) {
         if (Time.realtimeSinceStartup >= hardTimeoutAt) break;
         TextureResidencyCache.Pump();
@@ -343,11 +439,16 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
         locationBuffer.Clear();
         locationBuffer.AddRange(locHandle.Result);
         if (locationBuffer.Count > 1) {
-          locationBuffer.Sort((a, b) => CompareByLifecycleLabel(a.PrimaryKey, b.PrimaryKey));
+          locationBuffer.Sort((a, b) => CompareByLifecycleLabel(
+            a != null ? a.PrimaryKey : "",
+            b != null ? b.PrimaryKey : ""
+          ));
         }
         for (var j = 0; j < locationBuffer.Count; j++) {
           if (HasReachedWarmAddressCap()) break;
-          AddReadyAddress(locationBuffer[j].PrimaryKey, markCritical: isCritical, markHighPriority: isCritical);
+          var location = locationBuffer[j];
+          if (location == null) continue;
+          AddReadyAddress(location.PrimaryKey, markCritical: isCritical, markHighPriority: isCritical);
         }
         if (debugLogs) {
           Debug.Log(

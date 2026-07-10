@@ -122,8 +122,7 @@ public static class SpriteStreamingRuntimeSettings {
 
   public static int AnimationWarmupFrames {
     get {
-      var baseFrames = GetIntSetting(Asset != null ? Asset.animationWarmupFrames : 24, 24, 1);
-      return StreamingTelemetry.ApplyWarmupFrameHint(baseFrames);
+      return GetIntSetting(Asset != null ? Asset.animationWarmupFrames : 24, 24, 1);
     }
   }
 
@@ -326,23 +325,5 @@ public static class SpriteStreamingRuntimeSettings {
 
   static bool ShouldUseMobileAddressablePreset() {
     return Application.isMobilePlatform;
-  }
-}
-
-public static class StreamingTelemetry {
-  public static float FirstFrameLatencyMs {
-    get {
-      // TODO: hook into real telemetry system; stub returns -1 until implemented.
-      return -1f;
-    }
-  }
-
-  public static int ApplyWarmupFrameHint(int baseFrames) {
-    var latency = FirstFrameLatencyMs;
-    if (latency > 0f) {
-      var extra = Mathf.CeilToInt(latency / 16f);
-      return Mathf.Clamp(baseFrames + extra, 1, 120);
-    }
-    return baseFrames;
   }
 }

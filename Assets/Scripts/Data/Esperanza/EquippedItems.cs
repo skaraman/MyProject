@@ -69,6 +69,38 @@ public static class EquippedItems {
     };
   }
 
+  public static void ApplySavedGearForms(
+    Dictionary<string, Dictionary<string, GearItem>> targetForms,
+    Dictionary<string, Dictionary<string, GearItem>> loadedForms
+  ) {
+    if (targetForms == null || loadedForms == null) return;
+
+    foreach (var loadedForm in loadedForms) {
+      var form = EsperanzaForms.ResolveFormKey(loadedForm.Key);
+      if (string.IsNullOrWhiteSpace(form) || loadedForm.Value == null) {
+        continue;
+      }
+
+      if (!targetForms.TryGetValue(form, out var targetSlots) || targetSlots == null) {
+        continue;
+      }
+
+      foreach (var loadedSlot in loadedForm.Value) {
+        var slot = ResolveSlotKey(targetSlots, loadedSlot.Key);
+        if (string.IsNullOrWhiteSpace(slot)) {
+          continue;
+        }
+
+        var gearItem = CloneGearItem(loadedSlot.Value);
+        if (gearItem != null) {
+          gearItem.slot = slot;
+        }
+
+        targetSlots[slot] = gearItem;
+      }
+    }
+  }
+
   public static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearFormsSnapshot() {
     return CloneGearForms(DefaultGearForms);
   }
@@ -147,6 +179,19 @@ public static class EquippedItems {
 
   static string NormalizeToken(string value) {
     return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+  }
+
+  static string ResolveSlotKey(Dictionary<string, GearItem> targetSlots, string value) {
+    if (targetSlots == null || string.IsNullOrWhiteSpace(value)) return null;
+
+    var requestedSlot = value.Trim();
+    foreach (var slot in targetSlots.Keys) {
+      if (string.Equals(slot, requestedSlot, StringComparison.OrdinalIgnoreCase)) {
+        return slot;
+      }
+    }
+
+    return null;
   }
 
   static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearForms() {

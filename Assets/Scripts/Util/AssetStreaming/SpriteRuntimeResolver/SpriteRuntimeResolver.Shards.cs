@@ -170,23 +170,49 @@ public static partial class SpriteRuntimeResolver {
     if (shard.atlasLookupBuilt && shard.addressesByAtlasPath != null) return;
 
     shard.atlasLookupBuilt = true;
-    shard.addressesByAtlasPath = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-    if (shard.rows == null || shard.rows.Count <= 0) return;
-
-    foreach (var pair in shard.rows) {
-      AddAddressToAtlasLookup(shard.addressesByAtlasPath, pair.Value.colorAtlasAddress, pair.Value.colorAddress);
-      AddAddressToAtlasLookup(shard.addressesByAtlasPath, pair.Value.normalAtlasAddress, pair.Value.normalAddress);
-    }
+    shard.addressesByAtlasPath = BuildAtlasAddressLookup(shard.rows);
   }
 
-  static void AddAddressToAtlasLookup(Dictionary<string, List<string>> atlasMap, string atlasAssetPath, string sliceAddress) {
+  static Dictionary<string, List<string>> BuildAtlasAddressLookup(Dictionary<string, SpriteAddressPair> rows) {
+    var atlasMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+    if (rows == null || rows.Count <= 0) return atlasMap;
+
+    var seenByAtlasPath = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+    var rowKeys = new List<string>(rows.Keys);
+    rowKeys.Sort(StringComparer.Ordinal);
+
+    for (var i = 0; i < rowKeys.Count; i++) {
+      var pair = rows[rowKeys[i]];
+      AddAddressToAtlasLookup(
+        atlasMap,
+        seenByAtlasPath,
+        pair.colorAtlasAddress,
+        pair.colorAddress
+      );
+      AddAddressToAtlasLookup(
+        atlasMap,
+        seenByAtlasPath,
+        pair.normalAtlasAddress,
+        pair.normalAddress
+      );
+    }
+    return atlasMap;
+  }
+
+  static void AddAddressToAtlasLookup(
+    Dictionary<string, List<string>> atlasMap,
+    Dictionary<string, HashSet<string>> seenByAtlasPath,
+    string atlasAssetPath,
+    string sliceAddress
+  ) {
     if (atlasMap == null || string.IsNullOrWhiteSpace(sliceAddress)) return;
-    var normalizedAtlasPath = atlasAssetPath;
-    var normalizedSliceAddress = sliceAddress;
+    if (seenByAtlasPath == null) return;
+
+    var normalizedAtlasPath = NormalizeTokenUncached(atlasAssetPath);
+    var normalizedSliceAddress = NormalizeTokenUncached(sliceAddress);
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) {
-      if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var parsedAtlasAssetPath, out _)) return;
-      normalizedAtlasPath = NormalizeToken(parsedAtlasAssetPath);
-      normalizedSliceAddress = NormalizeToken(sliceAddress);
+      if (!SpriteSliceAddressUtility.TryParseSliceAddress(normalizedSliceAddress, out var parsedAtlasAssetPath, out _)) return;
+      normalizedAtlasPath = NormalizeTokenUncached(parsedAtlasAssetPath);
     }
     if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(normalizedSliceAddress)) return;
 
@@ -195,36 +221,12 @@ public static partial class SpriteRuntimeResolver {
       atlasMap[normalizedAtlasPath] = addresses;
     }
 
-    // TODO: O(n) linear scan for dedup. For large atlases this scales poorly.
-    // Replace the per-atlas List<string> with a HashSet<string> (OrdinalIgnoreCase) for O(1) contains,
-    // or maintain a parallel HashSet alongside the list if ordered iteration is required.
-    for (var i = 0; i < addresses.Count; i++) {
-      if (string.Equals(addresses[i], normalizedSliceAddress, StringComparison.OrdinalIgnoreCase)) return;
+    if (!seenByAtlasPath.TryGetValue(normalizedAtlasPath, out var seenAddresses) || seenAddresses == null) {
+      seenAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      seenByAtlasPath[normalizedAtlasPath] = seenAddresses;
     }
+    if (!seenAddresses.Add(normalizedSliceAddress)) return;
     addresses.Add(normalizedSliceAddress);
-  }
-
-  static void RemoveAddressFromAtlasLookup(Dictionary<string, List<string>> atlasMap, string atlasAssetPath, string sliceAddress) {
-    if (atlasMap == null || string.IsNullOrWhiteSpace(sliceAddress)) return;
-    var normalizedAtlasPath = atlasAssetPath;
-    var normalizedSliceAddress = sliceAddress;
-    if (string.IsNullOrWhiteSpace(normalizedAtlasPath)) {
-      if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var parsedAtlasAssetPath, out _)) return;
-      normalizedAtlasPath = NormalizeToken(parsedAtlasAssetPath);
-      normalizedSliceAddress = NormalizeToken(sliceAddress);
-    }
-    if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(normalizedSliceAddress)) return;
-    if (!atlasMap.TryGetValue(normalizedAtlasPath, out var addresses) || addresses == null) return;
-
-    for (var i = addresses.Count - 1; i >= 0; i--) {
-      if (!string.Equals(addresses[i], normalizedSliceAddress, StringComparison.OrdinalIgnoreCase)) continue;
-      addresses.RemoveAt(i);
-      break;
-    }
-
-    if (addresses.Count <= 0) {
-      atlasMap.Remove(normalizedAtlasPath);
-    }
   }
 
   static ParsedShardData ParseShardRows(string text, bool allowUnityLogging = true) {
@@ -242,31 +244,25 @@ public static partial class SpriteRuntimeResolver {
       var cols = line.Split('\t');
       if (cols.Length < 5) continue;
 
-      var form = NormalizeToken(Unescape(cols[0]));
-      var animation = NormalizeToken(Unescape(cols[1]));
+      var form = NormalizeTokenUncached(Unescape(cols[0]));
+      var animation = NormalizeTokenUncached(Unescape(cols[1]));
       if (!int.TryParse(cols[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var frame)) continue;
 
-      var key = BuildRowKey(form, animation, frame);
+      var key = BuildRowKeyUncached(form, animation, frame);
       if (allowUnityLogging && parsedShard.rows.ContainsKey(key)) {
         RateLimitedWarning(
           "shard-duplicate:" + key,
           "[SpriteRuntimeResolver] Duplicate shard row for key '" + key + "'. Last row wins."
         );
       }
-      if (parsedShard.rows.TryGetValue(key, out var previousPair)) {
-        RemoveAddressFromAtlasLookup(parsedShard.addressesByAtlasPath, previousPair.colorAtlasAddress, previousPair.colorAddress);
-        RemoveAddressFromAtlasLookup(parsedShard.addressesByAtlasPath, previousPair.normalAtlasAddress, previousPair.normalAddress);
-      }
-
       var spritePair = SpriteAddressPair.Create(
-        NormalizeToken(Unescape(cols[3])),
-        NormalizeToken(Unescape(cols[4]))
+        NormalizeTokenUncached(Unescape(cols[3])),
+        NormalizeTokenUncached(Unescape(cols[4]))
       );
       parsedShard.rows[key] = spritePair;
-      AddAddressToAtlasLookup(parsedShard.addressesByAtlasPath, spritePair.colorAtlasAddress, spritePair.colorAddress);
-      AddAddressToAtlasLookup(parsedShard.addressesByAtlasPath, spritePair.normalAtlasAddress, spritePair.normalAddress);
     }
 
+    parsedShard.addressesByAtlasPath = BuildAtlasAddressLookup(parsedShard.rows);
     return parsedShard;
   }
 }

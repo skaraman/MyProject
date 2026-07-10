@@ -5,6 +5,7 @@ public class AnimData {
   public int start;
   public int end;
   public float duration;
+  public bool isLocomotion;
   public bool loop;
   public int To;
   public bool pingPong;
@@ -17,8 +18,8 @@ public class AnimData {
 public static class Animations {
 
   public static Dictionary<string, AnimData> Imp { get; } = new Dictionary<string, AnimData> {
-    { "Idle", new AnimData { start = 1, end = 46, duration = 1200, loop = true } },
-    { "Run", new AnimData { start = 1, end = 46, duration = 1000, loop = true } },
+    { "Idle", new AnimData { start = 1, end = 46, duration = 1200, isLocomotion = true, loop = true } },
+    { "Run", new AnimData { start = 1, end = 46, duration = 1000, isLocomotion = true, loop = true } },
     { "Attack", new AnimData { start = 1, end = 32, duration = 600 } },
     { "Jump", new AnimData { start = 2, end = 196, duration = 1750 } },
     { "Hurt", new AnimData { start = 1, end = 60, duration = 175 } },
@@ -26,8 +27,8 @@ public static class Animations {
   };
 
   public static Dictionary<string, AnimData> LesserDevil { get; } = new Dictionary<string, AnimData> {
-    { "Idle", new AnimData { start = 1, end = 40, duration = 1200, loop = true } },
-    { "Run", new AnimData { start = 1, end = 30, duration = 850, loop = true } },
+    { "Idle", new AnimData { start = 1, end = 40, duration = 1200, isLocomotion = true, loop = true } },
+    { "Run", new AnimData { start = 1, end = 30, duration = 850, isLocomotion = true, loop = true } },
     { "Attack", new AnimData { start = 1, end = 28, duration = 650 } },
     { "Jump", new AnimData { start = 1, end = 40, duration = 1200 } },
     { "Hurt", new AnimData { start = 1, end = 24, duration = 400 } },
@@ -41,14 +42,14 @@ public static class Animations {
   };
 
   public static Dictionary<string, AnimData> Esperanza { get; } = new Dictionary<string, AnimData> {
-    { "Breathe", new AnimData { start = 1, end = 92, duration = 1750, pingPong = true } },
-    { "Walk", new AnimData { start = 1, end = 65, duration = 1000, loop = true } },
-    { "Run", new AnimData { start = 1, end = 45, duration = 700, loop = true } },
-    { "Sprint", new AnimData { start = 1, end = 49, duration = 500, loop = true } },
+    { "Breathe", new AnimData { start = 1, end = 92, duration = 1750, isLocomotion = true, pingPong = true } },
+    { "Walk", new AnimData { start = 1, end = 65, duration = 1000, isLocomotion = true, loop = true } },
+    { "Run", new AnimData { start = 1, end = 45, duration = 700, isLocomotion = true, loop = true } },
+    { "Sprint", new AnimData { start = 1, end = 49, duration = 500, isLocomotion = true, loop = true } },
     { "Dance", new AnimData { start = 1, end = 480, duration = 6000, loop = true } },
     { "Block", new AnimData { start = 1, end = 42, duration = 500 } },
     { "Dodge", new AnimData { start = 1, end = 58, duration = 250 } },
-    { "Stance", new AnimData { start = 1, end = 59, duration = 1000, pingPong = true } },
+    { "Stance", new AnimData { start = 1, end = 59, duration = 1000, isLocomotion = true, pingPong = true } },
 
 
     { "KickLeft", new AnimData { start = 1, end = 53, duration = 500 } },
@@ -104,7 +105,7 @@ public static class Animations {
     { "Jump", new AnimData { start = 1, end = 41, duration = 300 } },
     { "JumpDouble", new AnimData { start = 1, end = 32, duration = 300 } },
     { "JumpFalling", new AnimData { start = 1, end = 31, duration = 175, loop = true } },
-    { "JumpLanding", new AnimData { start = 1, end = 31, duration = 300 } },
+    { "JumpLanding", new AnimData { start = 1, end = 31, duration = 300, isLocomotion = true } },
     { "JumpToJumpDouble", new AnimData { start = 290, end = 300, duration = 175, To = 1 } },
     { "JumpToJumpFalling", new AnimData { start = 302, end = 313, duration = 175, To = 1 } },
     { "JumpToJumpLanding", new AnimData { start = 314, end = 325, duration = 175, To = 1 } },

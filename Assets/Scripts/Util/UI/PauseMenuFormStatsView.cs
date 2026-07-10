@@ -62,9 +62,9 @@ public class PauseMenuFormStatsView : MonoBehaviour {
       return;
     }
 
-    actions.Add(MessageBus.On("formChanged", o => OnFormChanged(o)));
-    actions.Add(MessageBus.On("formProgressChanged", o => RefreshForPayload(o, "form_progress_changed")));
-    actions.Add(MessageBus.On("formStatsChanged", o => RefreshForPayload(o, "form_stats_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, form => OnFormChanged(form)));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormProgressChanged, form => RefreshForPayload(form, "form_progress_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormStatsChanged, form => RefreshForPayload(form, "form_stats_changed")));
     actions.Add(MessageBus.On("pauseMenu.hover", o => OnHover(o)));
     actions.Add(MessageBus.On("pauseMenu.unhover", o => OnUnhover()));
     actions.Add(MessageBus.On("pauseMenu.click", o => OnClick(o)));

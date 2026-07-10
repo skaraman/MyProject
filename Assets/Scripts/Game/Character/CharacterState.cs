@@ -22,12 +22,17 @@ public class CharacterState : MonoBehaviour {
   }
 
   void EnsureRuntimeReferences() {
-    // TODO: Avoid using GetComponent at runtime in arbitrary functions (like LoadState). Cache this on Awake() or Start() to prevent potential performance hits if called frequently. - Senior Dev
-    gearController ??= GetComponent<GearController>();
+    if (gearController == null) {
+      gearController = GetComponent<GearController>();
+    }
+  }
+
+  void Awake() {
+    EnsureRuntimeReferences();
   }
 
   void Start() {
-    offLoadGame = MessageBus.On("loadGame", o => LoadState());
+    offLoadGame = MessageBus.On(CharacterMessageTopics.LoadGame, LoadState);
     EnsureRuntimeReferences();
   }
 
@@ -44,9 +49,8 @@ public class CharacterState : MonoBehaviour {
     EnsureRuntimeReferences();
     ResetRuntimeState();
 
-    // TODO: Extract magic strings ("forms", "stats", etc.) into a static SaveKeys class to avoid typos. - Senior Dev
-    var loadedForms = SaveSlotManager.Load("forms");
-    var loadedStats = SaveSlotManager.Load("stats");
+    var loadedForms = SaveSlotManager.Load(SaveKeys.Forms);
+    var loadedStats = SaveSlotManager.Load(SaveKeys.Stats);
     if (ShouldLogLoadStateDebug()) {
       Debug.Log(
         "[CharacterState][LoadState] stage=begin" +
@@ -61,11 +65,10 @@ public class CharacterState : MonoBehaviour {
     ApplyLoadedStatsState(loadedStats);
     DialogController.LoadState("character_load_state");
 
-    gearController?.LoadGear();
+    gearController?.LoadGear(publishReady: false);
     GatherAllStatValues();
     SaveFormsState();
-    // TODO: Consider replacing string-based events with typed actions/events or C# Actions for better maintainability, compile-time safety, and performance. - Senior Dev
-    MessageBus.Send("dialogStateReady", "load_state");
+    MessageBus.Send(CharacterMessageTopics.DialogStateReady, "load_state");
     NotifyFormStateChanged(EsperanzaForms.GetActive(), "load_state");
 
     if (ShouldLogLoadStateDebug()) {
@@ -92,10 +95,10 @@ public class CharacterState : MonoBehaviour {
       );
     }
 
-    gearController?.LoadGear();
+    gearController?.LoadGear(publishReady: false);
     GatherAllStatValues();
     SaveFormsState();
-    MessageBus.Send("dialogStateReady", "new_game");
+    MessageBus.Send(CharacterMessageTopics.DialogStateReady, "new_game");
     NotifyFormStateChanged(EsperanzaForms.GetActive(), "new_game");
 
     if (ShouldLogLoadStateDebug()) {
@@ -185,7 +188,7 @@ public class CharacterState : MonoBehaviour {
 
     var levelsGained = progress.level - previousLevel;
     var saved = SaveFormsState();
-    MessageBus.Send("formProgressChanged", resolvedForm);
+    MessageBus.Send(CharacterMessageTopics.FormProgressChanged, resolvedForm);
 
     Debug.Log(
       "[CharacterState][GrantFormXp] form='" + resolvedForm +
@@ -301,7 +304,7 @@ public class CharacterState : MonoBehaviour {
     stats[resolvedStat] += amount;
     GatherAllStatValues();
     var saved = SaveStatsState();
-    MessageBus.Send("formStatsChanged", resolvedForm);
+    MessageBus.Send(CharacterMessageTopics.FormStatsChanged, resolvedForm);
 
     Debug.Log(
       "[CharacterState][AddStats] form='" + resolvedForm +
@@ -357,40 +360,51 @@ public class CharacterState : MonoBehaviour {
       return;
     }
 
-    if (loadedForms.HasPrefix("unlockedForms")) {
-      var unlockedForms = loadedForms.GetComplex<Dictionary<string, int>>("unlockedForms");
+    if (loadedForms.HasPrefix(SaveKeys.UnlockedForms)) {
+      var unlockedForms = loadedForms.GetComplex<Dictionary<string, int>>(SaveKeys.UnlockedForms);
       EsperanzaForms.ApplyUnlockedState(unlockedForms);
     } else {
       EsperanzaForms.ApplyUnlockedState(null);
     }
 
-    if (loadedForms.HasPrefix("formProgress")) {
-      var formProgress = loadedForms.GetComplex<Dictionary<string, FormProgressState>>("formProgress");
+    if (loadedForms.HasPrefix(SaveKeys.FormProgress)) {
+      var formProgress = loadedForms.GetComplex<Dictionary<string, FormProgressState>>(SaveKeys.FormProgress);
       EsperanzaForms.ApplyProgressState(formProgress);
     } else {
       EsperanzaForms.ApplyProgressState(null);
     }
 
-    var requestedActiveForm = loadedForms.ContainsKey("activeForm")
-      ? Convert.ToString(loadedForms["activeForm"])
+    var requestedActiveForm = loadedForms.ContainsKey(SaveKeys.ActiveForm)
+      ? Convert.ToString(loadedForms[SaveKeys.ActiveForm])
       : EsperanzaForms.GetActive();
     EsperanzaForms.SetActive(requestedActiveForm);
   }
 
   void ApplyLoadedStatsState(SaveData loadedStats) {
-    if (loadedStats == null || loadedStats.Count == 0 || !loadedStats.HasPrefix("formStats")) {
+    if (loadedStats == null || loadedStats.Count == 0 || !loadedStats.HasPrefix(SaveKeys.FormStats)) {
       return;
     }
 
-    var loadedFormStats = loadedStats.GetComplex<Dictionary<string, Dictionary<string, int>>>("formStats");
+    var loadedFormStats = loadedStats.GetComplex<Dictionary<string, Dictionary<string, int>>>(SaveKeys.FormStats);
     if (loadedFormStats == null) {
       return;
     }
 
     foreach (var form in loadedFormStats) {
-      FormStatsValues.EnsureForm(form.Key);
+      var resolvedForm = EsperanzaForms.ResolveFormKey(form.Key);
+      if (string.IsNullOrWhiteSpace(resolvedForm) || form.Value == null) {
+        continue;
+      }
+
+      FormStatsValues.EnsureForm(resolvedForm);
       foreach (var stat in form.Value) {
-        FormStatsValues.values[form.Key][stat.Key] = stat.Value;
+        var resolvedStat = FormStatIncreases.ResolveMajorStatKey(resolvedForm, stat.Key);
+        if (string.IsNullOrWhiteSpace(resolvedStat)) {
+          continue;
+        }
+
+        var defaultValue = FormStatsValues.GetDefaultValue(resolvedForm, resolvedStat);
+        FormStatsValues.values[resolvedForm][resolvedStat] = Mathf.Max(stat.Value, defaultValue);
       }
     }
   }
@@ -398,11 +412,11 @@ public class CharacterState : MonoBehaviour {
   bool SaveFormsState() {
     try {
       var formsSave = new SaveData {
-        ["activeForm"] = EsperanzaForms.GetActive()
+        [SaveKeys.ActiveForm] = EsperanzaForms.GetActive()
       };
-      formsSave.SetComplex("unlockedForms", EsperanzaForms.GetUnlockedSnapshot());
-      formsSave.SetComplex("formProgress", EsperanzaForms.GetProgressSnapshot());
-      SaveSlotManager.Save("forms", formsSave);
+      formsSave.SetComplex(SaveKeys.UnlockedForms, EsperanzaForms.GetUnlockedSnapshot());
+      formsSave.SetComplex(SaveKeys.FormProgress, EsperanzaForms.GetProgressSnapshot());
+      SaveSlotManager.Save(SaveKeys.Forms, formsSave);
       return true;
     }
     catch (Exception e) {
@@ -414,8 +428,8 @@ public class CharacterState : MonoBehaviour {
   bool SaveStatsState() {
     try {
       var statsSave = new SaveData();
-      statsSave.SetComplex("formStats", FormStatsValues.values);
-      SaveSlotManager.Save("stats", statsSave);
+      statsSave.SetComplex(SaveKeys.FormStats, FormStatsValues.values);
+      SaveSlotManager.Save(SaveKeys.Stats, statsSave);
       return true;
     }
     catch (Exception e) {
@@ -429,9 +443,9 @@ public class CharacterState : MonoBehaviour {
       "[CharacterState][NotifyFormStateChanged] form='" + (resolvedForm ?? "") +
       "' source='" + (source ?? "") + "'"
     );
-    MessageBus.Send("formChanged", resolvedForm);
-    MessageBus.Send("gearReady", resolvedForm);
-    MessageBus.Send("formProgressChanged", resolvedForm);
+    MessageBus.Send(CharacterMessageTopics.FormChanged, resolvedForm);
+    MessageBus.Send(CharacterMessageTopics.GearReady, resolvedForm);
+    MessageBus.Send(CharacterMessageTopics.FormProgressChanged, resolvedForm);
   }
 
   int ResolveNextLevelXp(int currentThreshold, string formName, int nextLevel, string source) {

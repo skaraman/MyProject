@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public partial class GearController {
-  public void LoadGear() {
+  public void LoadGear(bool publishReady = true) {
     EnsureRuntimeInitialized("load_gear");
     EquippedItems.EnsureKnownForms();
     GetSavedGearState();
@@ -12,29 +12,25 @@ public partial class GearController {
     QueueStartupAppearanceWarmup("load_gear", pauseUntilReady: !equippedStartupWarmupCompleted);
     PrimeEquippedAnimationStartsIfLoading();
     PrimeCoreCombatEffectWarmup("load_gear");
-    MessageBus.Send("gearReady");
+    if (publishReady) {
+      MessageBus.Send(CharacterMessageTopics.GearReady, (string)null);
+    }
   }
 
   public void GetSavedGearState() {
     EquippedItems.EnsureKnownForms();
-    var loaded = SaveSlotManager.Load("equippedGear");
-    if (loaded.Keys.Count == 0) return;
-    foreach (var form in loaded.GetComplex<Dictionary<string, Dictionary<string, GearItem>>>("allGear")) {
-      EquippedItems.EnsureForm(form.Key);
-      foreach (var slot in form.Value) {
-        if (!EquippedItems.AllGearForms[form.Key].ContainsKey(slot.Key)) {
-          EquippedItems.AllGearForms[form.Key][slot.Key] = null;
-        }
-        EquippedItems.AllGearForms[form.Key][slot.Key] = EquippedItems.CloneGearItem(slot.Value);
-      }
-    }
+    var loaded = SaveSlotManager.Load(SaveKeys.EquippedGear);
+    if (loaded == null || !loaded.HasPrefix(SaveKeys.AllGear)) return;
+
+    var loadedForms = loaded.GetComplex<Dictionary<string, Dictionary<string, GearItem>>>(SaveKeys.AllGear);
+    EquippedItems.ApplySavedGearForms(EquippedItems.AllGearForms, loadedForms);
   }
 
   public void SetGearIntoSlot(string slot, GearItem gearItem) {
     EquippedItems.EnsureForm(EsperanzaForms.GetActive());
     EquippedItems.AllGearForms[EsperanzaForms.GetActive()][slot] = gearItem;
-    gameData.SetComplex("allGear", EquippedItems.AllGearForms);
-    SaveSlotManager.Save("equippedGear", gameData);
+    gameData.SetComplex(SaveKeys.AllGear, EquippedItems.AllGearForms);
+    SaveSlotManager.Save(SaveKeys.EquippedGear, gameData);
     RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("gear_slot_change");
     MarkAppearanceRevision();
   }

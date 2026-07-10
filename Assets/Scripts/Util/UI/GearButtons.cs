@@ -25,7 +25,7 @@ public class GearButtons : ButtonGroup {
       return;
     }
 
-    actions.Add(MessageBus.On("gearReady", o => OnGearReady(o as string)));
+    actions.Add(MessageBus.On(CharacterMessageTopics.GearReady, OnGearReady));
   }
 
   void UnregisterHandlers() {

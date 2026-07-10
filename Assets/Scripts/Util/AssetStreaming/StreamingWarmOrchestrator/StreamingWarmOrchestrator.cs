@@ -10,6 +10,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   static bool hasActiveProgress;
 
   readonly HashSet<string> warmLibrarySet = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> criticalLibrarySet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> warmAddressSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> warmLabelSet = new(StringComparer.OrdinalIgnoreCase);
   readonly HashSet<string> highPriorityAddressSet = new(StringComparer.OrdinalIgnoreCase);
@@ -42,7 +43,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   static readonly HashSet<string> archetypeKeySeenBuffer = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<string> sliceScratch = new();
   static readonly List<string> sortedLabelBuffer = new();
-  static readonly List<string> highPriorityAddressBatchBuffer = new();
+  static readonly List<string> libraryDependencyAddressBuffer = new();
   static readonly List<string> rescueAddressBuffer = new();
   static readonly HashSet<string> rescueSeenAddressBuffer = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<EnemyController> rescueEnemyControllerBuffer = new();
@@ -738,6 +739,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
   void ClearScratch() {
     warmLibrarySet.Clear();
+    criticalLibrarySet.Clear();
     warmAddressSet.Clear();
     warmLabelSet.Clear();
     highPriorityAddressSet.Clear();

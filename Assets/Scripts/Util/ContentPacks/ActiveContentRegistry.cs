@@ -1046,12 +1046,12 @@ public static class RuntimeContentPackResolver {
       return DefaultForm;
     }
 
-    var loadedForms = SaveSlotManager.Load("forms");
-    if (loadedForms == null || loadedForms.Count <= 0 || !loadedForms.ContainsKey("activeForm")) {
+    var loadedForms = SaveSlotManager.Load(SaveKeys.Forms);
+    if (loadedForms == null || loadedForms.Count <= 0 || !loadedForms.ContainsKey(SaveKeys.ActiveForm)) {
       return DefaultForm;
     }
 
-    return ResolveFormOrDefault(Convert.ToString(loadedForms["activeForm"]));
+    return ResolveFormOrDefault(Convert.ToString(loadedForms[SaveKeys.ActiveForm]));
   }
 
   public static Dictionary<string, Dictionary<string, GearItem>> ResolveGearFormsForGameplayStart(bool isNewGame) {
@@ -1060,7 +1060,7 @@ public static class RuntimeContentPackResolver {
       return gearForms;
     }
 
-    var loadedGear = SaveSlotManager.Load("equippedGear");
+    var loadedGear = SaveSlotManager.Load(SaveKeys.EquippedGear);
     ApplySavedGearForms(gearForms, loadedGear);
     return gearForms;
   }
@@ -1073,38 +1073,16 @@ public static class RuntimeContentPackResolver {
       return;
     }
 
-    if (!loadedGear.HasPrefix("allGear")) {
+    if (!loadedGear.HasPrefix(SaveKeys.AllGear)) {
       return;
     }
 
-    var loadedForms = loadedGear.GetComplex<Dictionary<string, Dictionary<string, GearItem>>>("allGear");
+    var loadedForms = loadedGear.GetComplex<Dictionary<string, Dictionary<string, GearItem>>>(SaveKeys.AllGear);
     if (loadedForms == null) {
       return;
     }
 
-    foreach (var formEntry in loadedForms) {
-      var form = EsperanzaForms.ResolveFormKey(formEntry.Key);
-      if (string.IsNullOrWhiteSpace(form)) {
-        continue;
-      }
-
-      if (!gearForms.TryGetValue(form, out var targetSlots) || targetSlots == null) {
-        continue;
-      }
-
-      if (formEntry.Value == null) {
-        continue;
-      }
-
-      foreach (var slotEntry in formEntry.Value) {
-        var slot = NormalizeToken(slotEntry.Key);
-        if (string.IsNullOrWhiteSpace(slot)) {
-          continue;
-        }
-
-        targetSlots[slot] = EquippedItems.CloneGearItem(slotEntry.Value);
-      }
-    }
+    EquippedItems.ApplySavedGearForms(gearForms, loadedForms);
   }
 
   static string BuildUiPackId(string activeForm) {

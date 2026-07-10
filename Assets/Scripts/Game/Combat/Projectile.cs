@@ -400,8 +400,7 @@ public class Projectile : MonoBehaviour {
     if (!isActiveAndEnabled || other == null) return;
     if (ignoreSameRoot && other.transform.root == transform.root) return;
 
-    var hurtBox = other.GetComponentInParent<HurtBox2D>();
-    if (hurtBox != null) {
+    if (HurtBox2D.TryResolve(other, out _)) {
       if (despawnOnHurtBoxHit) Despawn();
       return;
     }

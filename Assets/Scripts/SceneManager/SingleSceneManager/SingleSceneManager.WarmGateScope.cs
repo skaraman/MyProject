@@ -32,7 +32,9 @@ public partial class SingleSceneManager {
     }
 
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
-    if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) {
+    var pressure = ResolvePreUnlockQueuePressure(queue);
+    if (pressure == PreUnlockQueuePressure.High ||
+        pressure == PreUnlockQueuePressure.Critical) {
       ratio -= 0.02f;
     }
 

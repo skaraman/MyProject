@@ -193,7 +193,7 @@ public partial class SingleSceneManager {
     }
     else {
       LogLoadStateDispatch("dispatch_load_game");
-      MessageBus.Send("loadGame");
+      MessageBus.Send(CharacterMessageTopics.LoadGame);
     }
     if (!ShouldLogLoadingProgressDebug()) return;
     Debug.Log(

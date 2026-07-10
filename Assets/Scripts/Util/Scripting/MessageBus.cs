@@ -3,6 +3,31 @@ using System.Collections.Generic;
 using UnityEngine;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
+public readonly struct MessageTopic {
+  internal string Name { get; }
+
+  public MessageTopic(string name) {
+    Name = name;
+  }
+}
+
+public readonly struct MessageTopic<T> {
+  internal string Name { get; }
+
+  public MessageTopic(string name) {
+    Name = name;
+  }
+}
+
+public static class CharacterMessageTopics {
+  public static readonly MessageTopic LoadGame = new("loadGame");
+  public static readonly MessageTopic<string> DialogStateReady = new("dialogStateReady");
+  public static readonly MessageTopic<string> FormChanged = new("formChanged");
+  public static readonly MessageTopic<string> GearReady = new("gearReady");
+  public static readonly MessageTopic<string> FormProgressChanged = new("formProgressChanged");
+  public static readonly MessageTopic<string> FormStatsChanged = new("formStatsChanged");
+}
+
 public static class MessageBus {
   private static Dictionary<string, Action<object>> _messageTable =
       new Dictionary<string, Action<object>>();
@@ -20,6 +45,22 @@ public static class MessageBus {
       registeredKeys.Add(message);
     }
     return () => Off(message, callback);
+  }
+
+  public static Action On(MessageTopic topic, Action callback) {
+    if (callback == null) {
+      throw new ArgumentNullException(nameof(callback));
+    }
+
+    return On(topic.Name, _ => callback());
+  }
+
+  public static Action On<T>(MessageTopic<T> topic, Action<T> callback) {
+    if (callback == null) {
+      throw new ArgumentNullException(nameof(callback));
+    }
+
+    return On(topic.Name, payload => DispatchTypedPayload(topic.Name, payload, callback));
   }
 
   public static void Off(string message, Action<object> callback) {
@@ -74,6 +115,14 @@ public static class MessageBus {
     );
   }
 
+  public static void Send(MessageTopic topic) {
+    Send(topic.Name);
+  }
+
+  public static void Send<T>(MessageTopic<T> topic, T data) {
+    Send(topic.Name, data);
+  }
+
   // Optional: Clear all messages (useful for scene transitions)
   public static void Clear() {
     _messageTable.Clear();
@@ -83,6 +132,24 @@ public static class MessageBus {
   static bool ShouldLogSlowSubscriberDiagnostics() {
     if (!enableSlowSubscriberDiagnostics) return false;
     return Application.isEditor || Debug.isDebugBuild;
+  }
+
+  static void DispatchTypedPayload<T>(string message, object payload, Action<T> callback) {
+    if (payload == null) {
+      callback(default);
+      return;
+    }
+
+    if (payload is T typedPayload) {
+      callback(typedPayload);
+      return;
+    }
+
+    Debug.LogError(
+      "[MessageBus] Invalid payload type message='" + message +
+      "' expected='" + typeof(T).Name +
+      "' actual='" + payload.GetType().Name + "'"
+    );
   }
 
   static float ResolveSlowSubscriberThresholdMs() {

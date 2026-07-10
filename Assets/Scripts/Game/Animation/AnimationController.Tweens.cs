@@ -3,10 +3,12 @@ using System.Linq;
 using UnityEngine;
 
 public partial class AnimationController {
-  private void SetBounces() {
+  static readonly Vector2[] NeutralOffensiveHBoxPath = new Vector2[5];
+
+  private void SetBounces(bool resetOffensiveHBoxes = false) {
     CancelAllTweens();
     if (bounceData == null || bounceData.Count == 0 || bounceObjects.Length == 0 || string.IsNullOrEmpty(currentAnimation)) {
-      SetHBoxes();
+      SetHBoxes(resetOffensiveHBoxes);
       return;
     }
     foreach (KeyValuePair<string, Dictionary<string, List<BounceFrame>>> partPair in bounceData) {
@@ -21,7 +23,7 @@ public partial class AnimationController {
       TimeScale.UnregisterTweens(bounceParent);
       StartBounceSequence(bounceParent, frameSequence, 0);
     }
-    SetHBoxes();
+    SetHBoxes(resetOffensiveHBoxes);
   }
 
   private void StartBounceSequence(GameObject bounceParent, List<BounceFrame> sequence, int index) {
@@ -53,7 +55,10 @@ public partial class AnimationController {
     AddTweenId(bounceParent, delayDescr.id);
   }
 
-  private void SetHBoxes() {
+  private void SetHBoxes(bool resetOffensiveHBoxes) {
+    if (resetOffensiveHBoxes) {
+      ResetOffensiveHBoxes();
+    }
     if (hBoxData == null || hBoxObjects.Length == 0 || string.IsNullOrEmpty(currentAnimation)) return;
     foreach (var kvp in hBoxData) {
       string partKey = kvp.Key;
@@ -66,10 +71,33 @@ public partial class AnimationController {
         if (go == null) continue;
         var poly = go.GetComponent<PolygonCollider2D>();
         if (poly == null) continue;
+        var hitBox = go.GetComponent<HitBox2D>();
+        if (hitBox != null) {
+          if (hboxList == null || hboxList.Count == 0) continue;
+          poly.enabled = true;
+        }
         LeanTween.cancel(go);
         TimeScale.UnregisterTweens(go);
         StartHBoxSequence(go, poly, hboxList, 0);
       }
+    }
+  }
+
+  private void ResetOffensiveHBoxes() {
+    for (var i = 0; i < hBoxObjects.Length; i++) {
+      var go = hBoxObjects[i];
+      if (go == null) continue;
+
+      var hitBox = go.GetComponent<HitBox2D>();
+      if (hitBox == null) continue;
+
+      var poly = go.GetComponent<PolygonCollider2D>();
+      if (poly != null) {
+        poly.enabled = false;
+        poly.pathCount = 1;
+        poly.SetPath(0, NeutralOffensiveHBoxPath);
+      }
+      hitBox.ResetHitCache();
     }
   }
 

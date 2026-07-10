@@ -25,6 +25,10 @@ public class DestructionManager : MonoBehaviour {
 
   public void CollectPiecesFromChildren() {
     pieces.Clear();
+    if (piecesRoot == null) {
+      return;
+    }
+
     var found = piecesRoot.GetComponentsInChildren<Piece>(true);
     for (var i = 0; i < found.Length; i++) {
       pieces.Add(found[i]);
@@ -48,6 +52,7 @@ public class DestructionManager : MonoBehaviour {
     var count = Random.Range(1, active.Count + 1);
     for (var i = 0; i < active.Count; i++) {
       var p = active[i];
+      if (p == null) continue;
       var shouldLaunch = i < count;
       if (shouldLaunch) {
         if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);

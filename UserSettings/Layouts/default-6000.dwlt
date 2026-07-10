@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 2127
     height: 1331
   m_ShowMode: 4
-  m_Title: Console
+  m_Title: Game
   m_RootView: {fileID: 2}
   m_MinSize: {x: 875, y: 338}
   m_MaxSize: {x: 10000, y: 10000}
@@ -219,8 +219,8 @@ MonoBehaviour:
     y: 0
     width: 443
     height: 511
-  m_MinSize: {x: 50, y: 50}
-  m_MaxSize: {x: 4000, y: 4000}
+  m_MinSize: {x: 52, y: 76}
+  m_MaxSize: {x: 4002, y: 4026}
   m_ActualView: {fileID: 20}
   m_Panes:
   - {fileID: 20}
@@ -322,7 +322,7 @@ MonoBehaviour:
     x: 0
     y: 0
     width: 1250
-    height: 768
+    height: 845
   m_MinSize: {x: 201, y: 226}
   m_MaxSize: {x: 4001, y: 4026}
   m_ActualView: {fileID: 18}
@@ -349,13 +349,13 @@ MonoBehaviour:
   m_Position:
     serializedVersion: 2
     x: 0
-    y: 768
+    y: 845
     width: 1250
-    height: 507
+    height: 430
   m_MinSize: {x: 200, y: 56}
   m_MaxSize: {x: 16192, y: 8096}
   vertical: 0
-  controlID: 125
+  controlID: 119
   draggingID: 0
 --- !u!114 &15
 MonoBehaviour:
@@ -375,7 +375,7 @@ MonoBehaviour:
     x: 0
     y: 0
     width: 215
-    height: 507
+    height: 430
   m_MinSize: {x: 502, y: 326}
   m_MaxSize: {x: 4002, y: 4026}
   m_ActualView: {fileID: 24}
@@ -401,7 +401,7 @@ MonoBehaviour:
     x: 215
     y: 0
     width: 1035
-    height: 507
+    height: 430
   m_MinSize: {x: 101, y: 126}
   m_MaxSize: {x: 4001, y: 4026}
   m_ActualView: {fileID: 26}
@@ -431,8 +431,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "UnityEditor.MainToolbarWindow\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 4
-    y: 60
+    x: 0
+    y: 0
     width: 2127
     height: 36
   m_SerializedDataModeController:
@@ -713,10 +713,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Game\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 881
-    y: 96
+    x: 1
+    y: 24
     width: 1249
-    height: 742
+    height: 819
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -762,10 +762,10 @@ MonoBehaviour:
     m_VAllowExceedBaseRangeMin: 1
     m_VAllowExceedBaseRangeMax: 1
     m_ScaleWithWindow: 0
-    m_HSlider: 1
+    m_HSlider: 0
     m_VSlider: 0
     m_IgnoreScrollWheelUntilClicked: 0
-    m_EnableMouseInput: 1
+    m_EnableMouseInput: 0
     m_EnableSliderZoomHorizontal: 0
     m_EnableSliderZoomVertical: 0
     m_UniformScale: 1
@@ -775,9 +775,9 @@ MonoBehaviour:
       x: 0
       y: 21
       width: 1249
-      height: 721
+      height: 798
     m_Scale: {x: 0.32526043, y: 0.32526043}
-    m_Translation: {x: 624.49994, y: 360.5}
+    m_Translation: {x: 624.49994, y: 399}
     m_MarginLeft: 0
     m_MarginRight: 0
     m_MarginTop: 0
@@ -785,12 +785,12 @@ MonoBehaviour:
     m_LastShownAreaInsideMargins:
       serializedVersion: 2
       x: -1919.9998
-      y: -1108.3427
+      y: -1226.7094
       width: 3839.9998
-      height: 2216.6853
+      height: 2453.4187
     m_MinimalGUI: 1
   m_defaultScale: 0.32526043
-  m_LastWindowPixelSize: {x: 1249, y: 742}
+  m_LastWindowPixelSize: {x: 1249, y: 819}
   m_ClearInEditMode: 1
   m_NoCameraWarning: 1
   m_LowResolutionForAspectRatios: 01000000000000000000
@@ -818,8 +818,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Inspector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 4
-    y: 96
+    x: 0
+    y: 24
     width: 433
     height: 485
   m_SerializedDataModeController:
@@ -872,8 +872,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Hierarchy\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 438
-    y: 96
+    x: 435
+    y: 24
     width: 441
     height: 485
   m_SerializedDataModeController:
@@ -948,8 +948,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Scene\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 4
-    y: 607
+    x: 0
+    y: 535
     width: 876
     height: 418
   m_SerializedDataModeController:
@@ -1622,8 +1622,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Project\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 4
-    y: 1051
+    x: 0
+    y: 979
     width: 876
     height: 294
   m_SerializedDataModeController:
@@ -1652,7 +1652,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 3
     m_Folders:
-    - Assets/Sprites/Characters/Esperanza/_Grouped/Base_aa_Feet
+    - Assets/Scripts/Util/Input
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -1662,20 +1662,21 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 16
   m_LastFolders:
-  - Assets/Sprites/Characters/Esperanza/_Grouped/Base_aa_Feet
+  - Assets/Scripts/Util/Input
   m_LastFoldersGridSize: 16
   m_LastProjectPath: D:\localDev\Unity\Esperanza\MyProject
   m_LockTracker:
     m_IsLocked: 0
   m_LastLocalAssetsSearchArea: 3
   m_FolderTreeState:
-    scrollPos: {x: 0, y: 1160}
+    scrollPos: {x: 0, y: 654}
     m_SelectedIDs:
-    - m_rawData: 568105584918864198
+    - m_rawData: 568105584918863972
     m_LastClickedID:
-      m_rawData: 568105584918864198
+      m_rawData: 568105584918863972
     m_ExpandedIDs:
     - m_rawData: 0
+    - m_rawData: 568105584918863466
     - m_rawData: 568105584918863468
     - m_rawData: 568105584918863470
     - m_rawData: 568105584918863472
@@ -1810,7 +1811,6 @@ MonoBehaviour:
     - m_rawData: 568105584918863730
     - m_rawData: 568105584918863732
     - m_rawData: 568105584918863734
-    - m_rawData: 568105584918863736
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1844,6 +1844,7 @@ MonoBehaviour:
       m_rawData: 0
     m_ExpandedIDs:
     - m_rawData: 0
+    - m_rawData: 568105584918863466
     - m_rawData: 568105584918863468
     - m_rawData: 568105584918863470
     - m_rawData: 568105584918863472
@@ -1978,7 +1979,6 @@ MonoBehaviour:
     - m_rawData: 568105584918863730
     - m_rawData: 568105584918863732
     - m_rawData: 568105584918863734
-    - m_rawData: 568105584918863736
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -2009,7 +2009,7 @@ MonoBehaviour:
     m_SelectedInstanceIDs: []
     m_LastClickedEntityId:
       m_rawData: 0
-    m_HadKeyboardFocusLastEvent: 0
+    m_HadKeyboardFocusLastEvent: 1
     m_ExpandedInstanceIDs:
     - m_rawData: 0
     - m_rawData: 0
@@ -2220,10 +2220,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Sprite Library Editor\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 881
-    y: 864
+    x: 1
+    y: 24
     width: 213
-    height: 481
+    height: 404
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -2260,10 +2260,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Asset Usage Detector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 622
-    y: 872
-    width: 732
-    height: 315
+    x: 1096
+    y: 941
+    width: 1034
+    height: 404
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -2301,10 +2301,10 @@ MonoBehaviour:
     m_TextWithWhitespace: "Console\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1096
-    y: 864
+    x: 216
+    y: 24
     width: 1034
-    height: 481
+    height: 404
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0

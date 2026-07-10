@@ -36,9 +36,9 @@ public class PauseMenuFormProgressView : MonoBehaviour {
       return;
     }
 
-    actions.Add(MessageBus.On("formChanged", o => Refresh("form_changed")));
-    actions.Add(MessageBus.On("formProgressChanged", o => RefreshProgressForPayload(o, "form_progress_changed")));
-    actions.Add(MessageBus.On("gearReady", o => Refresh("gear_ready")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, _ => Refresh("form_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormProgressChanged, form => RefreshProgressForPayload(form, "form_progress_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.GearReady, _ => Refresh("gear_ready")));
   }
 
   void UnregisterHandlers() {

@@ -19,7 +19,6 @@ public class HitBox2D : MonoBehaviour {
   [Tooltip("Optional identifier for filtering hit reactions (attack name/type).")]
   public string hitId;
 
-  // TODO: Allocating and clearing a HashSet frequently can lead to garbage collection spikes. If this hitbox hits very few targets simultaneously, a simple List with linear search might be more performant due to lower memory overhead. - Senior Dev
   private readonly HashSet<ulong> hitHurtBoxIds = new();
   private float nextHitTime;
 
@@ -55,20 +54,23 @@ public class HitBox2D : MonoBehaviour {
     var now = TimeScale.GetNow(this);
     if (hitCooldown > 0f && now < nextHitTime) return;
 
-    // TODO: GetComponentInParent causes allocation overhead and traverses the hierarchy, which is expensive in OnTriggerEnter2D if hitboxes collide often. Consider caching a map of Colliders to HurtBoxes or using an IHitReceiver interface on the collider's object directly. - Senior Dev
-    var hurtBox = other.GetComponentInParent<HurtBox2D>();
-    if (hurtBox != null && hurtBox.isActiveAndEnabled) {
-      if (hitEachHurtBoxOnce) {
-        var id = ObjectEntityId.GetRawValue(hurtBox);
-        if (hitHurtBoxIds.Contains(id)) return;
-        hitHurtBoxIds.Add(id);
-      }
+    if (!HurtBox2D.TryResolve(other, out var hurtBox)) return;
+    if (!hurtBox.isActiveAndEnabled) return;
 
-      // Let the HurtBox validate and receive the hit
-      hurtBox.ReceiveHit(this);
-      if (hitCooldown > 0f) {
-        nextHitTime = now + hitCooldown;
-      }
+    var hurtBoxId = 0UL;
+    if (hitEachHurtBoxOnce) {
+      hurtBoxId = ObjectEntityId.GetRawValue(hurtBox);
+      if (hitHurtBoxIds.Contains(hurtBoxId)) return;
+    }
+
+    if (!hurtBox.TryReceiveHit(this)) return;
+
+    if (hitEachHurtBoxOnce) {
+      hitHurtBoxIds.Add(hurtBoxId);
+    }
+
+    if (hitCooldown > 0f) {
+      nextHitTime = now + hitCooldown;
     }
   }
 }

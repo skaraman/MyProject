@@ -423,9 +423,9 @@ public class GameplayDialogController : MonoBehaviour {
     actions.Add(MessageBus.On("dialog.playAuthored", o => PlayAuthoredSequence("message_bus")));
     actions.Add(MessageBus.On("dialog.play", o => PlayRequestedSequence(o)));
     actions.Add(MessageBus.On("dialog.stop", o => StopDialogue("message_bus")));
-    actions.Add(MessageBus.On("formChanged", o => OnFormChanged(o)));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, form => OnFormChanged(form)));
     actions.Add(MessageBus.On("LocationLoaded", o => OnLocationLoaded(o)));
-    actions.Add(MessageBus.On("dialogStateReady", o => OnDialogStateReady(o)));
+    actions.Add(MessageBus.On(CharacterMessageTopics.DialogStateReady, source => OnDialogStateReady(source)));
   }
 
   void UnregisterHandlers() {

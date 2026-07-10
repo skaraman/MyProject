@@ -326,7 +326,15 @@ public static partial class SpriteRuntimeResolver {
     if (string.IsNullOrWhiteSpace(value)) return "";
     if (namepartNormCache.TryGetValue(value, out var cached)) return cached;
 
-    var normalized = NormalizeToken(value).Replace('\\', '/');
+    var normalized = NormalizeNamePartUncached(value);
+    namepartNormCache[value] = normalized;
+    return normalized;
+  }
+
+  static string NormalizeNamePartUncached(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+
+    var normalized = NormalizeTokenUncached(value).Replace('\\', '/');
     normalized = CollapseSlashes(normalized).Trim('/');
     if (normalized.EndsWith(SpriteStreamingConfig.CustomSpriteLibraryExtension, StringComparison.OrdinalIgnoreCase)) {
       normalized = normalized.Substring(0, normalized.Length - SpriteStreamingConfig.CustomSpriteLibraryExtension.Length);
@@ -335,10 +343,9 @@ public static partial class SpriteRuntimeResolver {
       normalized = normalized.Substring(0, normalized.Length - SpriteStreamingConfig.LegacySpriteLibraryExtension.Length);
     }
 
-    var root = NormalizeToken(RuntimeConfig.SourceRootFolder).Replace('\\', '/');
+    var root = NormalizeTokenUncached(RuntimeConfig.SourceRootFolder).Replace('\\', '/');
     root = CollapseSlashes(root).Trim('/');
     if (string.Equals(normalized, root, StringComparison.OrdinalIgnoreCase)) {
-      namepartNormCache[value] = "";
       return "";
     }
 
@@ -347,7 +354,6 @@ public static partial class SpriteRuntimeResolver {
       normalized = normalized.Substring(root.Length + 1);
     }
 
-    namepartNormCache[value] = normalized;
     return normalized;
   }
 }

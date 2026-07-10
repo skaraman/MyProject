@@ -62,7 +62,9 @@ public class Piece : MonoBehaviour {
     transform.localPosition = initialLocalPosition;
     transform.localRotation = initialLocalRotation;
     transform.localScale = initialLocalScale;
-    all1.Play("resetFade");
+    if (all1 != null) {
+      all1.Play("resetFade");
+    }
     if (rb == null) rb = GetComponent<Rigidbody2D>();
     if (rb != null) {
       rb.simulated = true;
@@ -111,7 +113,9 @@ public class Piece : MonoBehaviour {
       rb.angularVelocity = 0f;
       rb.simulated = false;
     }
-    all1.Play("fadeOut");
+    if (all1 != null) {
+      all1.Play("fadeOut");
+    }
     yield return TimeScale.WaitForSecondsScaled(2f, this);
     gameObject.SetActive(false);
     freezeRoutine = null;

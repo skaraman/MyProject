@@ -35,7 +35,6 @@ public partial class AnimationController {
 
   public void InvalidateSpriteFrameCache() {
     lastAppliedSpriteFrame = int.MinValue;
-    lastAppliedSpriteCategory = null;
   }
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -335,7 +334,7 @@ public partial class AnimationController {
     if (ordered.Count < maxAnimations) {
       foreach (var pair in animationData) {
         if (ordered.Count >= maxAnimations) break;
-        if (!IsLocomotionAnimationName(pair.Key)) continue;
+        if (!IsLocomotionAnimation(pair.Key)) continue;
         TryAddWarmPlaybackAnimation(pair.Key, ordered, seen, maxAnimations);
       }
     }
@@ -519,8 +518,6 @@ public partial class AnimationController {
 
     if (hasCriticalTargets) return true;
 
-    // TODO: foreach on spriteTargets allocates an enumerator on every call â€” this runs per-frame
-    // during active gating. Replace with an indexed for-loop (same pattern as criticalSpriteTargets above).
     for (var i = 0; i < spriteTargets.Count; i++) {
       var target = spriteTargets[i];
       if (!IsSpriteTargetEnabled(target)) continue;
@@ -615,7 +612,7 @@ public partial class AnimationController {
     var queuedPrimeEnd = CalculateTransitionPrimeEndFrame(queuedAnim.start, queuedAnim.end);
     var shouldPrimeQueuedFullWindow =
       !HasSeenAnimationCategory(queuedCategory) &&
-      !IsLocomotionAnimationName(queuedResolved) &&
+      !IsLocomotionAnimation(queuedResolved) &&
       !IsTransitionCategory(queuedCategory);
     if (shouldPrimeQueuedFullWindow) {
       PrimeTargetsForAnimation(queuedCategory, queuedAnim.start, queuedAnim.end, primeFullWindow: true);
@@ -628,15 +625,11 @@ public partial class AnimationController {
            string.Equals(category, "To2", StringComparison.Ordinal);
   }
 
-  // TODO: hardcoded locomotion names. Adding a new locomotion animation requires a code change.
-  // Consider marking locomotion in AnimData (e.g. a bool isLocomotive flag) so this list is data-driven.
-  static bool IsLocomotionAnimationName(string animationName) {
+  public bool IsLocomotionAnimation(string animationName) {
     if (string.IsNullOrWhiteSpace(animationName)) return false;
-    return string.Equals(animationName, "Breathe", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Walk", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Run", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Sprint", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Stance", StringComparison.Ordinal);
+    if (!TryGetAnimationKey(animationName, out var resolvedAnimation)) return false;
+    if (!animationData.TryGetValue(resolvedAnimation, out var animation)) return false;
+    return animation != null && animation.isLocomotion;
   }
 
   void ClearPendingAnimationSwitch() {

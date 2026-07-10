@@ -6,6 +6,13 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public partial class SingleSceneManager {
+  enum PreUnlockQueuePressure {
+    Normal,
+    Moderate,
+    High,
+    Critical
+  }
+
   IEnumerator RunPreUnlockAnimationWarmupSequence(bool includeVisibleSpriteReprefetch) {
     var playerController = ResolvePlayerAnimationController();
     BuildEnemyAnimationControllerSnapshot(preUnlockEnemyControllerScratch);
@@ -563,6 +570,7 @@ public partial class SingleSceneManager {
   int ResolvePreUnlockMaxAddresses(TextureResidencyCache.QueueSnapshot queue) {
     var configuredMax = Mathf.Max(preUnlockPrefetchMaxAddresses, 1);
     var configuredMin = Mathf.Clamp(preUnlockPrefetchMinAddresses, 1, configuredMax);
+    var pressure = ResolvePreUnlockQueuePressure(queue);
     var scale = 1f;
 
     if (SystemInfo.systemMemorySize <= 8192) {
@@ -575,10 +583,10 @@ public partial class SingleSceneManager {
       scale = 0.8f;
     }
 
-    if (queue.queuedCount >= 1400 || queue.inFlightCount >= 192) {
+    if (pressure == PreUnlockQueuePressure.Critical) {
       scale *= 0.5f;
     }
-    else if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) {
+    else if (pressure == PreUnlockQueuePressure.High) {
       scale *= 0.7f;
     }
 
@@ -589,8 +597,9 @@ public partial class SingleSceneManager {
   int ResolvePreUnlockLookAheadFrames(TextureResidencyCache.QueueSnapshot queue) {
     var lookAhead = Mathf.Max(preUnlockPrefetchLookAheadFrames, 0);
     if (lookAhead <= 0) return 0;
-    if (queue.queuedCount >= 1400 || queue.inFlightCount >= 192) return 0;
-    if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) return Mathf.Min(lookAhead, 1);
+    var pressure = ResolvePreUnlockQueuePressure(queue);
+    if (pressure == PreUnlockQueuePressure.Critical) return 0;
+    if (pressure == PreUnlockQueuePressure.High) return Mathf.Min(lookAhead, 1);
     return lookAhead;
   }
 
@@ -600,7 +609,11 @@ public partial class SingleSceneManager {
 
     if (SystemInfo.systemMemorySize <= 12288) return 1;
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
-    if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) return 1;
+    var pressure = ResolvePreUnlockQueuePressure(queue);
+    if (pressure == PreUnlockQueuePressure.High ||
+        pressure == PreUnlockQueuePressure.Critical) {
+      return 1;
+    }
     return passes;
   }
 
@@ -622,21 +635,21 @@ public partial class SingleSceneManager {
 
   int ResolvePreUnlockEnqueueBudget(TextureResidencyCache.QueueSnapshot queue) {
     var budget = Mathf.Clamp(preUnlockPrefetchEnqueueBudgetPerFrame, 50, 200);
-    if (queue.queuedCount >= 1400 || queue.inFlightCount >= 192) return Mathf.Min(budget, 60);
-    if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) return Mathf.Min(budget, 90);
-    if (queue.queuedCount >= 500 || queue.inFlightCount >= 64) return Mathf.Min(budget, 120);
+    var pressure = ResolvePreUnlockQueuePressure(queue);
+    if (pressure == PreUnlockQueuePressure.Critical) return Mathf.Min(budget, 60);
+    if (pressure == PreUnlockQueuePressure.High) return Mathf.Min(budget, 90);
+    if (pressure == PreUnlockQueuePressure.Moderate) return Mathf.Min(budget, 120);
     return budget;
   }
 
   int ResolveWarmupPriorityPrefixCount(int totalAddressCount, TextureResidencyCache.QueueSnapshot queue, int playerAddressCount = 0) {
     if (totalAddressCount <= 0) return 0;
-    // TODO(smooth-first-play): Replace static queue thresholds with observed first-frame miss rate
-    // so prefix sizing adapts to real animation smoothness.
+    var pressure = ResolvePreUnlockQueuePressure(queue);
     int queueBasedCount;
-    if (queue.queuedCount >= 1400 || queue.inFlightCount >= 192) {
+    if (pressure == PreUnlockQueuePressure.Critical) {
       queueBasedCount = Mathf.Clamp(totalAddressCount / 3, 32, totalAddressCount);
     }
-    else if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) {
+    else if (pressure == PreUnlockQueuePressure.High) {
       queueBasedCount = Mathf.Clamp((totalAddressCount * 2) / 3, 64, totalAddressCount);
     }
     else {
@@ -645,5 +658,18 @@ public partial class SingleSceneManager {
     // Floor at player address count so all player-critical sprites always get Warmup priority
     // regardless of queue pressure, reflecting measured time-to-first-ready-frame for the player.
     return Mathf.Clamp(Mathf.Max(queueBasedCount, playerAddressCount), min: 0, max: totalAddressCount);
+  }
+
+  static PreUnlockQueuePressure ResolvePreUnlockQueuePressure(TextureResidencyCache.QueueSnapshot queue) {
+    if (queue.queuedCount >= 1400 || queue.inFlightCount >= 192) {
+      return PreUnlockQueuePressure.Critical;
+    }
+    if (queue.queuedCount >= 900 || queue.inFlightCount >= 128) {
+      return PreUnlockQueuePressure.High;
+    }
+    if (queue.queuedCount >= 500 || queue.inFlightCount >= 64) {
+      return PreUnlockQueuePressure.Moderate;
+    }
+    return PreUnlockQueuePressure.Normal;
   }
 }

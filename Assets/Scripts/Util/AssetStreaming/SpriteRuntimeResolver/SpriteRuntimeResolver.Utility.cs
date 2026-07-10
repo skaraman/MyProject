@@ -234,8 +234,6 @@ public static partial class SpriteRuntimeResolver {
     builder.Append('_');
   }
 
-  // TODO: both methods update the cooldown but never emit the message — all resolver diagnostics
-  // are silently dropped. Add Debug.Log(message) / Debug.LogWarning(message) after the cooldown update.
   static void RateLimitedLog(string key, string message) {
     var now = Time.realtimeSinceStartup;
     if (logCooldown.TryGetValue(key, out var last) && now - last < 5f) return;
@@ -264,6 +262,10 @@ public static partial class SpriteRuntimeResolver {
     return NormalizeToken(form) + "|" + NormalizeToken(animation) + "|" + frame;
   }
 
+  static string BuildRowKeyUncached(string form, string animation, int frame) {
+    return NormalizeTokenUncached(form) + "|" + NormalizeTokenUncached(animation) + "|" + frame;
+  }
+
   static ResolverSettings GetSettings() {
     if (settingsLoaded) return settings;
     settingsLoaded = true;
@@ -287,6 +289,14 @@ public static partial class SpriteRuntimeResolver {
     if (string.IsNullOrWhiteSpace(value)) return "";
     if (tokenNormCache.TryGetValue(value, out var cached)) return cached;
 
+    var result = NormalizeTokenUncached(value);
+    tokenNormCache[value] = result;
+    return result;
+  }
+
+  static string NormalizeTokenUncached(string value) {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+
     var trimmed = value.Trim();
     if (trimmed.Length >= 2) {
       var first = trimmed[0];
@@ -300,7 +310,6 @@ public static partial class SpriteRuntimeResolver {
     }
 
     var result = string.IsNullOrWhiteSpace(trimmed) ? "" : trimmed.Trim();
-    tokenNormCache[value] = result;
     return result;
   }
 

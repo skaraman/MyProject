@@ -75,7 +75,11 @@ public class EnemyHealth : MonoBehaviour {
       return;
     }
 
-    var damageResult = CombatDamageResolver.ResolveEsperanzaHit(enemyInfo != null ? enemyInfo.ResolvedStats : null);
+    var defenderStats = enemyInfo != null ? enemyInfo.ResolvedStats : null;
+    var damageResult = CombatDamageResolver.ResolveEsperanzaHit(
+      AllStatValues.Esperanza,
+      defenderStats
+    );
     ApplyDamage(damageResult, hitBox.hitId);
   }
 

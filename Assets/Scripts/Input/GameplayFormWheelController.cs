@@ -29,7 +29,7 @@ public class GameplayFormWheelController : MonoBehaviour {
     actions.Add(MessageBus.On("gameplay.hover", o => HandleHover(o)));
     actions.Add(MessageBus.On("gameplay.unhover", o => HandleUnhover()));
     actions.Add(MessageBus.On("gameplay.click", o => HandleClick(o)));
-    actions.Add(MessageBus.On("formChanged", o => SyncButtons("form_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, _ => SyncButtons("form_changed")));
   }
 
   void UnregisterHandlers() {

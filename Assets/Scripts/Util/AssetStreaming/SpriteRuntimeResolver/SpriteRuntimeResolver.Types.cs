@@ -18,6 +18,11 @@ public static partial class SpriteRuntimeResolver {
     public string assetPath;
   }
 
+  sealed class ParsedManifestData {
+    public Dictionary<string, ManifestEntry> rows;
+    public Dictionary<string, List<string>> ambiguousShortNamepartMatches;
+  }
+
   readonly struct LookupCacheKey : IEquatable<LookupCacheKey> {
     public readonly string shardKey;
     public readonly string labelPrefix;
@@ -91,7 +96,7 @@ public static partial class SpriteRuntimeResolver {
 #endif
 
   static AsyncOperationHandle<TextAsset> manifestLoad;
-  static Task<Dictionary<string, ManifestEntry>> manifestParse;
+  static Task<ParsedManifestData> manifestParse;
   static bool manifestLoadStarted;
   static bool manifestReady;
   static bool manifestFailed;

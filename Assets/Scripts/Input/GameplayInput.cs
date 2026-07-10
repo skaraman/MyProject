@@ -13,7 +13,6 @@ public class GameplayInput : MonoBehaviour {
   private readonly List<Action> actions = new();
   public GameObject cam;
   private GameObject EsperanzaParent;
-  // TODO: Cache Rigidbody2D references and consider extracting physics movement logic into a dedicated CharacterController component rather than handling it in the Input class. - Senior Dev
   private Rigidbody2D erb;
   private Rigidbody2D cameraRB;
   private GearController gearController;
@@ -24,6 +23,7 @@ public class GameplayInput : MonoBehaviour {
   [SerializeField] private float sprintMultiplier = 2f;
   [SerializeField] private float sprintSustainSeconds = 2f;
   [SerializeField] private float sprintResumeWindowSeconds = 2f;
+  [SerializeField] private float cameraFollowUnitsPerSecond = 60f;
 
   [Header("Stance")]
   [SerializeField] private float stanceDurationSeconds = 2f;
@@ -96,7 +96,7 @@ public class GameplayInput : MonoBehaviour {
     actions.Add(MessageBus.On("gameplay.jump", o => { if (_IsPressed(o)) Jump(); }));
     actions.Add(MessageBus.On("gameplay.pause", o => { if (_IsPressed(o)) pause(); }));
     actions.Add(MessageBus.On("gameplay.dance", o => { if (_IsPressed(o)) dance(); }));
-    actions.Add(MessageBus.On("gameplay.wheel", o => { if (_IsPressed(o)) formsWheel.SetActive(!formsWheel.activeSelf); }));
+    actions.Add(MessageBus.On("gameplay.wheel", o => { if (_IsPressed(o)) ToggleFormsWheel(); }));
     actions.Add(MessageBus.On("gameplay.charUp", o => charUp(o)));
     actions.Add(MessageBus.On("gameplay.charDown", o => charDown(o)));
     actions.Add(MessageBus.On("gameplay.charLeft", o => charLeft(o)));
@@ -355,12 +355,20 @@ public class GameplayInput : MonoBehaviour {
     MessageBus.Send("openPauseMenu", null);
   }
 
+  void ToggleFormsWheel() {
+    if (formsWheel == null) return;
+    formsWheel.SetActive(!formsWheel.activeSelf);
+  }
+
   void _CameraFollow() {
-      Vector3 targetPos = erb.transform.localPosition;
-      Vector3 currentPos = cameraRB.transform.localPosition; // Changed to localPosition
-    var followStep = 1f * Mathf.Max(GetSceneTimeFactor(), 0f);
+    if (erb == null || cameraRB == null) return;
+
+    Vector3 targetPos = erb.transform.localPosition;
+    Vector3 currentPos = cameraRB.transform.localPosition;
+    var followSpeed = Mathf.Max(cameraFollowUnitsPerSecond, 0f);
+    var followStep = followSpeed * Mathf.Max(GetSceneDeltaTime(), 0f);
     Vector3 newPos = Vector3.MoveTowards(currentPos, targetPos, followStep);
-    cameraRB.transform.localPosition = newPos; // Set localPosition instead of MovePosition
+    cameraRB.transform.localPosition = newPos;
   }
 
   void _ProcessMovementVelocity(Vector2 moveInput) {
@@ -389,7 +397,7 @@ public class GameplayInput : MonoBehaviour {
     if (gearController == null) return;
     var current = gearController.CurrentAnimation;
     var isPlaying = gearController.Controller != null && gearController.Controller.IsPlaying;
-    var isLocomotion = current == "Breathe" || current == "Walk" || current == "Run" || current == "Sprint" || current == "Stance";
+    var isLocomotion = _IsLocomotionAnimation(current);
     if (!isLocomotion && isPlaying) return;
 
     if (stanceTimeRemainingSeconds > 0f) {
@@ -483,7 +491,7 @@ public class GameplayInput : MonoBehaviour {
     if (gearController.Controller.IsPlaying) return;
     var current = gearController.CurrentAnimation;
     if (string.IsNullOrEmpty(current)) return;
-    if (current == "Breathe" || current == "Walk" || current == "Run" || current == "Sprint" || current == "Stance") return;
+    if (_IsLocomotionAnimation(current)) return;
 
     if (stanceTimeRemainingSeconds <= 0f) {
       _EnterStance(resetTimer: true);
@@ -708,13 +716,16 @@ public class GameplayInput : MonoBehaviour {
     return true;
   }
 
-  static bool _IsLocomotionAnimation(string animationName) {
-    return string.Equals(animationName, "Breathe", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Walk", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Run", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Sprint", StringComparison.Ordinal) ||
-           string.Equals(animationName, "Stance", StringComparison.Ordinal) ||
-           string.Equals(animationName, "JumpLanding", StringComparison.Ordinal);
+  bool _IsLocomotionAnimation(string animationName) {
+    if (string.IsNullOrWhiteSpace(animationName)) return false;
+
+    var controller = gearController != null ? gearController.Controller : null;
+    if (controller != null) {
+      return controller.IsLocomotionAnimation(animationName);
+    }
+
+    if (!Animations.Esperanza.TryGetValue(animationName, out var animation)) return false;
+    return animation != null && animation.isLocomotion;
   }
 
   static bool _IsTransitionAnimation(string animationName) {

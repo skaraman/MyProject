@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 public class InputProcessor : MonoBehaviour {
   const float ScalarDispatchEpsilon = 0.0001f;
   const float VectorDispatchEpsilonSqr = 0.0001f;
-  public TestActions input;
+  [System.NonSerialized] public TestActions input;
   public string defaultMap;
   private string activeMap;
   Dictionary<InputAction, string> cachedNames = new();
