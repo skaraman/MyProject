@@ -9,8 +9,9 @@ public class EnemyInfo : MonoBehaviour {
   [NonSerialized] public float currentHp;
   [NonSerialized] public Spawner ownerSpawner;
 
-  readonly Dictionary<string, float> resolvedStats = new(StringComparer.OrdinalIgnoreCase);
-  readonly List<DemonStatModifier> runtimeStatBonuses = new();
+  readonly Dictionary<string, float> resolvedStats = new(16, StringComparer.OrdinalIgnoreCase);
+  readonly List<DemonStatModifier> runtimeStatBonuses = new(4);
+  readonly List<string> resolvedStatKeyScratch = new(16);
 
   public int SpawnContextVersion { get; private set; }
   public IReadOnlyDictionary<string, float> ResolvedStats => resolvedStats;
@@ -37,7 +38,7 @@ public class EnemyInfo : MonoBehaviour {
     SpawnContextVersion += 1;
 
     if (ShouldLogSpawnDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[EnemyInfo][ApplySpawnContext]" +
         " object='" + gameObject.name + "'" +
         " enemy_type='" + enemyType + "'" +
@@ -49,12 +50,11 @@ public class EnemyInfo : MonoBehaviour {
   }
 
   public float GetResolvedStat(string statName, float fallback = 0f) {
-    var normalizedStat = DemonStatModifier.NormalizeStatKey(statName);
-    if (string.IsNullOrWhiteSpace(normalizedStat)) {
+    if (string.IsNullOrWhiteSpace(statName)) {
       return fallback;
     }
 
-    return resolvedStats.TryGetValue(normalizedStat, out var value) ? value : fallback;
+    return resolvedStats.TryGetValue(statName, out var value) ? value : fallback;
   }
 
   public float ResolveMaxHp() {
@@ -70,20 +70,25 @@ public class EnemyInfo : MonoBehaviour {
     if (statBonuses == null || statBonuses.Count <= 0) {
       return;
     }
+    if (runtimeStatBonuses.Capacity < statBonuses.Count) {
+      runtimeStatBonuses.Capacity = statBonuses.Count;
+    }
 
     for (var i = 0; i < statBonuses.Count; i++) {
       var bonus = statBonuses[i];
       if (bonus == null) continue;
-      runtimeStatBonuses.Add(bonus.Clone());
+      runtimeStatBonuses.Add(bonus);
     }
   }
 
   void RebuildResolvedStats() {
-    resolvedStats.Clear();
-    var rebuiltStats = DemonStats.ResolveStats(enemyType, level, runtimeStatBonuses);
-    foreach (var stat in rebuiltStats) {
-      resolvedStats[stat.Key] = stat.Value;
-    }
+    DemonStats.ResolveStatsInto(
+      enemyType,
+      level,
+      runtimeStatBonuses,
+      resolvedStats,
+      resolvedStatKeyScratch
+    );
   }
 
   string DescribeResolvedStats() {

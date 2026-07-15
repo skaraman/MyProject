@@ -234,7 +234,7 @@ public static class ContentPackCatalogLoader {
       }
       failedPackIds.Remove(packId);
       loadedCatalogHandles[packId] = operation;
-      Debug.Log(
+      RuntimeLog.Log(
         "[ContentPackCatalogLoader] Loaded content pack catalog." +
         " pack_id='" + packId + "'" +
         " source='" + (source ?? "") + "'"

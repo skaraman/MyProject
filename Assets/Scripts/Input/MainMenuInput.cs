@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class MainMenuInput : ButtonGroup {
   private const int LoadButtonInsertIndex = 1;
+  private const string MenuMoveSoundId = "menu.move";
 
   private int activeIndexMainMenu = -1;
   private readonly List<Action> actions = new();
@@ -56,7 +57,7 @@ public class MainMenuInput : ButtonGroup {
     if (activeIndexMainMenu < 0) {
       activeIndexMainMenu = buttons.Count - 1;
     }
-    SetActiveIndex(activeIndexMainMenu);
+    SetActiveIndexWithSound(activeIndexMainMenu);
   }
 
   public void MenuDown() {
@@ -71,7 +72,7 @@ public class MainMenuInput : ButtonGroup {
     if (activeIndexMainMenu >= buttons.Count) {
       activeIndexMainMenu = 0;
     }
-    SetActiveIndex(activeIndexMainMenu);
+    SetActiveIndexWithSound(activeIndexMainMenu);
   }
 
   public void MouseHover(object target) {
@@ -81,7 +82,7 @@ public class MainMenuInput : ButtonGroup {
     if (resolvedIndex < 0 || resolvedIndex == activeIndexMainMenu) return;
 
     activeIndexMainMenu = resolvedIndex;
-    SetActiveIndex(activeIndexMainMenu);
+    SetActiveIndexWithSound(activeIndexMainMenu);
   }
 
   public void MenuSelect() {
@@ -91,6 +92,8 @@ public class MainMenuInput : ButtonGroup {
     if (selectedButton == null) return;
 
     if (selectedButton == newGameButton || selectedButton.name.Equals("New Game", StringComparison.OrdinalIgnoreCase)) {
+      var newSlot = SaveSlotManager.ResolveNextAvailableSlot();
+      SaveSlotManager.SetSlot(newSlot);
       MessageBus.Send("startGame");
       return;
     }
@@ -161,6 +164,16 @@ public class MainMenuInput : ButtonGroup {
       activeIndexMainMenu = buttons.Count - 1;
       SetActiveIndex(activeIndexMainMenu);
     }
+  }
+
+  void SetActiveIndexWithSound(int index) {
+    var previousIndex = activeIndex;
+    SetActiveIndex(index);
+    if (activeIndex == previousIndex) {
+      return;
+    }
+
+    MessageBus.Send(SoundEffectPlayer.PlayMessage, MenuMoveSoundId);
   }
 
   protected override void HandleActiveState(GameObject button) {

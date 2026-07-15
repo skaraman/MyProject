@@ -6,6 +6,7 @@ public class ProjectileManager : MonoBehaviour {
   [Header("Pooling")]
   public Transform poolContainer;
   public int defaultPoolSize = 10;
+  [SerializeField, Min(1)] int loadingPoolCapacity = 16;
   public bool autoResize = true;
   public bool prewarmPools = true;
 
@@ -28,18 +29,23 @@ public class ProjectileManager : MonoBehaviour {
     hasQueuedEditorPauseAfterFirstProjectileSpawn = false;
     BuildEffectAnimations();
     if (prewarmPools) {
-      PrewarmPools();
+      EnsureLoadedPoolsReady();
     }
   }
 
-  private void PrewarmPools() {
+  public int EnsureLoadedPoolsReady() {
+    var preparedCount = 0;
     foreach (var entry in Projectiles.EnumerateAll()) {
       var key = NormalizeProjectileKey(entry.Key);
       if (string.IsNullOrWhiteSpace(key) || entry.Value == null) continue;
       if (entry.Value.IsPrefabLoaded()) {
-        TryGetPool(key, out _);
+        if (TryGetPool(key, out var pool)) {
+          pool.EnsureCapacity(Mathf.Max(defaultPoolSize, loadingPoolCapacity));
+          preparedCount += 1;
+        }
       }
     }
+    return preparedCount;
   }
 
   private void BuildEffectAnimations() {
@@ -71,7 +77,8 @@ public class ProjectileManager : MonoBehaviour {
     for (var i = 0; i < projectileKeys.Count; i++) {
       var key = NormalizeProjectileKey(projectileKeys[i]);
       if (string.IsNullOrWhiteSpace(key)) continue;
-      if (!TryGetPool(key, out _)) continue;
+      if (!TryGetPool(key, out var pool)) continue;
+      pool.EnsureCapacity(Mathf.Max(defaultPoolSize, loadingPoolCapacity));
       preparedCount++;
     }
 
@@ -138,7 +145,7 @@ public class ProjectileManager : MonoBehaviour {
     if (!TryGetPool(key, out var pool)) return null;
 
     var spawnPosition = ResolveSpawnPosition(key, position, direction);
-    var obj = pool.Spawn(spawnPosition, Quaternion.identity);
+    var obj = pool.Acquire(spawnPosition, Quaternion.identity);
     if (obj == null) {
       Debug.LogError($"[ProjectileManager] Failed to spawn projectile from pool '{key}'.");
       return null;
@@ -151,7 +158,10 @@ public class ProjectileManager : MonoBehaviour {
     }
     else {
       Debug.LogWarning($"[ProjectileManager] Spawned prefab '{key}' without Projectile component.");
+      pool.Despawn(obj);
+      return null;
     }
+    pool.Activate(obj);
 
     TryQueueEditorPauseAfterFirstProjectileSpawn(key, spawnPosition, direction);
     return obj;
@@ -255,7 +265,7 @@ public class ProjectileManager : MonoBehaviour {
 
     var resolvedPosition = basePosition + offset;
     if (ShouldLogSpawnOffsetDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[ProjectileManager] AppliedSpawnOffset" +
         " key='" + key + "'" +
         " base=" + basePosition +
@@ -335,11 +345,10 @@ public class ProjectileManager : MonoBehaviour {
     var startFrame = spriteTarget.IsAnimation ? 1 : 0;
     var endFrame = spriteTarget.IsAnimation ? Mathf.Max(startFrame, startFrame + warmFrames - 1) : 0;
     var category = spriteTarget.IsAnimation ? key : spriteTarget.category;
-    spriteTarget.CollectAnimationWindowAddresses(
+    spriteTarget.CollectAnimationAtlasAddresses(
       category,
       startFrame,
       endFrame,
-      0,
       outAddresses,
       seenAddresses,
       maxUniqueAddresses
@@ -392,7 +401,7 @@ public class ProjectileManager : MonoBehaviour {
     }
 
     hasQueuedEditorPauseAfterFirstProjectileSpawn = true;
-    Debug.Log(
+    RuntimeLog.Log(
       "[ProjectileManager] QueuePauseAfterFirstProjectileSpawnFrame" +
       " key='" + key + "'" +
       " frame=" + Time.frameCount +
@@ -410,7 +419,7 @@ public class ProjectileManager : MonoBehaviour {
       yield break;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[ProjectileManager] PauseAfterFirstProjectileSpawnFrame" +
       " key='" + key + "'" +
       " frame=" + Time.frameCount +

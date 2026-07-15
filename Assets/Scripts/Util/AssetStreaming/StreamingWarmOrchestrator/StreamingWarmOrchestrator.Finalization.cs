@@ -151,7 +151,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
     ApplyThreadedWarmPlanSnapshot(finalizeTask.Result);
     if (debugLogs) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[StreamingWarmOrchestrator] Threaded warm-plan finalize complete." +
         " context=" + context +
         " addresses=" + warmAddresses.Count +
@@ -451,7 +451,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
           AddReadyAddress(location.PrimaryKey, markCritical: isCritical, markHighPriority: isCritical);
         }
         if (debugLogs) {
-          Debug.Log(
+          RuntimeLog.Log(
             "[StreamingWarmOrchestrator] Label prewarm resolved label='" + label + "'" + " addresses=" +
             locationBuffer.Count + " critical=" + (isCritical ? 1 : 0)
           );

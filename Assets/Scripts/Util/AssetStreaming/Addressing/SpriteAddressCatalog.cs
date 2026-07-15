@@ -61,7 +61,7 @@ public readonly struct SpriteLookupKey {
   }
 
   static string Normalize(string value) {
-    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+    return string.IsNullOrWhiteSpace(value) ? "" : value;
   }
 
   public override string ToString() {

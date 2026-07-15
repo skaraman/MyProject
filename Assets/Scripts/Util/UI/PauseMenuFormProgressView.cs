@@ -5,15 +5,24 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class PauseMenuFormProgressView : MonoBehaviour {
   readonly List<Action> actions = new();
-  CharacterState characterState;
   FontText levelNumberText;
   FontText currentXpText;
   FontText neededXpText;
   AnchoredSpriteStretch xpBarStretch;
   SpriteWithNormals[] themedSprites = Array.Empty<SpriteWithNormals>();
+  string appliedThemeForm;
+  int displayedLevel = int.MinValue;
+  int displayedCurrentXp = int.MinValue;
+  int displayedNextLevelXp = int.MinValue;
+  bool hierarchyResolved;
+
+  static bool ShouldLogDebug() {
+    return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
+           (Application.isEditor || Debug.isDebugBuild);
+  }
 
   void OnEnable() {
-    EnsureResolved();
+    EnsureResolved(force: true);
     RegisterHandlers();
     Refresh("enable");
   }
@@ -60,6 +69,17 @@ public class PauseMenuFormProgressView : MonoBehaviour {
   }
 
   void EnsureResolved(bool force = false) {
+    if (!force && hierarchyResolved) {
+      return;
+    }
+
+    if (force) {
+      appliedThemeForm = null;
+      displayedLevel = int.MinValue;
+      displayedCurrentXp = int.MinValue;
+      displayedNextLevelXp = int.MinValue;
+    }
+
     if (force || levelNumberText == null) {
       levelNumberText = FindFontText("levelNumberText", "levelNumber");
     }
@@ -76,34 +96,52 @@ public class PauseMenuFormProgressView : MonoBehaviour {
     if (force || themedSprites == null || themedSprites.Length == 0) {
       themedSprites = GetComponentsInChildren<SpriteWithNormals>(includeInactive: true);
     }
-    if (force || characterState == null) {
-      characterState = SingleSceneManager.ResolveGameplayCharacterState();
-    }
+    hierarchyResolved = true;
   }
 
   void Refresh(string source) {
     EnsureResolved();
     var activeForm = EsperanzaForms.GetActive();
-    var progress = characterState != null
-      ? characterState.GetFormProgress(activeForm)
-      : EsperanzaForms.GetProgressCopy(activeForm);
-    if (string.IsNullOrWhiteSpace(activeForm) || progress == null) {
+    if (string.IsNullOrWhiteSpace(activeForm)) {
+      return;
+    }
+    if (!EsperanzaForms.TryGetProgressValues(
+          activeForm,
+          out var level,
+          out var currentXp,
+          out var nextLevelXp
+        )) {
       return;
     }
 
-    ApplyText(levelNumberText, progress.level.ToString());
-    ApplyText(currentXpText, progress.currentXp.ToString());
-    ApplyText(neededXpText, progress.nextLevelXp.ToString());
-    ApplyFill(progress.currentXp, progress.nextLevelXp);
-    ApplyTheme(activeForm);
+    if (displayedLevel != level) {
+      displayedLevel = level;
+      ApplyText(levelNumberText, IntegerTextCache.Get(level));
+    }
+    if (displayedCurrentXp != currentXp) {
+      displayedCurrentXp = currentXp;
+      ApplyText(currentXpText, IntegerTextCache.Get(currentXp));
+    }
+    if (displayedNextLevelXp != nextLevelXp) {
+      displayedNextLevelXp = nextLevelXp;
+      ApplyText(neededXpText, IntegerTextCache.Get(nextLevelXp));
+    }
 
-    Debug.Log(
-      "[PauseMenuFormProgressView] source='" + (source ?? "") +
-      "' form='" + activeForm +
-      "' level=" + progress.level +
-      " current_xp=" + progress.currentXp +
-      " next_level_xp=" + progress.nextLevelXp
-    );
+    ApplyFill(currentXp, nextLevelXp);
+    if (!string.Equals(appliedThemeForm, activeForm, StringComparison.OrdinalIgnoreCase)) {
+      appliedThemeForm = activeForm;
+      ApplyTheme(activeForm);
+    }
+
+    if (ShouldLogDebug()) {
+      RuntimeLog.Log(
+        "[PauseMenuFormProgressView] source='" + (source ?? "") +
+        "' form='" + activeForm +
+        "' level=" + level +
+        " current_xp=" + currentXp +
+        " next_level_xp=" + nextLevelXp
+      );
+    }
   }
 
   void ApplyText(FontText fontText, string value) {

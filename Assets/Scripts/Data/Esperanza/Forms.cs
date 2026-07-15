@@ -32,6 +32,10 @@ public static class EsperanzaForms {
 
   public static IReadOnlyList<string> KnownForms => KnownFormOrder;
 
+  public static void PrepareRuntimeCaches() {
+    EnsureKnownForms();
+  }
+
   public static void ResetRuntimeState() {
     Active = CreateDefaultActiveState();
     Unlocked = CreateDefaultUnlockedState();
@@ -48,9 +52,8 @@ public static class EsperanzaForms {
     EnsureKnownForms();
     EnsureProgress(resolvedForm);
     var previousForm = GetActive();
-    var activeKeys = new List<string>(Active.Keys);
-    for (int i = 0; i < activeKeys.Count; i++) {
-      var key = activeKeys[i];
+    for (var i = 0; i < KnownFormOrder.Length; i++) {
+      var key = KnownFormOrder[i];
       Active[key] = string.Equals(key, resolvedForm, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
     }
 
@@ -59,7 +62,7 @@ public static class EsperanzaForms {
     }
 
     if (!string.Equals(previousForm, resolvedForm, StringComparison.OrdinalIgnoreCase)) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[EsperanzaForms] Active form changed previous='" + (string.IsNullOrWhiteSpace(previousForm) ? "-" : previousForm) +
         "' next='" + resolvedForm + "'"
       );
@@ -68,17 +71,19 @@ public static class EsperanzaForms {
 
   public static string GetActive() {
     EnsureKnownForms();
-    var v = "";
-    foreach (var item in Active) {
-      if (item.Value == 1) {
-        v = item.Key;
+    for (var i = 0; i < KnownFormOrder.Length; i++) {
+      var form = KnownFormOrder[i];
+      if (Active.TryGetValue(form, out var isActive) && isActive == 1) {
+        return form;
       }
     }
-    if (string.IsNullOrWhiteSpace(v)) {
-      v = KnownFormOrder[0];
-      SetActive(v);
+
+    var fallback = KnownFormOrder[0];
+    for (var i = 0; i < KnownFormOrder.Length; i++) {
+      var form = KnownFormOrder[i];
+      Active[form] = string.Equals(form, fallback, StringComparison.Ordinal) ? 1 : 0;
     }
-    return v;
+    return fallback;
   }
 
   public static void UnlockForm(string v) {
@@ -122,6 +127,27 @@ public static class EsperanzaForms {
   public static FormProgressState GetProgressCopy(string value) {
     var progress = EnsureProgress(value);
     return progress != null ? progress.Clone() : null;
+  }
+
+  public static bool TryGetProgressValues(
+    string value,
+    out int level,
+    out int currentXp,
+    out int nextLevelXp
+  ) {
+    level = DefaultLevel;
+    currentXp = DefaultCurrentXp;
+    nextLevelXp = DefaultNextLevelXp;
+
+    var progress = EnsureProgress(value);
+    if (progress == null) {
+      return false;
+    }
+
+    level = progress.level;
+    currentXp = progress.currentXp;
+    nextLevelXp = progress.nextLevelXp;
+    return true;
   }
 
   public static Dictionary<string, int> GetUnlockedSnapshot() {
@@ -205,9 +231,10 @@ public static class EsperanzaForms {
   public static string ResolveFormKey(string value) {
     if (string.IsNullOrWhiteSpace(value)) return null;
 
+    var requestedValue = value.Trim();
     for (var i = 0; i < KnownFormOrder.Length; i++) {
       var key = KnownFormOrder[i];
-      if (string.Equals(key, value.Trim(), StringComparison.OrdinalIgnoreCase)) {
+      if (string.Equals(key, requestedValue, StringComparison.OrdinalIgnoreCase)) {
         return key;
       }
     }

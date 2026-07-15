@@ -52,7 +52,7 @@ public class ButtonGroup : MonoBehaviour {
       return;
     }
     if (index < 0 || index >= buttons.Count) {
-      Debug.Log($"[ButtonGroup] Index out of range: {index}");
+      RuntimeLog.Log($"[ButtonGroup] Index out of range: {index}");
       return;
     }
     hoverIndex = index;
@@ -67,7 +67,7 @@ public class ButtonGroup : MonoBehaviour {
       return;
     }
     if (index < 0 || index >= buttons.Count) {
-      Debug.Log($"[ButtonGroup] Index out of range: {index}");
+      RuntimeLog.Log($"[ButtonGroup] Index out of range: {index}");
       return;
     }
     activeIndex = index;

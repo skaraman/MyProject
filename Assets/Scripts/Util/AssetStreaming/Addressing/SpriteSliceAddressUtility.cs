@@ -10,6 +10,29 @@ public static class SpriteSliceAddressUtility {
     spriteName = "";
     if (string.IsNullOrWhiteSpace(address)) return false;
 
+    if (_parseCache.TryGetValue(address, out var cached)) {
+      atlasAssetPath = cached.Atlas;
+      spriteName = cached.Sprite;
+      return cached.IsValid;
+    }
+
+    var isValid = TryParseSliceAddressInternal(address, out atlasAssetPath, out spriteName);
+    _parseCache[address] = new ParseResult { IsValid = isValid, Atlas = atlasAssetPath, Sprite = spriteName };
+    return isValid;
+  }
+
+  static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ParseResult> _parseCache = new();
+
+  struct ParseResult {
+    public bool IsValid;
+    public string Atlas;
+    public string Sprite;
+  }
+
+  static bool TryParseSliceAddressInternal(string address, out string atlasAssetPath, out string spriteName) {
+    atlasAssetPath = "";
+    spriteName = "";
+
     if (!TryGetTrimmedSegmentBounds(address, 0, address.Length - 1, out var startIndex, out var totalLength)) return false;
     var endIndex = startIndex + totalLength - 1;
     if (address[endIndex] != ']') return false;

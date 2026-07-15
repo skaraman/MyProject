@@ -64,7 +64,7 @@ public class GearButtons : ButtonGroup {
     }
 
     if (ShouldLogRuntimeUiDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearButtons] Refreshed gear slot icons" +
         " form='" + resolvedForm + "'" +
         " slots=" + refreshedSlots
@@ -117,7 +117,7 @@ public class GearButtons : ButtonGroup {
     }
 
     if (ShouldLogRuntimeUiDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearButtons] Reset empty gear slot" +
         " form='" + formName + "'" +
         " slot='" + button.name + "'"
@@ -146,7 +146,7 @@ public class GearButtons : ButtonGroup {
     }
 
     if (ShouldLogRuntimeUiDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearButtons] Applied gear slot icon" +
         " form='" + formName + "'" +
         " slot='" + button.name + "'" +

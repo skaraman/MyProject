@@ -6,6 +6,7 @@ public partial class SingleSceneManager {
     if (defeatedEvent == null) return;
     if (!ContentEpisodeProgression.TryAdvanceForEnemyDefeated(defeatedEvent, "enemy_defeated")) return;
 
+    MessageBus.Send(ContentEpisodeProgression.ObjectivesCompletedTopic);
     RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("episode_objective_complete");
     RefreshEpisodeProgressionLocation("objective_complete");
   }
@@ -24,7 +25,7 @@ public partial class SingleSceneManager {
     RequestLocationLoad(current);
     if (!ShouldLogLoadFlowDebug()) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][EpisodeProgression] refreshed_location" +
       " source=" + ResolveLoadFlowValue(source) +
       " location=" + ResolveLoadFlowValue(current)

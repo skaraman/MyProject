@@ -35,8 +35,8 @@ public class PolygonPointLabeler : MonoBehaviour {
     poly = GetComponent<PolygonCollider2D>();
     cam = cam == null ? Camera.main : cam;
     LoadPoints();
-    //Debug.Log($"[PolygonPointLabeler] Enabled. HasCollider={(poly!=null)}, Paths={poly.pathCount}, UsingPath={pathIndex}");
-    // Debug.Log($"[PolygonPointLabeler] LoadedPoints={localPoints.Length}");
+    //RuntimeLog.Log($"[PolygonPointLabeler] Enabled. HasCollider={(poly!=null)}, Paths={poly.pathCount}, UsingPath={pathIndex}");
+    // RuntimeLog.Log($"[PolygonPointLabeler] LoadedPoints={localPoints.Length}");
   }
 
   [ForceUpdate]
@@ -46,7 +46,7 @@ public class PolygonPointLabeler : MonoBehaviour {
     localPoints = poly != null && pathIndex < poly.pathCount ? poly.GetPath(pathIndex) : Array.Empty<Vector2>();
     worldPoints.Clear();
     for (int i = 0; i < localPoints.Length; i++) worldPoints.Add(transform.TransformPoint(localPoints[i]));
-    //Debug.Log($"[PolygonPointLabeler] LoadPoints PathIndex={pathIndex} CountLocal={pCount} CountWorld={worldPoints.Count}");
+    //RuntimeLog.Log($"[PolygonPointLabeler] LoadPoints PathIndex={pathIndex} CountLocal={pCount} CountWorld={worldPoints.Count}");
   }
 
   void Update() {
@@ -63,7 +63,7 @@ public class PolygonPointLabeler : MonoBehaviour {
       localPoints = currentLocal;
       worldPoints.Clear();
       for (int i = 0; i < localPoints.Length; i++) worldPoints.Add(transform.TransformPoint(localPoints[i]));
-      //Debug.Log($"[PolygonPointLabeler] Detected collider point change. Reloaded {localPoints.Length} points.");
+      //RuntimeLog.Log($"[PolygonPointLabeler] Detected collider point change. Reloaded {localPoints.Length} points.");
 #if UNITY_EDITOR
       // ensure scene view and editor labels/handles repaint immediately
       UnityEditor.SceneView.RepaintAll();
@@ -101,19 +101,19 @@ public class PolygonPointLabeler : MonoBehaviour {
     if (idx != nearestIndex || Math.Abs(d - nearestDist) > 0.0001f) {
       nearestIndex = idx;
       nearestDist = d;
-      //Debug.Log($"[PolygonPointLabeler] MouseWorld=({mouseWorld.x:F3},{mouseWorld.y:F3}) NearestIndex={nearestIndex} Dist={nearestDist:F3} HoverRadius={hoverRadius}");
+      //RuntimeLog.Log($"[PolygonPointLabeler] MouseWorld=({mouseWorld.x:F3},{mouseWorld.y:F3}) NearestIndex={nearestIndex} Dist={nearestDist:F3} HoverRadius={hoverRadius}");
       if (nearestIndex >= 0 && d <= hoverRadius) MessageBus.Send(hoverEvent, nearestIndex);
     }
     if (clickToPin && Input.GetMouseButtonDown(0)) {
       if (nearestIndex >= 0 && d <= hoverRadius) {
         pinnedIndex = nearestIndex;
         MessageBus.Send(clickEvent, pinnedIndex);
-        // Debug.Log($"[PolygonPointLabeler] PinnedIndex={pinnedIndex}");
+        // RuntimeLog.Log($"[PolygonPointLabeler] PinnedIndex={pinnedIndex}");
       }
     }
     if (clickToPin && Input.GetKeyDown(unpinKey)) {
       pinnedIndex = -1;
-      //Debug.Log("[PolygonPointLabeler] Unpinned");
+      //RuntimeLog.Log("[PolygonPointLabeler] Unpinned");
     }
   }
 
@@ -142,7 +142,7 @@ public class PolygonPointLabeler : MonoBehaviour {
     var rect = new Rect(pos.x, pos.y, size.x + 8, size.y + 4);
     GUI.Box(rect, text);
     lastLabelRect = rect;
-    //Debug.Log($"[PolygonPointLabeler] GUI Label '{text}' @({rect.x:F1},{rect.y:F1}) Size=({rect.width:F1},{rect.height:F1}) ForWorld=({wp.x:F3},{wp.y:F3})");
+    //RuntimeLog.Log($"[PolygonPointLabeler] GUI Label '{text}' @({rect.x:F1},{rect.y:F1}) Size=({rect.width:F1},{rect.height:F1}) ForWorld=({wp.x:F3},{wp.y:F3})");
   }
 
   void OnValidate() {
@@ -231,7 +231,7 @@ public class PolygonPointLabeler : MonoBehaviour {
 
   public void SetPinnedIndex(int index) {
     pinnedIndex = Mathf.Clamp(index, -1, worldPoints.Count - 1);
-    //Debug.Log($"[PolygonPointLabeler] SetPinnedIndex={pinnedIndex}");
+    //RuntimeLog.Log($"[PolygonPointLabeler] SetPinnedIndex={pinnedIndex}");
   }
 
   public IReadOnlyList<Vector3> GetWorldPoints() {
@@ -240,7 +240,7 @@ public class PolygonPointLabeler : MonoBehaviour {
 
   public void SetHoverRadius(float r) {
     hoverRadius = Mathf.Max(0.0001f, r);
-    //Debug.Log($"[PolygonPointLabeler] SetHoverRadius={hoverRadius}");
+    //RuntimeLog.Log($"[PolygonPointLabeler] SetHoverRadius={hoverRadius}");
   }
 
   // helper to compare local point arrays with a small tolerance

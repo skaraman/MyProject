@@ -5,7 +5,20 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 
+public static class RuntimeLog {
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
+  public static void Log(object message) {
+    Debug.Log(message);
+  }
+
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
+  public static void Log(object message, UnityEngine.Object context) {
+    Debug.Log(message, context);
+  }
+}
+
 public static class DebugHelper {
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void LogObject(object obj) {
     string result = FormatObject(obj, 0);
     Debug.Log(result);

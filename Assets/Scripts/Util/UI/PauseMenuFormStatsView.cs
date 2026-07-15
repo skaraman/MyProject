@@ -216,7 +216,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     selectedMajorIndex = WrapIndex(selectedMajorIndex + direction, orderedMajorStats.Count);
     var nextStat = orderedMajorStats[selectedMajorIndex];
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuFormStatsView] Shifted major stat form='" + activeForm +
       "' source='" + (source ?? "") +
       "' prev_stat='" + previousStat +
@@ -239,7 +239,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     var selectedMajorStat = orderedMajorStats[selectedMajorIndex];
     var availablePoints = ResolveAvailableStatPoints(activeForm);
     if (availablePoints <= 0) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[PauseMenuFormStatsView] Ignored stat spend form='" + activeForm +
         "' stat='" + selectedMajorStat +
         "' source='" + (source ?? "") +
@@ -255,7 +255,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     }
 
     var spent = characterState.TryAddFormStatPoint(activeForm, selectedMajorStat, source);
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuFormStatsView] Spend attempt form='" + activeForm +
       "' stat='" + selectedMajorStat +
       "' source='" + (source ?? "") +
@@ -297,7 +297,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     ApplyText(statsAvailText, availablePoints.ToString(CultureInfo.InvariantCulture));
     ApplyMinorRows(majorValue, orderedMinorStats, sessionSpentCount);
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuFormStatsView] Refreshed source='" + (source ?? "") +
       "' form='" + activeForm +
       "' selected_stat='" + selectedMajorStat +
@@ -365,7 +365,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
 
     selectedForm = resolvedForm;
     selectedMajorIndex = 0;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuFormStatsView] Reset selected major stat form='" + resolvedForm +
       "' source='" + (source ?? "") +
       "' selected_index=" + selectedMajorIndex
@@ -384,7 +384,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
 
     var clampedIndex = Mathf.Clamp(selectedMajorIndex, 0, orderedMajorStats.Count - 1);
     if (clampedIndex != selectedMajorIndex) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[PauseMenuFormStatsView] Clamped selected major index form='" + activeForm +
         "' source='" + (source ?? "") +
         "' prev_index=" + selectedMajorIndex +
@@ -479,7 +479,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     }
 
     formPreview[resolvedStat] += 1;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuFormStatsView] Session preview updated form='" + resolvedForm +
       "' stat='" + resolvedStat +
       "' session_points=" + formPreview[resolvedStat]
@@ -505,7 +505,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuFormStatsView] Cleared session preview source='" + (source ?? "") +
       "' form_count=" + sessionSpendPreview.Count
     );

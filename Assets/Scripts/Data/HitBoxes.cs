@@ -240,7 +240,7 @@ public static class HBoxes {
     ["Hurt"] = new List<HBox> {
 
     },
-    ["Death"] = new List<HBox> {
+    ["BaseDeath1"] = new List<HBox> {
 
     },
 
@@ -258,7 +258,7 @@ public static class HBoxes {
     ["Idle"] = new List<HBox> { },
     ["Attack"] = new List<HBox> { },
     ["Hurt"] = new List<HBox> { },
-    ["Death"] = new List<HBox> { },
+    ["BaseDeath1"] = new List<HBox> { },
   };
 
   public static Dictionary<string, Dictionary<string, List<HBox>>> Imp = new Dictionary<string, Dictionary<string, List<HBox>>> {

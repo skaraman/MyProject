@@ -105,13 +105,15 @@ public static partial class TextureResidencyCache {
     if (entry.metadataAtlasMetadataHandle.IsValid()) {
       Addressables.Release(entry.metadataAtlasMetadataHandle);
     }
-    for (var i = 0; i < entry.exactSliceSupplementHandles.Count; i++) {
-      var supplementHandle = entry.exactSliceSupplementHandles[i];
-      if (supplementHandle.IsValid()) {
-        Addressables.Release(supplementHandle);
+    if (entry.exactSliceSupplementHandles != null) {
+      for (var i = 0; i < entry.exactSliceSupplementHandles.Count; i++) {
+        var supplementHandle = entry.exactSliceSupplementHandles[i];
+        if (supplementHandle.IsValid()) {
+          Addressables.Release(supplementHandle);
+        }
       }
+      entry.exactSliceSupplementHandles.Clear();
     }
-    entry.exactSliceSupplementHandles.Clear();
     ReleaseLocationHandle(entry);
 
     entry.handle = default;
@@ -121,17 +123,25 @@ public static partial class TextureResidencyCache {
     entry.metadataAtlasTextureHandle = default;
     entry.metadataAtlasMetadataHandle = default;
     ClearPendingAssetLoadStart(entry);
-    entry.pendingExactSliceSupplementAddresses.Clear();
-    entry.failedExactSliceSupplementAddresses.Clear();
+    if (entry.pendingExactSliceSupplementAddresses != null) {
+      entry.pendingExactSliceSupplementAddresses.Clear();
+    }
+    if (entry.failedExactSliceSupplementAddresses != null) {
+      entry.failedExactSliceSupplementAddresses.Clear();
+    }
     entry.primarySprite = null;
-    entry.spritesByName.Clear();
+    if (entry.spritesByName != null) {
+      entry.spritesByName.Clear();
+    }
     entry.spriteMapMaterialized = false;
     entry.deferredSpriteMapMaterialization = false;
     entry.generatedSpriteSetComplete = false;
     entry.isDone = false;
     entry.isSuccess = false;
     entry.hasTextureRegistration = false;
-    entry.registeredTextureIds.Clear();
+    if (entry.registeredTextureIds != null) {
+      entry.registeredTextureIds.Clear();
+    }
     entry.loadStarted = false;
     entry.countedInFlight = false;
     entry.atlasFallbackToDirect = false;
@@ -400,6 +410,43 @@ public static partial class TextureResidencyCache {
     requestStrategy = "direct_only";
     if (string.IsNullOrWhiteSpace(requestedAddress)) return false;
 
+    if (_ownerAddressCache.TryGetValue(requestedAddress, out var cached)) {
+      ownerAddress = cached.OwnerAddress;
+      spriteName = cached.SpriteName;
+      requestStrategy = cached.RequestStrategy;
+      return cached.IsValid;
+    }
+
+    var isValid = TryResolveRequestOwnerAddressInternal(requestedAddress, out ownerAddress, out spriteName, out requestStrategy);
+    _ownerAddressCache[requestedAddress] = new OwnerAddressResult {
+      IsValid = isValid,
+      OwnerAddress = ownerAddress,
+      SpriteName = spriteName,
+      RequestStrategy = requestStrategy
+    };
+    return isValid;
+  }
+
+  static readonly System.Collections.Concurrent.ConcurrentDictionary<string, OwnerAddressResult> _ownerAddressCache = new();
+
+  struct OwnerAddressResult {
+    public bool IsValid;
+    public string OwnerAddress;
+    public string SpriteName;
+    public string RequestStrategy;
+  }
+
+  static bool TryResolveRequestOwnerAddressInternal(
+    string requestedAddress,
+    out string ownerAddress,
+    out string spriteName,
+    out string requestStrategy
+  ) {
+    ownerAddress = "";
+    spriteName = "";
+    requestStrategy = "direct_only";
+    if (string.IsNullOrWhiteSpace(requestedAddress)) return false;
+
     var normalizedRequestedAddress = requestedAddress.Trim();
     if (SpriteSliceAddressUtility.TryParseSliceAddress(normalizedRequestedAddress, out var atlasAssetPath, out var parsedSpriteName)) {
       var normalizedAtlasAddress = string.IsNullOrWhiteSpace(atlasAssetPath) ? "" : atlasAssetPath.Trim();
@@ -439,14 +486,7 @@ public static partial class TextureResidencyCache {
   }
 
   static string NormalizePinLeaseAddress(string value) {
-    if (string.IsNullOrWhiteSpace(value)) return "";
-    var normalized = value.Trim();
-    if (SpriteSliceAddressUtility.TryParseSliceAddress(normalized, out var atlasAssetPath, out var spriteName) &&
-        !string.IsNullOrWhiteSpace(atlasAssetPath) &&
-        !string.IsNullOrWhiteSpace(spriteName)) {
-      return normalized;
-    }
-    return NormalizeAddress(normalized);
+    return NormalizeAddress(value);
   }
 
   static string NormalizeOwnerId(string value) {

@@ -537,22 +537,96 @@ public static partial class ContentPackPipeline {
     AddUniquePath(output, "Assets/Sprites/GameInterface");
   }
 
+  const string EsperanzaSkinLibraryRoot = "Assets/Sprites/SpriteLibraries/Esperanza/Skin";
+  const string EsperanzaGroupedSpriteRoot = "Assets/Sprites/Characters/Esperanza/_Grouped";
+
   static void AddCoreEsperanzaSkinOwnedRoots(List<string> output) {
-    if (output == null) return;
+    if (output == null) {
+      return;
+    }
 
-    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/Esperanza/Skin");
+    AddUniquePath(output, EsperanzaSkinLibraryRoot);
 
-    var groupedRoot = "Assets/Sprites/Characters/Esperanza/_Grouped";
-    var groupedFullPath = Path.GetFullPath(groupedRoot);
-    if (!Directory.Exists(groupedFullPath)) return;
+    var groupedFullPath = Path.GetFullPath(EsperanzaGroupedSpriteRoot);
+    if (!Directory.Exists(groupedFullPath)) {
+      return;
+    }
 
     var directories = Directory.GetDirectories(groupedFullPath, "Skin_*", SearchOption.TopDirectoryOnly);
     Array.Sort(directories, StringComparer.OrdinalIgnoreCase);
     for (var i = 0; i < directories.Length; i++) {
       var assetPath = ToProjectAssetPath(directories[i]);
-      if (string.IsNullOrWhiteSpace(assetPath)) continue;
+      if (string.IsNullOrWhiteSpace(assetPath)) {
+        continue;
+      }
       AddUniquePath(output, assetPath);
     }
+  }
+
+  static void ApplyCoreEsperanzaSkinFallback(
+    List<PackDefinition> packDefinitions,
+    PackDefinition corePack
+  ) {
+    if (corePack == null) {
+      return;
+    }
+
+    if (HasDerivedEsperanzaSkinPack(packDefinitions)) {
+      RemoveCoreEsperanzaSkinRoots(corePack.seedRoots);
+      RemoveCoreEsperanzaSkinRoots(corePack.ownedRoots);
+      return;
+    }
+
+    AddCoreEsperanzaSkinOwnedRoots(corePack.seedRoots);
+    AddCoreEsperanzaSkinOwnedRoots(corePack.ownedRoots);
+  }
+
+  static bool HasDerivedEsperanzaSkinPack(List<PackDefinition> packDefinitions) {
+    if (packDefinitions == null) {
+      return false;
+    }
+
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null) {
+        continue;
+      }
+      if (!string.Equals(pack.packId, "EsperanzaSkinAnimations", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+      if (pack.authoringSources == null) {
+        return false;
+      }
+
+      return pack.authoringSources.Count > 0;
+    }
+
+    return false;
+  }
+
+  static void RemoveCoreEsperanzaSkinRoots(List<string> roots) {
+    if (roots == null) {
+      return;
+    }
+
+    roots.RemoveAll(IsEsperanzaSkinRoot);
+  }
+
+  static bool IsEsperanzaSkinRoot(string value) {
+    var root = NormalizeAssetPath(value);
+    if (string.Equals(root, EsperanzaSkinLibraryRoot, StringComparison.OrdinalIgnoreCase)) {
+      return true;
+    }
+    if (root.StartsWith(EsperanzaSkinLibraryRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+      return true;
+    }
+
+    var groupedSkinPrefix = EsperanzaGroupedSpriteRoot + "/Skin_";
+    if (root.StartsWith(groupedSkinPrefix, StringComparison.OrdinalIgnoreCase)) {
+      return true;
+    }
+
+    return false;
   }
 
   sealed class CoreHealthBarSliceBinding {
@@ -623,8 +697,7 @@ public static partial class ContentPackPipeline {
 
       AddCoreUiOwnedRoots(pack.seedRoots);
       AddCoreUiOwnedRoots(pack.ownedRoots);
-      AddCoreEsperanzaSkinOwnedRoots(pack.seedRoots);
-      AddCoreEsperanzaSkinOwnedRoots(pack.ownedRoots);
+      ApplyCoreEsperanzaSkinFallback(packDefinitions, pack);
       AddCoreGameplayMaterialOwnedRoots(pack.seedRoots);
       AddCoreGameplayMaterialOwnedRoots(pack.ownedRoots);
       return;
@@ -816,6 +889,7 @@ public static partial class ContentPackPipeline {
       }
 
       RegisterAuthoringSourceTarget(pack, source.assetPath, source, errors);
+      RegisterPairedNormalMapTarget(pack, source.assetPath, source, errors);
 
       if (!string.IsNullOrWhiteSpace(source.normalAssetPath)) {
         AddUniquePath(pack.assetDependencies, source.normalAssetPath);
@@ -825,8 +899,20 @@ public static partial class ContentPackPipeline {
         }
 
         RegisterAuthoringSourceTarget(pack, source.normalAssetPath, source, errors);
+        RegisterPairedNormalMapTarget(pack, source.normalAssetPath, source, errors);
       }
     }
+  }
+
+  static void RegisterPairedNormalMapTarget(
+    PackDefinition pack,
+    string colorAssetPath,
+    ContentPackAuthoringSourceJson source,
+    List<string> errors
+  ) {
+    var normalMapAssetPath = ResolvePairedNormalMapAssetPath(colorAssetPath);
+    if (string.IsNullOrWhiteSpace(normalMapAssetPath)) return;
+    RegisterAuthoringSourceTarget(pack, normalMapAssetPath, source, errors);
   }
 
   static void RegisterAuthoringSourceTarget(
@@ -892,8 +978,8 @@ public static partial class ContentPackPipeline {
           errors?.Add("Missing sprite sheet normal asset '" + normalAssetPath + "'.");
           return false;
         }
-        if (!string.Equals(Path.GetExtension(normalAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) {
-          errors?.Add("Sprite sheet normal authoring source must be a .png asset. asset='" + normalAssetPath + "'");
+        if (!IsRuntimeTexturePath(normalAssetPath)) {
+          errors?.Add("Sprite sheet normal authoring source must be a .png, .jpg, or .jpeg asset. asset='" + normalAssetPath + "'");
           return false;
         }
       }

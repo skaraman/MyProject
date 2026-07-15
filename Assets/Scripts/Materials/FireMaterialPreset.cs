@@ -148,7 +148,7 @@ public class FireMaterialPreset : MonoBehaviour {
     SetOverlayEnabled(sourceRenderer.enabled && sourceRenderer.sprite != null);
 
     if (verboseLogging) {
-      Debug.Log(
+      RuntimeLog.Log(
         $"[{nameof(FireMaterialPreset)}] {reason} overlay='{fireOverlay.name}' " +
         $"shader='{fireMaterial.shader.name}' interior={GetDarkInteriorColor()} " +
         $"hotEdge={GetHotEdgeColor()} brightEdge={GetBrightEdgeColor()}",
@@ -363,7 +363,7 @@ public class FireMaterialPreset : MonoBehaviour {
       return;
     }
 
-    Debug.Log(message, this);
+    RuntimeLog.Log(message, this);
   }
 
   void ReleaseOverlayMaterial() {

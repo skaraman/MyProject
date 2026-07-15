@@ -158,7 +158,7 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     for (var i = 0; i < source.Count; i++) {
       var clone = CloneObjective(source[i]);
       if (clone == null) continue;
-      var key = clone.packId + "|" + clone.id;
+      var key = clone.packId + "|" + clone.id + "|" + clone.objective;
       if (!seen.Add(key)) continue;
       target.Add(clone);
     }
@@ -198,7 +198,11 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     return new ContentObjectiveDefinition(
       packId,
       id,
-      NormalizeToken(source.objective)
+      source.title,
+      source.description,
+      NormalizeToken(source.objective),
+      source.spawns,
+      source.respawns
     );
   }
 
@@ -370,15 +374,44 @@ public sealed class ContentEpisodeDefinition {
 public sealed class ContentObjectiveDefinition {
   public string packId;
   public string id;
+  public string title;
+  public string description;
   public string objective;
+  public List<string> spawns = new();
+  public List<string> respawns = new();
 
   public ContentObjectiveDefinition() {
   }
 
-  public ContentObjectiveDefinition(string packId, string id, string objective) {
+  public ContentObjectiveDefinition(
+    string packId,
+    string id,
+    string title,
+    string description,
+    string objective,
+    IList<string> spawns,
+    IList<string> respawns
+  ) {
     this.packId = string.IsNullOrWhiteSpace(packId) ? "" : packId.Trim();
     this.id = string.IsNullOrWhiteSpace(id) ? "" : id.Trim();
+    this.title = string.IsNullOrWhiteSpace(title) ? "" : title.Trim();
+    this.description = string.IsNullOrWhiteSpace(description) ? "" : description.Trim();
     this.objective = string.IsNullOrWhiteSpace(objective) ? "" : objective.Trim();
+    CopyRules(this.spawns, spawns);
+    CopyRules(this.respawns, respawns);
+  }
+
+  static void CopyRules(List<string> target, IList<string> source) {
+    target.Clear();
+    if (source == null) return;
+
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < source.Count; i++) {
+      var rule = string.IsNullOrWhiteSpace(source[i]) ? "" : source[i].Trim();
+      if (string.IsNullOrWhiteSpace(rule)) continue;
+      if (!seen.Add(rule)) continue;
+      target.Add(rule);
+    }
   }
 }
 
@@ -429,7 +462,7 @@ public static class ActiveContentRegistryRuntime {
     runtimeRequestedPackIds.AddRange(nextPackIds);
     reloadVersion++;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[ActiveContentRegistryRuntime] Runtime requested packs updated" +
       " source='" + (source ?? "") + "'" +
       " count=" + runtimeRequestedPackIds.Count +
@@ -446,7 +479,7 @@ public static class ActiveContentRegistryRuntime {
     runtimeRequestedPackIds.Clear();
     reloadVersion++;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[ActiveContentRegistryRuntime] Runtime requested packs cleared" +
       " source='" + (source ?? "") + "'"
     );
@@ -893,7 +926,7 @@ public static class RuntimeContentPackResolver {
       resolvedReason = "scene_change";
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[RuntimeContentPackResolver] Scene-change packs unloading" +
       " reason='" + resolvedReason + "'" +
       " previous='" + (previousSceneId ?? "") + "'" +
@@ -1178,7 +1211,7 @@ public static class RuntimeContentPackResolver {
     string activeForm,
     IReadOnlyList<string> packIds
   ) {
-    Debug.Log(
+    RuntimeLog.Log(
       "[RuntimeContentPackResolver] Save-derived packs loaded" +
       " mode='" + (mode ?? "") + "'" +
       " source='" + (source ?? "") + "'" +

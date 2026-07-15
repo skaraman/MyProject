@@ -726,7 +726,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   ) {
     if (!debugLogs) return;
     if (!deadlineHit && (budget == null || budget.YieldedFrames <= 0)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[StreamingWarmOrchestrator] Warm plan pass." +
       " context=" + request.context +
       " static_seed=" + (includeStaticSeedWork ? 1 : 0) +
@@ -746,7 +746,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   void LogAtlasSeedExpansionSummary(WarmContext context, WarmPlanSliceBudget budget, bool deadlineHit, bool debugLogs) {
     if (!debugLogs) return;
     if (!deadlineHit && (budget == null || budget.YieldedFrames <= 0)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[StreamingWarmOrchestrator] Atlas seed expansion." +
       " context=" + context +
       " yielded_frames=" + (budget != null ? budget.YieldedFrames : 0) +

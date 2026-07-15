@@ -46,6 +46,7 @@ public static class GeneratedAtlasBuildSurrogateUtility {
   const string ContentStageRootFolder = "Packages/com.skaraman.myprojectcontent";
   static readonly string[] MetadataExcludedFolderNames = Array.Empty<string>();
   static readonly HashSet<string> MetadataExcludedFolderNameSet = new(MetadataExcludedFolderNames, StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, string> MetadataAssetPathByAtlasPath = new(StringComparer.Ordinal);
 
   public static string MetadataExcludedFolderSummary => string.Join(", ", MetadataExcludedFolderNames);
 
@@ -132,7 +133,13 @@ public static class GeneratedAtlasBuildSurrogateUtility {
   public static string BuildMetadataAssetPath(string atlasAssetPath) {
     var normalizedAtlasAssetPath = NormalizePath(atlasAssetPath);
     if (string.IsNullOrWhiteSpace(normalizedAtlasAssetPath)) return "";
-    return NormalizePath(Path.ChangeExtension(normalizedAtlasAssetPath, ".json"));
+    if (MetadataAssetPathByAtlasPath.TryGetValue(normalizedAtlasAssetPath, out var cachedMetadataAssetPath)) {
+      return cachedMetadataAssetPath;
+    }
+
+    var metadataAssetPath = NormalizePath(Path.ChangeExtension(normalizedAtlasAssetPath, ".json"));
+    MetadataAssetPathByAtlasPath[normalizedAtlasAssetPath] = metadataAssetPath;
+    return metadataAssetPath;
   }
 
   static string NormalizeFolderPath(string assetPathOrFolderPath) {

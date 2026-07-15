@@ -65,7 +65,7 @@ public static class DialogController {
     ClearDebugLocationSession();
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[DialogController][SetDebugTreatAllDialogAsUnseen] source='" + (source ?? "") +
         "' enabled=" + (debugTreatAllDialogAsUnseen ? 1 : 0) +
         " seen_count=" + seenLineKeys.Count +
@@ -86,7 +86,7 @@ public static class DialogController {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[DialogController][BeginLocationDialogSession] source='" + (source ?? "") +
       "' location='" + debugSessionLocationId + "'" +
       " debug_session_seen_count=" + debugSessionSeenLineKeys.Count
@@ -100,7 +100,7 @@ public static class DialogController {
     runtimeStateReady = true;
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[DialogController][ResetRuntimeState] source='" + (source ?? "") +
         "' slot=" + loadedSlot +
         " seen_count=" + seenLineKeys.Count
@@ -119,7 +119,7 @@ public static class DialogController {
     runtimeStateReady = true;
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[DialogController][LoadState] source='" + (source ?? "") +
         "' slot=" + loadedSlot +
         " seen_count=" + seenLineKeys.Count +
@@ -136,7 +136,7 @@ public static class DialogController {
       SaveSlotManager.Save(DialogSaveName, saveBuffer);
 
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[DialogController][SaveState] source='" + (source ?? "") +
           "' slot=" + SaveSlotManager.slot +
           " seen_count=" + seenLineKeys.Count
@@ -170,7 +170,7 @@ public static class DialogController {
     sequence.Clear();
     if (!DialogData.TryGetLocation(locationId, out var locationDialog) || locationDialog == null) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[DialogController][TryBuildTriggeredSequence] Missing location dialog location='" + (locationId ?? "") + "'"
         );
       }
@@ -181,7 +181,7 @@ public static class DialogController {
     AppendTriggeredLocationLines(locationDialog, normalizedTrigger, sequence);
     if (sequence.Count <= 0) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[DialogController][TryBuildTriggeredSequence] No unseen lines remain" +
           " location='" + locationDialog.locationId + "'" +
           " trigger='" + normalizedTrigger + "'"
@@ -191,7 +191,7 @@ public static class DialogController {
     }
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[DialogController][TryBuildTriggeredSequence] location='" + locationDialog.locationId +
         "' trigger='" + normalizedTrigger +
         "' unseen_count=" + sequence.Count
@@ -225,7 +225,7 @@ public static class DialogController {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[DialogController][CollectPendingTriggers] location='" + locationDialog.locationId +
       "' trigger_count=" + triggers.Count +
       " triggers='" + string.Join(", ", triggers) + "'"
@@ -270,7 +270,7 @@ public static class DialogController {
 
     var saved = SaveState("mark_seen:" + (source ?? ""));
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[DialogController][MarkSeen] location='" + normalizedLocationId +
         "' speaker='" + normalizedSpeakerId +
         "' line=" + normalizedLineNumber +

@@ -12,7 +12,7 @@ public class DemonStatModifier {
     this.amount = amount;
   }
 
-  public string StatKey => NormalizeStatKey(stat);
+  public string StatKey => stat ?? "";
 
   public DemonStatModifier Clone() {
     return new DemonStatModifier(StatKey, amount);
@@ -36,7 +36,26 @@ public sealed class DemonStatDefinition {
   }
 
   public Dictionary<string, float> ResolveStats(int level, IList<DemonStatModifier> bonuses = null) {
-    var resolved = CloneStats(baseStats);
+    var resolved = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+    var statNameScratch = new List<string>();
+    ResolveStatsInto(resolved, statNameScratch, level, bonuses);
+    return resolved;
+  }
+
+  public void ResolveStatsInto(
+    Dictionary<string, float> resolved,
+    List<string> statNameScratch,
+    int level,
+    IList<DemonStatModifier> bonuses = null
+  ) {
+    if (resolved == null) {
+      return;
+    }
+
+    resolved.Clear();
+    foreach (var stat in baseStats) {
+      resolved[stat.Key] = stat.Value;
+    }
     var resolvedLevel = Mathf.Max(level, 1);
     var growthStepCount = Mathf.Max(resolvedLevel - 1, 0);
 
@@ -49,7 +68,7 @@ public sealed class DemonStatDefinition {
     }
 
     ApplyBonuses(resolved, bonuses);
-    return resolved;
+    FormStatIncreases.ApplyBonusToFlatStats(resolved, statNameScratch);
   }
 
   static void ApplyBonuses(Dictionary<string, float> resolved, IList<DemonStatModifier> bonuses) {
@@ -132,11 +151,60 @@ public static class DemonStats {
     int level,
     IList<DemonStatModifier> bonuses = null
   ) {
-    if (!TryGetDefinition(demonType, out var definition)) {
-      return new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+    var resolvedStats = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+    var statNameScratch = new List<string>();
+    ResolveStatsInto(demonType, level, bonuses, resolvedStats, statNameScratch);
+    return resolvedStats;
+  }
+
+  public static bool ResolveStatsInto(
+    string demonType,
+    int level,
+    IList<DemonStatModifier> bonuses,
+    Dictionary<string, float> resolvedStats,
+    List<string> statNameScratch
+  ) {
+    if (resolvedStats == null || statNameScratch == null) {
+      return false;
     }
 
-    return definition.ResolveStats(level, bonuses);
+    if (!TryGetDefinition(demonType, out var definition)) {
+      resolvedStats.Clear();
+      return false;
+    }
+
+    definition.ResolveStatsInto(resolvedStats, statNameScratch, level, bonuses);
+    ApplyEpisodeProgressMultiplier(resolvedStats, statNameScratch);
+    return true;
+  }
+
+  public static float ResolveEpisodeProgressMultiplier() {
+    var completedPartCount = ContentEpisodeProgression.ResolveCompletedPartCount();
+    return Mathf.Pow(2f, completedPartCount);
+  }
+
+  static void ApplyEpisodeProgressMultiplier(
+    Dictionary<string, float> resolvedStats,
+    List<string> statNameScratch
+  ) {
+    if (resolvedStats == null || resolvedStats.Count <= 0) {
+      return;
+    }
+
+    var multiplier = ResolveEpisodeProgressMultiplier();
+    if (Mathf.Approximately(multiplier, 1f)) {
+      return;
+    }
+
+    statNameScratch.Clear();
+    foreach (var stat in resolvedStats) {
+      statNameScratch.Add(stat.Key);
+    }
+    for (var i = 0; i < statNameScratch.Count; i++) {
+      var statKey = statNameScratch[i];
+      resolvedStats[statKey] *= multiplier;
+    }
+    statNameScratch.Clear();
   }
 
   public static string NormalizeDemonType(string value) {

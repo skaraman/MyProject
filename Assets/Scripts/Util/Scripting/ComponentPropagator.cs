@@ -14,6 +14,7 @@ public class ComponentPropagator : MonoBehaviour {
   }
 
   private bool propagateOn = true;
+  private bool hasPropagated;
   [SerializeField] bool verboseLogging;
   [SerializeField] float initialDelaySeconds = .5f;
   [SerializeField] int initialDelayFrames = 0;
@@ -24,7 +25,17 @@ public class ComponentPropagator : MonoBehaviour {
   int _fieldsSkippedCulling;
   int _propertiesSkippedCulling;
 
+  private static readonly Dictionary<Type, FieldInfo[]> _cachedFields = new();
+  private static readonly Dictionary<Type, PropertyInfo[]> _cachedProperties = new();
+  private static readonly Dictionary<Type, MethodInfo> _cachedForceUpdateMethods = new();
+  private readonly List<Component> _scratchComponents = new();
+  private readonly List<ComponentToggle> _scratchToggles = new();
+
   void OnEnable() {
+    if (propagateOnce && hasPropagated) {
+      propagateOn = false;
+      return;
+    }
     StartPropagationDelay();
   }
 
@@ -39,12 +50,17 @@ public class ComponentPropagator : MonoBehaviour {
     StartCoroutine(EnablePropagationAfterDelay());
   }
 
+  private WaitForSeconds _cachedWaitForSeconds;
+
   IEnumerator EnablePropagationAfterDelay() {
     for (int i = 0; i < initialDelayFrames; i++) {
       yield return null; // wait a frame so dynamically-created children appear
     }
     if (initialDelaySeconds > 0f) {
-      yield return new WaitForSeconds(initialDelaySeconds);
+      if (_cachedWaitForSeconds == null) {
+        _cachedWaitForSeconds = new WaitForSeconds(initialDelaySeconds);
+      }
+      yield return _cachedWaitForSeconds;
     }
     propagateOn = true;
   }
@@ -61,18 +77,27 @@ public class ComponentPropagator : MonoBehaviour {
   public void ForcePropagation() {
     RefreshComponentList();
     ApplyPropagation();
+    hasPropagated = true;
+    if (!propagateOnce) {
+      return;
+    }
+
+    propagateOn = false;
+    StopAllCoroutines();
   }
 
   void RefreshComponentList() {
-    var current = new List<ComponentToggle>();
-    foreach (var c in GetComponents<Component>())
-    {
+    GetComponents(_scratchComponents);
+    _scratchToggles.Clear();
+    for (int i = 0; i < _scratchComponents.Count; i++) {
+      var c = _scratchComponents[i];
       if (c is Transform || c is ComponentPropagator) continue;
       var existing = components.Find(e => e.component == c);
-      if (existing != null) current.Add(existing);
-      else current.Add(new ComponentToggle { component = c, propagate = false });
+      if (existing != null) _scratchToggles.Add(existing);
+      else _scratchToggles.Add(new ComponentToggle { component = c, propagate = false });
     }
-    components = current;
+    components.Clear();
+    components.AddRange(_scratchToggles);
   }
 
   void ApplyPropagation() {
@@ -102,7 +127,7 @@ public class ComponentPropagator : MonoBehaviour {
       }
     }
     if (verboseLogging) {
-      Debug.Log($"[ComponentPropagator] Skips due to culling-related members fields={_fieldsSkippedCulling} properties={_propertiesSkippedCulling}");
+      RuntimeLog.Log($"[ComponentPropagator] Skips due to culling-related members fields={_fieldsSkippedCulling} properties={_propertiesSkippedCulling}");
     }
   }
 
@@ -121,7 +146,11 @@ public class ComponentPropagator : MonoBehaviour {
   }
 
   void CopyFields(object source, object target) {
-    var fields = source.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+    var type = source.GetType();
+    if (!_cachedFields.TryGetValue(type, out var fields)) {
+      fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+      _cachedFields[type] = fields;
+    }
     foreach (var f in fields) {
       if (f.IsInitOnly || f.IsLiteral) continue;
       var n = f.Name;
@@ -159,7 +188,11 @@ public class ComponentPropagator : MonoBehaviour {
   }
 
   void CopyProperties(object source, object target)  {
-    var props = source.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+    var type = source.GetType();
+    if (!_cachedProperties.TryGetValue(type, out var props)) {
+      props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+      _cachedProperties[type] = props;
+    }
     foreach (var p in props)    {
       if (!p.CanRead || !p.CanWrite) continue;
       var n = p.Name;
@@ -262,12 +295,19 @@ public class ComponentPropagator : MonoBehaviour {
   }
 
   void InvokeForceUpdate(object target) {
-    var methods = target.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-    foreach (var method in methods){
-      if (method.GetCustomAttribute(typeof(ForceUpdateAttribute)) != null) {
-        try { method.Invoke(target, null); } catch { }
-        break;
+    var type = target.GetType();
+    if (!_cachedForceUpdateMethods.TryGetValue(type, out var forceUpdateMethod)) {
+      var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+      foreach (var method in methods){
+        if (method.GetCustomAttribute(typeof(ForceUpdateAttribute)) != null) {
+          forceUpdateMethod = method;
+          break;
+        }
       }
+      _cachedForceUpdateMethods[type] = forceUpdateMethod;
+    }
+    if (forceUpdateMethod != null) {
+      try { forceUpdateMethod.Invoke(target, null); } catch { }
     }
   }
 }

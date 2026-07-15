@@ -6,6 +6,10 @@ struct Attributes
     float4 vertex : POSITION;
     float2 uv : TEXCOORD0;
 	half4 color : COLOR;
+	#if defined(SKINNED_SPRITE)
+	float4 weights : BLENDWEIGHTS;
+	uint4 indices : BLENDINDICES;
+	#endif
 
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
@@ -35,6 +39,10 @@ struct VertexDataNormalsPass
 	float2 uv : TEXCOORD0;
 	half4 color : COLOR;
 	half4 tangent : TANGENT;
+	#if defined(SKINNED_SPRITE)
+	float4 weights : BLENDWEIGHTS;
+	uint4 indices : BLENDINDICES;
+	#endif
 	UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 

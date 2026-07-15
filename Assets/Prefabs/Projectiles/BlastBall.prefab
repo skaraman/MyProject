@@ -13,6 +13,8 @@ GameObject:
   - component: {fileID: 6807759890696001026}
   - component: {fileID: 6349500182128385827}
   - component: {fileID: 5139290945509360972}
+  - component: {fileID: 6057113811267714201}
+  - component: {fileID: 5118274592461130558}
   m_Layer: 0
   m_Name: BlastBall
   m_TagString: Untagged
@@ -55,8 +57,8 @@ MonoBehaviour:
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
-  shaderMarginPixelsX: 0
-  shaderMarginPixelsY: 0
+  shaderMarginPixelsX: 4
+  shaderMarginPixelsY: 4
   enableDebugSpriteFetchLogs: 0
   enableDebugSpriteApplyLogs: 0
   serializedAppliedTrimmedOffsetLocalUnits: {x: 0, y: 0, z: 0}
@@ -116,7 +118,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 0333f2851fbfbaf4dac326b64de9e6d3, type: 2}
+  - {fileID: 2100000, guid: bf465cd7ef8d48a396b9f20d7ea8ad62, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -162,6 +164,101 @@ SortingGroup:
   m_SortingOrder: 48
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
+--- !u!114 &6057113811267714201
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7967227520933354192}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  m_ComponentVersion: 4
+  m_LightType: 3
+  m_BlendStyleIndex: 0
+  m_Light2DProvider:
+    rid: -2
+  m_SelectionSources:
+    rid: 6221682371487910144
+  m_FalloffIntensity: 0.8
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Intensity: 1.15
+  m_LightVolumeIntensity: 1
+  m_LightVolumeEnabled: 0
+  m_ApplyToSortingLayers: 0fd32e51d92f446ecbb7f124
+  m_LightCookieSprite: {fileID: 0}
+  m_DeprecatedPointLightCookieSprite: {fileID: 0}
+  m_LightOrder: 0
+  m_AlphaBlendOnOverlap: 0
+  m_OverlapOperation: 0
+  m_NormalMapDistance: 0.4
+  m_NormalMapQuality: 1
+  m_UseNormalMap: 1
+  m_ShadowsEnabled: 0
+  m_ShadowIntensity: 0.75
+  m_ShadowSoftness: 0.3
+  m_ShadowSoftnessFalloffIntensity: 0.5
+  m_ShadowVolumeIntensityEnabled: 0
+  m_ShadowVolumeIntensity: 0.75
+  m_LocalBounds:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 0.17, y: 0.17, z: 0}
+  m_PointLightInnerAngle: 360
+  m_PointLightOuterAngle: 360
+  m_PointLightInnerRadius: 0.021
+  m_PointLightOuterRadius: 0.17
+  m_ShapeLightParametricSides: 5
+  m_ShapeLightParametricAngleOffset: 0
+  m_ShapeLightParametricRadius: 1
+  m_ShapeLightFalloffSize: 0.5
+  m_ShapeLightFalloffOffset: {x: 0, y: 0}
+  m_ShapePath:
+  - {x: -0.5, y: -0.5, z: 0}
+  - {x: 0.5, y: -0.5, z: 0}
+  - {x: 0.5, y: 0.5, z: 0}
+  - {x: -0.5, y: 0.5, z: 0}
+  references:
+    version: 2
+    RefIds:
+    - rid: -2
+      type: {class: , ns: , asm: }
+    - rid: 6221682371487910144
+      type: {class: Light2DProviderSources, ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.2D.Runtime}
+      data:
+        m_SelectedHashCode: 3
+        m_SelectedSource:
+          rid: -2
+        m_Provider2DCache:
+          rid: -2
+--- !u!114 &5118274592461130558
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7967227520933354192}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 451e21dbf9d749278a78c6a658f722d9, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Project.Internal::EffectLight2D
+  effectLight: {fileID: 6057113811267714201}
+  lightColor: {r: 1, g: 1, b: 1, a: 1}
+  baseIntensity: 1.15
+  intensityFlicker: 0.55
+  flickerFrequency: 22
+  radiusFlicker: 0.12
+  innerRadius: 0.08
+  outerRadius: 0.65
+  falloffIntensity: 0.8
+  flickerSeed: 0.37
+  targetSortingLayers:
+  - GameBG
+  - GameMG
+  - GameFG
 --- !u!1 &8321494052513208523
 GameObject:
   m_ObjectHideFlags: 0

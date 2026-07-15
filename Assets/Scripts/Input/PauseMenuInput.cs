@@ -140,7 +140,7 @@ public class PauseMenuInput : MonoBehaviour {
       if (sceneLightsWereActiveBeforePause) {
         sceneLights.SetActive(false);
       }
-      Debug.Log(
+      RuntimeLog.Log(
         "[PauseMenuInput] Pause lighting applied previous_active=" + (sceneLightsWereActiveBeforePause ? 1 : 0) +
         " current_active=" + (sceneLights.activeSelf ? 1 : 0)
       );
@@ -153,7 +153,7 @@ public class PauseMenuInput : MonoBehaviour {
     if (sceneLights.activeSelf != sceneLightsWereActiveBeforePause) {
       sceneLights.SetActive(sceneLightsWereActiveBeforePause);
     }
-    Debug.Log(
+    RuntimeLog.Log(
       "[PauseMenuInput] Pause lighting restored restored_active=" + (sceneLightsWereActiveBeforePause ? 1 : 0) +
       " current_active=" + (sceneLights.activeSelf ? 1 : 0)
     );
@@ -196,7 +196,7 @@ public class PauseMenuInput : MonoBehaviour {
     }
 
     if (logVisibilityChange || !hasLoggedFormsListVisibility || lastFormsListVisible != shouldBeActive) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[PauseMenuInput] Forms list visibility active=" + (shouldBeActive ? 1 : 0) +
         " character_menu=" + ((CharacterMenu != null && CharacterMenu.activeSelf) ? 1 : 0) +
         " ability_menu=" + ((AbilityMenu != null && AbilityMenu.activeSelf) ? 1 : 0)
@@ -330,7 +330,7 @@ public class PauseMenuInput : MonoBehaviour {
 
     var button = formButtons.buttons[index];
     if (!IsUnlockedFormButton(button)) {
-      Debug.Log("[PauseMenuInput] Ignored locked form button='" + (button != null ? button.name : "-") + "'");
+      RuntimeLog.Log("[PauseMenuInput] Ignored locked form button='" + (button != null ? button.name : "-") + "'");
       return;
     }
 
@@ -378,7 +378,7 @@ public class PauseMenuInput : MonoBehaviour {
     }
 
     if (logSelection) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[PauseMenuInput] Applied form='" + resolvedForm +
         "' primary_color='" + (string.IsNullOrWhiteSpace(primaryColorName) ? "-" : primaryColorName) +
         "' secondary_color='" + (string.IsNullOrWhiteSpace(secondaryColorName) ? "-" : secondaryColorName) +

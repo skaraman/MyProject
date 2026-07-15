@@ -4,6 +4,41 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public partial class AnimationController {
+  public bool AppearancePinsExternallyManaged =>
+    appearancePinsExternallyManaged && IsExternalAppearancePinCoverageCurrent();
+
+  public void SetAppearancePinsExternallyManaged(
+    bool externallyManaged,
+    string externalOwnerId = "",
+    int expectedPinCount = 0
+  ) {
+    var normalizedOwnerId = string.IsNullOrWhiteSpace(externalOwnerId)
+      ? ""
+      : externalOwnerId.Trim();
+    var normalizedPinCount = Math.Max(expectedPinCount, 0);
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (appearancePinsExternallyManaged == externallyManaged &&
+        string.Equals(externalAppearancePinOwnerId, normalizedOwnerId, StringComparison.OrdinalIgnoreCase) &&
+        externalAppearancePinCount == normalizedPinCount &&
+        externalAppearanceContentVersion == contentVersion) {
+      return;
+    }
+
+    appearancePinsExternallyManaged = externallyManaged;
+    if (externallyManaged) {
+      externalAppearancePinOwnerId = normalizedOwnerId;
+      externalAppearancePinCount = normalizedPinCount;
+      externalAppearanceContentVersion = contentVersion;
+      ReleaseAppearancePins();
+      return;
+    }
+
+    externalAppearancePinOwnerId = "";
+    externalAppearancePinCount = 0;
+    externalAppearanceContentVersion = -1;
+    InvalidateAppearancePinSnapshot();
+  }
+
   public void ReleaseAppearancePins() {
     if (string.IsNullOrWhiteSpace(appearanceOwnerId)) return;
     TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
@@ -154,13 +189,11 @@ public partial class AnimationController {
     ClearPendingAnimationSwitch();
   }
 
-  void PrimeTargetsForAnimation(string targetCategory, int startFrame, int endFrame, bool primeFullWindow = false) {
+  void PrimeTargetsForAnimation(string targetCategory, int startFrame, int endFrame) {
     var warmupFrames = Math.Max(runtimeWarmupFrames, 1);
-    var firstPlayActionFrames = Math.Max(warmupFrames, FirstPlayActionPrimeMaxFrames);
     var clampedStart = Math.Max(startFrame, 1);
     var clampedEnd = Math.Max(endFrame, clampedStart);
-    var primeWindowFrames = primeFullWindow ? firstPlayActionFrames : warmupFrames;
-    var targetEnd = Math.Min(clampedEnd, clampedStart + primeWindowFrames - 1);
+    var targetEnd = Math.Min(clampedEnd, clampedStart + warmupFrames - 1);
     var immediateBudget = PrimeImmediateStartFrameBudget;
     PrimeTargetsForAnimationSet(
       criticalSpriteTargets,
@@ -610,14 +643,6 @@ public partial class AnimationController {
 
     var queuedCategory = ResolveAnimationCategory(queuedResolved, queuedAnim);
     var queuedPrimeEnd = CalculateTransitionPrimeEndFrame(queuedAnim.start, queuedAnim.end);
-    var shouldPrimeQueuedFullWindow =
-      !HasSeenAnimationCategory(queuedCategory) &&
-      !IsLocomotionAnimation(queuedResolved) &&
-      !IsTransitionCategory(queuedCategory);
-    if (shouldPrimeQueuedFullWindow) {
-      PrimeTargetsForAnimation(queuedCategory, queuedAnim.start, queuedAnim.end, primeFullWindow: true);
-      return;
-    }
     PrimeTargetsForAnimation(queuedCategory, queuedAnim.start, queuedPrimeEnd);
   }
   static bool IsTransitionCategory(string category) {
@@ -668,14 +693,20 @@ public partial class AnimationController {
     }
     var loadingOverlayWarmGateActive = SpriteStreamingLoadingState.IsLoadingOverlayActive &&
                                        StreamingWarmOrchestrator.IsWarmGateRunning;
-    var gameplayMixedAppearanceSync =
-      !loadingOverlayWarmGateActive &&
-      HasMixedVisibleSpriteTargets() &&
-      spriteTargets.Count <= MaxTargetsForGateReadinessChecks;
     var startupPlayerVisualHold =
       holdCurrentAnimationOnStartFrameUntilReady &&
       startupVisualHoldActive &&
       appearancePinClass == TextureResidencyCache.PinClass.Player;
+    if (!loadingOverlayWarmGateActive &&
+        !startupPlayerVisualHold &&
+        HasCurrentAppearancePinCoverage()) {
+      ClearVisualFrameHold();
+      return desiredFrame;
+    }
+    var gameplayMixedAppearanceSync =
+      !loadingOverlayWarmGateActive &&
+      HasMixedVisibleSpriteTargets() &&
+      spriteTargets.Count <= MaxTargetsForGateReadinessChecks;
     if (!loadingOverlayWarmGateActive && !gameplayMixedAppearanceSync) {
       ClearVisualFrameHold();
       return desiredFrame;
@@ -730,123 +761,144 @@ public partial class AnimationController {
   void RefreshAppearancePins() {
     if (!Application.isPlaying) return;
     if (string.IsNullOrWhiteSpace(appearanceOwnerId)) return;
-    var loadingOverlayWarmGateActive = SpriteStreamingLoadingState.IsLoadingOverlayActive &&
-                                       StreamingWarmOrchestrator.IsWarmGateRunning;
-    var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
-    var queueBusy = queue.queuedCount > 0 || queue.inFlightCount > 0;
-    var keepLoadedForSession = SpriteStreamingRuntimeSettings.KeepLoadedSpritesForSession;
-    var pinWindowFrames = Math.Max(SpriteStreamingRuntimeSettings.PinWindowFrames, 1);
-    var maxPredicted = Math.Max(SpriteStreamingRuntimeSettings.PinPredictedNextAnimations, 0);
-    if (!loadingOverlayWarmGateActive) {
-      // Gameplay mode: keep pin churn light to avoid trigger-time spikes.
-      pinWindowFrames = Math.Min(pinWindowFrames, 8);
-      maxPredicted = 0;
+    if (appearancePinsExternallyManaged && IsExternalAppearancePinCoverageCurrent()) return;
+    if (appearancePinsExternallyManaged) {
+      appearancePinsExternallyManaged = false;
+      externalAppearancePinOwnerId = "";
+      externalAppearancePinCount = 0;
+      externalAppearanceContentVersion = -1;
+      InvalidateAppearancePinSnapshot();
     }
-    var pinRefreshBucketSize = Math.Max(SpriteStreamingRuntimeSettings.PinRefreshFrameBucketSize, 1);
-    if (loadingOverlayWarmGateActive) {
-      pinRefreshBucketSize = Math.Max(pinRefreshBucketSize, 64);
-    }
-    else if (keepLoadedForSession && !queueBusy && !hasPendingAnimationSwitch) {
-      pinRefreshBucketSize = Math.Max(pinRefreshBucketSize, 48);
-      pinWindowFrames = Math.Min(pinWindowFrames, 12);
-      maxPredicted = Math.Min(maxPredicted, 1);
-    }
-    else {
-      pinRefreshBucketSize = Math.Max(pinRefreshBucketSize, 16);
-    }
-    var maxPinAddresses = Math.Max(SpriteStreamingRuntimeSettings.MaxPinnedAddressesPerOwner, MinAppearancePinAddressBudget);
-    if (SpriteStreamingLoadingState.IsLoadingOverlayActive || StreamingWarmOrchestrator.IsWarmGateRunning) {
-      maxPinAddresses = Math.Max(Math.Min(maxPinAddresses, LoadingOverlayPinAddressCap), MinAppearancePinAddressBudget);
-    }
-    var currentFrameBucket = Mathf.Max(Time.frameCount + appearancePinRefreshOffset, 0) / pinRefreshBucketSize;
-
-    if (!SpriteStreamingRuntimeSettings.EnableAppearanceSetStreaming ||
-        !SpriteStreamingRuntimeSettings.EnablePinnedHotset) {
-      if (IsAppearancePinSnapshotCurrent(false, pinWindowFrames, maxPredicted, currentFrameBucket)) return;
+    var streamingEnabled = SpriteStreamingRuntimeSettings.EnableAppearanceSetStreaming &&
+                           SpriteStreamingRuntimeSettings.EnablePinnedHotset;
+    if (!streamingEnabled) {
+      if (IsAppearancePinSnapshotCurrent(false)) return;
       TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
       appearancePinAddressBuffer.Clear();
       appearancePinAddressSet.Clear();
-      UpdateAppearancePinSnapshot(false, pinWindowFrames, maxPredicted, currentFrameBucket);
+      UpdateAppearancePinSnapshot(false);
       return;
     }
 
     if (animationData == null || animationData.Count == 0 || spriteTargets.Count == 0) {
-      if (IsAppearancePinSnapshotCurrent(true, pinWindowFrames, maxPredicted, currentFrameBucket)) return;
+      if (IsAppearancePinSnapshotCurrent(true)) return;
       TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
       appearancePinAddressBuffer.Clear();
       appearancePinAddressSet.Clear();
-      UpdateAppearancePinSnapshot(true, pinWindowFrames, maxPredicted, currentFrameBucket);
+      UpdateAppearancePinSnapshot(true);
       return;
     }
 
-    if (IsAppearancePinSnapshotCurrent(true, pinWindowFrames, maxPredicted, currentFrameBucket)) return;
+    if (IsAppearancePinSnapshotCurrent(true)) return;
 
+    var maxPinAddresses = Math.Max(
+      SpriteStreamingRuntimeSettings.MaxPinnedAddressesPerOwner,
+      MinAppearancePinAddressBudget
+    );
+    if (SpriteStreamingLoadingState.IsLoadingOverlayActive ||
+        StreamingWarmOrchestrator.IsWarmGateRunning) {
+      maxPinAddresses = Math.Max(
+        Math.Min(maxPinAddresses, LoadingOverlayPinAddressCap),
+        MinAppearancePinAddressBudget
+      );
+    }
+
+    PinCollectProfilerMarker.Begin();
     appearancePinAddressBuffer.Clear();
     appearancePinAddressSet.Clear();
 
     if (!string.IsNullOrWhiteSpace(currentAnimation) && animationData.TryGetValue(currentAnimation, out var currentAnim)) {
-      var currentCategory = ResolveAnimationCategory(currentAnimation, currentAnim);
-      var currentStart = isPlaying ? Mathf.Clamp(currentFrame, currentAnim.start, currentAnim.end) : currentAnim.start;
-      CollectWindowAddresses(currentCategory, currentStart, currentAnim.end, pinWindowFrames, maxPinAddresses);
-      if (loadingOverlayWarmGateActive) {
-        CollectPredictedInterruptWindows(currentAnimation, pinWindowFrames, maxPredicted, maxPinAddresses);
-      }
+      CollectAnimationAtlasAddresses(currentAnimation, currentAnim, null, maxPinAddresses);
     }
 
     if (appearancePinAddressBuffer.Count < maxPinAddresses &&
-        loadingOverlayWarmGateActive &&
         hasPendingAnimationSwitch &&
         !string.IsNullOrWhiteSpace(pendingAnimation) &&
         animationData.TryGetValue(pendingAnimation, out var pendingAnim)) {
-      var pendingCategoryName = string.IsNullOrWhiteSpace(pendingCategory)
-        ? ResolveAnimationCategory(pendingAnimation, pendingAnim)
-        : pendingCategory;
-      var pendingStart = Mathf.Clamp(Math.Max(pendingStartFrame, pendingAnim.start), pendingAnim.start, pendingAnim.end);
-      CollectWindowAddresses(pendingCategoryName, pendingStart, pendingAnim.end, pinWindowFrames, maxPinAddresses);
+      CollectAnimationAtlasAddresses(pendingAnimation, pendingAnim, pendingCategory, maxPinAddresses);
     }
 
     if (appearancePinAddressBuffer.Count < maxPinAddresses &&
-        loadingOverlayWarmGateActive &&
         !string.IsNullOrWhiteSpace(queuedAnimation) &&
         animationData.TryGetValue(queuedAnimation, out var queuedAnim)) {
-      var queuedCategory = ResolveAnimationCategory(queuedAnimation, queuedAnim);
-      CollectWindowAddresses(queuedCategory, queuedAnim.start, queuedAnim.end, pinWindowFrames, maxPinAddresses);
+      CollectAnimationAtlasAddresses(queuedAnimation, queuedAnim, null, maxPinAddresses);
     }
+    PinCollectProfilerMarker.End();
 
     if (appearancePinAddressBuffer.Count <= 0) {
       TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
-      UpdateAppearancePinSnapshot(true, pinWindowFrames, maxPredicted, currentFrameBucket);
+      UpdateAppearancePinSnapshot(true);
       return;
     }
 
+    PinCacheUpdateProfilerMarker.Begin();
     TextureResidencyCache.UpdateOwnerPins(
       appearanceOwnerId,
       appearancePinClass,
       appearancePinAddressBuffer,
       TextureResidencyCache.LoadPriority.Warmup
     );
-    UpdateAppearancePinSnapshot(true, pinWindowFrames, maxPredicted, currentFrameBucket);
+    PinCacheUpdateProfilerMarker.End();
+    UpdateAppearancePinSnapshot(true);
   }
 
-  void CollectWindowAddresses(string categoryName, int startFrame, int maxClipFrame, int pinWindowFrames, int maxPinAddresses) {
-    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
-    var clampedStart = Math.Max(startFrame, 1);
-    var clampedMax = Math.Max(maxClipFrame, clampedStart);
-    var clampedEnd = Math.Min(clampedMax, clampedStart + pinWindowFrames - 1);
+  bool IsExternalAppearancePinCoverageCurrent() {
+    if (string.IsNullOrWhiteSpace(externalAppearancePinOwnerId)) return false;
+    if (externalAppearancePinCount <= 0) return false;
+    if (externalAppearanceContentVersion != ActiveContentRegistryRuntime.ReloadVersion) return false;
+    return TextureResidencyCache.GetOwnerPinCount(externalAppearancePinOwnerId) >= externalAppearancePinCount;
+  }
 
-    // Frame-first + critical-first collection protects core body continuity (Skin*) during switch windows.
-    for (var frame = clampedStart; frame <= clampedEnd; frame++) {
-      CollectWindowAddressesForTargetSet(criticalSpriteTargets, categoryName, frame, maxPinAddresses);
-      if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
-      CollectWindowAddressesForTargetSet(spriteTargets, categoryName, frame, maxPinAddresses, skipCriticalTargets: true);
-      if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+  bool HasCurrentAppearancePinCoverage() {
+    if (appearancePinsExternallyManaged) {
+      return IsExternalAppearancePinCoverageCurrent();
     }
+    if (!IsAppearancePinSnapshotCurrent(true)) return false;
+    if (appearancePinAddressSet.Count <= 0) return false;
+
+    var currentPinCount = TextureResidencyCache.GetOwnerPinCount(appearanceOwnerId);
+    return currentPinCount >= appearancePinAddressSet.Count;
   }
 
-  void CollectWindowAddressesForTargetSet(
+  void CollectAnimationAtlasAddresses(
+    string animationName,
+    AnimData animation,
+    string categoryOverride,
+    int maxPinAddresses
+  ) {
+    if (animation == null) return;
+    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+
+    var categoryName = string.IsNullOrWhiteSpace(categoryOverride)
+      ? ResolveAnimationCategory(animationName, animation)
+      : categoryOverride;
+    var clipStart = Math.Max(animation.start, 1);
+    var clipEnd = Math.Max(animation.end, clipStart);
+
+    CollectAnimationAtlasAddressesForTargetSet(
+      criticalSpriteTargets,
+      categoryName,
+      clipStart,
+      clipEnd,
+      maxPinAddresses
+    );
+    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
+
+    CollectAnimationAtlasAddressesForTargetSet(
+      spriteTargets,
+      categoryName,
+      clipStart,
+      clipEnd,
+      maxPinAddresses,
+      skipCriticalTargets: true
+    );
+  }
+
+  void CollectAnimationAtlasAddressesForTargetSet(
     List<SpriteWithNormals> targets,
     string categoryName,
-    int frame,
+    int startFrame,
+    int endFrame,
     int maxPinAddresses,
     bool skipCriticalTargets = false
   ) {
@@ -857,78 +909,54 @@ public partial class AnimationController {
       if (target == null) continue;
       if (skipCriticalTargets && IsCriticalSpriteTarget(target)) continue;
       if (!IsSpriteTargetEnabled(target)) continue;
-      if (!target.TryGetFrameAddressPair(frame, out var pair, categoryName)) continue;
-
-      AddAppearancePinAddress(pair.StreamingColorAddress, maxPinAddresses);
-      AddAppearancePinAddress(pair.StreamingNormalAddress, maxPinAddresses);
+      target.CollectAnimationAtlasAddresses(
+        categoryName,
+        startFrame,
+        endFrame,
+        appearancePinAddressBuffer,
+        appearancePinAddressSet,
+        maxPinAddresses
+      );
     }
   }
 
-  void CollectPredictedInterruptWindows(string sourceAnimation, int pinWindowFrames, int maxPredicted, int maxPinAddresses) {
-    if (maxPredicted <= 0) return;
-    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
-    if (interruptData == null || !interruptData.TryGetValue(sourceAnimation, out var nextMap) || nextMap == null || nextMap.Count == 0) return;
-
-    predictedAnimations.Clear();
-    foreach (var pair in nextMap) {
-      var predictedAnimationName = pair.Value;
-      if (string.IsNullOrWhiteSpace(predictedAnimationName)) continue;
-      if (!predictedAnimations.Add(predictedAnimationName)) continue;
-      if (!animationData.TryGetValue(predictedAnimationName, out var predictedAnim)) continue;
-
-      var predictedCategory = ResolveAnimationCategory(predictedAnimationName, predictedAnim);
-      CollectWindowAddresses(predictedCategory, predictedAnim.start, predictedAnim.end, pinWindowFrames, maxPinAddresses);
-      if (appearancePinAddressBuffer.Count >= maxPinAddresses) break;
-      if (predictedAnimations.Count >= maxPredicted) break;
-    }
-  }
-
-  void AddAppearancePinAddress(string address, int maxPinAddresses) {
-    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
-    if (string.IsNullOrWhiteSpace(address)) return;
-    var normalized = address;
-    if (!appearancePinAddressSet.Add(normalized)) return;
-    if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
-    appearancePinAddressBuffer.Add(normalized);
-  }
-
-  bool IsAppearancePinSnapshotCurrent(bool streamingEnabled, int pinWindowFrames, int maxPredicted, int currentFrameBucket) {
+  bool IsAppearancePinSnapshotCurrent(bool streamingEnabled) {
     return pinSnapshotStreamingEnabled == streamingEnabled &&
-           pinSnapshotWindowFrames == pinWindowFrames &&
-           pinSnapshotPredictedAnimations == maxPredicted &&
-           pinSnapshotCurrentFrameBucket == currentFrameBucket &&
            pinSnapshotHasPendingSwitch == hasPendingAnimationSwitch &&
            string.Equals(pinSnapshotCurrentAnimation, currentAnimation, StringComparison.Ordinal) &&
            string.Equals(pinSnapshotPendingAnimation, pendingAnimation, StringComparison.Ordinal) &&
+           string.Equals(pinSnapshotPendingCategory, pendingCategory, StringComparison.Ordinal) &&
+           string.Equals(pinSnapshotPendingQueuedAnimation, pendingQueuedAnimation, StringComparison.Ordinal) &&
            pinSnapshotPendingStartFrame == pendingStartFrame &&
            pinSnapshotPendingReadyEndFrame == pendingReadyEndFrame &&
-           string.Equals(pinSnapshotQueuedAnimation, queuedAnimation, StringComparison.Ordinal);
+           string.Equals(pinSnapshotQueuedAnimation, queuedAnimation, StringComparison.Ordinal) &&
+           pinSnapshotContentReloadVersion == ActiveContentRegistryRuntime.ReloadVersion;
   }
 
-  void UpdateAppearancePinSnapshot(bool streamingEnabled, int pinWindowFrames, int maxPredicted, int currentFrameBucket) {
+  void UpdateAppearancePinSnapshot(bool streamingEnabled) {
     pinSnapshotStreamingEnabled = streamingEnabled;
-    pinSnapshotWindowFrames = pinWindowFrames;
-    pinSnapshotPredictedAnimations = maxPredicted;
     pinSnapshotCurrentAnimation = currentAnimation;
-    pinSnapshotCurrentFrameBucket = currentFrameBucket;
     pinSnapshotHasPendingSwitch = hasPendingAnimationSwitch;
     pinSnapshotPendingAnimation = pendingAnimation;
+    pinSnapshotPendingCategory = pendingCategory;
+    pinSnapshotPendingQueuedAnimation = pendingQueuedAnimation;
     pinSnapshotPendingStartFrame = pendingStartFrame;
     pinSnapshotPendingReadyEndFrame = pendingReadyEndFrame;
     pinSnapshotQueuedAnimation = queuedAnimation;
+    pinSnapshotContentReloadVersion = ActiveContentRegistryRuntime.ReloadVersion;
   }
 
   void InvalidateAppearancePinSnapshot() {
     pinSnapshotStreamingEnabled = false;
-    pinSnapshotWindowFrames = int.MinValue;
-    pinSnapshotPredictedAnimations = int.MinValue;
     pinSnapshotCurrentAnimation = null;
-    pinSnapshotCurrentFrameBucket = int.MinValue;
     pinSnapshotHasPendingSwitch = false;
     pinSnapshotPendingAnimation = null;
+    pinSnapshotPendingCategory = null;
+    pinSnapshotPendingQueuedAnimation = null;
     pinSnapshotPendingStartFrame = int.MinValue;
     pinSnapshotPendingReadyEndFrame = int.MinValue;
     pinSnapshotQueuedAnimation = null;
+    pinSnapshotContentReloadVersion = int.MinValue;
   }
 
   void PrimeSampledTargetsForAnimation(string targetCategory, int startFrame, int endFrame, int maxSampleTargets) {

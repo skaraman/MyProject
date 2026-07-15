@@ -53,7 +53,7 @@ public class GameplayFormWheelController : MonoBehaviour {
 
     formButtons.RefreshState();
     formButtons.SetHoverIndex(-1);
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayFormWheelController] source='" + (source ?? "") +
       "' active_form='" + EsperanzaForms.GetActive() + "'"
     );
@@ -104,7 +104,7 @@ public class GameplayFormWheelController : MonoBehaviour {
     }
 
     if (!IsUnlocked(index)) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayFormWheelController] Ignored locked form click" +
         " button='" + (target != null ? target.name : "-") + "'"
       );
@@ -127,7 +127,7 @@ public class GameplayFormWheelController : MonoBehaviour {
     formButtons.SetHoverIndex(-1);
     SyncButtons("gameplay_click");
     gameObject.SetActive(false);
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayFormWheelController] Selected form='" + resolvedForm +
       "' source='gameplay_wheel'"
     );

@@ -1,19 +1,34 @@
 #pragma warning disable CS0162 // Unreachable code detected
 using System;
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 
 /// <summary>
 /// Generic animation driver (non-MonoBehaviour). Host behaviours must call Tick/Cleanup and wire data/targets.
 /// </summary>
 public partial class AnimationController {
+  static readonly ProfilerMarker TickProfilerMarker = new ProfilerMarker("AnimationController.Tick");
+  static readonly ProfilerMarker TargetScanProfilerMarker = new ProfilerMarker("AnimationController.TargetScan");
+  static readonly ProfilerMarker PinRefreshProfilerMarker = new ProfilerMarker("AnimationController.PinRefresh");
+  static readonly ProfilerMarker PinCollectProfilerMarker = new ProfilerMarker("AnimationController.PinCollect");
+  static readonly ProfilerMarker PinCacheUpdateProfilerMarker = new ProfilerMarker("AnimationController.PinCacheUpdate");
+  static readonly ProfilerMarker AdvanceProfilerMarker = new ProfilerMarker("AnimationController.Advance");
+  static readonly ProfilerMarker SpriteApplyProfilerMarker = new ProfilerMarker("AnimationController.SpriteApply");
+  static readonly ProfilerMarker SwitchCategoryProfilerMarker = new ProfilerMarker("AnimationController.SwitchCategory");
+  static readonly ProfilerMarker SwitchBounceProfilerMarker = new ProfilerMarker("AnimationController.SwitchBounce");
+  static readonly ProfilerMarker SwitchEventsProfilerMarker = new ProfilerMarker("AnimationController.SwitchEvents");
+  static readonly Dictionary<string, AnimData> EmptyAnimationData = new();
+  static readonly Dictionary<string, Dictionary<string, string>> EmptyInterruptData = new();
+  static readonly Dictionary<string, Dictionary<string, List<BounceFrame>>> EmptyBounceData = new();
+  static readonly Dictionary<string, Dictionary<string, List<HBox>>> EmptyHBoxData = new();
+
   const bool EnableAttackTraceLogs = false;
   const bool SuppressRuntimeWarningLogsForPerfPass = true;
   const int MaxTargetsForGateReadinessChecks = 96;
   const int FirstPlayGateSampleTargetCount = 24;
   // Increased from 8 to 16 to ensure more initial frames are requested immediately on switch, reducing first-frame blanks.
   const int PrimeImmediateStartFrameBudget = 16;
-  const int FirstPlayActionPrimeMaxFrames = 72;
   const int MinAppearancePinAddressBudget = 32;
   const int LoadingOverlayPinAddressCap = 640;
   const int TransitionPrimeWindowFrames = 4;
@@ -25,7 +40,10 @@ public partial class AnimationController {
   public bool ForceLoop { get; set; }
 
   public string CurrentAnimation => currentAnimation;
-  public bool IsPlaying => isPlaying;
+  public bool IsPlaying =>
+    isPlaying ||
+    hasPendingAnimationSwitch ||
+    holdCurrentAnimationOnStartFrameUntilReady;
   public bool IsFacingRight => isFacingRight;
   public Action<string> OnEffectTriggered;
   public Action<string> OnProjectileTriggered;
@@ -33,10 +51,10 @@ public partial class AnimationController {
   private Transform rootTransform;
   private Vector3 baseScale = Vector3.one;
 
-  private Dictionary<string, AnimData> animationData = new();
-  private Dictionary<string, Dictionary<string, string>> interruptData = new();
-  private Dictionary<string, Dictionary<string, List<BounceFrame>>> bounceData = new();
-  private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData = new();
+  private Dictionary<string, AnimData> animationData = EmptyAnimationData;
+  private Dictionary<string, Dictionary<string, string>> interruptData = EmptyInterruptData;
+  private Dictionary<string, Dictionary<string, List<BounceFrame>>> bounceData = EmptyBounceData;
+  private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData = EmptyHBoxData;
 
   private GameObject[] spriteObjects = Array.Empty<GameObject>();
   private GameObject[] bounceObjects = Array.Empty<GameObject>();
@@ -46,11 +64,15 @@ public partial class AnimationController {
   private readonly List<SpriteWithNormals> spriteTargetScanBuffer = new(32);
   private readonly Dictionary<SpriteWithNormals, SpriteRenderer> spriteTargetRenderers = new();
   private readonly HashSet<SpriteWithNormals> startupVisualHoldSuppressedTargets = new();
-  private readonly Dictionary<string, string> animationKeyLookup = new(StringComparer.OrdinalIgnoreCase);
-  private readonly Dictionary<string, GameObject> bounceObjectByName = new(StringComparer.Ordinal);
-  private readonly Dictionary<string, List<GameObject>> hBoxObjectsByName = new(StringComparer.Ordinal);
+  private readonly Dictionary<string, string> animationKeyLookup = new(64, StringComparer.OrdinalIgnoreCase);
+  private readonly Dictionary<string, GameObject> bounceObjectByName = new(8, StringComparer.Ordinal);
+  private readonly Dictionary<string, List<GameObject>> hBoxObjectsByName = new(8, StringComparer.Ordinal);
+  private readonly Dictionary<GameObject, PolygonCollider2D> hBoxColliders = new(8);
+  private readonly Dictionary<GameObject, HitBox2D> hBoxHitBoxes = new(8);
   private readonly HashSet<string> seenAnimationCategories = new(StringComparer.Ordinal);
-  private readonly Dictionary<GameObject, List<int>> activeTweens = new();
+  private readonly Dictionary<GameObject, List<int>> activeTweens = new(16);
+  private readonly Dictionary<GameObject, BounceTweenState> bounceTweenStates = new(8);
+  private readonly Dictionary<GameObject, HBoxTweenState> hBoxTweenStates = new(8);
 
   private string currentAnimation;
   private string queuedAnimation;
@@ -67,6 +89,7 @@ public partial class AnimationController {
   private bool hadEnabledSpriteTargetsLastTick;
   private string activeSpriteCategory;
   private int lastAppliedSpriteFrame = int.MinValue;
+  private int lastAppliedSpriteContentVersion = int.MinValue;
   private bool activePunchTrace;
   private string activePunchTraceAnimation;
   private string activePunchTraceCategory;
@@ -94,24 +117,26 @@ public partial class AnimationController {
   private float startupVisualHoldStartedAt;
   private string appearanceOwnerId;
   private TextureResidencyCache.PinClass appearancePinClass = TextureResidencyCache.PinClass.Enemy;
-  private int appearancePinRefreshOffset;
+  private bool appearancePinsExternallyManaged;
+  private string externalAppearancePinOwnerId = "";
+  private int externalAppearancePinCount;
+  private int externalAppearanceContentVersion = -1;
   private readonly List<string> appearancePinAddressBuffer = new(512);
   private readonly HashSet<string> appearancePinAddressSet = new(StringComparer.OrdinalIgnoreCase);
-  private readonly HashSet<string> predictedAnimations = new(StringComparer.Ordinal);
   private readonly List<string> warmPlaybackAnimationScratch = new(16);
   private readonly HashSet<string> warmPlaybackAnimationSeenScratch = new(StringComparer.Ordinal);
   private readonly List<string> warmPlaybackAddressScratch = new(512);
   private readonly HashSet<string> warmPlaybackSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private bool pinSnapshotStreamingEnabled;
-  private int pinSnapshotWindowFrames = int.MinValue;
-  private int pinSnapshotPredictedAnimations = int.MinValue;
   private string pinSnapshotCurrentAnimation;
-  private int pinSnapshotCurrentFrameBucket = int.MinValue;
   private bool pinSnapshotHasPendingSwitch;
   private string pinSnapshotPendingAnimation;
+  private string pinSnapshotPendingCategory;
+  private string pinSnapshotPendingQueuedAnimation;
   private int pinSnapshotPendingStartFrame = int.MinValue;
   private int pinSnapshotPendingReadyEndFrame = int.MinValue;
   private string pinSnapshotQueuedAnimation;
+  private int pinSnapshotContentReloadVersion = int.MinValue;
 
   static bool runtimeSettingsLoaded;
   static int runtimeWarmupFrames = 24;
@@ -149,11 +174,10 @@ public partial class AnimationController {
     playOnStart = autoPlay;
     this.appearanceOwnerId = string.IsNullOrWhiteSpace(appearanceOwnerId) ? "" : appearanceOwnerId.Trim();
     this.appearancePinClass = appearancePinClass;
-    appearancePinRefreshOffset = root != null ? ObjectEntityId.GetModulo(root, int.MaxValue) : 0;
     appearancePinAddressBuffer.Clear();
     appearancePinAddressSet.Clear();
-    predictedAnimations.Clear();
     activeSpriteCategory = null;
+    lastAppliedSpriteContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
     InvalidateSpriteFrameCache();
     InvalidateAppearancePinSnapshot();
     if (playOnStart && !string.IsNullOrEmpty(defaultAnimation) && animationData.Count > 0) {
@@ -167,10 +191,10 @@ public partial class AnimationController {
     Dictionary<string, Dictionary<string, List<BounceFrame>>> bounces = null,
     Dictionary<string, Dictionary<string, List<HBox>>> hboxes = null
   ) {
-    animationData = animations ?? new Dictionary<string, AnimData>();
-    interruptData = interrupts ?? new Dictionary<string, Dictionary<string, string>>();
-    bounceData = bounces ?? new Dictionary<string, Dictionary<string, List<BounceFrame>>>();
-    hBoxData = hboxes ?? new Dictionary<string, Dictionary<string, List<HBox>>>();
+    animationData = animations ?? EmptyAnimationData;
+    interruptData = interrupts ?? EmptyInterruptData;
+    bounceData = bounces ?? EmptyBounceData;
+    hBoxData = hboxes ?? EmptyHBoxData;
     animationKeyLookup.Clear();
     foreach (var pair in animationData) {
       var key = pair.Key;
@@ -178,6 +202,7 @@ public partial class AnimationController {
       animationKeyLookup[key] = key;
     }
     seenAnimationCategories.Clear();
+    PrepareHBoxTweenStates();
     ClearStartFrameHold();
     InvalidateSpriteFrameCache();
     InvalidateAppearancePinSnapshot();
@@ -194,11 +219,13 @@ public partial class AnimationController {
   public void SetBounceObjects(IEnumerable<GameObject> targets) {
     bounceObjects = ResolveTargetArray(targets);
     RebuildBounceObjectLookup();
+    PrepareBounceTweenStates();
   }
 
   public void SetHBoxObjects(IEnumerable<GameObject> targets) {
     hBoxObjects = ResolveTargetArray(targets);
     RebuildHBoxObjectLookup();
+    PrepareHBoxTweenStates();
   }
 
   static GameObject[] ResolveTargetArray(IEnumerable<GameObject> targets) {
@@ -233,6 +260,8 @@ public partial class AnimationController {
     foreach (var pair in hBoxObjectsByName) {
       pair.Value.Clear();
     }
+    hBoxColliders.Clear();
+    hBoxHitBoxes.Clear();
     if (hBoxObjects == null || hBoxObjects.Length == 0) return;
     for (var i = 0; i < hBoxObjects.Length; i++) {
       var go = hBoxObjects[i];
@@ -242,12 +271,23 @@ public partial class AnimationController {
         hBoxObjectsByName[go.name] = list;
       }
       list.Add(go);
+      if (go.TryGetComponent<PolygonCollider2D>(out var collider)) {
+        hBoxColliders[go] = collider;
+      }
+      if (go.TryGetComponent<HitBox2D>(out var hitBox)) {
+        hBoxHitBoxes[go] = hitBox;
+      }
     }
   }
 
   public void Tick(float deltaTime) {
+    TickProfilerMarker.Begin();
     TextureResidencyCache.PumpOncePerFrame();
+    RefreshSpriteTargetsAfterContentReload();
+
+    TargetScanProfilerMarker.Begin();
     var hasEnabledSpriteTargets = HasEnabledSpriteTargets();
+    TargetScanProfilerMarker.End();
     if (!hasEnabledSpriteTargets) {
       if (hadEnabledSpriteTargetsLastTick) {
         ReleaseAppearancePins();
@@ -259,9 +299,28 @@ public partial class AnimationController {
         InvalidateSpriteFrameCache();
       }
       hadEnabledSpriteTargetsLastTick = true;
+      PinRefreshProfilerMarker.Begin();
       RefreshAppearancePins();
+      PinRefreshProfilerMarker.End();
     }
+
+    AdvanceProfilerMarker.Begin();
     AdvanceAnimation(deltaTime);
+    AdvanceProfilerMarker.End();
+    TickProfilerMarker.End();
+  }
+
+  void RefreshSpriteTargetsAfterContentReload() {
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (lastAppliedSpriteContentVersion == contentVersion) return;
+
+    lastAppliedSpriteContentVersion = contentVersion;
+    InvalidateSpriteFrameCache();
+    for (var i = 0; i < spriteTargets.Count; i++) {
+      var target = spriteTargets[i];
+      if (target == null) continue;
+      target.ForceUpdateSpriteAndNormal(currentFrame);
+    }
   }
 
   public bool PlayAnimation(string animationName, bool forceRestart = false, bool resolveInterrupts = true) {
@@ -333,20 +392,15 @@ public partial class AnimationController {
       StreamingWarmOrchestrator.IsWarmGateRunning;
     var gateMs = loadingOverlayWarmGateActive ? Math.Max(runtimeSwitchGateMs, 0) : 0;
     var shouldHoldInitialPlayerStartFrame = ShouldHoldInitialPlayerStartFrame(enabledTargetCount, category);
+    var shouldHoldEffectStartFrame = ShouldHoldEffectStartFrame(enabledTargetCount, category, anim);
+    var shouldHoldStartFrame =
+      shouldHoldInitialPlayerStartFrame ||
+      shouldHoldEffectStartFrame;
 
     if (gateMs <= 0) {
       // Global no-gate mode: commit immediately and let per-frame sync absorb streaming lag.
       if (isTransitionCategory) {
         PrimeTransitionAndQueuedWindows(category, anim, queued);
-      }
-      else if (shouldHoldInitialPlayerStartFrame) {
-        PrimeTargetsForAnimation(category, anim.start, anim.start);
-      }
-      else {
-        var shouldPrimeFullWindow =
-          !HasSeenAnimationCategory(category) &&
-          !IsLocomotionAnimation(resolvedAnimation);
-        PrimeTargetsForAnimation(category, anim.start, anim.end, primeFullWindow: shouldPrimeFullWindow);
       }
       if (shouldHoldInitialPlayerStartFrame) {
         BeginStartupVisualHold();
@@ -357,7 +411,8 @@ public partial class AnimationController {
         resolvedAnimation,
         queued,
         category,
-        holdOnStartFrameUntilReady: shouldHoldInitialPlayerStartFrame
+        holdOnStartFrameUntilReady: shouldHoldStartFrame,
+        deferInitialVisualApply: true
       );
       return true;
     }
@@ -408,7 +463,12 @@ public partial class AnimationController {
     }
 
     if (EnableAttackTraceLogs) LogAttackTrace("commit_final", requestedAnimation: requestedAnimation, resolvedAnimation: resolvedAnimation, queuedAnimationName: queued, category: category);
-    CommitAnimationSwitch(resolvedAnimation, queued, category);
+    CommitAnimationSwitch(
+      resolvedAnimation,
+      queued,
+      category,
+      holdOnStartFrameUntilReady: shouldHoldEffectStartFrame
+    );
     return true;
   }
 

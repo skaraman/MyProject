@@ -88,8 +88,17 @@ public partial class AnimationController {
       }
       else if (!AreAllTargetsReadyForWindow(holdCategory, holdFrame, holdFrame)) {
         PrimeTargetsForAnimation(holdCategory, holdFrame, holdFrame);
-        TraceActivePunchFrameStep(holdFrame, deltaMs);
-        return;
+        var holdSeconds = Time.realtimeSinceStartup - pendingSwitchStartTime;
+        if (holdSeconds >= MaxSwitchHardTimeoutSeconds) {
+          UpdateSprites(holdFrame);
+          CompleteStartupVisualHold("timeout");
+          isPlaying = true;
+          ClearStartFrameHold();
+        }
+        else {
+          TraceActivePunchFrameStep(holdFrame, deltaMs);
+          return;
+        }
       }
       else {
         UpdateSprites(holdFrame);
@@ -109,7 +118,7 @@ public partial class AnimationController {
     if (!pingPong) {
       int frameOffset = Mathf.FloorToInt((anim.end - anim.start) * normalTime);
       currentFrame = anim.start + frameOffset;
-      if (currentFrame >= anim.end) {
+      if (normalTime >= 1f) {
         if (!string.IsNullOrEmpty(queuedAnimation)) {
           TraceActivePunchFrameStep(anim.end, deltaMs);
           EndActivePunchTrace("queued_next", anim.end);
@@ -147,7 +156,7 @@ public partial class AnimationController {
     else {
       int frameOffset = Mathf.FloorToInt((anim.end - anim.start) * normalTime);
       currentFrame = anim.end - frameOffset;
-      if (currentFrame <= anim.start) {
+      if (normalTime >= 1f) {
         isPlaying = true;
         currentFrame = anim.start;
         pingPong = false;
@@ -218,17 +227,20 @@ public partial class AnimationController {
 
   static string NormalizeAnimationName(string value) {
     if (string.IsNullOrWhiteSpace(value)) return "";
-    return value
-      .Replace("\u200B", "")
-      .Replace("\uFEFF", "")
-      .Trim();
+    var hasZWSP = value.IndexOf('\u200B') >= 0;
+    var hasBOM = value.IndexOf('\uFEFF') >= 0;
+    if (hasZWSP || hasBOM) {
+      return value.Replace("\u200B", "").Replace("\uFEFF", "").Trim();
+    }
+    return value;
   }
 
   void CommitAnimationSwitch(
     string nextAnimation,
     string nextQueuedAnimation,
     string targetCategory,
-    bool holdOnStartFrameUntilReady = false
+    bool holdOnStartFrameUntilReady = false,
+    bool deferInitialVisualApply = false
   ) {
     EndActivePunchTrace("interrupted_by_switch", currentFrame);
     currentAnimation = nextAnimation;
@@ -244,27 +256,37 @@ public partial class AnimationController {
       holdCurrentAnimationOnStartFrameUntilReady = true;
       holdCategory = targetCategory;
       holdFrame = Math.Max(anim.start, 1);
+      pendingSwitchStartTime = Time.realtimeSinceStartup;
     }
     else {
       ClearStartFrameHold();
     }
 
+    SwitchCategoryProfilerMarker.Begin();
     SetAnimationCategory(targetCategory);
+    SwitchCategoryProfilerMarker.End();
     if (holdOnStartFrameUntilReady) {
       PrimeTargetsForAnimation(targetCategory, currentFrame, currentFrame);
     }
-    else if (ShouldDeferInitialVisualApply(targetCategory, currentFrame)) {
-      PrimeTargetsForAnimation(targetCategory, currentFrame, currentFrame);
+    else if (!deferInitialVisualApply) {
+      if (ShouldDeferInitialVisualApply(targetCategory, currentFrame)) {
+        PrimeTargetsForAnimation(targetCategory, currentFrame, currentFrame);
+      }
+      else {
+        UpdateSprites(currentFrame);
+      }
     }
-    else {
-      UpdateSprites(currentFrame);
-    }
+    SwitchBounceProfilerMarker.Begin();
     SetBounces(resetOffensiveHBoxes: true);
+    SwitchBounceProfilerMarker.End();
+
+    SwitchEventsProfilerMarker.Begin();
     ResetAnimationEvents(anim);
     TryTriggerFrameEvents(anim, lastFrame, currentFrame);
     lastFrame = currentFrame;
     MarkAnimationCategorySeen(targetCategory);
     BeginActivePunchTrace(anim, targetCategory);
+    SwitchEventsProfilerMarker.End();
   }
 
   bool ShouldDeferInitialVisualApply(string targetCategory, int frame) {
@@ -299,7 +321,6 @@ public partial class AnimationController {
 
   private void SetAnimationCategory(string category) {
     var normalizedCategory = category ?? "";
-    if (string.Equals(activeSpriteCategory, normalizedCategory, StringComparison.Ordinal)) return;
     if (EnableAttackTraceLogs) LogAttackTrace("set_category", category: normalizedCategory, note: "targets=" + spriteTargets.Count);
     activeSpriteCategory = normalizedCategory;
     foreach (var target in spriteTargets) {
@@ -335,10 +356,13 @@ public partial class AnimationController {
     if (frame == int.MinValue) return;
     if (frame == lastAppliedSpriteFrame) return;
     lastAppliedSpriteFrame = frame;
+
+    SpriteApplyProfilerMarker.Begin();
     foreach (var target in spriteTargets) {
       if (!IsSpriteTargetEnabled(target)) continue;
       target.UpdateSpriteAndNormal(frame);
     }
+    SpriteApplyProfilerMarker.End();
   }
 
   private void ApplyFlip() {

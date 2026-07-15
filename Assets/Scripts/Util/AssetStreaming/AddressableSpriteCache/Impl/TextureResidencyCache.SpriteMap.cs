@@ -111,7 +111,7 @@ public static partial class TextureResidencyCache {
     if (!ShouldLogAtlasNameDiagnostics(entry.address)) return;
 
     var requestedAddress = string.IsNullOrWhiteSpace(entry.lastRequestedAddress) ? entry.address : entry.lastRequestedAddress;
-    Debug.Log(
+    RuntimeLog.Log(
       "[TextureResidencyCache] Atlas sprite map build" +
       " requested='" + (requestedAddress ?? "") + "'" +
       " atlas='" + (entry.address ?? "") + "'" +
@@ -274,13 +274,14 @@ public static partial class TextureResidencyCache {
     if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out _, out _)) return;
 
     var normalizedSliceAddress = sliceOrAtlasAddress.Trim();
+    EnsureExactSliceSupplementCollections(entry);
     if (entry.pendingExactSliceSupplementAddresses.Contains(normalizedSliceAddress)) return;
     if (entry.failedExactSliceSupplementAddresses.Contains(normalizedSliceAddress)) return;
 
     entry.pendingExactSliceSupplementAddresses.Add(normalizedSliceAddress);
     pendingExactSliceSupplementQueue.Enqueue(new ExactSliceSupplementRequest(entry, normalizedSliceAddress));
     if (!ShouldLogAtlasNameDiagnostics(entry.address)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[TextureResidencyCache] Queue exact slice supplement" +
       " requested='" + normalizedSliceAddress + "'" +
       " atlas='" + (entry.address ?? "") + "'" +

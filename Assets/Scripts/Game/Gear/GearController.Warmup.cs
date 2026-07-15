@@ -51,23 +51,47 @@ public partial class GearController {
       return 0;
     }
 
-    var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
+    BuildCharacterAnimationWarmPlan(
+      persistentWarmAnimationScratch,
+      persistentWarmAnimationSeenScratch
+    );
     var startingCount = outAddresses.Count;
     CollectPersistentStartupAddresses(
       SkinObjects,
-      startupWarmFrames,
       outAddresses,
       seenAddresses,
       maxUniqueAddresses
     );
     CollectPersistentStartupAddresses(
       GearObjects,
-      startupWarmFrames,
       outAddresses,
       seenAddresses,
       maxUniqueAddresses
     );
-    return Mathf.Max(outAddresses.Count - startingCount, 0);
+    var collectedCount = Mathf.Max(outAddresses.Count - startingCount, 0);
+    persistentWarmAnimationScratch.Clear();
+    persistentWarmAnimationSeenScratch.Clear();
+    return collectedCount;
+  }
+
+  public int CollectPersistentEffectStartupAddresses(
+    List<string> outAddresses,
+    HashSet<string> seenAddresses = null,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    BuildCharacterAnimationWarmPlan(
+      persistentWarmAnimationScratch,
+      persistentWarmAnimationSeenScratch
+    );
+    var collectedCount = CollectPersistentEffectStartupAddresses(
+      outAddresses,
+      persistentWarmAnimationScratch,
+      seenAddresses,
+      maxUniqueAddresses
+    );
+    persistentWarmAnimationScratch.Clear();
+    persistentWarmAnimationSeenScratch.Clear();
+    return collectedCount;
   }
 
   public int CollectPersistentEffectStartupAddresses(
@@ -94,9 +118,9 @@ public partial class GearController {
       linkedEffectWarmKeyScratch,
       linkedEffectWarmKeySeenScratch
     );
-    CollectPersistentEffectStartupAddresses(Effects.Esperanza, linkedEffectWarmKeyScratch, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
-    CollectPersistentEffectStartupAddresses(Effects.Things, linkedEffectWarmKeyScratch, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
-    CollectPersistentEffectStartupAddresses(Effects.Imp, linkedEffectWarmKeyScratch, warmFrames, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Esperanza, linkedEffectWarmKeyScratch, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Things, linkedEffectWarmKeyScratch, outAddresses, seenAddresses, maxUniqueAddresses);
+    CollectPersistentEffectStartupAddresses(Effects.Imp, linkedEffectWarmKeyScratch, outAddresses, seenAddresses, maxUniqueAddresses);
     linkedProjectileWarmKeyScratch.Clear();
     linkedProjectileWarmKeySeenScratch.Clear();
     AnimationLinkUtility.CollectLinkedProjectileKeys(
@@ -133,23 +157,27 @@ public partial class GearController {
       return 0;
     }
 
-    var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
+    BuildCharacterAnimationWarmPlan(
+      persistentWarmAnimationScratch,
+      persistentWarmAnimationSeenScratch
+    );
     var startingCount = outAddresses.Count;
     CollectPersistentStartupAddresses(
       SkinObjects,
-      startupWarmFrames,
       outAddresses,
       seenAddresses,
       maxUniqueAddresses
     );
     CollectPersistentStartupAddresses(
       GearObjects,
-      startupWarmFrames,
       outAddresses,
       seenAddresses,
       maxUniqueAddresses
     );
-    return Mathf.Max(outAddresses.Count - startingCount, 0);
+    var collectedCount = Mathf.Max(outAddresses.Count - startingCount, 0);
+    persistentWarmAnimationScratch.Clear();
+    persistentWarmAnimationSeenScratch.Clear();
+    return collectedCount;
   }
 
   public int CollectPersistentProjectileStartupAssetAddresses(
@@ -200,7 +228,6 @@ public partial class GearController {
 
   void CollectPersistentStartupAddresses(
     GameObject[] objects,
-    int startupWarmFrames,
     List<string> outAddresses,
     HashSet<string> seenAddresses,
     int maxUniqueAddresses
@@ -219,7 +246,6 @@ public partial class GearController {
       var target = go.GetComponent<SpriteWithNormals>();
       CollectPersistentStartupAddresses(
         target,
-        startupWarmFrames,
         outAddresses,
         seenAddresses,
         maxUniqueAddresses
@@ -229,19 +255,17 @@ public partial class GearController {
 
   void CollectPersistentStartupAddresses(
     SpriteWithNormals target,
-    int startupWarmFrames,
     List<string> outAddresses,
     HashSet<string> seenAddresses,
     int maxUniqueAddresses
   ) {
-    if (target == null || outAddresses == null || maxUniqueAddresses <= 0) {
+    if (target == null || target.DoNotRender || outAddresses == null || maxUniqueAddresses <= 0) {
       return;
     }
 
     if (!target.IsAnimation) {
-      target.CollectAnimationWindowAddresses(
+      target.CollectAnimationAtlasAddresses(
         target.category,
-        0,
         0,
         0,
         outAddresses,
@@ -251,26 +275,23 @@ public partial class GearController {
       return;
     }
 
-    var warmFrames = Mathf.Max(startupWarmFrames, 1);
-    foreach (var animationPair in Animations.Esperanza) {
+    for (var animationIndex = 0; animationIndex < persistentWarmAnimationScratch.Count; animationIndex++) {
       if (outAddresses.Count >= maxUniqueAddresses) {
         return;
       }
 
-      var animationName = animationPair.Key;
-      var animationData = animationPair.Value;
-      if (animationData == null || string.IsNullOrWhiteSpace(animationName)) {
+      var animationName = persistentWarmAnimationScratch[animationIndex];
+      if (!Animations.Esperanza.TryGetValue(animationName, out var animationData) || animationData == null) {
         continue;
       }
 
       var category = ResolveEsperanzaAnimationCategory(animationName, animationData);
       var clipStart = Mathf.Max(animationData.start, 1);
-      var clipEnd = Mathf.Min(Mathf.Max(animationData.end, clipStart), clipStart + warmFrames - 1);
-      target.CollectAnimationWindowAddresses(
+      var clipEnd = Mathf.Max(animationData.end, clipStart);
+      target.CollectAnimationAtlasAddresses(
         category,
         clipStart,
         clipEnd,
-        0,
         outAddresses,
         seenAddresses,
         maxUniqueAddresses
@@ -406,7 +427,7 @@ public partial class GearController {
     }
 
     if (ShouldLogRuntimeInitDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController][StartupAppearanceWarmup]" +
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " object=" + gameObject.name +
@@ -433,9 +454,12 @@ public partial class GearController {
       return 0;
     }
 
-    if (!TryResolveStartupAnimationWindow(out var category, out var startFrame, out var endFrame)) {
+    if (!TryResolveStartupAnimationData(out var animationName, out var animationData)) {
       return 0;
     }
+    var category = ResolveEsperanzaAnimationCategory(animationName, animationData);
+    var startFrame = Mathf.Max(animationData.start, 1);
+    var endFrame = Mathf.Max(animationData.end, startFrame);
 
     var startingCount = outAddresses.Count;
     CollectStartupAppearanceAddresses(
@@ -526,11 +550,10 @@ public partial class GearController {
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
       if (target == null || target.DoNotRender) continue;
-      target.CollectAnimationWindowAddresses(
+      target.CollectAnimationAtlasAddresses(
         category,
         startFrame,
         endFrame,
-        0,
         outAddresses,
         seenAddresses,
         maxUniqueAddresses
@@ -551,17 +574,25 @@ public partial class GearController {
   }
 
   public int CountBootstrapSkinStartupReadySamples(out int totalSampleCount) {
+    return CountPersistentSkinStartupReadySamples(out totalSampleCount);
+  }
+
+  public int CountPersistentSkinStartupReadySamples(out int totalSampleCount) {
     totalSampleCount = 0;
     var readyCount = 0;
-    var startupWarmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
-    CountPersistentStartupReadiness(SkinObjects, startupWarmFrames, ref readyCount, ref totalSampleCount);
-    CountPersistentStartupReadiness(GearObjects, startupWarmFrames, ref readyCount, ref totalSampleCount);
+    BuildCharacterAnimationWarmPlan(
+      persistentWarmAnimationScratch,
+      persistentWarmAnimationSeenScratch
+    );
+    CountPersistentStartupReadiness(SkinObjects, ref readyCount, ref totalSampleCount);
+    CountPersistentStartupReadiness(GearObjects, ref readyCount, ref totalSampleCount);
+    persistentWarmAnimationScratch.Clear();
+    persistentWarmAnimationSeenScratch.Clear();
     return readyCount;
   }
 
   void CountPersistentStartupReadiness(
     GameObject[] objects,
-    int startupWarmFrames,
     ref int readyCount,
     ref int totalSampleCount
   ) {
@@ -573,13 +604,12 @@ public partial class GearController {
       var go = objects[i];
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
-      CountPersistentStartupReadiness(target, startupWarmFrames, ref readyCount, ref totalSampleCount);
+      CountPersistentStartupReadiness(target, ref readyCount, ref totalSampleCount);
     }
   }
 
   void CountPersistentStartupReadiness(
     SpriteWithNormals target,
-    int startupWarmFrames,
     ref int readyCount,
     ref int totalSampleCount
   ) {
@@ -592,17 +622,15 @@ public partial class GearController {
       return;
     }
 
-    var warmFrames = Mathf.Max(startupWarmFrames, 1);
-    foreach (var animationPair in Animations.Esperanza) {
-      var animationName = animationPair.Key;
-      var animationData = animationPair.Value;
-      if (animationData == null || string.IsNullOrWhiteSpace(animationName)) {
+    for (var animationIndex = 0; animationIndex < persistentWarmAnimationScratch.Count; animationIndex++) {
+      var animationName = persistentWarmAnimationScratch[animationIndex];
+      if (!Animations.Esperanza.TryGetValue(animationName, out var animationData) || animationData == null) {
         continue;
       }
 
       var category = ResolveEsperanzaAnimationCategory(animationName, animationData);
       var clipStart = Mathf.Max(animationData.start, 1);
-      var clipEnd = Mathf.Min(Mathf.Max(animationData.end, clipStart), clipStart + warmFrames - 1);
+      var clipEnd = Mathf.Max(animationData.end, clipStart);
       CountAnimationWindowReadiness(target, category, clipStart, clipEnd, ref readyCount, ref totalSampleCount);
     }
   }
@@ -641,6 +669,7 @@ public partial class GearController {
     }
 
     if (!target.IsAnimation) {
+      if (!target.TryGetFrameAddressPair(0, out _, category)) return;
       totalSampleCount += 1;
       if (target.GetFrameColdLoadState(0, out _, category).IsCommitReady()) {
         readyCount += 1;
@@ -651,6 +680,7 @@ public partial class GearController {
     var minFrame = Mathf.Max(Mathf.Min(startFrame, endFrame), 1);
     var maxFrame = Mathf.Max(Mathf.Max(startFrame, endFrame), minFrame);
     for (var frame = minFrame; frame <= maxFrame; frame++) {
+      if (!target.TryGetFrameAddressPair(frame, out _, category)) continue;
       totalSampleCount += 1;
       if (target.GetFrameColdLoadState(frame, out _, category).IsCommitReady()) {
         readyCount += 1;
@@ -670,7 +700,6 @@ public partial class GearController {
   void CollectPersistentEffectStartupAddresses(
     Dictionary<string, EffectData> effects,
     IReadOnlyList<string> effectKeys,
-    int warmFrames,
     List<string> outAddresses,
     HashSet<string> seenAddresses,
     int maxUniqueAddresses
@@ -690,12 +719,11 @@ public partial class GearController {
       }
 
       var startFrame = Mathf.Max(effectData.start, 1);
-      var endFrame = Mathf.Max(startFrame, Mathf.Min(Mathf.Max(effectData.end, startFrame), startFrame + Mathf.Max(warmFrames, 1) - 1));
-      effectNode.CollectAnimationWindowAddresses(
+      var endFrame = Mathf.Max(effectData.end, startFrame);
+      effectNode.CollectAnimationAtlasAddresses(
         effectKey,
         startFrame,
         endFrame,
-        0,
         outAddresses,
         seenAddresses,
         maxUniqueAddresses
@@ -744,7 +772,7 @@ public partial class GearController {
     );
 
     if (ShouldLogRuntimeInitDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController] CoreCombatEffectWarmup" +
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " object=" + gameObject.name +
@@ -765,11 +793,21 @@ public partial class GearController {
 
   void QueueWarmupForEquippedCharacter(Dictionary<string, string> equippedPartPrefixes) {
     if (!Application.isPlaying || !queueEquippedAnimationWarmup) return;
+    if (SceneAppearanceAtlasPinsManaged) return;
     pendingEquipWarmupPartPrefixes = equippedPartPrefixes != null
       ? new Dictionary<string, string>(equippedPartPrefixes, StringComparer.OrdinalIgnoreCase)
       : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     if (!equippedStartupWarmupCompleted) return;
     TryStartPendingEquipWarmup("queue_request");
+  }
+
+  void HandleAbilityLoadoutChanged(string formName) {
+    var activeForm = EsperanzaForms.GetActive();
+    if (!string.Equals(formName, activeForm, StringComparison.OrdinalIgnoreCase)) return;
+
+    QueueWarmupForEquippedCharacter(
+      new Dictionary<string, string>(equipPartPrefixScratch, StringComparer.OrdinalIgnoreCase)
+    );
   }
 
   void TryStartPendingEquipWarmup(string source) {
@@ -778,7 +816,7 @@ public partial class GearController {
     if (!equippedStartupWarmupCompleted && startupAppearanceWarmupRoutine != null) return;
     if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
       if (ShouldLogRuntimeInitDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GearController] DeferredEquipWarmup" +
           " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
           " object=" + gameObject.name +
@@ -798,12 +836,11 @@ public partial class GearController {
     if (equipWarmupRoutine == null) return;
     StopCoroutine(equipWarmupRoutine);
     equipWarmupRoutine = null;
+    equipWarmAnimationScratch.Clear();
+    equipWarmAnimationSeenScratch.Clear();
   }
 
   IEnumerator WarmEquippedCharacterRoutine(Dictionary<string, string> equippedPartPrefixes) {
-    while (Application.isPlaying && SpriteStreamingLoadingState.IsLoadingOverlayActive) {
-      yield return null;
-    }
     if (!Application.isPlaying) {
       equipWarmupRoutine = null;
       yield break;
@@ -811,6 +848,7 @@ public partial class GearController {
 
     equipWarmupAddressScratch.Clear();
     equipWarmupSeenAddressScratch.Clear();
+    BuildEquippedAnimationWarmPlan();
     var loadingOverlayActive = SpriteStreamingLoadingState.IsLoadingOverlayActive;
     var overlayWarmGateManaged = loadingOverlayActive &&
                                  StreamingWarmOrchestrator.IsWarmGateRunning;
@@ -836,7 +874,7 @@ public partial class GearController {
     }
 
     if (logEquipWarmupSummary) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController] EquipWarmupComplete" +
         " queued=" + queuedAddressCount +
         " unique=" + equipWarmupSeenAddressScratch.Count +
@@ -848,6 +886,8 @@ public partial class GearController {
 
     equipWarmupAddressScratch.Clear();
     equipWarmupSeenAddressScratch.Clear();
+    equipWarmAnimationScratch.Clear();
+    equipWarmAnimationSeenScratch.Clear();
     if (ReferenceEquals(pendingEquipWarmupPartPrefixes, equippedPartPrefixes)) {
       pendingEquipWarmupPartPrefixes = null;
     }
@@ -862,6 +902,72 @@ public partial class GearController {
     PrimeLinkedEffectAnimationWarmup(Animations.Esperanza, "equip_loading");
   }
 
+  void BuildEquippedAnimationWarmPlan() {
+    BuildCharacterAnimationWarmPlan(
+      equipWarmAnimationScratch,
+      equipWarmAnimationSeenScratch
+    );
+  }
+
+  void BuildCharacterAnimationWarmPlan(
+    List<string> animationPlan,
+    HashSet<string> seenAnimations
+  ) {
+    animationPlan.Clear();
+    seenAnimations.Clear();
+
+    for (var i = 0; i < DefaultCharacterAnimationKeys.Length; i++) {
+      AddCharacterWarmAnimation(DefaultCharacterAnimationKeys[i], animationPlan, seenAnimations);
+    }
+
+    AddCharacterWarmAnimation(defaultAnimation, animationPlan, seenAnimations);
+    if (animationController != null) {
+      AddCharacterWarmAnimation(animationController.CurrentAnimation, animationPlan, seenAnimations);
+    }
+
+    var activeForm = EsperanzaForms.GetActive();
+    if (AttacksMapToForms.all.TryGetValue(activeForm, out var activeActionMap) &&
+        activeActionMap != null) {
+      foreach (var action in activeActionMap) {
+        AddCharacterWarmAnimation(action.Value, animationPlan, seenAnimations);
+      }
+    }
+
+    var equippedAbilities = EsperanzaAbilityLoadouts.GetAbilitiesView(activeForm);
+    for (var i = 0; i < equippedAbilities.Count; i++) {
+      AddCharacterWarmAnimation(equippedAbilities[i], animationPlan, seenAnimations);
+    }
+
+    var addedTransition = true;
+    while (addedTransition) {
+      addedTransition = false;
+      foreach (var source in Interrupts.Esperanza) {
+        if (!seenAnimations.Contains(source.Key)) continue;
+        if (source.Value == null) continue;
+
+        foreach (var transition in source.Value) {
+          if (!seenAnimations.Contains(transition.Key)) continue;
+          if (!AddCharacterWarmAnimation(transition.Value, animationPlan, seenAnimations)) continue;
+          addedTransition = true;
+        }
+      }
+    }
+  }
+
+  bool AddCharacterWarmAnimation(
+    string animationName,
+    List<string> animationPlan,
+    HashSet<string> seenAnimations
+  ) {
+    if (string.IsNullOrWhiteSpace(animationName)) return false;
+    if (!Animations.Esperanza.TryGetValue(animationName, out var animation) || animation == null) {
+      return false;
+    }
+    if (!seenAnimations.Add(animationName)) return false;
+    animationPlan.Add(animationName);
+    return true;
+  }
+
   IEnumerator CollectSkinWarmupAddresses(bool overlayWarmGateActive) {
     if (SkinObjects == null || SkinObjects.Length == 0) yield break;
 
@@ -870,7 +976,7 @@ public partial class GearController {
       if (go == null) continue;
       var target = go.GetComponent<SpriteWithNormals>();
       if (target == null) continue;
-      yield return CollectFullEsperanzaAnimationAddresses(target, overlayWarmGateActive);
+      yield return CollectPlannedEsperanzaAnimationAtlasAddresses(target, overlayWarmGateActive);
     }
   }
 
@@ -890,18 +996,20 @@ public partial class GearController {
         target.SetLabelPrefix(normalizedMappedPrefix);
       }
 
-      yield return CollectFullEsperanzaAnimationAddresses(target, overlayWarmGateActive);
+      yield return CollectPlannedEsperanzaAnimationAtlasAddresses(target, overlayWarmGateActive);
     }
   }
 
-  IEnumerator CollectFullEsperanzaAnimationAddresses(SpriteWithNormals target, bool overlayWarmGateActive) {
+  IEnumerator CollectPlannedEsperanzaAnimationAtlasAddresses(
+    SpriteWithNormals target,
+    bool overlayWarmGateActive
+  ) {
     if (target == null) yield break;
     if (!target.IsAnimation) {
-      target.CollectAnimationWindowAddresses(
+      target.CollectAnimationAtlasAddresses(
         target.category,
         0,
         0,
-        lookAheadFrames: 0,
         equipWarmupAddressScratch,
         equipWarmupSeenAddressScratch
       );
@@ -916,21 +1024,19 @@ public partial class GearController {
       : 1;
     var chunksSinceYield = 0;
 
-    foreach (var animationPair in Animations.Esperanza) {
-      var animationName = animationPair.Key;
-      var anim = animationPair.Value;
-      if (anim == null || string.IsNullOrWhiteSpace(animationName)) continue;
+    for (var animationIndex = 0; animationIndex < equipWarmAnimationScratch.Count; animationIndex++) {
+      var animationName = equipWarmAnimationScratch[animationIndex];
+      if (!Animations.Esperanza.TryGetValue(animationName, out var anim) || anim == null) continue;
 
       var category = ResolveEsperanzaAnimationCategory(animationName, anim);
       var clipStart = Mathf.Max(anim.start, 1);
       var clipEnd = Mathf.Max(anim.end, clipStart);
       for (var frameStart = clipStart; frameStart <= clipEnd; frameStart += chunkFrames) {
         var frameEnd = Mathf.Min(frameStart + chunkFrames - 1, clipEnd);
-        target.CollectAnimationWindowAddresses(
+        target.CollectAnimationAtlasAddressesUncached(
           category,
           frameStart,
           frameEnd,
-          lookAheadFrames: 0,
           equipWarmupAddressScratch,
           equipWarmupSeenAddressScratch
         );
@@ -970,7 +1076,7 @@ public partial class GearController {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[GearController] PrimedLinkedEffects" +
       " source=" + NormalizeDebugValue(source) +
       " object=" + gameObject.name +

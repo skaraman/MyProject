@@ -99,21 +99,21 @@ public static class Interrupts {
 
   public static Dictionary<string, Dictionary<string, string>> Imp { get; } = new Dictionary<string, Dictionary<string, string>> {
     ["Idle"] = new Dictionary<string, string> {
-      { "Run", "Run" }, { "Attack", "Attack" }, { "Hurt", "Hurt" }, { "Jump", "Jump" }, { "Death", "Death" }
+      { "Run", "Run" }, { "Attack", "Attack" }, { "Hurt", "Hurt" }, { "Jump", "Jump" }, { "BaseDeath1", "BaseDeath1" }
     },
     ["Run"] = new Dictionary<string, string> {
-      { "Idle", "Idle" }, { "Attack", "Attack" }, { "Hurt", "Hurt" }, { "Jump", "Jump" }, { "Death", "Death" }
+      { "Idle", "Idle" }, { "Attack", "Attack" }, { "Hurt", "Hurt" }, { "Jump", "Jump" }, { "BaseDeath1", "BaseDeath1" }
     },
     ["Attack"] = new Dictionary<string, string> {
-      { "Hurt", "Hurt" }, { "Death", "Death" }
+      { "Hurt", "Hurt" }, { "BaseDeath1", "BaseDeath1" }
     },
     ["Hurt"] = new Dictionary<string, string> {
-      {"Hurt", "Hurt"}, { "Death", "Death" }
+      {"Hurt", "Hurt"}, { "BaseDeath1", "BaseDeath1" }
     },
     ["Jump"] = new Dictionary<string, string> {
       { "Hurt", "Hurt" },
     },
-    ["Death"] = new Dictionary<string, string>()
+    ["BaseDeath1"] = new Dictionary<string, string>()
   };
 
   public static Dictionary<string, Dictionary<string, Dictionary<string, string>>> Enemies { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, string>>> {

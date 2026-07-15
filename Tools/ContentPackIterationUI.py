@@ -1881,7 +1881,7 @@ def resolve_project_or_absolute_path(project_root: Path, value: str) -> Path:
 
 
 def sanitize_identifier(value: str) -> str:
-    normalized = re.sub(r"[^A-Za-z0-9_]+", "_", (value or "").strip())
+    normalized = re.sub(r"[^A-Za-z0-9_.]+", "_", (value or "").strip())
     return re.sub(r"_+", "_", normalized).strip("_")
 
 
@@ -2113,8 +2113,9 @@ def validate_authoring_source(source: SourceAssetSpec) -> str:
             return "Sprite Sheet sources require a label prefix."
         normal_asset_path = source.normal_asset_path.strip()
         if normal_asset_path:
-            if not normal_asset_path.lower().endswith(".png"):
-                return "Sprite Sheet normal texture must point at a .png asset."
+            supported_extensions = (".png", ".jpg", ".jpeg")
+            if not normal_asset_path.lower().endswith(supported_extensions):
+                return "Sprite Sheet normal texture must point at a .png, .jpg, or .jpeg asset."
     elif source.source_type == "sprite_library":
         asset_path = source.asset_path.lower()
         has_custom_extension = asset_path.endswith(CUSTOM_LIBRARY_EXTENSION.lower())

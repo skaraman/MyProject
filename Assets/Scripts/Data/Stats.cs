@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 public static class FormStatIncreases {
@@ -45,6 +46,82 @@ public static class FormStatIncreases {
       ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["CDMG"] = 1, ["BONUS"] = 1 }
     }
   };
+
+  public static bool IsPercentageStat(string statName) {
+    if (string.IsNullOrWhiteSpace(statName)) {
+      return false;
+    }
+
+    foreach (var form in increases) {
+      foreach (var majorStat in form.Value) {
+        foreach (var minorStat in majorStat.Value) {
+          if (!string.Equals(minorStat.Key, statName, StringComparison.OrdinalIgnoreCase)) {
+            continue;
+          }
+
+          var roundedIncrease = Math.Round(minorStat.Value);
+          var fractionalAmount = Math.Abs(minorStat.Value - roundedIncrease);
+          if (fractionalAmount > 0.0001d) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  public static void ApplyBonusToFlatStats(IDictionary<string, float> stats) {
+    if (stats == null || !stats.TryGetValue("BONUS", out var bonus)) {
+      return;
+    }
+    if (Math.Abs(bonus) <= 0.0001f) {
+      return;
+    }
+
+    var statNames = new List<string>(stats.Keys);
+    for (var i = 0; i < statNames.Count; i++) {
+      var statName = statNames[i];
+      if (string.Equals(statName, "BONUS", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+      if (IsPercentageStat(statName)) {
+        continue;
+      }
+
+      stats[statName] += bonus;
+    }
+  }
+
+  public static void ApplyBonusToFlatStats(
+    Dictionary<string, float> stats,
+    List<string> statNameScratch
+  ) {
+    if (stats == null ||
+        statNameScratch == null ||
+        !stats.TryGetValue("BONUS", out var bonus)) {
+      return;
+    }
+    if (Math.Abs(bonus) <= 0.0001f) {
+      return;
+    }
+
+    statNameScratch.Clear();
+    foreach (var stat in stats) {
+      statNameScratch.Add(stat.Key);
+    }
+    for (var i = 0; i < statNameScratch.Count; i++) {
+      var statName = statNameScratch[i];
+      if (string.Equals(statName, "BONUS", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+      if (IsPercentageStat(statName)) {
+        continue;
+      }
+      stats[statName] += bonus;
+    }
+    statNameScratch.Clear();
+  }
 
   public static List<string> GetOrderedMajorStats(string formName) {
     var orderedStats = new List<string>();

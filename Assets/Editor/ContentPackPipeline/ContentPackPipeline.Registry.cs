@@ -69,9 +69,7 @@ public static partial class ContentPackPipeline {
         dialogs.Add(dialogSnapshot);
       }
 
-      if (TryReadObjectiveSnapshot(pack, out var objectiveSnapshot) && objectiveSnapshot != null) {
-        objectives.Add(objectiveSnapshot);
-      }
+      AppendObjectiveSnapshots(pack, objectives);
 
     }
 
@@ -197,14 +195,25 @@ public static partial class ContentPackPipeline {
   [Serializable]
   sealed class ExportedObjectiveJson {
     public string id;
+    public string title;
+    public string description;
     public string objective;
+    public List<string> spawns = new();
+    public List<string> respawns = new();
   }
 
-  static bool TryReadObjectiveSnapshot(PackDefinition pack, out ContentObjectiveDefinition objectiveInfo) {
-    objectiveInfo = null;
-    if (pack == null) return false;
-    if (!string.Equals(pack.kind, "objective", StringComparison.OrdinalIgnoreCase)) return false;
-    if (pack.ownedRoots == null || pack.ownedRoots.Count <= 0) return false;
+  [Serializable]
+  sealed class ExportedObjectiveListJson {
+    public List<ExportedObjectiveJson> items = new();
+  }
+
+  static void AppendObjectiveSnapshots(
+    PackDefinition pack,
+    List<ContentObjectiveDefinition> target
+  ) {
+    if (pack == null || target == null) return;
+    if (!string.Equals(pack.kind, "objective", StringComparison.OrdinalIgnoreCase)) return;
+    if (pack.ownedRoots == null || pack.ownedRoots.Count <= 0) return;
 
     for (var i = 0; i < pack.ownedRoots.Count; i++) {
       var root = NormalizeAssetPath(pack.ownedRoots[i]);
@@ -215,18 +224,42 @@ public static partial class ContentPackPipeline {
       var snapshotFullPath = GetPhysicalPath(snapshotAssetPath);
       if (!File.Exists(snapshotFullPath)) continue;
 
-      var json = JsonUtility.FromJson<ExportedObjectiveJson>(File.ReadAllText(snapshotFullPath));
-      if (json == null || string.IsNullOrWhiteSpace(json.objective)) continue;
+      var jsonText = File.ReadAllText(snapshotFullPath).Trim();
+      var snapshots = ParseObjectiveSnapshots(jsonText);
+      for (var objectiveIndex = 0; objectiveIndex < snapshots.Count; objectiveIndex++) {
+        var snapshot = snapshots[objectiveIndex];
+        if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.objective)) continue;
 
-      objectiveInfo = new ContentObjectiveDefinition(
-        pack.packId,
-        json.id,
-        json.objective
-      );
-      return true;
+        target.Add(new ContentObjectiveDefinition(
+          pack.packId,
+          snapshot.id,
+          snapshot.title,
+          snapshot.description,
+          snapshot.objective,
+          snapshot.spawns,
+          snapshot.respawns
+        ));
+      }
+    }
+  }
+
+  static List<ExportedObjectiveJson> ParseObjectiveSnapshots(string jsonText) {
+    if (string.IsNullOrWhiteSpace(jsonText)) {
+      return new List<ExportedObjectiveJson>();
     }
 
-    return false;
+    if (jsonText.StartsWith("[", StringComparison.Ordinal)) {
+      var wrappedJson = "{\"items\":" + jsonText + "}";
+      var wrapper = JsonUtility.FromJson<ExportedObjectiveListJson>(wrappedJson);
+      return wrapper != null && wrapper.items != null
+        ? wrapper.items
+        : new List<ExportedObjectiveJson>();
+    }
+
+    var snapshot = JsonUtility.FromJson<ExportedObjectiveJson>(jsonText);
+    return snapshot != null
+      ? new List<ExportedObjectiveJson> { snapshot }
+      : new List<ExportedObjectiveJson>();
   }
 
   static bool TryReadLocationSnapshot(PackDefinition pack, out LocationInfo locationInfo) {

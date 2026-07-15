@@ -153,8 +153,43 @@ public static partial class ContentPackPipeline {
     }
 
     CollectSupplementalTextDependencies(result, errors);
+    CollectPairedNormalMapDependencies(result, errors);
     CollectAtlasMetadataDependencies(result, errors);
     return result;
+  }
+
+  static void CollectPairedNormalMapDependencies(List<string> result, List<string> errors) {
+    if (result == null || result.Count <= 0) return;
+
+    var pairedNormalMapPaths = new List<string>();
+    for (var i = 0; i < result.Count; i++) {
+      var normalMapAssetPath = ResolvePairedNormalMapAssetPath(result[i]);
+      if (string.IsNullOrWhiteSpace(normalMapAssetPath)) continue;
+      AddUniquePath(pairedNormalMapPaths, normalMapAssetPath);
+    }
+
+    for (var i = 0; i < pairedNormalMapPaths.Count; i++) {
+      TryAddExportableDependency(result, pairedNormalMapPaths[i], errors);
+    }
+  }
+
+  static string ResolvePairedNormalMapAssetPath(string colorAssetPath) {
+    var normalizedColorAssetPath = NormalizeAssetPath(colorAssetPath);
+    if (!string.Equals(Path.GetExtension(normalizedColorAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) {
+      return "";
+    }
+
+    var jpgAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedColorAssetPath, ".jpg"));
+    if (File.Exists(Path.GetFullPath(jpgAssetPath))) {
+      return jpgAssetPath;
+    }
+
+    var jpegAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedColorAssetPath, ".jpeg"));
+    if (File.Exists(Path.GetFullPath(jpegAssetPath))) {
+      return jpegAssetPath;
+    }
+
+    return "";
   }
 
   static void CollectAtlasMetadataDependencies(List<string> result, List<string> errors) {

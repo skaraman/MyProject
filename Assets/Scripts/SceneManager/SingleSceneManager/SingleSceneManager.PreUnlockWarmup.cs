@@ -27,14 +27,6 @@ public partial class SingleSceneManager {
 
     if (preUnlockAddressScratch.Count > 0) {
       var blockingPrefixCount = ResolvePreUnlockBlockingPrefixCount(preUnlockAddressScratch);
-      if (blockingPrefixCount < preUnlockAddressScratch.Count) {
-        QueueDeferredPostRevealWarmupAddresses(
-          preUnlockAddressScratch,
-          blockingPrefixCount,
-          preUnlockAddressScratch.Count - blockingPrefixCount,
-          "animation_frame_tail"
-        );
-      }
       var preloadPasses = Mathf.Max(preUnlockAnimationFramePreloadPasses, 1);
       if (blockingPrefixCount > 0) {
         for (var pass = 0; pass < preloadPasses; pass++) {
@@ -91,7 +83,7 @@ public partial class SingleSceneManager {
       if (settledForBlockingReady) {
         if (ShouldLogLoadingProgressDebug()) {
           ResolveBlockingReadyQueueThresholds(out var maxOutstanding, out var maxInFlight);
-          Debug.Log(
+          RuntimeLog.Log(
             "[SingleSceneManager][PreUnlockSettle] early_release" +
             " queued=" + queue.queuedCount +
             " in_flight=" + queue.inFlightCount +
@@ -266,7 +258,9 @@ public partial class SingleSceneManager {
       playerController = ResolvePlayerAnimationController();
     }
 
-    if (playerController != null) {
+    var playerGear = ResolvePlayerGearController();
+    var playerAtlasesManaged = playerGear != null && playerGear.SceneAppearanceAtlasPinsManaged;
+    if (playerController != null && !playerAtlasesManaged) {
       var playerMaxAnimations = Mathf.Max(preUnlockPlayerAnimationStarts, 1);
       playerController.CollectWarmPlaybackAddresses(
         addresses,
@@ -314,14 +308,6 @@ public partial class SingleSceneManager {
 
     if (addresses.Count > 0) {
       var blockingPrefixCount = ResolvePreUnlockBlockingPrefixCount(addresses, playerWarmPlaybackAddressCount);
-      if (blockingPrefixCount < addresses.Count) {
-        QueueDeferredPostRevealWarmupAddresses(
-          addresses,
-          blockingPrefixCount,
-          addresses.Count - blockingPrefixCount,
-          "animation_playback_tail"
-        );
-      }
       if (blockingPrefixCount > 0) {
         yield return PreloadAnimationAddressBatch(
           addresses,
@@ -417,7 +403,9 @@ public partial class SingleSceneManager {
     seenAddresses.Clear();
     var animationFrames = Mathf.Max(preUnlockPrefetchAnimationFrames, 1);
 
-    if (playerController != null) {
+    var playerGear = ResolvePlayerGearController();
+    var playerAtlasesManaged = playerGear != null && playerGear.SceneAppearanceAtlasPinsManaged;
+    if (playerController != null && !playerAtlasesManaged) {
       playerController.CollectAnimationStartAddresses(
         outAddresses,
         seenAddresses,
@@ -537,7 +525,7 @@ public partial class SingleSceneManager {
 
     TrimmedSpriteOffsetResolver.PumpDeferredRuntimeLoads();
     if (!ShouldLogLoadingProgressDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PreUnlockMetadataWarmup] start=" + startInclusive +
       " count=" + count +
       " queued_atlas_metadata=" + queuedAtlasMetadata

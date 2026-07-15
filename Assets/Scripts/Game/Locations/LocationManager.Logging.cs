@@ -22,7 +22,7 @@ public partial class LocationManager {
     var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
     var flowKind = SingleSceneManager.ActiveGameplayLoadFlowKind;
     var flowTargetLocation = SingleSceneManager.ActiveGameplayLoadFlowTargetLocation;
-    Debug.Log(
+    RuntimeLog.Log(
       "[LocationManager][LocationLoadTiming] flow_id=" + SingleSceneManager.ActiveGameplayLoadFlowId +
       " flow_kind=" + (string.IsNullOrWhiteSpace(flowKind) ? "-" : flowKind.Trim()) +
       " flow_target_location=" + (string.IsNullOrWhiteSpace(flowTargetLocation) ? "-" : flowTargetLocation.Trim()) +
@@ -49,7 +49,7 @@ public partial class LocationManager {
     bool promotedDeferred
   ) {
     if (!ShouldLogVerboseLoadDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[LocationManager][StagePlan] flow_id=" + SingleSceneManager.ActiveGameplayLoadFlowId +
       " flow_kind=" + (string.IsNullOrWhiteSpace(SingleSceneManager.ActiveGameplayLoadFlowKind) ? "-" : SingleSceneManager.ActiveGameplayLoadFlowKind.Trim()) +
       " stage=" + (string.IsNullOrWhiteSpace(stage) ? "-" : stage.Trim()) +
@@ -127,7 +127,7 @@ public partial class LocationManager {
         " subtree_behaviours=" + target.GetComponentsInChildren<MonoBehaviour>(true).Length;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[LocationManager][ActivationTrace] phase=set_active_begin" +
       " location=" + (string.IsNullOrWhiteSpace(locationId) ? "-" : locationId.Trim()) +
       " elapsed_ms=" + ((Time.realtimeSinceStartup - activationStartedAt) * 1000f).ToString("0.0") +
@@ -203,7 +203,7 @@ public partial class LocationManager {
     if (!ShouldLogLocationActivationTrace()) return;
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
     var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
-    Debug.Log(
+    RuntimeLog.Log(
       "[LocationManager][ActivationTrace] phase=" + (string.IsNullOrWhiteSpace(phase) ? "-" : phase.Trim()) +
       " location=" + (string.IsNullOrWhiteSpace(locationId) ? "-" : locationId.Trim()) +
       " elapsed_ms=" + ((Time.realtimeSinceStartup - activationStartedAt) * 1000f).ToString("0.0") +
@@ -234,7 +234,7 @@ public partial class LocationManager {
     if (stepSeconds < SlowActivationStepLogSeconds) return;
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
     var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
-    Debug.Log(
+    RuntimeLog.Log(
       "[LocationManager][ActivationTrace] phase=set_active_complete_slow" +
       " location=" + (string.IsNullOrWhiteSpace(locationId) ? "-" : locationId.Trim()) +
       " elapsed_ms=" + ((Time.realtimeSinceStartup - activationStartedAt) * 1000f).ToString("0.0") +

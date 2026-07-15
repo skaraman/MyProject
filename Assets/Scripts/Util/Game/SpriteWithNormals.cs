@@ -8,6 +8,9 @@ using UnityEditor.SceneManagement;
 #endif
 
 public partial class SpriteWithNormals : MonoBehaviour {
+  static readonly Unity.Profiling.ProfilerMarker ResolvePairProfilerMarker = new("SpriteWithNormals.ResolvePair");
+  static readonly Unity.Profiling.ProfilerMarker ApplyLoadedPairProfilerMarker = new("SpriteWithNormals.ApplyLoadedPair");
+  static readonly Unity.Profiling.ProfilerMarker RenderApplyProfilerMarker = new("SpriteWithNormals.RenderApply");
   const float EditorSpriteMapSupplementWaitTimeoutSeconds = 0.5f;
   const float EditorSpriteMapSupplementWaitTimeoutDuringOverlaySeconds = 2.0f;
   const float EditorSliceResolveRetryGraceSeconds = 6.0f;
@@ -30,6 +33,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
 
   SpriteRenderer _renderer;
   MaterialPropertyBlock _mpb;
+  Action _trimmedOffsetMetadataReadyCallback;
   int _lastRequestedFrame;
   string _lastRequestedCategory = "";
   string _lastRequestedLibrary = "";
@@ -52,6 +56,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const int PrefetchAheadFrames = 0;
   const int InternalRetryFrames = 2;
   const int MaxPairLookupCacheEntries = 2048;
+  const int MaxAnimationAtlasCacheEntries = 128;
   const bool ForceDisableDebugLogsForPerfPass = true;
   static int WarmupRequestBudgetPerFrame => Application.isMobilePlatform ? 64 : 256;
   const int WarmupQueueThrottleThreshold = 2048;
@@ -59,6 +64,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const int OverlayEnableRefreshBudgetPerFrame = 8;
   const int GameplayEnableRefreshBudgetPerFrame = 24;
   static readonly int NormalMapPropertyId = Shader.PropertyToID("_NormalMap");
+  static readonly int SpriteUvRectPropertyId = Shader.PropertyToID("_SpriteUvRect");
+  static readonly int SpriteEffectActivePropertyId = Shader.PropertyToID("_SpriteEffectActive");
   static readonly Color32 TransparentPaddingColor = new(0, 0, 0, 0);
   static readonly Color32 FlatNormalPaddingColor = new(128, 128, 255, 255);
   const int MaxLocalSpriteCacheEntries = 4096;
@@ -74,7 +81,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
 #if UNITY_EDITOR
   static readonly HashSet<SpriteWithNormals> pendingEditorPreviewRefreshTargets = new();
   static bool pendingEditorPreviewRefreshQueued;
-  static readonly Dictionary<string, bool> editorRuntimeAtlasAvailabilityByPath = new(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> editorRuntimeAtlasAddressIndex = new(StringComparer.OrdinalIgnoreCase);
+  static bool editorRuntimeAtlasAddressIndexBuilt;
 #endif
 
   int _requestVersion;
@@ -107,7 +115,9 @@ public partial class SpriteWithNormals : MonoBehaviour {
   readonly HashSet<string> _sliceMismatchWarnings = new(StringComparer.OrdinalIgnoreCase);
   int _pendingRetargetAllowedFrame;
   int _deferredOverwriteAllowedFrame;
-  ulong _lastAppliedNormalTextureId = ulong.MaxValue;
+  Texture _lastAppliedNormalTexture;
+  bool _hasAppliedNormalTexture;
+  bool _hasAppliedSpriteUvRect;
   string _appliedColorSliceAddress = "";
   Vector3 _lastAppliedTrimmedOffsetLocalUnits;
   bool _hasAppliedTrimmedOffset;
@@ -132,6 +142,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
   int _pendingLoadRequestVersion;
   readonly Dictionary<PairLookupCacheKey, SpriteAddressPair> _pairLookupHitCache = new();
   readonly HashSet<PairLookupCacheKey> _pairLookupMissCache = new();
+  int _pairLookupContentReloadVersion = int.MinValue;
+  readonly Dictionary<AnimationAtlasCacheKey, string[]> _animationAtlasAddressCache = new();
+  readonly List<string> _animationAtlasBuildScratch = new(8);
+  readonly HashSet<string> _animationAtlasBuildSeenScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly Dictionary<string, Sprite> _localLoadedSpriteByAddress = new(StringComparer.OrdinalIgnoreCase);
   readonly Dictionary<PaddedSpriteCacheKey, Sprite> _generatedPaddedSprites = new();
   readonly List<Sprite> _generatedPaddedSpriteAssets = new();
@@ -145,12 +159,19 @@ public partial class SpriteWithNormals : MonoBehaviour {
   void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
     _mpb = new MaterialPropertyBlock();
+    if (useTrimmedAtlasOffset) {
+      _trimmedOffsetMetadataReadyCallback = OnTrimmedOffsetMetadataReady;
+    }
     SyncSerializedTrimmedOffsetState();
     SyncRendererVisibility();
   }
 
   void OnEnable() {
+    if (useTrimmedAtlasOffset) {
+      _trimmedOffsetMetadataReadyCallback ??= OnTrimmedOffsetMetadataReady;
+    }
     SyncSerializedTrimmedOffsetState();
+    SyncRendererVisibility();
     RefreshTrimmedOffsetForCurrentSprite();
     if (!Application.isPlaying) {
       QueueAutoRefreshOnEnable();
@@ -159,7 +180,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _nextInternalRetryFrame = 0;
     _pendingRetargetAllowedFrame = 0;
     _deferredOverwriteAllowedFrame = 0;
-    _lastAppliedNormalTextureId = ulong.MaxValue;
+    _lastAppliedNormalTexture = null;
+    _hasAppliedNormalTexture = false;
     _adaptiveCooldownMultiplier = 1;
     _adaptiveStaleWindowStartFrame = -1;
     _adaptiveStaleCountInWindow = 0;
@@ -210,7 +232,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     ResetPairLookupCaches();
     _localLoadedSpriteByAddress.Clear();
     _sliceMismatchWarnings.Clear();
-    _lastAppliedNormalTextureId = ulong.MaxValue;
+    _lastAppliedNormalTexture = null;
+    _hasAppliedNormalTexture = false;
   }
 
   void OnDestroy() {
@@ -226,7 +249,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _localLoadedSpriteByAddress.Clear();
     ClearGeneratedPaddedSprites();
     _sliceMismatchWarnings.Clear();
-    _lastAppliedNormalTextureId = ulong.MaxValue;
+    _lastAppliedNormalTexture = null;
+    _hasAppliedNormalTexture = false;
   }
 
   public bool IsAnimation => isAnimation;
@@ -397,7 +421,11 @@ public partial class SpriteWithNormals : MonoBehaviour {
   public SpriteColdLoadState GetFrameColdLoadState(int frame, out bool colorReadyOnly, string categoryOverride = null) {
     colorReadyOnly = false;
     if (!Application.isPlaying) return SpriteColdLoadState.Ready;
-    if (!enabled || !gameObject.activeInHierarchy || doNotRender) return SpriteColdLoadState.Ready;
+    if (doNotRender) return SpriteColdLoadState.Ready;
+    var explicitWarmupQuery = !string.IsNullOrWhiteSpace(categoryOverride);
+    if ((!enabled || !gameObject.activeInHierarchy) && !explicitWarmupQuery) {
+      return SpriteColdLoadState.Ready;
+    }
 
     var lookupLibraryName = libraryName ?? "";
     var lookupLabelPrefix = labelPrefix ?? "";
@@ -409,7 +437,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
       return SpriteColdLoadState.ExplicitEmpty;
     }
 
-    var isCurrentQuery = string.IsNullOrEmpty(categoryOverride) || string.Equals(categoryOverride, category, StringComparison.Ordinal);
+    var isCurrentQuery = string.IsNullOrEmpty(categoryOverride);
     if (isCurrentQuery) {
       if (!_hasLastLookup || _hasDeferredRequest || HasPendingLoadRequest()) {
         return SpriteColdLoadState.Pending;
@@ -429,6 +457,16 @@ public partial class SpriteWithNormals : MonoBehaviour {
     var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
     if (!colorState.IsCommitReady()) return colorState;
 
+    if (!TryGetLoadedSpritesForPair(pair, out _, out var normalSprite, out _)) {
+      var exactState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
+      return exactState.IsCommitReady() ? SpriteColdLoadState.Pending : exactState;
+    }
+    if (pair.HasNormal && normalSprite == null) {
+      var normalRequestAddress = ResolveWarmupAddress(pair.normalAddress, pair.StreamingNormalAddress);
+      var exactNormalState = TextureResidencyCache.GetRequestState(normalRequestAddress, pump: false);
+      return exactNormalState.IsCommitReady() ? SpriteColdLoadState.Pending : exactNormalState;
+    }
+
     var metadataState = GetTrimmedMetadataState(colorRequestAddress, requestIfNeeded: true);
     if (!metadataState.IsCommitReady()) return metadataState;
 
@@ -442,7 +480,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   bool IsExplicitEmptyLookup(SpriteLookupKey lookupKey) {
     if (HasBlankCategoryAndLabelPrefix(lookupKey)) return true;
     if (!isAnimation && string.IsNullOrWhiteSpace(lookupKey.labelPrefix)) return true;
-    return string.Equals((lookupKey.labelPrefix ?? "").Trim(), "Empty", StringComparison.OrdinalIgnoreCase);
+    return string.Equals(lookupKey.labelPrefix ?? "", "Empty", StringComparison.OrdinalIgnoreCase);
   }
 
   public bool TryGetFrameAddressPair(int frame, out SpriteAddressPair pair, string categoryOverride = null) {
@@ -517,9 +555,123 @@ public partial class SpriteWithNormals : MonoBehaviour {
     }
   }
 
+  public void CollectAnimationAtlasAddresses(
+    string categoryOverride,
+    int startFrame,
+    int endFrame,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null) return;
+    var maxAddresses = Mathf.Max(maxUniqueAddresses, 1);
+    if (outAddresses.Count >= maxAddresses) return;
+
+    var lookupCategory = string.IsNullOrWhiteSpace(categoryOverride)
+      ? (category ?? "")
+      : categoryOverride;
+    if (string.IsNullOrWhiteSpace(libraryName) || string.IsNullOrWhiteSpace(lookupCategory)) return;
+
+    var minFrame = isAnimation ? Mathf.Max(Mathf.Min(startFrame, endFrame), 1) : 0;
+    var maxFrame = isAnimation ? Mathf.Max(Mathf.Max(startFrame, endFrame), minFrame) : 0;
+    var cacheKey = new AnimationAtlasCacheKey(
+      lookupCategory,
+      minFrame,
+      maxFrame,
+      ActiveContentRegistryRuntime.ReloadVersion
+    );
+
+    if (!_animationAtlasAddressCache.TryGetValue(cacheKey, out var atlasAddresses)) {
+      atlasAddresses = BuildAnimationAtlasAddresses(lookupCategory, minFrame, maxFrame);
+      if (_animationAtlasAddressCache.Count >= MaxAnimationAtlasCacheEntries) {
+        _animationAtlasAddressCache.Clear();
+      }
+      _animationAtlasAddressCache[cacheKey] = atlasAddresses;
+    }
+
+    for (var i = 0; i < atlasAddresses.Length; i++) {
+      if (outAddresses.Count >= maxAddresses) return;
+      AddUniqueAddress(outAddresses, atlasAddresses[i], seenAddresses, maxAddresses);
+    }
+  }
+
+  public void CollectAnimationAtlasAddressesUncached(
+    string categoryOverride,
+    int startFrame,
+    int endFrame,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxUniqueAddresses = int.MaxValue
+  ) {
+    if (outAddresses == null) return;
+    var maxAddresses = Mathf.Max(maxUniqueAddresses, 1);
+    if (outAddresses.Count >= maxAddresses) return;
+
+    var lookupCategory = string.IsNullOrWhiteSpace(categoryOverride)
+      ? (category ?? "")
+      : categoryOverride;
+    if (string.IsNullOrWhiteSpace(libraryName) || string.IsNullOrWhiteSpace(lookupCategory)) return;
+
+    var minFrame = isAnimation ? Mathf.Max(Mathf.Min(startFrame, endFrame), 1) : 0;
+    var maxFrame = isAnimation ? Mathf.Max(Mathf.Max(startFrame, endFrame), minFrame) : 0;
+    CollectAnimationAtlasAddressRange(
+      lookupCategory,
+      minFrame,
+      maxFrame,
+      outAddresses,
+      seenAddresses,
+      maxAddresses
+    );
+  }
+
+  string[] BuildAnimationAtlasAddresses(string lookupCategory, int minFrame, int maxFrame) {
+    _animationAtlasBuildScratch.Clear();
+    _animationAtlasBuildSeenScratch.Clear();
+
+    CollectAnimationAtlasAddressRange(
+      lookupCategory,
+      minFrame,
+      maxFrame,
+      _animationAtlasBuildScratch,
+      _animationAtlasBuildSeenScratch,
+      int.MaxValue
+    );
+
+    var result = _animationAtlasBuildScratch.ToArray();
+    _animationAtlasBuildScratch.Clear();
+    _animationAtlasBuildSeenScratch.Clear();
+    return result;
+  }
+
+  void CollectAnimationAtlasAddressRange(
+    string lookupCategory,
+    int minFrame,
+    int maxFrame,
+    List<string> outAddresses,
+    HashSet<string> seenAddresses,
+    int maxAddresses
+  ) {
+    for (var frame = minFrame; frame <= maxFrame; frame++) {
+      if (outAddresses.Count >= maxAddresses) return;
+      if (!TryGetFrameAddressPair(frame, out var pair, lookupCategory)) continue;
+      AddUniqueAddress(
+        outAddresses,
+        pair.RuntimeColorAddress,
+        seenAddresses,
+        maxAddresses
+      );
+      AddUniqueAddress(
+        outAddresses,
+        pair.RuntimeNormalAddress,
+        seenAddresses,
+        maxAddresses
+      );
+    }
+  }
+
   static string ResolveWarmupAddress(string sliceAddress, string fallbackAtlasAddress) {
-    if (!string.IsNullOrWhiteSpace(sliceAddress)) return sliceAddress.Trim();
-    return string.IsNullOrWhiteSpace(fallbackAtlasAddress) ? "" : fallbackAtlasAddress.Trim();
+    if (!string.IsNullOrWhiteSpace(sliceAddress)) return sliceAddress;
+    return string.IsNullOrWhiteSpace(fallbackAtlasAddress) ? "" : fallbackAtlasAddress;
   }
 
   public bool IsUiTarget() {
@@ -601,10 +753,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _lastRequestedFrame = frame;
     if (Application.isPlaying && !_isInternalTickRequest) _lastExternalRequestFrame = Time.frameCount;
     if (Application.isPlaying && (!enabled || !gameObject.activeInHierarchy)) return;
+    EnsureContentReloadVersion();
 
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
     if (_renderer == null) return;
-    SyncRendererVisibility();
     if (doNotRender) return;
 
     var lookupLibraryName = libraryName ?? "";
@@ -617,15 +769,6 @@ public partial class SpriteWithNormals : MonoBehaviour {
     var lookupFrame = isAnimation
       ? ResolveLookupFrameForPendingMiss(frame, lookupLibraryName, lookupLabelPrefix, lookupCategory)
       : 0;
-    if (PunchLeftTraceGate.IsActive) {
-      PunchLeftTraceGate.LogFrameRequest(
-        gameObject.name,
-        lookupCategory,
-        lookupFrame,
-        lookupLibraryName,
-        lookupLabelPrefix
-      );
-    }
     if (ShouldLogFetch) {
       LogSpriteFetch(
         "lookup_begin",
@@ -646,7 +789,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
     var lookupKey = new SpriteLookupKey(lookupLibraryName, lookupLabelPrefix, lookupCategory, lookupFrame);
     if (TryApplyBlankSelectionEmptyFallback(lookupKey)) return;
     if (TryApplyNoPrefixStaticEmptyFallback(lookupKey)) return;
-    if (!TryResolvePairCached(lookupKey, out var pair, out var pending)) {
+    ResolvePairProfilerMarker.Begin();
+    var pairResolved = TryResolvePairCached(lookupKey, out var pair, out var pending);
+    ResolvePairProfilerMarker.End();
+    if (!pairResolved) {
       if (pending) {
         if (ShouldLogFetch) LogSpriteFetch("resolve_pending", "key='" + lookupKey + "'");
         return;
@@ -677,7 +823,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _lastLookupCategory = lookupCategory;
     _lastLookupFrame = lookupFrame;
 
-    if (AddressEquals(pair.colorAddress, _targetColorAddress) &&
+    if (AddressEquals(pair.colorAddress, _targetColorSliceAddress) &&
         AddressEquals(pair.normalAddress, _targetNormalSliceAddress)) {
       if (ShouldLogFetch) LogSpriteFetch("skip_same_target_addresses");
       return;
@@ -699,7 +845,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _targetNormalSliceAddress = pair.normalAddress ?? "";
 
     if (Application.isPlaying) {
-      if (TryApplyLoadedSpritesFromCache(pair, cancelPendingIfAny: true)) {
+      ApplyLoadedPairProfilerMarker.Begin();
+      var appliedLoadedPair = TryApplyLoadedSpritesFromCache(pair, cancelPendingIfAny: true);
+      ApplyLoadedPairProfilerMarker.End();
+      if (appliedLoadedPair) {
         if (ShouldLogFetch) LogSpriteFetch("use_cached_pair");
         return;
       }

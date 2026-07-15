@@ -172,7 +172,7 @@ public partial class GearController {
     var bodyMaterial = ResolveEsperanzaBodyMaterial();
     var fixedSkinMaterials = NormalizeSpriteDefaultsForRuntime(SkinObjects, bodyMaterial, EsperanzaBodyMaterialName);
     if (fixedSkinMaterials > 0 && ShouldLogRuntimeInitDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController] Normalized skin renderer materials" +
         " object=" + gameObject.name +
         " fixed=" + fixedSkinMaterials +
@@ -184,7 +184,7 @@ public partial class GearController {
     var gearMaterial = ResolveEsperanzaGearMaterial();
     var fixedGearMaterials = NormalizeSpriteDefaultsForRuntime(GearObjects, gearMaterial, EsperanzaGearMaterialName);
     if (fixedGearMaterials > 0 && ShouldLogRuntimeInitDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController] Normalized gear renderer materials" +
         " object=" + gameObject.name +
         " fixed=" + fixedGearMaterials +
@@ -196,7 +196,7 @@ public partial class GearController {
     var hairMaterial = ResolveEsperanzaHairMaterial();
     var fixedHairMaterials = NormalizeSpriteDefaultsForRuntime(HairObjects, hairMaterial, EsperanzaHairMaterialName);
     if (fixedHairMaterials > 0 && ShouldLogRuntimeInitDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController] Normalized hair renderer materials" +
         " object=" + gameObject.name +
         " fixed=" + fixedHairMaterials +
@@ -208,7 +208,7 @@ public partial class GearController {
     if (HairSkin != null && hairMaterial != null) {
       if (NormalizeRendererMaterialForRuntime(HairSkin, hairMaterial, EsperanzaHairMaterialName)) {
         if (ShouldLogRuntimeInitDebug()) {
-          Debug.Log(
+          RuntimeLog.Log(
             "[GearController] Normalized HairSkin material" +
             " object=" + gameObject.name +
             " material=" + hairMaterial.name +

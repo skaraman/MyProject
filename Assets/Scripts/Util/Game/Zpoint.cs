@@ -19,7 +19,7 @@ public class Zpoint : MonoBehaviour {
     if (sortingGroup != null && mainCamera != null) {
       Vector3 pos = cachedTransform.position;
       Vector3 screenPoint = mainCamera.WorldToScreenPoint(pos);
-      //Debug.Log($"Screen Point: {screenPoint}, ID: {gameObject.transform.name}");
+      //RuntimeLog.Log($"Screen Point: {screenPoint}, ID: {gameObject.transform.name}");
       // Adjust to control the effect
       sortingGroup.sortingOrder = -(int)screenPoint.y;
     }

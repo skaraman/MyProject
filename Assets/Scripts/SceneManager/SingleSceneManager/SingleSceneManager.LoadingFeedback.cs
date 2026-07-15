@@ -193,6 +193,8 @@ public partial class SingleSceneManager {
     gameplayWarmGateCompletedForLoad = false;
     gameplayLoadingStageForLoad = OptimalGameplayLoadingStage.Player;
     gameplayLoadingStageLocationId = "";
+    runtimeBaseSetupPreparedFlowId = 0;
+    runtimeRevealSetupPreparedFlowId = 0;
   }
 
   void ResetGameplayLoadFlowTrace() {
@@ -262,7 +264,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowInt(builder, "deferred_pending", deferredPending);
     AppendLoadFlowBool(builder, "resolver_idle", SpriteRuntimeResolver.IsWarmupIdle());
     AppendLoadFlowBool(builder, "player_ready", IsPlayerFirstFrameReady());
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
     return activeGameplayLoadFlowId;
   }
 
@@ -294,7 +296,7 @@ public partial class SingleSceneManager {
       AppendLoadFlowInt(builder, "deferred_pending", deferredPending);
       AppendLoadFlowBool(builder, "resolver_idle", SpriteRuntimeResolver.IsWarmupIdle());
       AppendLoadFlowBool(builder, "player_ready", IsPlayerFirstFrameReady());
-      Debug.Log(builder.ToString());
+      RuntimeLog.Log(builder.ToString());
     }
 
     ResetGameplayLoadFlowTrace();
@@ -331,7 +333,7 @@ public partial class SingleSceneManager {
     if (!string.IsNullOrWhiteSpace(extraFields)) {
       builder.Append(' ').Append(extraFields.Trim());
     }
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
     return trace;
   }
 
@@ -373,13 +375,14 @@ public partial class SingleSceneManager {
       builder.Append(' ').Append(extraFields.Trim());
     }
 
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   bool IsGameplayLoadPipelineTrackingActive() {
     if (startGameRoutine != null ||
         resumeGameplayRoutine != null ||
         startupGameplayRoutine != null ||
+        runtimeLocationTransitionRoutine != null ||
         pendingRevealSection == Section.Gameplay) {
       return true;
     }
@@ -624,7 +627,7 @@ public partial class SingleSceneManager {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][OptimalLoadingProgress] stage='" + gameplayLoadingStageForLoad +
       "' player_ready=" + (playerReady ? 1 : 0) +
       " location_ready=" + (locationReady ? 1 : 0) +
@@ -1100,7 +1103,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowField(builder, "current_section", ResolveCurrentSection().ToString());
     AppendLoadFlowField(builder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
     AppendGameplayLoadPipelineFields(builder);
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   void MaybeLogLoadingStageStall(int percent, string detail) {
@@ -1174,7 +1177,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowField(builder, "ui_blocker", ResolveLoadFlowValue(GetGameplayUiReadyBlockerSummary()));
     AppendLoadFlowField(builder, "dialog_blocker", ResolveLoadFlowValue(GetGameplayDialogReadyBlockerSummary()));
     AppendGameplayLoadPipelineFields(builder);
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   void ResetLoadingProgressForPhase(bool force = false) {
@@ -1216,7 +1219,7 @@ public partial class SingleSceneManager {
     loadingProgressObservedWork = remainingWork > 0;
     loadingProgressNextDebugLogAt = -1f;
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][LoadingProgress] prime_at_fade_start goal_total=" + loadingProgressGoalTotal +
         " queue_outstanding=" + outstanding +
         " remaining_work=" + remainingWork
@@ -1266,7 +1269,7 @@ public partial class SingleSceneManager {
     ScheduleLoadingProgressUiArmCheck(remainingWork > 0 || loadingProgressGoalTotal > 0);
 
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][LoadingProgress] activate_after_fade_in goal_total=" + loadingProgressGoalTotal +
         " queue_outstanding=" + outstanding +
         " remaining_work=" + remainingWork
@@ -1285,7 +1288,7 @@ public partial class SingleSceneManager {
     if (!(holdBlackscreenOpaqueDuringLoad || IsLoadingFlowActive())) return;
     if (!ShouldLogLoadFlowWarnings()) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LoadingProgressUi] arm_failed" +
       " loading_root=" + (LoadingScreen != null && LoadingScreen.activeSelf ? 1 : 0) +
       " progress_ui=" + (IsLoadingProgressUiVisible() ? 1 : 0) +
@@ -1328,7 +1331,7 @@ public partial class SingleSceneManager {
     var gameplayUiReady = IsGameplayUiReadyForLoadingProgress();
     var gameplayDialogReady = IsGameplayDialogReadyForLoadingProgress();
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LoadingProgress] expected=" + expectedPercent +
       " actual=" + actualPercent +
       " target=" + targetProgress.ToString("0.000") +
@@ -1439,7 +1442,7 @@ public partial class SingleSceneManager {
     if (!string.IsNullOrWhiteSpace(extraFields)) {
       builder.Append(' ').Append(extraFields.Trim());
     }
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   void LogWarmGateConfig(WarmGateMode context, float requestedTimeoutSeconds, float requestedRatio, WarmRequest request, GearController playerController, EnemyController[] activeEnemies) {
@@ -1473,7 +1476,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowInt(builder, "queue_queued", queue.queuedCount);
     AppendLoadFlowInt(builder, "queue_in_flight", queue.inFlightCount);
     AppendLoadFlowInt(builder, "deferred_pending", deferred.pendingCount);
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   string BuildPreUnlockThresholdFields() {
@@ -1523,7 +1526,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowBool(builder, "player_ready", IsPlayerFirstFrameReady());
     AppendLoadFlowBool(builder, "location_activation_pending", LocationManager.HasPendingBlockingActivationWork);
     AppendLoadFlowBool(builder, "location_deferred_pending", LocationManager.HasPendingDeferredActivationWork);
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   static string ResolveLoadFlowValue(string value, string fallback = "-") {
@@ -1557,7 +1560,7 @@ public partial class SingleSceneManager {
       AppendLoadFlowField(warningBuilder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
       AppendLoadFlowField(warningBuilder, "current_section", ResolveCurrentSection().ToString());
       AppendLoadFlowField(warningBuilder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
-      Debug.Log(warningBuilder.ToString());
+      RuntimeLog.Log(warningBuilder.ToString());
     }
     loadingHeartbeatLastLoggedAt = now;
     loadingHeartbeatCount++;
@@ -1622,7 +1625,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowBool(infoBuilder, "blocking_hard_bypass", blockingHardBypassUsed);
     AppendLoadFlowBool(infoBuilder, "location_activation_pending", locationActivationPending);
     AppendGameplayLoadPipelineFields(infoBuilder);
-    Debug.Log(infoBuilder.ToString());
+    RuntimeLog.Log(infoBuilder.ToString());
   }
 
   void LogStartGameRequest(bool isNewGame, SaveData loadedSlot) {
@@ -1630,7 +1633,7 @@ public partial class SingleSceneManager {
     var savedLocation = loadedSlot != null && loadedSlot.ContainsKey("location")
       ? Convert.ToString(loadedSlot["location"])
       : "";
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LoadStart] kind=" + (isNewGame ? "new_game" : "load_save") +
       " slot=" + SaveSlotManager.slot +
       " slot_exists=" + (SaveSlotManager.CurrentSlotExists() ? 1 : 0) +
@@ -1647,7 +1650,7 @@ public partial class SingleSceneManager {
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
     var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
     var playerReady = IsPlayerFirstFrameReady();
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LoadState] stage=" + (string.IsNullOrWhiteSpace(stage) ? "unspecified" : stage.Trim()) +
       " slot=" + SaveSlotManager.slot +
       " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
@@ -1662,7 +1665,7 @@ public partial class SingleSceneManager {
 
   void LogLocationLoadRequest(string requestedLocationId, string resolvedLocationId) {
     if (!ShouldLogLoadFlowDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LocationLoad] requested=" + (string.IsNullOrWhiteSpace(requestedLocationId) ? "-" : requestedLocationId.Trim()) +
       " resolved=" + (string.IsNullOrWhiteSpace(resolvedLocationId) ? "-" : resolvedLocationId.Trim()) +
       " current_before=" + (string.IsNullOrWhiteSpace(LocationManager.currentLocation) ? "-" : LocationManager.currentLocation) +
@@ -1673,7 +1676,7 @@ public partial class SingleSceneManager {
 
   void LogLocationUpdate(string previousLocationId, string currentLocationId) {
     if (!ShouldLogLoadFlowDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LocationLoad] updated previous=" + (string.IsNullOrWhiteSpace(previousLocationId) ? "-" : previousLocationId.Trim()) +
       " current=" + (string.IsNullOrWhiteSpace(currentLocationId) ? "-" : currentLocationId.Trim()) +
       " overlay_reason=" + (string.IsNullOrWhiteSpace(SpriteStreamingLoadingState.ActiveReason) ? "-" : SpriteStreamingLoadingState.ActiveReason) +
@@ -1753,7 +1756,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowBool(warningBuilder, "progress_ui", IsLoadingProgressUiVisible());
     AppendLoadFlowBool(warningBuilder, "loading_light", loadingLightObject != null && loadingLightObject.activeSelf);
     AppendGameplayLoadPipelineFields(warningBuilder);
-    Debug.Log(warningBuilder.ToString());
+    RuntimeLog.Log(warningBuilder.ToString());
   }
 
   void MaybeLogStreamingIdleWaitState(
@@ -1824,7 +1827,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowBool(infoBuilder, "location_activation_pending", locationActivationPending);
     AppendLoadFlowBool(infoBuilder, "location_deferred_pending", locationDeferredPending);
     AppendLoadFlowBool(infoBuilder, "warmup_done", warmupDone);
-    Debug.Log(infoBuilder.ToString());
+    RuntimeLog.Log(infoBuilder.ToString());
   }
 
   static bool ShouldLogLoadingProgressDebug() {
@@ -1860,7 +1863,7 @@ public partial class SingleSceneManager {
     loadingText.content = textValue;
     loadingText.Generate();
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][LoadingText] value='" + textValue +
         "' visible=" + (loadingTextObject != null && loadingTextObject.activeSelf ? 1 : 0) +
         " overlay_reason=" + ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason) +

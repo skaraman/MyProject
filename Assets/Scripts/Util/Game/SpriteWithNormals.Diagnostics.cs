@@ -11,6 +11,7 @@ public partial class SpriteWithNormals {
     if (_renderer != null) _renderer.enabled = !doNotRender && !externalVisualSuppressed;
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void LogSpriteFetch(string stage, string details = "") {
     if (ForceDisableDebugLogsForPerfPass) return;
     if (!enableDebugSpriteFetchLogs || !Application.isPlaying) return;
@@ -20,7 +21,7 @@ public partial class SpriteWithNormals {
       : normalizedStage.StartsWith("fetch_", StringComparison.Ordinal)
         ? "fetch"
         : "state";
-    Debug.Log(
+    RuntimeLog.Log(
       "[SpriteWithNormals][Fetch] object='" + gameObject.name +
       "' category='" + (category ?? "") +
       "' requested_frame=" + _lastRequestedFrame +
@@ -31,10 +32,11 @@ public partial class SpriteWithNormals {
     );
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void LogSpriteApply(string stage, Sprite colorSprite, Sprite normalSprite, string details = "") {
     if (ForceDisableDebugLogsForPerfPass) return;
     if (!enableDebugSpriteApplyLogs || !Application.isPlaying) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SpriteWithNormals][Apply] object='" + gameObject.name +
       "' category='" + (category ?? "") +
       "' requested_frame=" + _lastRequestedFrame +

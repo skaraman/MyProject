@@ -238,7 +238,7 @@ public static partial class SpriteRuntimeResolver {
     var now = Time.realtimeSinceStartup;
     if (logCooldown.TryGetValue(key, out var last) && now - last < 5f) return;
     logCooldown[key] = now;
-    Debug.Log(message);
+    RuntimeLog.Log(message);
   }
 
   static void RateLimitedWarning(string key, string message, Object logContext = null) {

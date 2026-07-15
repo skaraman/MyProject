@@ -60,7 +60,15 @@ public static partial class ContentPackPipeline {
 
   static void WriteJson<T>(string fullPath, T payload, TransitionPipelineMode mode, ExportSyncStats stats, bool generatedFile) {
     EnsureDirectoryFullPath(Path.GetDirectoryName(fullPath));
-    File.WriteAllText(fullPath, JsonUtility.ToJson(payload, prettyPrint: true), new UTF8Encoding(false));
+    var json = JsonUtility.ToJson(payload, prettyPrint: true);
+    if (mode == TransitionPipelineMode.Smart && File.Exists(fullPath)) {
+      var existingJson = File.ReadAllText(fullPath);
+      if (string.Equals(existingJson, json, StringComparison.Ordinal)) {
+        return;
+      }
+    }
+
+    File.WriteAllText(fullPath, json, new UTF8Encoding(false));
     if (stats != null) {
       if (generatedFile) {
         stats.generatedFilesWritten++;

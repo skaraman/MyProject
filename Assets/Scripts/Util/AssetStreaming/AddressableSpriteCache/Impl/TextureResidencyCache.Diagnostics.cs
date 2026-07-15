@@ -294,7 +294,7 @@ public static partial class TextureResidencyCache {
 
     loadingContextModeLogged = true;
     loadingContextModeReason = reason;
-    Debug.Log(
+    RuntimeLog.Log(
       "[TextureResidencyCache][OverlayMode] reason='" + reason + "'" +
       " serial_mode=" + (ShouldUseStrictSerialLoadingDebounce() ? 1 : 0) +
       " max_starts=" + Math.Max(maxStarts, 0) +

@@ -453,6 +453,8 @@ public static class SaveKeys {
   public const string ActiveForm = "activeForm";
   public const string UnlockedForms = "unlockedForms";
   public const string FormProgress = "formProgress";
+  public const string AbilityProgress = "abilityProgress";
+  public const string AbilityLoadouts = "abilityLoadouts";
   public const string FormStats = "formStats";
   public const string EquippedGear = "equippedGear";
   public const string AllGear = "allGear";
@@ -461,7 +463,7 @@ public static class SaveKeys {
 public static class SaveSlotManager {
   public const string SlotEpisodeIdKey = "episodeId";
   public const string SlotSaveDateKey = "saveDate";
-  public const string DefaultEpisodeId = "Episode01";
+  public const string DefaultEpisodeId = "Episode1.1";
   const string LegacySlotEpisodeKey = "episode";
   const string LegacySlotSaveDateKey = "date";
   const string SlotSaveDateFormat = "yyyy-MM-dd";
@@ -469,7 +471,23 @@ public static class SaveSlotManager {
   static int _slot = 1;
   public static int slot {
     get => _slot;
-    set => _slot = value;
+    set {
+      if (_slot == value) {
+        return;
+      }
+
+      var formsFlushed = CharacterState.FlushPendingProgressBeforeSlotChange();
+      var episodeFlushed = ContentEpisodeProgression.FlushPendingSave();
+      if (!formsFlushed || !episodeFlushed) {
+        Debug.LogWarning(
+          "[SaveSlotManager] Refused slot change because pending progress could not be saved." +
+          " current_slot=" + _slot +
+          " requested_slot=" + value
+        );
+        return;
+      }
+      _slot = value;
+    }
   }
 
   static string BuildSlotDirectory(int slotNumber) {
@@ -504,6 +522,16 @@ public static class SaveSlotManager {
     return SlotExists(slot);
   }
 
+  public static int ResolveNextAvailableSlot() {
+    var slotNumber = 1;
+
+    while (SlotExists(slotNumber)) {
+      slotNumber += 1;
+    }
+
+    return slotNumber;
+  }
+
   public static void Save(string name, SaveData table) {
     NormalizeBeforeSave(name, table);
     var path = BuildSavePath(BuildSlotDirectory(slot), name);
@@ -525,6 +553,7 @@ public static class SaveSlotManager {
   }
 
   public static void Delete(int deleteSlot) {
+    ContentEpisodeProgression.DiscardRuntimeCacheForSlot(deleteSlot);
     var mainDirectory = BuildSlotDirectory(deleteSlot);
     if (Directory.Exists(mainDirectory)) {
       Directory.Delete(mainDirectory, true);
@@ -744,7 +773,7 @@ public static class SaveSlotManager {
 // var loaded = SaveSlotManager.Load("stats");
 
 // // ******* Use the loaded values
-// Debug.Log("Loaded HP: " + loaded["HP"]);
-// Debug.Log("Loaded Speed: " + loaded["Speed"]);
-// Debug.Log("Loaded Name: " + loaded["Name"]);
+// RuntimeLog.Log("Loaded HP: " + loaded["HP"]);
+// RuntimeLog.Log("Loaded Speed: " + loaded["Speed"]);
+// RuntimeLog.Log("Loaded Name: " + loaded["Name"]);
 // ******************************************** //

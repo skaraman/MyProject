@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Settings;
@@ -49,6 +50,14 @@ public static class RuntimePrefabAddressables {
 
     var normalizedAssetPath = NormalizeAssetPath(assetPath);
     var guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
+    if (string.IsNullOrWhiteSpace(guid) && File.Exists(normalizedAssetPath)) {
+      AssetDatabase.ImportAsset(
+        normalizedAssetPath,
+        ImportAssetOptions.ForceSynchronousImport
+      );
+      guid = AssetDatabase.AssetPathToGUID(normalizedAssetPath);
+    }
+
     if (string.IsNullOrWhiteSpace(guid)) {
       var label = string.IsNullOrWhiteSpace(assetLabel) ? "runtime asset" : assetLabel.Trim();
       Debug.LogWarning("[" + logPrefix + "] " + label + " was not found for path '" + normalizedAssetPath + "'.");

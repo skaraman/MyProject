@@ -1,0 +1,201 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using UnityEditor;
+using UnityEditor.Profiling;
+using UnityEditorInternal;
+using UnityEngine;
+
+public static class ProfilerReportExporter {
+  const string OutputFolderName = "ProfilerCaptures";
+  const string LatestReportFileName = "latest.csv";
+
+  [MenuItem("Tools/Diagnostics/Export Selected Profiler Frame for Codex")]
+  static void ExportSelectedProfilerFrame() {
+    var profilerWindow = EditorWindow.GetWindow<ProfilerWindow>();
+    var selectedFrameIndex = Convert.ToInt32(profilerWindow.selectedFrameIndex);
+
+    if (selectedFrameIndex < profilerWindow.firstAvailableFrameIndex ||
+        selectedFrameIndex > profilerWindow.lastAvailableFrameIndex) {
+      EditorUtility.DisplayDialog(
+        "Profiler Export",
+        "Select a captured frame in the Profiler window first.",
+        "OK"
+      );
+      return;
+    }
+
+    ExportFrame(selectedFrameIndex);
+  }
+
+  [MenuItem("Tools/Diagnostics/Export Worst Buffered Profiler Frame for Codex")]
+  static void ExportWorstBufferedProfilerFrame() {
+    var firstFrameIndex = ProfilerDriver.firstFrameIndex;
+    var lastFrameIndex = ProfilerDriver.lastFrameIndex;
+    var worstFrameIndex = -1;
+    var worstPlayerLoopTimeMs = double.MinValue;
+
+    for (var frameIndex = firstFrameIndex; frameIndex <= lastFrameIndex; frameIndex++) {
+      if (!TryGetPlayerLoopTimeMs(frameIndex, out var playerLoopTimeMs)) continue;
+      if (playerLoopTimeMs <= worstPlayerLoopTimeMs) continue;
+
+      worstPlayerLoopTimeMs = playerLoopTimeMs;
+      worstFrameIndex = frameIndex;
+    }
+
+    if (worstFrameIndex < 0) {
+      EditorUtility.DisplayDialog(
+        "Profiler Export",
+        "The Profiler has no readable PlayerLoop frames.",
+        "OK"
+      );
+      return;
+    }
+
+    ExportFrame(worstFrameIndex);
+  }
+
+  static bool TryGetPlayerLoopTimeMs(int frameIndex, out double playerLoopTimeMs) {
+    playerLoopTimeMs = 0d;
+    using (var frameData = ProfilerDriver.GetHierarchyFrameDataView(
+      frameIndex,
+      0,
+      HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName,
+      HierarchyFrameDataView.columnTotalTime,
+      false
+    )) {
+      if (frameData == null || !frameData.valid) return false;
+
+      var rootItemId = frameData.GetRootItemID();
+      var childItems = new List<int>();
+      frameData.GetItemChildren(rootItemId, childItems);
+      for (var i = 0; i < childItems.Count; i++) {
+        var itemId = childItems[i];
+        if (!string.Equals(frameData.GetItemName(itemId), "PlayerLoop", StringComparison.Ordinal)) continue;
+
+        playerLoopTimeMs = frameData.GetItemColumnDataAsDouble(
+          itemId,
+          HierarchyFrameDataView.columnTotalTime
+        );
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static void ExportFrame(int frameIndex) {
+    var outputPath = GetOutputPath();
+    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+
+    var exportedThreadCount = WriteFrameReport(frameIndex, outputPath);
+    if (exportedThreadCount <= 0) {
+      EditorUtility.DisplayDialog(
+        "Profiler Export",
+        "The selected frame has no readable CPU hierarchy data.",
+        "OK"
+      );
+      return;
+    }
+
+    EditorGUIUtility.systemCopyBuffer = outputPath;
+    EditorUtility.RevealInFinder(outputPath);
+    Debug.Log(
+      "[ProfilerReportExporter] Exported frame " +
+      (frameIndex + 1) +
+      " to '" +
+      outputPath +
+      "'."
+    );
+  }
+
+  static int WriteFrameReport(int frameIndex, string outputPath) {
+    var exportedThreadCount = 0;
+
+    using (var writer = new StreamWriter(outputPath, false, new UTF8Encoding(false))) {
+      WriteHeader(writer);
+
+      for (var threadIndex = 0; ; threadIndex++) {
+        using (var frameData = ProfilerDriver.GetHierarchyFrameDataView(
+          frameIndex,
+          threadIndex,
+          HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName,
+          HierarchyFrameDataView.columnTotalTime,
+          false
+        )) {
+          if (frameData == null || !frameData.valid) break;
+
+          WriteThreadRows(writer, frameData);
+          exportedThreadCount++;
+        }
+      }
+    }
+
+    return exportedThreadCount;
+  }
+
+  static void WriteHeader(StreamWriter writer) {
+    writer.WriteLine(
+      "frame_index,frame_display_index,frame_time_ms,frame_fps," +
+      "thread_group,thread_name,depth,path,name,object_name," +
+      "total_ms,self_ms,calls,gc_alloc_bytes"
+    );
+  }
+
+  static void WriteThreadRows(StreamWriter writer, HierarchyFrameDataView frameData) {
+    var pendingItems = new Stack<int>();
+    var childItems = new List<int>();
+    pendingItems.Push(frameData.GetRootItemID());
+
+    while (pendingItems.Count > 0) {
+      var itemId = pendingItems.Pop();
+      WriteItemRow(writer, frameData, itemId);
+
+      childItems.Clear();
+      frameData.GetItemChildren(itemId, childItems);
+      for (var i = childItems.Count - 1; i >= 0; i--) {
+        pendingItems.Push(childItems[i]);
+      }
+    }
+  }
+
+  static void WriteItemRow(StreamWriter writer, HierarchyFrameDataView frameData, int itemId) {
+    WriteInteger(writer, frameData.frameIndex);
+    WriteInteger(writer, frameData.frameIndex + 1);
+    WriteNumber(writer, frameData.frameTimeMs);
+    WriteNumber(writer, frameData.frameFps);
+    WriteText(writer, frameData.threadGroupName);
+    WriteText(writer, frameData.threadName);
+    WriteInteger(writer, frameData.GetItemDepth(itemId));
+    WriteText(writer, frameData.GetItemPath(itemId));
+    WriteText(writer, frameData.GetItemName(itemId));
+    WriteText(writer, frameData.GetItemColumnData(itemId, HierarchyFrameDataView.columnObjectName));
+    WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnTotalTime));
+    WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnSelfTime));
+    WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnCalls));
+    WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnGcMemory), true);
+  }
+
+  static void WriteText(StreamWriter writer, string value) {
+    writer.Write('"');
+    writer.Write((value ?? "").Replace("\"", "\"\""));
+    writer.Write("\",");
+  }
+
+  static void WriteInteger(StreamWriter writer, long value) {
+    writer.Write(value.ToString(CultureInfo.InvariantCulture));
+    writer.Write(',');
+  }
+
+  static void WriteNumber(StreamWriter writer, double value, bool endRow = false) {
+    writer.Write(value.ToString("0.####", CultureInfo.InvariantCulture));
+    writer.Write(endRow ? '\n' : ',');
+  }
+
+  static string GetOutputPath() {
+    var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+    return Path.Combine(projectRoot, OutputFolderName, LatestReportFileName);
+  }
+}

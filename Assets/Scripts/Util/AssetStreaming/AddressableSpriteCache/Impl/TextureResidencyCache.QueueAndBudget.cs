@@ -22,6 +22,7 @@ public static partial class TextureResidencyCache {
       var entry = request.entry;
       var sliceAddress = request.sliceAddress;
       if (entry == null || string.IsNullOrWhiteSpace(sliceAddress)) continue;
+      if (entry.pendingExactSliceSupplementAddresses == null) continue;
       if (!entry.pendingExactSliceSupplementAddresses.Contains(sliceAddress)) continue;
       if (entry.isEvicted || !entry.isDone || !entry.isSuccess) {
         entry.pendingExactSliceSupplementAddresses.Remove(sliceAddress);
@@ -73,7 +74,7 @@ public static partial class TextureResidencyCache {
               }
               entry.failedExactSliceSupplementAddresses.Remove(sliceAddress);
               if (ShouldLogAtlasNameDiagnostics(entry.address)) {
-                Debug.Log(
+                RuntimeLog.Log(
                   "[TextureResidencyCache] Exact slice supplement resolved" +
                   " requested='" + sliceAddress + "'" +
                   " sprite_name='" + (sprite.name ?? "") + "'" +
@@ -159,6 +160,9 @@ public static partial class TextureResidencyCache {
   }
 
   static string BuildTraceReleaseDetail(CacheEntry entry, string reason) {
+    var registeredTextureCount = entry != null && entry.registeredTextureIds != null
+      ? entry.registeredTextureIds.Count
+      : 0;
     return
       "reason=" + NormalizeAddress(reason) +
       " load_mode=" + ResolvePrimaryLoadMode(entry.address) +
@@ -167,11 +171,12 @@ public static partial class TextureResidencyCache {
         : "direct_only") +
       " was_done=" + (entry.isDone ? 1 : 0) +
       " was_success=" + (entry.isSuccess ? 1 : 0) +
-      " registered_textures=" + entry.registeredTextureIds.Count;
+      " registered_textures=" + registeredTextureCount;
   }
 
   static void RecordAssetTraceQueue(CacheEntry entry, LoadPriority priority) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "TextureResidencyCache",
       stage: "queue",
@@ -186,6 +191,7 @@ public static partial class TextureResidencyCache {
 
   static void RecordAssetTraceStart(CacheEntry entry, string loadMode, int resourceLocationCount, int expectedSiblingSliceCount) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "TextureResidencyCache",
       stage: "start",
@@ -197,6 +203,7 @@ public static partial class TextureResidencyCache {
 
   static void RecordAssetTraceFinalize(CacheEntry entry, int loadedSpriteCount, bool loadSucceeded) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     var texture = ResolveTraceTexture(entry);
     AssetLoadTraceMonitor.RecordEvent(
       source: "TextureResidencyCache",
@@ -211,6 +218,7 @@ public static partial class TextureResidencyCache {
 
   static void RecordAssetTraceFailure(CacheEntry entry, string reason) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "TextureResidencyCache",
       stage: "fail",
@@ -225,6 +233,7 @@ public static partial class TextureResidencyCache {
 
   static void RecordAssetTraceResident(CacheEntry entry) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     var texture = ResolveTraceTexture(entry);
     AssetLoadTraceMonitor.RecordEvent(
       source: "TextureResidencyCache",
@@ -238,6 +247,7 @@ public static partial class TextureResidencyCache {
 
   static void RecordAssetTraceRelease(CacheEntry entry, string reason) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     var texture = ResolveTraceTexture(entry);
     AssetLoadTraceMonitor.RecordEvent(
       source: "TextureResidencyCache",

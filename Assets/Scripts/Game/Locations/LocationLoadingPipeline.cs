@@ -11,7 +11,7 @@ public class LocationLoadingPipeline : MonoBehaviour {
 
   public void RequestLoad(string resolvedId) {
     if (SpriteStreamingLoadingState.IsProtectedLoadingOverlayActive) {
-      Debug.Log($"[LocationLoadingPipeline] Deferring load request for '{resolvedId}' because protected loading overlay is active.");
+      RuntimeLog.Log($"[LocationLoadingPipeline] Deferring load request for '{resolvedId}' because protected loading overlay is active.");
       return;
     }
 
@@ -68,7 +68,7 @@ public class LocationLoadingPipeline : MonoBehaviour {
 
 
 
-    Debug.Log($"[LocationLoadingPipeline] Built archetypes for location '{locationId}': count={map.Count}", this);
+    RuntimeLog.Log($"[LocationLoadingPipeline] Built archetypes for location '{locationId}': count={map.Count}", this);
     return map;
   }
 

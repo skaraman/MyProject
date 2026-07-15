@@ -139,23 +139,11 @@ public static partial class SpriteIndexBuilder {
       return true;
     }
 
+    var fingerprintByGroupName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     for (var i = 0; i < optionalPackCatalogs.Count; i++) {
       var catalog = optionalPackCatalogs[i];
       if (catalog == null || string.IsNullOrWhiteSpace(catalog.groupName)) {
         continue;
-      }
-
-      if (!cleanCachesBeforeBuild) {
-        var catalogPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(catalog.externalRootPath, catalog.catalogRelativePath));
-        if (System.IO.File.Exists(catalogPath)) {
-          if (logResult) {
-            UnityEngine.Debug.Log(
-              "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Skipping already built content pack catalog." +
-              " pack_id='" + (catalog.packId ?? "") + "'"
-            );
-          }
-          continue;
-        }
       }
 
       var group = settings.FindGroup(catalog.groupName);
@@ -166,6 +154,28 @@ public static partial class SpriteIndexBuilder {
           " group='" + (catalog.groupName ?? "") + "'"
         );
         return false;
+      }
+
+      fingerprintByGroupName[catalog.groupName] = ComputeOptionalPackCatalogFingerprint(group);
+    }
+
+    for (var i = 0; i < optionalPackCatalogs.Count; i++) {
+      var catalog = optionalPackCatalogs[i];
+      if (catalog == null || string.IsNullOrWhiteSpace(catalog.groupName)) {
+        continue;
+      }
+
+      var group = settings.FindGroup(catalog.groupName);
+      var inputFingerprint = fingerprintByGroupName[catalog.groupName];
+      if (!cleanCachesBeforeBuild &&
+          IsOptionalPackCatalogFingerprintCurrent(catalog, inputFingerprint)) {
+        if (logResult) {
+          Debug.Log(
+            "[SpriteIndexBuilder] [" + contextLabel + "][PackCatalog] Skipping unchanged content pack catalog." +
+            " pack_id='" + (catalog.packId ?? "") + "'"
+          );
+        }
+        continue;
       }
 
       ApplyChunkIncludeInBuildSelection(settings, originalStates, new[] { group });
@@ -189,12 +199,96 @@ public static partial class SpriteIndexBuilder {
         return false;
       }
 
-      if (!CopyPackCatalogBuildOutput(result, catalog, contextLabel, logResult)) {
+      if (!CopyPackCatalogBuildOutput(
+            result,
+            catalog,
+            inputFingerprint,
+            contextLabel,
+            logResult)) {
         return false;
       }
     }
 
     return true;
+  }
+
+  static string ComputeOptionalPackCatalogFingerprint(AddressableAssetGroup group) {
+    var content = new StringBuilder();
+    content.Append("version=1\n");
+    content.Append("build_target=").Append(EditorUserBuildSettings.activeBuildTarget).Append('\n');
+    content.Append("group=").Append(group?.Name ?? "").Append('\n');
+
+    var schema = group?.GetSchema<BundledAssetGroupSchema>();
+    if (schema != null) {
+      content.Append("schema=").Append(EditorJsonUtility.ToJson(schema)).Append('\n');
+    }
+
+    var entries = group?.entries
+      .Where(entry => entry != null)
+      .OrderBy(entry => entry.guid, StringComparer.OrdinalIgnoreCase)
+      .ToList() ?? new List<AddressableAssetEntry>();
+
+    for (var i = 0; i < entries.Count; i++) {
+      var entry = entries[i];
+      var assetPath = NormalizePath(AssetDatabase.GUIDToAssetPath(entry.guid));
+      if (string.IsNullOrWhiteSpace(assetPath)) {
+        assetPath = NormalizePath(entry.AssetPath);
+      }
+
+      content.Append("entry_guid=").Append(entry.guid ?? "").Append('\n');
+      content.Append("entry_address=").Append(NormalizePath(entry.address)).Append('\n');
+      content.Append("asset_path=").Append(assetPath).Append('\n');
+
+      var labels = entry.labels != null
+        ? entry.labels.OrderBy(label => label, StringComparer.OrdinalIgnoreCase).ToList()
+        : new List<string>();
+      for (var labelIndex = 0; labelIndex < labels.Count; labelIndex++) {
+        content.Append("label=").Append(labels[labelIndex] ?? "").Append('\n');
+      }
+
+      var dependencyHash = AssetDatabase.GetAssetDependencyHash(assetPath);
+      content.Append("dependency_hash=").Append(dependencyHash).Append('\n');
+    }
+
+    using var hashAlgorithm = SHA256.Create();
+    var inputBytes = Encoding.UTF8.GetBytes(content.ToString());
+    var hashBytes = hashAlgorithm.ComputeHash(inputBytes);
+    var fingerprint = new StringBuilder(hashBytes.Length * 2);
+    for (var i = 0; i < hashBytes.Length; i++) {
+      fingerprint.Append(hashBytes[i].ToString("x2", CultureInfo.InvariantCulture));
+    }
+
+    return fingerprint.ToString();
+  }
+
+  static bool IsOptionalPackCatalogFingerprintCurrent(
+    ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo catalog,
+    string inputFingerprint
+  ) {
+    if (catalog == null || string.IsNullOrWhiteSpace(inputFingerprint)) {
+      return false;
+    }
+
+    var catalogPath = Path.GetFullPath(
+      Path.Combine(catalog.externalRootPath, catalog.catalogRelativePath)
+    );
+    if (!File.Exists(catalogPath)) {
+      return false;
+    }
+
+    var fingerprintPath = Path.GetFullPath(
+      Path.Combine(
+        catalog.externalRootPath,
+        catalog.bundleRootRelativePath,
+        ContentPackPipeline.RuntimeCatalogFingerprintFileName
+      )
+    );
+    if (!File.Exists(fingerprintPath)) {
+      return false;
+    }
+
+    var existingFingerprint = File.ReadAllText(fingerprintPath).Trim();
+    return string.Equals(existingFingerprint, inputFingerprint, StringComparison.OrdinalIgnoreCase);
   }
 
   static void ApplyHybridBaseIncludeInBuildSelection(
@@ -447,6 +541,7 @@ public static partial class SpriteIndexBuilder {
   static bool CopyPackCatalogBuildOutput(
     AddressablesPlayerBuildResult result,
     ContentPackPipeline.ContentPackRuntimeCatalogBuildInfo catalog,
+    string inputFingerprint,
     string contextLabel,
     bool logResult
   ) {
@@ -496,6 +591,16 @@ public static partial class SpriteIndexBuilder {
       );
       return false;
     }
+
+    var fingerprintPath = Path.Combine(
+      targetRoot,
+      ContentPackPipeline.RuntimeCatalogFingerprintFileName
+    );
+    File.WriteAllText(
+      fingerprintPath,
+      inputFingerprint + Environment.NewLine,
+      new UTF8Encoding(false)
+    );
 
     if (logResult) {
       Debug.Log(

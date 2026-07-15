@@ -3,6 +3,16 @@
 
 FragmentDataNormalsPass NormalsRenderingVertex(VertexDataNormalsPass v)
 {
+	#if defined(SKINNED_SPRITE)
+		v.vertex.xyz = UnitySkinSprite(
+			v.vertex.xyz,
+			v.indices,
+			v.weights,
+			unity_SpriteProps.z,
+			1.0f
+		);
+	#endif
+
 	#if RECTSIZE_ON
 	v.vertex.xyz += (v.vertex.xyz * (_RectSize - 1.0));
 	#endif

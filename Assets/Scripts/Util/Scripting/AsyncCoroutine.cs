@@ -22,7 +22,7 @@ public static class AsyncCoroutine {
         await Task.Yield();
     }
     catch (OperationCanceledException) {
-      Debug.Log($"[AsyncCoroutine] Canceled: {key}");
+      RuntimeLog.Log($"[AsyncCoroutine] Canceled: {key}");
     }
     finally {
       if (active.ContainsKey(key) && active[key] == cts)

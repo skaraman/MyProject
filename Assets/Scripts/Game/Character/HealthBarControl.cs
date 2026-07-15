@@ -3,12 +3,16 @@ using UnityEngine;
 using UnityEngine.UI;
 
 public class HealthBarControl : MonoBehaviour {
+  const int NumericGlyphCapacity = 4;
+
     public string Form;
   [SerializeField] private List<GameObject> objectsToChange = new();
   private CharacterState characterState;
   [SerializeField] private FontText healthText;
   [SerializeField] private FontText nrgText;
   private string lastLabelPrefix;
+  private float lastHp = -1f;
+  private float lastNrg = -1f;
 
   void OnValidate() {
     if (Application.isPlaying) return;
@@ -25,6 +29,8 @@ public class HealthBarControl : MonoBehaviour {
     if (characterState == null) {
       characterState = GetComponentInParent<CharacterState>();
     }
+    healthText?.EnsureGlyphCapacity(NumericGlyphCapacity);
+    nrgText?.EnsureGlyphCapacity(NumericGlyphCapacity);
 
     var activeForm = EsperanzaForms.GetActive();
     lastLabelPrefix = Form != null ? Form : activeForm;
@@ -40,12 +46,18 @@ public class HealthBarControl : MonoBehaviour {
 
     if (healthText != null) {
       if (!AllStatValues.Esperanza.TryGetValue("HP", out var hp)) hp = 0f;
-      healthText.content = hp.ToString("0");
+      if (Mathf.Abs(hp - lastHp) > 0.01f) {
+        lastHp = hp;
+        healthText.content = IntegerTextCache.Get(Mathf.RoundToInt(hp));
+      }
     }
 
     if (nrgText != null) {
       if (!AllStatValues.Esperanza.TryGetValue("NRG", out var nrg)) nrg = 0f;
-      nrgText.content = nrg.ToString("0");
+      if (Mathf.Abs(nrg - lastNrg) > 0.01f) {
+        lastNrg = nrg;
+        nrgText.content = IntegerTextCache.Get(Mathf.RoundToInt(nrg));
+      }
     }
   }
 

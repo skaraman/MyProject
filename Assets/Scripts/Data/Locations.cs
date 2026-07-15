@@ -88,13 +88,13 @@ public class LocationPrefabData {
     }
 
     if (RuntimeAssetCache.TryGetLoaded<GameObject>(address, out var prewarmedPrefab)) {
-      Debug.Log("[LocationPrefabData] Using runtime asset cache prefab address='" + address + "'.");
+      RuntimeLog.Log("[LocationPrefabData] Using runtime asset cache prefab address='" + address + "'.");
       addressablesLoadFailed = false;
       return prewarmedPrefab;
     }
 
     if (TryGetCachedPrefab(address, out var cachedPrefab)) {
-      Debug.Log("[LocationPrefabData] Using cached addressable prefab address='" + address + "'.");
+      RuntimeLog.Log("[LocationPrefabData] Using cached addressable prefab address='" + address + "'.");
       addressablesLoadFailed = false;
       return cachedPrefab;
     }
@@ -156,7 +156,7 @@ public class LocationPrefabData {
         Addressables.Release(evictHandle);
       }
       prefabHandleCache.Remove(evictAddress);
-      Debug.Log("[LocationPrefabData] Evicted cached addressable prefab address='" + evictAddress + "'.");
+      RuntimeLog.Log("[LocationPrefabData] Evicted cached addressable prefab address='" + evictAddress + "'.");
     }
   }
 
@@ -171,7 +171,7 @@ public class LocationPrefabData {
       if (loadHandle.Status == AsyncOperationStatus.Succeeded && loadedPrefab != null) {
         RememberCachedPrefab(address, loadHandle, loadedPrefab);
         var loadSeconds = Time.realtimeSinceStartup - startedAt;
-        Debug.Log(
+        RuntimeLog.Log(
           "[LocationPrefabData] Loaded addressable prefab address='" + address +
           "' load_s=" + loadSeconds.ToString("0.0000") +
           " child_count=" + loadedPrefab.transform.childCount
@@ -332,7 +332,7 @@ public static class LocationEnemyData {
     }
 
     if (ShouldLogLocationDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[LocationEnemyData] Resolved prefab via built-in fallback" +
         " prefab='" + prefab.name +
         "' asset_path='" + (string.IsNullOrWhiteSpace(selectedAssetPath) ? "-" : selectedAssetPath) +

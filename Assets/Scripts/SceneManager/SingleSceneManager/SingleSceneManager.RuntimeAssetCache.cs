@@ -6,6 +6,12 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public partial class SingleSceneManager {
+  void OnAbilityLoadoutChangedForPersistentPins(string formName) {
+    var activeForm = EsperanzaForms.GetActive();
+    if (!string.Equals(formName, activeForm, StringComparison.OrdinalIgnoreCase)) return;
+    RefreshPersistentPlayerBaselineAtlasPins("ability_loadout_changed");
+  }
+
   IEnumerator StartupMainMenuRevealRoutine() {
     PrepareLoadingScreenCarrier();
     SetLoadingBlackscreenHold(true);
@@ -35,7 +41,7 @@ public partial class SingleSceneManager {
     var startedAt = Time.realtimeSinceStartup;
     QueueMenuRuntimeAssetWarmup("startup_load_menu_prewarm", includeLocationProfile: false);
     if (ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][LoadMenuPrewarm] stage=begin" +
         " restore_section=" + restoreSection +
         " saves=" + (saveSlotView != null ? saveSlotView.SavesCount : -1) +
@@ -56,7 +62,7 @@ public partial class SingleSceneManager {
 
     if (!ShouldLogLoadFlowDebug()) yield break;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LoadMenuPrewarm] stage=complete" +
       " restore_section=" + restoreSection +
       " saves=" + (saveSlotView != null ? saveSlotView.SavesCount : -1) +
@@ -135,7 +141,7 @@ public partial class SingleSceneManager {
     QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
 
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
         " class=ui_fonts" +
         " addresses=" + persistentAtlasAddressScratch.Count
@@ -149,33 +155,82 @@ public partial class SingleSceneManager {
   void RefreshPersistentPlayerSkinAtlasPins(string source) {
     var player = ResolvePlayerGearController();
     if (player == null) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
+      persistentPlayerAppearanceAtlasAddresses.Clear();
+      persistentPlayerAppearanceContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
       return;
     }
 
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
-    var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
+    var pinBudget = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
     var collectedCount = player.CollectPersistentSkinStartupAddresses(
       persistentAtlasAddressScratch,
       persistentAtlasSeenAddressScratch,
-      maxPinnedAddresses
+      int.MaxValue
     );
     if (collectedCount <= 0 || persistentAtlasAddressScratch.Count <= 0) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
+      player.SetSceneAppearanceAtlasPinsManaged(false);
+      persistentPlayerAppearanceAtlasAddresses.Clear();
+      persistentPlayerAppearanceContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
       persistentAtlasAddressScratch.Clear();
       persistentAtlasSeenAddressScratch.Clear();
       return;
     }
 
-    TextureResidencyCache.UpdateOwnerPins(
-      PersistentPlayerSkinAtlasPinOwnerId,
-      TextureResidencyCache.PinClass.Player,
+    var completePlanFitsPinBudget = persistentAtlasAddressScratch.Count <= pinBudget;
+    if (completePlanFitsPinBudget) {
+      TextureResidencyCache.UpdateOwnerPins(
+        PersistentPlayerAppearanceAtlasPinOwnerId,
+        TextureResidencyCache.PinClass.Player,
+        persistentAtlasAddressScratch,
+        TextureResidencyCache.LoadPriority.Warmup
+      );
+      var persistentPinCount = TextureResidencyCache.GetOwnerPinCount(
+        PersistentPlayerAppearanceAtlasPinOwnerId
+      );
+      var completePinCoverage = persistentPinCount >= persistentAtlasAddressScratch.Count;
+      player.SetSceneAppearanceAtlasPinsManaged(
+        completePinCoverage,
+        PersistentPlayerAppearanceAtlasPinOwnerId,
+        persistentAtlasAddressScratch.Count
+      );
+      if (!completePinCoverage) {
+        TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
+        Debug.LogWarning(
+          "[SingleSceneManager] Complete character atlas plan could not retain full pin coverage." +
+          " atlases=" + persistentAtlasAddressScratch.Count +
+          " pinned=" + persistentPinCount
+        );
+      }
+      completePlanFitsPinBudget = completePinCoverage;
+    }
+    else {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
+      player.SetSceneAppearanceAtlasPinsManaged(false);
+      Debug.LogWarning(
+        "[SingleSceneManager] Complete character atlas plan exceeds the player pin budget." +
+        " atlases=" + persistentAtlasAddressScratch.Count +
+        " budget=" + pinBudget
+      );
+    }
+    TextureResidencyCache.RequestLoadBatch(
       persistentAtlasAddressScratch,
-      TextureResidencyCache.LoadPriority.Warmup
+      TextureResidencyCache.LoadPriority.Warmup,
+      allowAtlasExpansion: false,
+      warmGateManaged: SpriteStreamingLoadingState.IsLoadingOverlayActive &&
+                       StreamingWarmOrchestrator.IsWarmGateRunning
     );
+    persistentPlayerAppearanceAtlasAddresses.Clear();
+    if (completePlanFitsPinBudget) {
+      persistentPlayerAppearanceAtlasAddresses.AddRange(persistentAtlasAddressScratch);
+    }
+    persistentPlayerAppearanceContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
     QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
 
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
         " class=player_skin" +
         " addresses=" + persistentAtlasAddressScratch.Count +
@@ -191,42 +246,73 @@ public partial class SingleSceneManager {
   void RefreshPersistentPlayerEffectAtlasPins(string source) {
     var player = ResolvePlayerGearController();
     if (player == null) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
+      persistentPlayerEffectAtlasAddresses.Clear();
+      persistentPlayerEffectContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
       return;
     }
 
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
-    var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
+    var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetEffectAddresses, 1);
     var collectedCount = player.CollectPersistentEffectStartupAddresses(
       persistentAtlasAddressScratch,
-      CorePlayerWarmAnimationKeys,
       persistentAtlasSeenAddressScratch,
-      maxPinnedAddresses
+      int.MaxValue
     );
     if (collectedCount <= 0 || persistentAtlasAddressScratch.Count <= 0) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
+      persistentPlayerEffectAtlasAddresses.Clear();
+      persistentPlayerEffectContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
       persistentAtlasAddressScratch.Clear();
       persistentAtlasSeenAddressScratch.Clear();
       return;
     }
 
-    TextureResidencyCache.UpdateOwnerPins(
-      PersistentPlayerEffectAtlasPinOwnerId,
-      TextureResidencyCache.PinClass.Effect,
+    var completePlanFitsPinBudget = persistentAtlasAddressScratch.Count <= maxPinnedAddresses;
+    if (completePlanFitsPinBudget) {
+      TextureResidencyCache.UpdateOwnerPins(
+        PersistentPlayerEffectAtlasPinOwnerId,
+        TextureResidencyCache.PinClass.Effect,
+        persistentAtlasAddressScratch,
+        TextureResidencyCache.LoadPriority.Warmup
+      );
+      var persistentPinCount = TextureResidencyCache.GetOwnerPinCount(
+        PersistentPlayerEffectAtlasPinOwnerId
+      );
+      completePlanFitsPinBudget = persistentPinCount >= persistentAtlasAddressScratch.Count;
+    }
+    if (!completePlanFitsPinBudget) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
+      Debug.LogWarning(
+        "[SingleSceneManager] Complete player effect atlas plan exceeds available pin coverage." +
+        " atlases=" + persistentAtlasAddressScratch.Count +
+        " budget=" + maxPinnedAddresses
+      );
+    }
+    TextureResidencyCache.RequestLoadBatch(
       persistentAtlasAddressScratch,
-      TextureResidencyCache.LoadPriority.Warmup
+      TextureResidencyCache.LoadPriority.Warmup,
+      allowAtlasExpansion: false,
+      warmGateManaged: SpriteStreamingLoadingState.IsLoadingOverlayActive &&
+                       StreamingWarmOrchestrator.IsWarmGateRunning
     );
+    persistentPlayerEffectAtlasAddresses.Clear();
+    if (completePlanFitsPinBudget) {
+      persistentPlayerEffectAtlasAddresses.AddRange(persistentAtlasAddressScratch);
+    }
+    persistentPlayerEffectContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
     QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
 
-      if (ShouldLogLoadingProgressDebug()) {
-        Debug.Log(
-          "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
-          " class=player_effects" +
-          " addresses=" + persistentAtlasAddressScratch.Count +
-          " warm_animations=" + CorePlayerWarmAnimationKeys.Length +
-          " projectile_manager=" + (player.projectileManager != null ? 1 : 0) +
-          " player='" + player.gameObject.name + "'"
-        );
-      }
+    if (ShouldLogLoadingProgressDebug()) {
+      RuntimeLog.Log(
+        "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
+        " class=player_effects" +
+        " addresses=" + persistentAtlasAddressScratch.Count +
+        " projectile_manager=" + (player.projectileManager != null ? 1 : 0) +
+        " player='" + player.gameObject.name + "'"
+      );
+    }
 
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
@@ -252,7 +338,7 @@ public partial class SingleSceneManager {
     QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
 
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PersistentAtlasPins] source='" + (source ?? "") + "'" +
         " class=player_expressions" +
         " addresses=" + persistentAtlasAddressScratch.Count
@@ -304,7 +390,7 @@ public partial class SingleSceneManager {
 
     if (!ShouldLogLoadingProgressDebug()) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][EnvironmentCache] stage=apply_slot" +
       " source='" + (source ?? "") + "'" +
       " slot=" + ResolveLoadFlowValue(slotName) +
@@ -333,7 +419,7 @@ public partial class SingleSceneManager {
 
     if (!ShouldLogLoadingProgressDebug()) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][EnvironmentCache] stage=refresh_slots" +
       " source='" + (source ?? "") + "'" +
       " current=" + ResolveLoadFlowValue(currentEnvironmentCacheLocationId) +
@@ -427,7 +513,7 @@ public partial class SingleSceneManager {
     );
 
     if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][LoadingTextWarmup] source='" + (source ?? "") + "'" +
         " font='" + (loadingText != null ? loadingText.font : "") + "'" +
         " atlas='" + atlasAddress + "'"

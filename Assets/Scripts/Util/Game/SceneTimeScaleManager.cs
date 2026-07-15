@@ -12,7 +12,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
     [Min(0f)] public float factor;
   }
 
-  sealed class TweenRegistration {
+  struct TweenRegistration {
     public int tweenId;
     public int layerIndex;
     public ulong ownerEntityId;
@@ -33,6 +33,9 @@ public class SceneTimeScaleManager : MonoBehaviour {
   }
 
   const float PauseRescanIntervalSeconds = 0.25f;
+  const int TweenRegistrationWarmCapacity = 256;
+  const int TweenOwnerWarmCapacity = 64;
+  const int TweenIdsPerOwnerWarmCapacity = 8;
 
   static SceneTimeScaleManager instance;
   static bool instanceLookupAttempted;
@@ -52,17 +55,19 @@ public class SceneTimeScaleManager : MonoBehaviour {
   readonly Dictionary<int, float> layerFactorLookup = new();
   readonly Dictionary<int, float> layerClockLookup = new();
   readonly HashSet<int> observedLayers = new();
-  readonly Dictionary<int, TweenRegistration> tweenRegistrationsById = new();
-  readonly Dictionary<ulong, List<int>> tweenIdsByOwner = new();
+  readonly Dictionary<int, TweenRegistration> tweenRegistrationsById = new(TweenRegistrationWarmCapacity);
+  readonly Dictionary<ulong, List<int>> tweenIdsByOwner = new(TweenOwnerWarmCapacity);
+  readonly Stack<List<int>> tweenIdListPool = new(TweenOwnerWarmCapacity);
   readonly HashSet<ulong> warnedExternalTweenOwners = new();
   readonly Dictionary<Rigidbody2D, FrozenRigidbody2DState> frozenRigidbodies2D = new();
   readonly Dictionary<Animator, FrozenAnimatorState> frozenAnimators = new();
-  readonly List<TweenRegistration> tweenRegistrationBuffer = new();
+  readonly List<TweenRegistration> tweenRegistrationBuffer = new(TweenRegistrationWarmCapacity);
   readonly List<Rigidbody2D> managedRigidbodies2DBuffer = new();
   readonly List<Animator> managedAnimatorsBuffer = new();
   bool warnedMissingSceneRoot;
   bool managedPauseStateApplied;
   float nextPauseRescanAt = -1f;
+  int tweenIdListCreatedCount;
 
   internal static int StateVersion => stateVersion;
 
@@ -84,6 +89,12 @@ public class SceneTimeScaleManager : MonoBehaviour {
   }
 
   public float SceneMultiplier => Mathf.Max(sceneMultiplier, 0f);
+
+  public void PrepareRuntimeCaches() {
+    while (tweenIdListCreatedCount < TweenOwnerWarmCapacity) {
+      tweenIdListPool.Push(CreateTweenIdList());
+    }
+  }
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetStaticState() {
@@ -267,10 +278,9 @@ public class SceneTimeScaleManager : MonoBehaviour {
       baseSpeed = Mathf.Max(baseSpeed, 0f)
     };
 
-    tweenRegistrationsById[tweenId] = registration;
     if (ownerEntityId != 0UL) {
       if (!tweenIdsByOwner.TryGetValue(ownerEntityId, out var list)) {
-        list = new List<int>();
+        list = AcquireTweenIdList();
         tweenIdsByOwner[ownerEntityId] = list;
       }
       if (!list.Contains(tweenId)) {
@@ -279,7 +289,8 @@ public class SceneTimeScaleManager : MonoBehaviour {
     }
 
     EnsureObservedLayer(layerIndex);
-    ApplyTweenScale(registration, descr);
+    ApplyTweenScale(ref registration, descr);
+    tweenRegistrationsById[tweenId] = registration;
   }
 
   public void UnregisterTween(int tweenId) {
@@ -290,6 +301,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
       list.Remove(tweenId);
       if (list.Count <= 0) {
         tweenIdsByOwner.Remove(registration.ownerEntityId);
+        ReleaseTweenIdList(list);
       }
     }
   }
@@ -302,6 +314,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
       tweenRegistrationsById.Remove(list[i]);
     }
     tweenIdsByOwner.Remove(ownerId);
+    ReleaseTweenIdList(list);
   }
 
   void InitializeRuntimeState() {
@@ -419,11 +432,32 @@ public class SceneTimeScaleManager : MonoBehaviour {
     nextPauseRescanAt = now + PauseRescanIntervalSeconds;
   }
 
+  struct LayerCacheEntry {
+    public EntityId instanceId;
+    public int frameCount;
+    public int layerIndex;
+    public SceneTimeScaleTarget ownerTarget;
+  }
+
+  readonly LayerCacheEntry[] _layerCache = new LayerCacheEntry[2048];
+
   internal bool TryResolveLayerContext(Transform context, out SceneTimeScaleTarget ownerTarget, out int layerIndex) {
     ownerTarget = null;
     layerIndex = 1;
     ResolveSceneObjectsRoot();
     if (context == null || sceneObjectsRoot == null) return false;
+
+    EntityId instanceId = context.GetEntityId();
+    int cacheIndex = (instanceId.GetHashCode() & 0x7FFFFFFF) % _layerCache.Length;
+    var entry = _layerCache[cacheIndex];
+
+    if (entry.instanceId.Equals(instanceId) && entry.frameCount == Time.frameCount) {
+      ownerTarget = entry.ownerTarget;
+      layerIndex = entry.layerIndex;
+      EnsureObservedLayer(layerIndex);
+      return true;
+    }
+
     if (context != sceneObjectsRoot && !context.IsChildOf(sceneObjectsRoot)) return false;
 
     var current = context;
@@ -431,6 +465,12 @@ public class SceneTimeScaleManager : MonoBehaviour {
       if (current.TryGetComponent<SceneTimeScaleTarget>(out ownerTarget)) {
         layerIndex = ownerTarget.LayerIndex;
         EnsureObservedLayer(layerIndex);
+        _layerCache[cacheIndex] = new LayerCacheEntry {
+          instanceId = instanceId,
+          frameCount = Time.frameCount,
+          layerIndex = layerIndex,
+          ownerTarget = ownerTarget
+        };
         return true;
       }
       if (current == sceneObjectsRoot) break;
@@ -438,6 +478,12 @@ public class SceneTimeScaleManager : MonoBehaviour {
     }
 
     EnsureObservedLayer(layerIndex);
+    _layerCache[cacheIndex] = new LayerCacheEntry {
+      instanceId = instanceId,
+      frameCount = Time.frameCount,
+      layerIndex = layerIndex,
+      ownerTarget = ownerTarget
+    };
     return true;
   }
 
@@ -606,14 +652,15 @@ public class SceneTimeScaleManager : MonoBehaviour {
         UnregisterTween(registration.tweenId);
         continue;
       }
-      ApplyTweenScale(registration, descr);
+      ApplyTweenScale(ref registration, descr);
+      tweenRegistrationsById[registration.tweenId] = registration;
     }
 
     tweenRegistrationBuffer.Clear();
   }
 
-  void ApplyTweenScale(TweenRegistration registration, LTDescr descr) {
-    if (registration == null || descr == null) return;
+  void ApplyTweenScale(ref TweenRegistration registration, LTDescr descr) {
+    if (descr == null) return;
 
     var factor = GetEffectiveFactor(registration.layerIndex);
     if (factor <= 0f) {
@@ -635,6 +682,28 @@ public class SceneTimeScaleManager : MonoBehaviour {
       descr.resume();
       registration.pausedByTimeScale = false;
     }
+  }
+
+  List<int> AcquireTweenIdList() {
+    if (tweenIdListPool.Count > 0) {
+      return tweenIdListPool.Pop();
+    }
+
+    return CreateTweenIdList();
+  }
+
+  List<int> CreateTweenIdList() {
+    tweenIdListCreatedCount += 1;
+    return new List<int>(TweenIdsPerOwnerWarmCapacity);
+  }
+
+  void ReleaseTweenIdList(List<int> list) {
+    if (list == null) {
+      return;
+    }
+
+    list.Clear();
+    tweenIdListPool.Push(list);
   }
 
   void UpsertSerializedLayerEntry(int layerIndex, float factor) {
@@ -708,7 +777,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
 
   void LogDebug(string message) {
     if (!enableDebugLogs) return;
-    Debug.Log(message);
+    RuntimeLog.Log(message);
   }
 
   static string FormatReason(string reason) {

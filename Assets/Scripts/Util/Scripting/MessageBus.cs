@@ -26,6 +26,8 @@ public static class CharacterMessageTopics {
   public static readonly MessageTopic<string> GearReady = new("gearReady");
   public static readonly MessageTopic<string> FormProgressChanged = new("formProgressChanged");
   public static readonly MessageTopic<string> FormStatsChanged = new("formStatsChanged");
+  public static readonly MessageTopic<string> AbilityProgressChanged = new("abilityProgressChanged");
+  public static readonly MessageTopic<string> AbilityLoadoutChanged = new("abilityLoadoutChanged");
 }
 
 public static class MessageBus {

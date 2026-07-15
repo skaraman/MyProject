@@ -60,7 +60,7 @@ public partial class SpriteWithNormals {
     var refreshedCount = RefreshTargetsInEditor(pendingEditorPreviewRefreshTargets);
     pendingEditorPreviewRefreshTargets.Clear();
     if (refreshedCount > 0) {
-      Debug.Log("[SpriteWithNormals] Auto-refreshed edit-mode previews after scene object enable. targets=" + refreshedCount);
+      RuntimeLog.Log("[SpriteWithNormals] Auto-refreshed edit-mode previews after scene object enable. targets=" + refreshedCount);
     }
   }
 
@@ -84,7 +84,7 @@ public partial class SpriteWithNormals {
 
     var refreshedCount = RefreshTargetsInEditor(targets);
     if (refreshedCount > 0) {
-      Debug.Log("[SpriteWithNormals] Refreshed edit-mode previews after atlas import. targets=" + refreshedCount);
+      RuntimeLog.Log("[SpriteWithNormals] Refreshed edit-mode previews after atlas import. targets=" + refreshedCount);
     }
   }
 #endif
@@ -259,7 +259,6 @@ public partial class SpriteWithNormals {
   void PrimeTrimmedMetadataWarmup(string colorAddress) {
     if (!useTrimmedAtlasOffset) return;
     if (string.IsNullOrWhiteSpace(colorAddress)) return;
-    TrackTrimmedMetadataWarmupCandidate(colorAddress);
     TrimmedSpriteOffsetResolver.GetMetadataState(
       colorAddress,
       pump: false,
@@ -275,7 +274,9 @@ public partial class SpriteWithNormals {
   SpriteColdLoadState GetTrimmedMetadataState(string colorAddress, bool requestIfNeeded = false) {
     if (!useTrimmedAtlasOffset) return SpriteColdLoadState.Ready;
     if (string.IsNullOrWhiteSpace(colorAddress)) return SpriteColdLoadState.Ready;
-    TrackTrimmedMetadataWarmupCandidate(colorAddress);
+    if (!requestIfNeeded) {
+      TrackTrimmedMetadataWarmupCandidate(colorAddress);
+    }
     return TrimmedSpriteOffsetResolver.GetMetadataState(
       colorAddress,
       pump: false,
@@ -392,12 +393,7 @@ public partial class SpriteWithNormals {
       }
     }
 
-    colorSprite = ResolveExpectedSliceSprite(colorSprite, pair.colorAddress, "color");
-    normalSprite = ResolveExpectedSliceSprite(normalSprite, pair.normalAddress, "normal");
-    if (colorSprite == null) {
-      sourceTag = "slice_mismatch";
-      return false;
-    }
+    // Both caches resolve by exact slice address before storing the sprite.
     sourceTag = ResolveCacheSourceTag(colorFromLocal, normalFromLocal, pair.normalAddress);
     return true;
   }
@@ -433,6 +429,7 @@ public partial class SpriteWithNormals {
   void ResetPairLookupCaches() {
     _pairLookupHitCache.Clear();
     _pairLookupMissCache.Clear();
+    _animationAtlasAddressCache.Clear();
   }
 
   void ResetTransientResolveRetryState() {
@@ -575,6 +572,8 @@ public partial class SpriteWithNormals {
     pair = default;
     pending = false;
 
+    EnsureContentReloadVersion();
+
     var cacheKey = new PairLookupCacheKey(key.libraryName, key.labelPrefix, key.category, key.frame);
     if (_pairLookupHitCache.TryGetValue(cacheKey, out pair)) return true;
     if (_pairLookupMissCache.Contains(cacheKey)) return false;
@@ -593,6 +592,26 @@ public partial class SpriteWithNormals {
     CachePairLookupHit(cacheKey, resolvedPair);
     pair = resolvedPair;
     return true;
+  }
+
+  void EnsureContentReloadVersion() {
+    var contentReloadVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (_pairLookupContentReloadVersion == contentReloadVersion) return;
+
+    _pairLookupContentReloadVersion = contentReloadVersion;
+    if (Application.isPlaying) {
+      CancelPendingRequest();
+      ReleaseActiveLeases();
+    }
+    _localLoadedSpriteByAddress.Clear();
+    ResetPairLookupCaches();
+    _hasLastLookup = false;
+    _targetColorAddress = "";
+    _targetNormalAddress = "";
+    _targetColorSliceAddress = "";
+    _targetNormalSliceAddress = "";
+    _lastAppliedNormalTexture = null;
+    _hasAppliedNormalTexture = false;
   }
 
   void CachePairLookupHit(PairLookupCacheKey cacheKey, SpriteAddressPair pair) {

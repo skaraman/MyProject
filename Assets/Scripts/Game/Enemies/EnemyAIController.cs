@@ -1,8 +1,14 @@
-using System.Collections;
 using UnityEngine;
 
 [RequireComponent(typeof(EnemyController))]
 public class EnemyAIController : MonoBehaviour {
+  enum BehaviourState {
+    Decide,
+    Wait,
+    Move,
+    Attack
+  }
+
   public Transform player;
   public EnemyController enemyController;
   public float moveSpeed = 2.5f;
@@ -20,9 +26,12 @@ public class EnemyAIController : MonoBehaviour {
   private float baselineAttackCooldown;
   private Rigidbody2D rb;
   private EnemyInfo info;
-  private Coroutine aiRoutine;
   private float nextAttackTime;
   private int cachedSpawnContextVersion = -1;
+  private BehaviourState behaviourState;
+  private float stateTimeRemaining;
+  private Vector2 stateMoveDirection;
+  private float stateMoveSpeedMultiplier;
 
   static bool ShouldLogSpawnDebug() {
     return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
@@ -39,69 +48,97 @@ public class EnemyAIController : MonoBehaviour {
   }
 
   void OnEnable() {
-    if (aiRoutine != null) StopCoroutine(aiRoutine);
-    aiRoutine = StartCoroutine(BehaviourLoop());
+    behaviourState = BehaviourState.Decide;
+    stateTimeRemaining = 0f;
+    enemyController?.ResumeAnimation();
   }
 
   void OnDisable() {
-    if (aiRoutine != null) StopCoroutine(aiRoutine);
-    aiRoutine = null;
     StopMovement();
   }
 
-  private IEnumerator BehaviourLoop() {
-    while (true) {
-      if (player == null || enemyController == null) {
-        yield return null;
-        continue;
-      }
-      RefreshResolvedCombatStats();
+  void Update() {
+    if (player == null || enemyController == null) {
+      return;
+    }
 
-      float distance = Vector2.Distance(transform.position, player.position);
-      FacePlayer();
-
-      if (distance <= closingDistance) {
-        yield return AttackSequence();
-      }
-      else {
-        yield return RepositionSequence();
-      }
-      yield return null;
+    switch (behaviourState) {
+      case BehaviourState.Decide:
+        DecideNextBehaviour();
+        break;
+      case BehaviourState.Wait:
+        TickWait();
+        break;
+      case BehaviourState.Move:
+        TickMove();
+        break;
+      case BehaviourState.Attack:
+        TickAttack();
+        break;
     }
   }
 
-  private IEnumerator AttackSequence() {
+  void DecideNextBehaviour() {
+    RefreshResolvedCombatStats();
+    var distance = Vector2.Distance(transform.position, player.position);
+    FacePlayer();
+
+    if (distance <= closingDistance) {
+      BeginAttack();
+      return;
+    }
+
+    BeginReposition();
+  }
+
+  void BeginAttack() {
     var now = TimeScale.GetNow(this);
-    if (now < nextAttackTime) yield break;
+    if (now < nextAttackTime) {
+      return;
+    }
+
     nextAttackTime = now + runtimeAttackCooldown;
 
     StopMovement();
-    if (enemyController.PlayAnimation("Attack")) {
-      float wait = enemyController.GetAnimationDurationSeconds("Attack");
-      if (wait <= 0f) wait = 0.5f;
-      yield return TimeScale.WaitForSecondsScaled(wait, this);
+    if (!enemyController.PlayAnimation("Attack")) {
+      return;
     }
-    enemyController.PlayAnimation(enemyController.defaultAnimation);
+
+    stateTimeRemaining = enemyController.GetAnimationDurationSeconds("Attack");
+    if (stateTimeRemaining <= 0f) {
+      stateTimeRemaining = 0.5f;
+    }
+    behaviourState = BehaviourState.Attack;
   }
 
-  private IEnumerator RepositionSequence() {
+  void TickAttack() {
+    stateTimeRemaining -= TimeScale.GetDeltaTime(this);
+    if (stateTimeRemaining > 0f) {
+      return;
+    }
+
+    enemyController.PlayAnimation(enemyController.defaultAnimation);
+    behaviourState = BehaviourState.Decide;
+  }
+
+  void BeginReposition() {
     var toPlayer = ((Vector2)(player.position - transform.position)).normalized;
-    float roll = Random.value;
+    var roll = Random.value;
 
     if (roll < 0.25f) {
       StopMovement();
       enemyController.PauseAnimation();
-      yield return TimeScale.WaitForSecondsScaled(Random.Range(waitRange.x, waitRange.y), this);
-      enemyController.ResumeAnimation();
-      yield break;
+      stateTimeRemaining = Random.Range(waitRange.x, waitRange.y);
+      behaviourState = BehaviourState.Wait;
+      return;
     }
 
-    Vector2 moveDir = toPlayer;
+    var moveDirection = toPlayer;
     float duration;
-    float speedMultiplier = 1f;
+    var speedMultiplier = 1f;
 
     if (roll < 0.55f) {
-      moveDir = -toPlayer;
+      moveDirection = -toPlayer;
       duration = Random.Range(backstepRange.x, backstepRange.y);
       speedMultiplier = 0.75f;
     }
@@ -114,24 +151,39 @@ public class EnemyAIController : MonoBehaviour {
     }
 
     if (!enemyController.PlayAnimation("Run")) {
-      yield break;
+      return;
     }
-    yield return MoveForDuration(moveDir, duration, speedMultiplier);
-    enemyController.PlayAnimation(enemyController.defaultAnimation);
+
+    if (moveDirection.sqrMagnitude > 0.001f) {
+      enemyController.FaceDirection(moveDirection.x);
+    }
+
+    stateMoveDirection = moveDirection.normalized;
+    stateMoveSpeedMultiplier = speedMultiplier;
+    stateTimeRemaining = duration;
+    behaviourState = BehaviourState.Move;
   }
 
-  private IEnumerator MoveForDuration(Vector2 direction, float duration, float speedMultiplier) {
-    if (direction.sqrMagnitude > 0.001f) {
-      enemyController.FaceDirection(direction.x);
+  void TickWait() {
+    stateTimeRemaining -= TimeScale.GetDeltaTime(this);
+    if (stateTimeRemaining > 0f) {
+      return;
     }
-    direction = direction.normalized;
-    float elapsed = 0f;
-    while (elapsed < duration) {
-      ApplyMovement(direction, speedMultiplier);
-      elapsed += TimeScale.GetDeltaTime(this);
-      yield return null;
+
+    enemyController.ResumeAnimation();
+    behaviourState = BehaviourState.Decide;
+  }
+
+  void TickMove() {
+    ApplyMovement(stateMoveDirection, stateMoveSpeedMultiplier);
+    stateTimeRemaining -= TimeScale.GetDeltaTime(this);
+    if (stateTimeRemaining > 0f) {
+      return;
     }
+
     StopMovement();
+    enemyController.PlayAnimation(enemyController.defaultAnimation);
+    behaviourState = BehaviourState.Decide;
   }
 
   private void ApplyMovement(Vector2 dir, float speedMultiplier) {
@@ -166,7 +218,7 @@ public class EnemyAIController : MonoBehaviour {
     closingDistance = ResolveClosingDistance();
 
     if (ShouldLogSpawnDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[EnemyAIController][RefreshResolvedCombatStats]" +
         " object='" + gameObject.name + "'" +
         " enemy_type='" + ResolveEnemyType() + "'" +

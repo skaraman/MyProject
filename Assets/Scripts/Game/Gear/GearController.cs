@@ -2,12 +2,15 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using CustomInspector;
+using Unity.Profiling;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
 public partial class GearController : MonoBehaviour {
+  static readonly ProfilerMarker PlayerTickProfilerMarker = new ProfilerMarker("GearController.PlayerTick");
+  static readonly ProfilerMarker EffectTickProfilerMarker = new ProfilerMarker("GearController.EffectTick");
   const int MinimumPlayerWarmFramesAtStartup = 8;
   const int MinimumCoreEffectWarmFramesAtStartup = 24;
   const float StartupAppearanceAddressCollectionTimeoutSeconds = 0.5f;
@@ -16,6 +19,20 @@ public partial class GearController : MonoBehaviour {
   const string EsperanzaBodyMaterialName = "EsperanzaBody";
   const string EsperanzaGearShaderName = "AllIn1SpriteShader/AllIn1Urp2dRenderer";
   static readonly string[] corePlayerWarmAnimationKeys = { "Blast", "Breathe", "Stance", "Walk" };
+  static readonly string[] DefaultCharacterAnimationKeys = {
+    "Walk",
+    "Run",
+    "Sprint",
+    "Stance",
+    "Breathe",
+    "Jump",
+    "JumpDouble",
+    "JumpLanding",
+    "JumpFalling",
+    "Dance",
+    "Block",
+    "Dodge"
+  };
   static readonly string[] CoreCombatWarmAnimationKeys = { "Blast" };
   public static string[] CorePlayerWarmAnimationKeys => corePlayerWarmAnimationKeys;
 
@@ -61,6 +78,10 @@ public partial class GearController : MonoBehaviour {
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private readonly List<string> equipWarmupAddressScratch = new();
   private readonly HashSet<string> equipWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> equipWarmAnimationScratch = new(64);
+  private readonly HashSet<string> equipWarmAnimationSeenScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> persistentWarmAnimationScratch = new(64);
+  private readonly HashSet<string> persistentWarmAnimationSeenScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> startupAppearanceWarmupAddressScratch = new();
   private readonly HashSet<string> startupAppearanceWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> coreEffectWarmupAddressScratch = new();
@@ -77,11 +98,13 @@ public partial class GearController : MonoBehaviour {
   private bool effectControllerInitialized;
   private bool effectResetToEmptyPending;
   private bool equippedStartupWarmupCompleted;
+  private bool sceneAppearanceAtlasPinsManaged;
   private bool runtimeInitialized;
   private string appearanceOwnerId;
   private string effectAppearanceOwnerId;
   private string coreEffectWarmOwnerId;
   private string startupAppearanceWarmOwnerId;
+  private Action offAbilityLoadoutChanged;
   private int appearanceRevision = 1;
   private bool runtimeGearMaterialWarningLogged;
   private bool runtimeHairMaterialWarningLogged;
@@ -89,6 +112,10 @@ public partial class GearController : MonoBehaviour {
 
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
   public int AppearanceRevision => appearanceRevision;
+  public bool SceneAppearanceAtlasPinsManaged =>
+    sceneAppearanceAtlasPinsManaged &&
+    animationController != null &&
+    animationController.AppearancePinsExternallyManaged;
 
 
   void OnEnable() {
@@ -110,6 +137,10 @@ public partial class GearController : MonoBehaviour {
   void EnsureRuntimeInitialized(string source) {
     if (runtimeInitialized) return;
     runtimeInitialized = true;
+    offAbilityLoadoutChanged = MessageBus.On(
+      CharacterMessageTopics.AbilityLoadoutChanged,
+      HandleAbilityLoadoutChanged
+    );
     ResetDebugPlaybackFlags();
     appearanceOwnerId = "player:" + ObjectEntityId.GetString(gameObject);
     effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
@@ -131,7 +162,7 @@ public partial class GearController : MonoBehaviour {
     animationController.PlayAnimation(defaultAnimation, true);
     QueueStartupAppearanceWarmup(source, pauseUntilReady: ShouldPauseStartupAppearanceWarmupUntilReady());
     if (ShouldLogRuntimeInitDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GearController] RuntimeInit" +
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " object=" + gameObject.name +
@@ -160,10 +191,15 @@ public partial class GearController : MonoBehaviour {
 
   void TickControllers(float deltaTime) {
     if (deltaTime <= 0f) return;
+
+    PlayerTickProfilerMarker.Begin();
     animationController?.Tick(deltaTime);
+    PlayerTickProfilerMarker.End();
     if (effectControllerInitialized) {
+      EffectTickProfilerMarker.Begin();
       effectAnimationController.Tick(deltaTime);
       TryFinalizeCompletedEffectAnimation();
+      EffectTickProfilerMarker.End();
     }
   }
 
@@ -216,7 +252,7 @@ public partial class GearController : MonoBehaviour {
     var previousPseudoTimer = pseudoTimer;
     pseudoTimer = 0f;
     if (!ShouldLogRuntimeInitDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[GearController] ResetPseudoTimer" +
       " object=" + gameObject.name +
       " previous_ms=" + previousPseudoTimer +
@@ -298,6 +334,8 @@ public partial class GearController : MonoBehaviour {
 #endif
     StopStartupAppearanceWarmup();
     StopEquipWarmupQueue();
+    offAbilityLoadoutChanged?.Invoke();
+    offAbilityLoadoutChanged = null;
     ReleaseCoreCombatEffectWarmupPins();
     ReleaseRuntimeGearMaterialHandle();
     animationController?.Cleanup(!Application.isPlaying);

@@ -25,7 +25,7 @@ public partial class LocationManager {
 
     var startedAt = Time.realtimeSinceStartup;
     if (shouldWaitForBarrier && logVerbose) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[LocationManager] Deferring location activation id='" + locationId +
         "' libraries=" + barrierLibraries.Count +
         " overlay_active=1"
@@ -70,7 +70,7 @@ public partial class LocationManager {
 
     var instantiateStartedAt = Time.realtimeSinceStartup;
     if (TryInstantiateStagedLocationPrefab(locationId, prefab, prefabData, parent, out var stagedInstance, out var stagePlans)) {
-      activeLocationInstance = stagedInstance;
+      SetActiveLocationInstance(locationId, prefab, stagedInstance);
       MessageBus.Send("LocationLocationChanged", activeLocationInstance);
       SplitActivationStagePlans(stagePlans, out var blockingPlans, out var deferredPlans);
       if (promoteDeferredStages && deferredPlans.Count > 0) {
@@ -78,7 +78,7 @@ public partial class LocationManager {
       }
       LogLocationStagePlanSummary("split", locationId, blockingPlans, deferredPlans, promoteDeferredStages);
       if (logVerbose) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[LocationManager] Stage split id='" + locationId +
           "' blocking_stages=" + blockingPlans.Count +
           " deferred_stages=" + deferredPlans.Count +
@@ -120,7 +120,8 @@ public partial class LocationManager {
     }
 
     instantiateStartedAt = Time.realtimeSinceStartup;
-    activeLocationInstance = InstantiateConfiguredLocationPrefab(locationId, prefab, prefabData, parent);
+    var configuredInstance = InstantiateConfiguredLocationPrefab(locationId, prefab, prefabData, parent);
+    SetActiveLocationInstance(locationId, prefab, configuredInstance);
     pendingBlockingLocationActivationRoutine = null;
     MessageBus.Send("LocationLocationChanged", activeLocationInstance);
     LogLocationLoadTiming(
@@ -325,7 +326,7 @@ public partial class LocationManager {
             out var maxInFlight,
             out var resolverIdle)) {
         if (logActivationTrace && waitedFrames > 0) {
-          Debug.Log(
+          RuntimeLog.Log(
             "[LocationManager][ActivationCapacity] result=ready id='" + locationId +
             "' target='" + activationTarget +
             "' wait_ms=" + ((Time.realtimeSinceStartup - startedAt) * 1000f).ToString("0.0") +
@@ -363,7 +364,7 @@ public partial class LocationManager {
       }
 
       if (logActivationTrace && Time.realtimeSinceStartup >= nextLogAt) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[LocationManager] Waiting for activation capacity id='" + locationId +
           "' target='" + activationTarget +
           "' mode=" + ResolveActivationCapacityMode() +

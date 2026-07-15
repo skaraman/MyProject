@@ -11,7 +11,7 @@ public class SaveCollider : MonoBehaviour {
 
 
   public void LogPointsCsv() {
-    Debug.Log(GetPointsCsv());
+    RuntimeLog.Log(GetPointsCsv());
   }
 
   public string GetPointsCsv() {

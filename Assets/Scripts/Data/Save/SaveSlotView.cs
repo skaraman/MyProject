@@ -77,7 +77,7 @@ public class SaveSlotView : MonoBehaviour {
     var renderedSlotCount = ResolveRenderedSlotCount(slotDirectories);
     ConfigureLoadButtonState(renderedSlotCount > 0);
     BuildSlotItems(slotDirectories, renderedSlotCount);
-    SaveSlotManager.SetSlot(ResolveNextNewSlotNumber(slotDirectories));
+    SaveSlotManager.SetSlot(SaveSlotManager.ResolveNextAvailableSlot());
 
     if (deletedSlotNumber > 0 && loadMenuGroup != null) {
       loadMenuGroup.SetActiveSlotNumber(deletedSlotNumber);
@@ -158,16 +158,6 @@ public class SaveSlotView : MonoBehaviour {
   int ResolveRenderedSlotCount(SortedDictionary<int, string> slotDirectories) {
     TrackKnownSlotNumbers(slotDirectories);
     return knownMaxSlotNumber;
-  }
-
-  int ResolveNextNewSlotNumber(SortedDictionary<int, string> slotDirectories) {
-    for (int slotNumber = 1; slotNumber <= knownMaxSlotNumber; slotNumber++) {
-      if (!slotDirectories.ContainsKey(slotNumber)) {
-        return slotNumber;
-      }
-    }
-
-    return knownMaxSlotNumber + 1;
   }
 
   void ApplySlotSortingBand(GameObject slotObject, int slotIndex, int renderedSlotCount) {
@@ -319,11 +309,33 @@ public class SaveSlotView : MonoBehaviour {
 
   public void ScrollBy(float deltaY) {
     if (Mathf.Abs(deltaY) <= Mathf.Epsilon) return;
-    scrollOffsetY += deltaY;
+    var requestedOffset = scrollOffsetY + deltaY;
+    var maxOffset = ResolveMaxScrollOffset();
+    scrollOffsetY = Mathf.Clamp(requestedOffset, 0f, maxOffset);
     ApplyVirtualizedSlotPositions();
   }
 
+  float ResolveMaxScrollOffset() {
+    if (loadMenuGroup == null) return 0f;
+
+    var slotCount = loadMenuGroup.buttons.Count;
+    if (slotCount <= 1) return 0f;
+
+    var lastSlotIndex = slotCount - 1;
+    if (!TryResolveViewportLocalRange(out var minY, out var unusedMaxY)) {
+      return lastSlotIndex * SlotSpacingY;
+    }
+
+    var lastSlotY = initialY - padding - (lastSlotIndex * SlotSpacingY);
+    var lastSlotBottomOffset = minY + ResolveSlotHalfHeight() + 10f;
+    var maxOffset = lastSlotBottomOffset - lastSlotY;
+    return Mathf.Max(maxOffset, 0f);
+  }
+
   public bool ScrollSlotIntoView(int slotIndex, float margin) {
+    if (loadMenuGroup == null) return false;
+    if (slotIndex < 0 || slotIndex >= loadMenuGroup.buttons.Count) return false;
+
     if (!TryResolveViewportLocalRange(out var minY, out var maxY)) {
       return false;
     }

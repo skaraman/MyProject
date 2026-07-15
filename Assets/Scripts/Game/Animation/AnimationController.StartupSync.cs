@@ -2,6 +2,21 @@ using System;
 using UnityEngine;
 
 public partial class AnimationController {
+  bool ShouldHoldEffectStartFrame(
+    int enabledTargetCount,
+    string category,
+    AnimData animation
+  ) {
+    if (!Application.isPlaying) return false;
+    if (appearancePinClass != TextureResidencyCache.PinClass.Effect) return false;
+    if (enabledTargetCount <= 0) return false;
+    if (string.IsNullOrWhiteSpace(category)) return false;
+    if (animation == null) return false;
+
+    var startFrame = Math.Max(animation.start, 1);
+    return !AreAllTargetsReadyForWindow(category, startFrame, startFrame);
+  }
+
   bool ShouldHoldInitialPlayerStartFrame(int enabledTargetCount, string category) {
     return Application.isPlaying &&
            appearancePinClass == TextureResidencyCache.PinClass.Player &&
@@ -17,7 +32,7 @@ public partial class AnimationController {
     startupVisualHoldStartedAt = Time.realtimeSinceStartup;
     HideStartupVisualTargetsForHold();
     if (!ShouldLogStartupVisualHold()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[AnimationController][StartupSync] stage=begin" +
       " animation='" + (defaultAnimation ?? "") + "'" +
       " targets=" + spriteTargets.Count +
@@ -35,7 +50,7 @@ public partial class AnimationController {
   void CompleteStartupVisualHold(string stage) {
     if (!startupVisualHoldActive) return;
     if (ShouldLogStartupVisualHold()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[AnimationController][StartupSync] stage=" + (string.IsNullOrWhiteSpace(stage) ? "complete" : stage.Trim()) +
         " animation='" + (currentAnimation ?? "") + "'" +
         " hold_frame=" + holdFrame +

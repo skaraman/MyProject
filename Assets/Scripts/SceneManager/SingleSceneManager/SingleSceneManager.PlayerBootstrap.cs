@@ -16,7 +16,7 @@ public partial class SingleSceneManager {
     var loadingLightActive = loadingLightObject != null && loadingLightObject.activeSelf;
     var sceneLights = ResolveSceneObjectLights();
     var sceneLightsActive = sceneLights != null && sceneLights.activeSelf;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][SectionTransition] stage=" + (string.IsNullOrWhiteSpace(stage) ? "unspecified" : stage.Trim()) +
       " from=" + fromSection +
       " to=" + toSection +
@@ -37,7 +37,7 @@ public partial class SingleSceneManager {
   void InvalidateCachedPlayerGearController(string reason = null) {
     if (cachedPlayerGearController == null) return;
     if (ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PlayerResolve] invalidate reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()) +
         " previous=" + DescribeGearController(cachedPlayerGearController)
       );
@@ -177,7 +177,7 @@ public partial class SingleSceneManager {
     }
 
     TextureResidencyCache.UpdateOwnerPins(
-      PersistentPlayerSkinAtlasPinOwnerId,
+      PersistentPlayerAppearanceAtlasPinOwnerId,
       TextureResidencyCache.PinClass.Player,
       playerBootstrapWarmAddressScratch,
       TextureResidencyCache.LoadPriority.Warmup
@@ -194,7 +194,7 @@ public partial class SingleSceneManager {
 
     if (ShouldLogLoadingProgressDebug()) {
       var readyCount = CountReadyPlayerBootstrapSamples(gear, out var totalReadySamples);
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PlayerBootstrap] stage=prewarm_complete" +
         " source='" + (source ?? "") + "'" +
         " addresses=" + playerBootstrapWarmAddressScratch.Count +
@@ -227,7 +227,7 @@ public partial class SingleSceneManager {
       yield break;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PlayerBootstrap] stage=prewarm_wait_complete" +
       " source='" + (source ?? "") + "'" +
       " ready=" + readyCount +
@@ -255,7 +255,7 @@ public partial class SingleSceneManager {
       var resolvedPrefab = gameplayPlayerBootstrapPrefabData.ResolvePrefab();
       if (resolvedPrefab != null) {
         if (ShouldLogLoadFlowDebug()) {
-          Debug.Log(
+          RuntimeLog.Log(
             "[SingleSceneManager][PlayerBootstrap] stage=resolved_prefab" +
             " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
             " asset_path='" + resolvedAssetPath + "'" +
@@ -276,7 +276,7 @@ public partial class SingleSceneManager {
     }
 
     if (playerCharacterPrefab != null && ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PlayerBootstrap] stage=fallback_serialized_prefab" +
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " prefab='" + playerCharacterPrefab.name + "'"
@@ -379,7 +379,7 @@ public partial class SingleSceneManager {
     RefreshPersistentPlayerBaselineAtlasPins(string.IsNullOrWhiteSpace(source) ? "player_bootstrap_ready" : source + "_player_bootstrap_ready");
 
     if (!ShouldLogLoadFlowDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PlayerBootstrap] stage=ready" +
       " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
       " action=" + (instantiated ? "instantiate" : "reuse") +

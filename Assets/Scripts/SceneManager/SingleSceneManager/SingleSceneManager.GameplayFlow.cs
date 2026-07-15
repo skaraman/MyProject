@@ -53,6 +53,82 @@ public partial class SingleSceneManager {
     startupGameplayRoutine = null;
   }
 
+  IEnumerator RuntimeLocationTransitionFlowRoutine(string targetLocationId) {
+    pendingGameplayLocationId = targetLocationId;
+    var overlayTag = IsHomebaseLocation(targetLocationId)
+      ? "HomebaseTransitionFlow"
+      : "ZoneTransitionFlow";
+    yield return RunGameplayFlowRoutine(
+      overlayTag: overlayTag,
+      warmContext: WarmGateMode.ZoneTransition,
+      warmTimeoutSeconds: startWarmTimeoutSeconds,
+      warmRequiredRatio: startWarmRequiredRatio,
+      applyGameplayStateBeforeWarmGate: true,
+      sendReadyForSpawns: true,
+      switchInputMapToNone: true,
+      resolveLocationForStart: false,
+      isNewGame: false
+    );
+    runtimeLocationTransitionRoutine = null;
+    runtimeLocationTransitionInProgress = false;
+    runtimeLocationTransitionCommitApplied = false;
+  }
+
+  public static bool TryBeginRuntimeLocationTransition(string requestedLocationId) {
+    if (!Application.isPlaying || instance == null) {
+      return false;
+    }
+
+    return instance.TryStartRuntimeLocationTransition(requestedLocationId);
+  }
+
+  bool TryStartRuntimeLocationTransition(string requestedLocationId) {
+    var targetLocationId = LocationEnemyData.NormalizeLocationId(requestedLocationId);
+    if (!IsGameplayLocation(targetLocationId)) {
+      return false;
+    }
+    if (runtimeLocationTransitionInProgress) {
+      if (!runtimeLocationTransitionCommitApplied) {
+        pendingGameplayLocationId = targetLocationId;
+      }
+      else if (string.Equals(
+                 LocationManager.currentLocation,
+                 targetLocationId,
+                 StringComparison.OrdinalIgnoreCase
+               )) {
+        queuedRuntimeLocationId = "";
+      }
+      else {
+        queuedRuntimeLocationId = targetLocationId;
+      }
+      return true;
+    }
+    if (string.Equals(
+          LocationManager.currentLocation,
+          targetLocationId,
+          StringComparison.OrdinalIgnoreCase
+        )) {
+      return false;
+    }
+    if (IsLoadingFlowActive()) {
+      queuedRuntimeLocationId = targetLocationId;
+      return true;
+    }
+
+    var currentSection = ResolveCurrentSection();
+    if (currentSection != Section.Gameplay && currentSection != Section.Pause) {
+      return false;
+    }
+
+    pendingGameplayLocationId = targetLocationId;
+    runtimeLocationTransitionInProgress = true;
+    runtimeLocationTransitionCommitApplied = false;
+    runtimeLocationTransitionRoutine = StartCoroutine(
+      RuntimeLocationTransitionFlowRoutine(targetLocationId)
+    );
+    return true;
+  }
+
   IEnumerator RunGameplayFlowRoutine(
     string overlayTag,
     WarmGateMode warmContext,
@@ -76,9 +152,10 @@ public partial class SingleSceneManager {
     );
     ConfigureRuntimeContentPacksForGameplayFlow(warmContext, isNewGame, overlayTag + "_begin");
     var gameplayStateAppliedUnderBlack = false;
-    pendingGameplayLocationId = "";
+    if (warmContext != WarmGateMode.ZoneTransition) {
+      pendingGameplayLocationId = "";
+    }
     ResetGameplayLoadStageTracking();
-    StopDeferredPostRevealWarmup("begin_gameplay_flow");
     pendingRevealSection = Section.Gameplay;
     LogSectionTransitionState("begin", previousSection, Section.Gameplay, overlayTag, true);
     SpriteStreamingLoadingState.BeginLoadingOverlay(overlayTag);
@@ -101,7 +178,7 @@ public partial class SingleSceneManager {
     yield return PrewarmGameplayPlayerBootstrapAssets(overlayTag);
     EnsureGameplayPlayerBootstrap(overlayTag);
 
-    if (!isNewGame) {
+    if (warmContext == WarmGateMode.LoadSave) {
       if (applyGameplayStateBeforeWarmGate && !gameplayStateAppliedUnderBlack) {
         ApplyGameplayStateUnderBlack();
         gameplayStateAppliedUnderBlack = true;
@@ -119,7 +196,7 @@ public partial class SingleSceneManager {
         ApplyGameplayStateUnderBlack();
         gameplayStateAppliedUnderBlack = true;
       }
-      if (isNewGame) {
+      if (warmContext == WarmGateMode.StartGame && isNewGame) {
         PrepareNewGameRuntimeStateUnderLoadingOverlay();
         RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("after_new_game_state");
       }
@@ -158,7 +235,8 @@ public partial class SingleSceneManager {
   }
 
   void ConfigureRuntimeContentPacksForGameplayFlow(WarmGateMode warmContext, bool isNewGame, string source) {
-    if (warmContext == WarmGateMode.GearApplyReturn) {
+    if (warmContext == WarmGateMode.GearApplyReturn ||
+        warmContext == WarmGateMode.ZoneTransition) {
       RuntimeContentPackResolver.ConfigureForCurrentRuntimeState(source);
       return;
     }
@@ -196,7 +274,7 @@ public partial class SingleSceneManager {
       MessageBus.Send(CharacterMessageTopics.LoadGame);
     }
     if (!ShouldLogLoadingProgressDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][LoadState] Applied save-state under loading overlay" +
       " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
       " warm_gate_running=" + (StreamingWarmOrchestrator.IsWarmGateRunning ? 1 : 0) +
@@ -210,7 +288,7 @@ public partial class SingleSceneManager {
     var characterState = ResolvePlayerCharacterState();
 
     if (ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][NewGameState] stage=begin" +
         " slot=" + SaveSlotManager.slot +
         " character_state=" + (characterState != null ? 1 : 0) +
@@ -232,12 +310,75 @@ public partial class SingleSceneManager {
     if (!ShouldLogLoadFlowDebug()) return;
     var playerReady = IsPlayerFirstFrameReady();
     var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker) ? "-" : blocker;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][NewGameState] stage=complete" +
       " slot=" + SaveSlotManager.slot +
       " player_ready=" + (playerReady ? 1 : 0) +
       " player_blocker=" + blockerSummary
     );
+  }
+
+  void PrepareRuntimeBaseUnderLoadingOverlay() {
+    if (!Application.isPlaying) {
+      return;
+    }
+    if (activeGameplayLoadFlowId > 0 &&
+        runtimeBaseSetupPreparedFlowId == activeGameplayLoadFlowId) {
+      return;
+    }
+
+    Pool.PrepareForLoading();
+    SceneTimeScaleManager.Instance?.PrepareRuntimeCaches();
+    IntegerTextCache.Warm(LoadingIntegerTextWarmLimit);
+    EsperanzaForms.PrepareRuntimeCaches();
+    EsperanzaAbilities.PrepareRuntimeCaches();
+    ContentEpisodeProgression.PrepareRuntimeCaches();
+
+    var characterState = ResolvePlayerCharacterState();
+    characterState?.FlushPendingProgressSave();
+    ContentEpisodeProgression.FlushPendingSave();
+
+    var spawner = ResolveGameplaySpawner();
+    spawner?.PrepareRuntimeForReveal();
+    runtimeBaseSetupPreparedFlowId = activeGameplayLoadFlowId;
+  }
+
+  void PrepareRuntimeRevealUnderLoadingOverlay() {
+    PrepareRuntimeBaseUnderLoadingOverlay();
+    if (activeGameplayLoadFlowId > 0 &&
+        runtimeRevealSetupPreparedFlowId == activeGameplayLoadFlowId) {
+      return;
+    }
+
+    var spawner = ResolveGameplaySpawner();
+    var spawnerReady = spawner != null && spawner.PrepareRuntimeForReveal();
+    if (ShouldExpectEnemyWarmStageForCurrentLocation() && !spawnerReady) {
+      return;
+    }
+
+    var projectileManager = ResolveGameplayProjectileManagerInternal();
+    projectileManager?.EnsureLoadedPoolsReady();
+    runtimeRevealSetupPreparedFlowId = activeGameplayLoadFlowId;
+  }
+
+  bool IsRuntimeRevealSetupReady() {
+    if (activeGameplayLoadFlowId <= 0 ||
+        runtimeRevealSetupPreparedFlowId == activeGameplayLoadFlowId) {
+      return true;
+    }
+
+    PrepareRuntimeRevealUnderLoadingOverlay();
+    return runtimeRevealSetupPreparedFlowId == activeGameplayLoadFlowId;
+  }
+
+  void CollectManagedGarbageUnderLoadingOverlay() {
+    if (!Application.isPlaying) {
+      return;
+    }
+
+    SetLoadingStatusOverride("Finalizing runtime");
+    GC.Collect();
+    ClearLoadingStatusOverride();
   }
 
   void MaybeLogGameplayWarmGatePrereqState(
@@ -265,7 +406,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowBool(infoBuilder, "ready_for_spawns_sent", gameplayReadyForSpawnsSentForLoad);
     AppendLoadFlowBool(infoBuilder, "warm_gate_started", gameplayWarmGateStartedForLoad);
     AppendLoadFlowBool(infoBuilder, "warm_gate_completed", gameplayWarmGateCompletedForLoad);
-    Debug.Log(infoBuilder.ToString());
+    RuntimeLog.Log(infoBuilder.ToString());
   }
 
   IEnumerator WaitForGameplayWarmGatePrerequisites(bool sendReadyForSpawns) {
@@ -277,6 +418,9 @@ public partial class SingleSceneManager {
     while (true) {
       var playerBootstrapReady = IsPlayerHierarchyReady();
       var locationActivationPending = LocationManager.HasPendingBlockingActivationWork;
+      if (playerBootstrapReady && !locationActivationPending) {
+        PrepareRuntimeBaseUnderLoadingOverlay();
+      }
       var shouldExpectEnemyWarmStage = ShouldExpectEnemyWarmStageForCurrentLocation();
       var archetypeCount = shouldExpectEnemyWarmStage ? ResolveCurrentLocationLoadingArchetypeCount() : 0;
       var shouldWaitForEnemyArchetypes = playerBootstrapReady &&
@@ -368,18 +512,33 @@ public partial class SingleSceneManager {
 
     if (!prerequisitesReady) {
       ClearLoadingStatusOverride();
-      yield break;
     }
     if (!sendReadyForSpawns || gameplayReadyForSpawnsSentForLoad) yield break;
     gameplayReadyForSpawnsSentForLoad = true;
     if (ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][WarmGatePrereq] Dispatch ReadyForSpawns" +
+        " prerequisites_ready=" + (prerequisitesReady ? 1 : 0) +
         " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
         " enemy_archetype_count=" + ResolveCurrentLocationLoadingArchetypeCount()
       );
     }
     MessageBus.Send("ReadyForSpawns");
+  }
+
+  bool StartQueuedRuntimeLocationTransitionIfNeeded() {
+    var targetLocationId = queuedRuntimeLocationId;
+    queuedRuntimeLocationId = "";
+    if (string.IsNullOrWhiteSpace(targetLocationId)) {
+      return false;
+    }
+
+    var currentSection = ResolveCurrentSection();
+    if (currentSection != Section.Gameplay && currentSection != Section.Pause) {
+      return false;
+    }
+
+    return TryStartRuntimeLocationTransition(targetLocationId);
   }
 
   bool ShouldTimeoutGameplayWarmGatePrerequisites(
@@ -420,7 +579,7 @@ public partial class SingleSceneManager {
     var controller = player != null ? player.Controller : null;
     if (controller == null) {
       if (ShouldLogLoadFlowWarnings()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[SingleSceneManager][PlayerAnimationHold] stage=skip_missing_controller" +
           " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
           " " + DescribeGearController(player)
@@ -451,7 +610,7 @@ public partial class SingleSceneManager {
     playerAnimationHeldForLoadingOverlay = true;
 
     if (!ShouldLogLoadFlowWarnings()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PlayerAnimationHold] stage=applied" +
       " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
       " target_animation=" + (string.IsNullOrWhiteSpace(targetAnimation) ? "-" : targetAnimation.Trim()) +
@@ -469,7 +628,7 @@ public partial class SingleSceneManager {
     playerAnimationHeldForLoadingOverlay = false;
     if (controller == null) {
       if (ShouldLogLoadFlowWarnings()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[SingleSceneManager][PlayerAnimationHold] stage=release_missing_controller" +
           " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
           " " + DescribeGearController(player)
@@ -480,7 +639,7 @@ public partial class SingleSceneManager {
 
     controller.ResumeAnimation();
     if (!ShouldLogLoadFlowWarnings()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PlayerAnimationHold] stage=released" +
       " reason=" + (string.IsNullOrWhiteSpace(reason) ? "-" : reason.Trim()) +
       " current_animation=" + (string.IsNullOrWhiteSpace(controller.CurrentAnimation) ? "-" : controller.CurrentAnimation.Trim()) +
@@ -575,7 +734,7 @@ public partial class SingleSceneManager {
     WarmResult warmResult = default;
     gameplayWarmGateStartedForLoad = true;
     if (ShouldLogLoadFlowWarnings()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][WarmGate] stage=begin" +
         " context=" + context +
         " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
@@ -611,7 +770,7 @@ public partial class SingleSceneManager {
     CaptureBlockingProgressStateFromWarmResult(warmResult);
     gameplayWarmGateCompletedForLoad = true;
     if (ShouldLogLoadFlowWarnings()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][WarmGate] stage=complete" +
         " context=" + context +
         " reached_ready=" + (warmResult.reachedReadyThreshold ? 1 : 0) +

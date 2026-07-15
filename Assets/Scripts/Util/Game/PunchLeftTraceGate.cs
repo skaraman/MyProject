@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 public static class PunchLeftTraceGate {
-  static readonly bool EnableTraceLogs = true;
+  static readonly bool EnableTraceLogs = false;
   const int ActiveFrameWindow = 900;
   const float HitchDeltaMsThreshold = 22f;
 
@@ -24,12 +24,13 @@ public static class PunchLeftTraceGate {
     return value.IndexOf("PunchLeft", StringComparison.OrdinalIgnoreCase) >= 0;
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void OpenFromClick(string actionKey, string mappedAnimation, string currentAnimation) {
     if (!EnableTraceLogs) return;
     if (!ContainsPunchLeft(mappedAnimation)) return;
     sequence++;
     activeUntilFrame = Time.frameCount + ActiveFrameWindow;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PunchLeftTrace][Click] seq=" + sequence +
       " frame=" + Time.frameCount +
       " action='" + (actionKey ?? "") +
@@ -38,6 +39,7 @@ public static class PunchLeftTraceGate {
     );
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void LogClickDispatchResult(
     string actionKey,
     string mappedAnimation,
@@ -46,7 +48,7 @@ public static class PunchLeftTraceGate {
   ) {
     if (!EnableTraceLogs) return;
     if (!ContainsPunchLeft(mappedAnimation) && !ContainsPunchLeft(currentAnimation)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PunchLeftTrace][Dispatch] seq=" + sequence +
       " frame=" + Time.frameCount +
       " action='" + (actionKey ?? "") +
@@ -62,6 +64,7 @@ public static class PunchLeftTraceGate {
     return ContainsPunchLeft(animationName) || ContainsPunchLeft(category);
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void LogAnimationStart(
     string animationName,
     string category,
@@ -72,7 +75,7 @@ public static class PunchLeftTraceGate {
     int inFlightLoads
   ) {
     if (!ShouldTraceAnimation(animationName, category)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PunchLeftTrace][AnimStart] seq=" + sequence +
       " frame=" + Time.frameCount +
       " animation='" + (animationName ?? "") +
@@ -85,6 +88,7 @@ public static class PunchLeftTraceGate {
     );
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void LogAnimationEnd(
     string animationName,
     string category,
@@ -95,7 +99,7 @@ public static class PunchLeftTraceGate {
     int skippedFrames
   ) {
     if (!ShouldTraceAnimation(animationName, category)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PunchLeftTrace][AnimEnd] seq=" + sequence +
       " frame=" + Time.frameCount +
       " animation='" + (animationName ?? "") +
@@ -108,6 +112,7 @@ public static class PunchLeftTraceGate {
     );
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void LogFrameAdvance(
     string animationName,
     string category,
@@ -118,7 +123,7 @@ public static class PunchLeftTraceGate {
     if (!ShouldTraceAnimation(animationName, category)) return;
     var frameDelta = toFrame - fromFrame;
     if (Mathf.Abs(frameDelta) <= 1 && deltaMs < HitchDeltaMsThreshold) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PunchLeftTrace][FrameStep] seq=" + sequence +
       " frame=" + Time.frameCount +
       " animation='" + (animationName ?? "") +
@@ -136,6 +141,7 @@ public static class PunchLeftTraceGate {
     return ContainsPunchLeft(category);
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   public static void LogFrameRequest(
     string objectName,
     string category,
@@ -145,7 +151,7 @@ public static class PunchLeftTraceGate {
   ) {
     if (!EnableTraceLogs) return;
     if (!ShouldTraceCategory(category)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[PunchLeftTrace][FrameRequest] seq=" + sequence +
       " frame=" + Time.frameCount +
       " object='" + (objectName ?? "") +

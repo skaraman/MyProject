@@ -15,10 +15,16 @@ public partial class SingleSceneManager : MonoBehaviour {
   static int pendingPauseDialogResumeToken;
   static SingleSceneManager instance;
 
+  public static readonly MessageTopic BlackscreenFullyTransparentTopic =
+    new("blackscreen.fullyTransparent");
+
+  public static bool IsBlackscreenFullyTransparent { get; private set; }
+
   enum WarmGateMode {
     StartGame = 0,
     LoadSave = 1,
-    GearApplyReturn = 2
+    GearApplyReturn = 2,
+    ZoneTransition = 3
   }
 
   enum Section {
@@ -242,7 +248,7 @@ public partial class SingleSceneManager : MonoBehaviour {
 
     pendingPauseDialogResumeToken = 0;
     if (ShouldLogPauseDialogResumeDebug()) {
-      Debug.Log("[SingleSceneManager][PauseDialogResume] consumed_token=" + token);
+      RuntimeLog.Log("[SingleSceneManager][PauseDialogResume] consumed_token=" + token);
     }
     return true;
   }
@@ -253,7 +259,7 @@ public partial class SingleSceneManager : MonoBehaviour {
     }
 
     if (ShouldLogPauseDialogResumeDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PauseDialogResume] clear source='" + (source ?? "") +
         "' active_token=" + activePauseDialogResumeToken +
         " pending_token=" + pendingPauseDialogResumeToken
@@ -333,11 +339,14 @@ public partial class SingleSceneManager : MonoBehaviour {
   private Coroutine startGameRoutine;
   private Coroutine resumeGameplayRoutine;
   private Coroutine startupGameplayRoutine;
+  private Coroutine runtimeLocationTransitionRoutine;
+  private bool runtimeLocationTransitionInProgress;
+  private bool runtimeLocationTransitionCommitApplied;
+  private string queuedRuntimeLocationId = "";
   private Coroutine startupMainMenuRevealRoutine;
   private Coroutine startupFadeWatchdogRoutine;
   private Coroutine unlockFadeFailSafeRoutine;
   private Coroutine sectionTransitionRoutine;
-  private Coroutine deferredPostRevealWarmupRoutine;
   private GearController cachedPlayerGearController;
   private float lastPlayerResolveTime = -1f;
   readonly LocationPrefabData gameplayPlayerBootstrapPrefabData = new(assetPath: GameplayCoreAssetPaths.EsperanzaPrefabAssetPath);
@@ -370,6 +379,8 @@ public partial class SingleSceneManager : MonoBehaviour {
   private bool gameplayReadyForSpawnsSentForLoad;
   private bool gameplayWarmGateStartedForLoad;
   private bool gameplayWarmGateCompletedForLoad;
+  private int runtimeBaseSetupPreparedFlowId;
+  private int runtimeRevealSetupPreparedFlowId;
   readonly List<string> preUnlockAddressScratch = new(4096);
   readonly HashSet<string> preUnlockSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> preUnlockAtlasSiblingScratch = new(64);
@@ -379,11 +390,13 @@ public partial class SingleSceneManager : MonoBehaviour {
   readonly List<string> preUnlockResidentPinAddressScratch = new(16384);
   readonly List<string> preUnlockResidentPinReadyAddressScratch = new(16384);
   readonly HashSet<string> preUnlockResidentPinSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
-  readonly List<string> deferredPostRevealWarmupAddressScratch = new(4096);
-  readonly HashSet<string> deferredPostRevealWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly List<string> loadingTextRuntimeAddressScratch = new(4);
   readonly List<string> persistentAtlasAddressScratch = new(512);
   readonly HashSet<string> persistentAtlasSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  readonly List<string> persistentPlayerAppearanceAtlasAddresses = new(512);
+  readonly List<string> persistentPlayerEffectAtlasAddresses = new(256);
+  int persistentPlayerAppearanceContentVersion = -1;
+  int persistentPlayerEffectContentVersion = -1;
   readonly List<string> environmentCacheLibraryScratch = new(256);
   readonly List<string> environmentCacheAddressScratch = new(4096);
   readonly List<string> environmentCacheAssetAddressScratch = new(64);
@@ -417,11 +430,12 @@ public partial class SingleSceneManager : MonoBehaviour {
   float preUnlockVisibleSpriteTargetsCacheRefreshedAt = -1f;
   const float ActiveEnemyControllersCacheRefreshSeconds = 0.2f;
   const float GameplayInputCacheRefreshSeconds = 0.2f;
+  const int LoadingIntegerTextWarmLimit = 4096;
   const long LocationPurgeAllThresholdBytes = 2L * 1024L * 1024L * 1024L;
   const string PreUnlockResidentPinOwnerId = "single_scene_manager.pre_unlock";
   const string LoadingTextFontPinOwnerId = "single_scene_manager.loading_text_font";
   const string PersistentFontAtlasPinOwnerId = "single_scene_manager.persistent_font_atlases";
-  const string PersistentPlayerSkinAtlasPinOwnerId = "single_scene_manager.persistent_player_skin_atlases";
+  const string PersistentPlayerAppearanceAtlasPinOwnerId = "single_scene_manager.persistent_player_appearance_atlases";
   const string PersistentPlayerEffectAtlasPinOwnerId = "single_scene_manager.persistent_player_effect_atlases";
   const string PersistentPlayerExpressionAtlasPinOwnerId = "single_scene_manager.persistent_player_expression_atlases";
   const string CurrentEnvironmentPinOwnerId = "single_scene_manager.environment_hot.current";
@@ -434,9 +448,18 @@ public partial class SingleSceneManager : MonoBehaviour {
 
   void Awake() {
     instance = this;
+    IsBlackscreenFullyTransparent = false;
   }
 
   void OnDestroy() {
+    var player = ResolvePlayerGearController();
+    player?.SetSceneAppearanceAtlasPinsManaged(false);
+    TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
+    TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
+    persistentPlayerAppearanceAtlasAddresses.Clear();
+    persistentPlayerEffectAtlasAddresses.Clear();
+    persistentPlayerAppearanceContentVersion = -1;
+    persistentPlayerEffectContentVersion = -1;
     if (ReferenceEquals(instance, this)) {
       instance = null;
     }
@@ -571,7 +594,7 @@ public partial class SingleSceneManager : MonoBehaviour {
       : "-";
     var playerPrefabPath = ResolveGameplayPlayerBootstrapAssetPath();
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][ContentPack]" +
       " external_active=" + (ActiveContentRegistryRuntime.HasActiveExternalContent() ? 1 : 0) +
       " active_packs=" + activePackIds +
@@ -601,6 +624,7 @@ public partial class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("dialog.started", o => OnDialogStarted(o)));
     actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
     actions.Add(MessageBus.On(CharacterMessageTopics.GearReady, _ => RefreshPersistentPlayerBaselineAtlasPins("gear_ready")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.AbilityLoadoutChanged, OnAbilityLoadoutChangedForPersistentPins));
     actions.Add(MessageBus.On("enemy.defeated", o => OnEnemyDefeatedForEpisodeProgress(o)));
     actions.Add(MessageBus.On("episode.advance", o => AdvanceEpisodeSlice("message")));
   }

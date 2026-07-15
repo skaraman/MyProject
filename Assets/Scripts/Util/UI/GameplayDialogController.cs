@@ -205,7 +205,7 @@ public class GameplayDialogController : MonoBehaviour {
     pauseDialogSuspendToken = 0;
     if (!SingleSceneManager.TryConsumePauseDialogResumeToken(resumeToken)) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] Dropped suspended dialog because pause resume token was not available" +
           " token=" + resumeToken +
           " source='" + (source ?? "") + "'"
@@ -233,7 +233,7 @@ public class GameplayDialogController : MonoBehaviour {
     ApplyVisibleText();
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Resumed active dialog after pause" +
         " token=" + resumeToken +
         " node_index=" + currentNodeIndex +
@@ -284,7 +284,7 @@ public class GameplayDialogController : MonoBehaviour {
     if (suspendForPause) {
       SetDialogVisible(false, "pause_suspend");
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] Suspended active dialog for pause" +
           " token=" + pauseDialogSuspendToken +
           " node_index=" + currentNodeIndex +
@@ -344,7 +344,7 @@ public class GameplayDialogController : MonoBehaviour {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayDialogController] Debug seen override configured=" + (debugTreatAllDialogAsUnseen ? 1 : 0) +
       " enabled=" + (effectiveDebugSeenOverride ? 1 : 0) +
       " source='" + (source ?? "") + "'"
@@ -364,7 +364,7 @@ public class GameplayDialogController : MonoBehaviour {
   public void PlaySequence(List<GameplayDialogNode> nodes, string source = "runtime") {
     ReplaceSequenceNodes(nodes);
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Assigned runtime sequence source='" + (source ?? "") +
         "' node_count=" + sequenceNodes.Count
       );
@@ -390,7 +390,7 @@ public class GameplayDialogController : MonoBehaviour {
     }
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log("[GameplayDialogController] Dialog finished reason='" + (reason ?? "") + "'");
+      RuntimeLog.Log("[GameplayDialogController] Dialog finished reason='" + (reason ?? "") + "'");
     }
     MessageBus.Send("dialog.finished", reason);
     RegisterLocationTriggerHandlers(activeLocationDialogId, "dialog_finished");
@@ -571,7 +571,7 @@ public class GameplayDialogController : MonoBehaviour {
     fontText.Generate();
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Created runtime speaker name text side='" + widgets.sideKey +
         "' name_root='" + (widgets.nameBackgroundObject != null ? widgets.nameBackgroundObject.name : parentTransform.name) + "'"
       );
@@ -628,7 +628,7 @@ public class GameplayDialogController : MonoBehaviour {
     portrait.ForceUpdateSpriteAndNormal(0);
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Created runtime speaker portrait side='" + widgets.sideKey +
         "' avatar_root='" + (widgets.avatarBackgroundObject != null ? widgets.avatarBackgroundObject.name : parentTransform.name) + "'"
       );
@@ -672,7 +672,7 @@ public class GameplayDialogController : MonoBehaviour {
 
     if (dialogueActive) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log("[GameplayDialogController] Restarting active dialog source='" + (source ?? "") + "'");
+        RuntimeLog.Log("[GameplayDialogController] Restarting active dialog source='" + (source ?? "") + "'");
       }
     }
 
@@ -684,7 +684,7 @@ public class GameplayDialogController : MonoBehaviour {
     SetDialogVisible(true, source);
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Dialog started source='" + (source ?? "") +
         "' node_count=" + sequenceNodes.Count +
         " active_form='" + EsperanzaForms.GetActive() + "'"
@@ -730,7 +730,7 @@ public class GameplayDialogController : MonoBehaviour {
     RegisterLocationTriggerHandlers(activeLocationDialogId, "location_loaded");
     if (!dialogStateReady) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] Deferred location dialog until dialog state is ready" +
           " location='" + activeLocationDialogId + "'"
         );
@@ -749,7 +749,7 @@ public class GameplayDialogController : MonoBehaviour {
     ResetAutoDialogRetryState();
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Dialog state ready source='" + (payload != null ? payload.ToString() : "") +
         "' location='" + activeLocationDialogId + "'"
       );
@@ -819,7 +819,7 @@ public class GameplayDialogController : MonoBehaviour {
     var markedSeen = DialogController.MarkSeen(node, source + "_show");
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Showing node index=" + currentNodeIndex +
         " source='" + (source ?? "") + "'" +
         " location='" + (node.locationId ?? "") + "'" +
@@ -929,7 +929,7 @@ public class GameplayDialogController : MonoBehaviour {
 
     background.ForceUpdateSpriteAndNormal();
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Updated dialog UI sprite key='" + debugKey +
         "' form='" + formName + "'"
       );
@@ -950,7 +950,7 @@ public class GameplayDialogController : MonoBehaviour {
 
     if (!TryResolvePortraitPresentation(node, formName, out var libraryName, out var labelPrefix)) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] No portrait library resolved side='" + (speakerSide ?? "") +
           "' source='" + (source ?? "") +
           "' speaker_id='" + (node.speakerId ?? "") +
@@ -984,7 +984,7 @@ public class GameplayDialogController : MonoBehaviour {
 
     portrait.ForceUpdateSpriteAndNormal(0);
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
           "[GameplayDialogController] Updated portrait side='" + (speakerSide ?? "") +
           "' source='" + (source ?? "") +
           "' library='" + libraryName +
@@ -1015,7 +1015,7 @@ public class GameplayDialogController : MonoBehaviour {
     ApplyVisibleText();
     if (visibleCharacterCount >= currentFullText.Length) {
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] Typewriter complete index=" + currentNodeIndex +
           " text_length=" + currentFullText.Length
         );
@@ -1032,7 +1032,7 @@ public class GameplayDialogController : MonoBehaviour {
     typewriterCharacterProgress = visibleCharacterCount;
     ApplyVisibleText();
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Typewriter skipped source='" + (source ?? "") +
         "' index=" + currentNodeIndex +
         " text_length=" + visibleCharacterCount
@@ -1079,7 +1079,7 @@ public class GameplayDialogController : MonoBehaviour {
 
     dialogRoot.SetActive(visible);
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Dialog root visibility visible=" + (visible ? 1 : 0) +
         " source='" + (source ?? "") + "'"
       );
@@ -1338,7 +1338,7 @@ public class GameplayDialogController : MonoBehaviour {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayDialogController] Speaker widget state side='" + widgets.sideKey +
       "' expected_active=" + (expectedActive ? 1 : 0) +
       " name_bg=" + GetActiveSelf(widgets.nameBackgroundObject) +
@@ -1373,7 +1373,7 @@ public class GameplayDialogController : MonoBehaviour {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayDialogController] Registered location dialog triggers" +
       " location='" + resolvedLocationId +
       "' source='" + (source ?? "") +
@@ -1417,7 +1417,7 @@ public class GameplayDialogController : MonoBehaviour {
       }
 
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] Ignored duplicate pending dialog trigger" +
           " location='" + resolvedLocationId +
           "' trigger='" + resolvedTrigger + "'"
@@ -1433,7 +1433,7 @@ public class GameplayDialogController : MonoBehaviour {
     });
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Queued triggered dialog" +
         " location='" + resolvedLocationId +
         "' trigger='" + resolvedTrigger +
@@ -1466,7 +1466,7 @@ public class GameplayDialogController : MonoBehaviour {
       return;
     }
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayDialogController] Cleared stale pending dialog requests" +
       " source='" + (source ?? "") +
       "' previous_location='" + ResolveLocationId(previousLocationId) +
@@ -1531,7 +1531,7 @@ public class GameplayDialogController : MonoBehaviour {
       }
 
       if (ShouldLogDialogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[GameplayDialogController] Dropped pending dialog trigger because no matching unseen chunk was available" +
           " location='" + request.locationId +
           "' trigger='" + request.trigger +
@@ -1585,7 +1585,7 @@ public class GameplayDialogController : MonoBehaviour {
     ReplaceSequenceNodes(resolvedLocationSequence);
 
     if (ShouldLogDialogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[GameplayDialogController] Starting location dialog chunk" +
         " location='" + locationId +
         "' trigger='" + ResolveDialogTrigger(trigger) +

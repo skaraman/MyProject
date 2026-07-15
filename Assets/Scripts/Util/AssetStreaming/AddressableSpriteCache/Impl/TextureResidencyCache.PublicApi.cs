@@ -120,7 +120,10 @@ public static partial class TextureResidencyCache {
     var frame = Time.frameCount;
     if (pumpOncePerFrameFrame == frame) return;
     pumpOncePerFrameFrame = frame;
+
+    PumpProfilerMarker.Begin();
     Pump();
+    PumpProfilerMarker.End();
   }
 
   public static DeferredSnapshot GetDeferredSnapshot() {
@@ -441,6 +444,25 @@ public static partial class TextureResidencyCache {
     return GetRequestState(atlasAddress, pump) == SpriteColdLoadState.Ready;
   }
 
+  public static SpriteColdLoadState GetPreparedAtlasState(string address, bool pump = true) {
+    if (string.IsNullOrWhiteSpace(address)) return SpriteColdLoadState.Missing;
+    if (pump) {
+      Pump();
+    }
+
+    if (!TryResolveRequestOwnerAddress(address, out var ownerAddress, out _, out _)) {
+      return SpriteColdLoadState.Missing;
+    }
+    if (!cache.TryGetValue(ownerAddress, out var entry) || entry == null) {
+      return SpriteColdLoadState.Pending;
+    }
+    if (!entry.isDone) return SpriteColdLoadState.Pending;
+    if (!entry.isSuccess || entry.primarySprite == null) return SpriteColdLoadState.Missing;
+    if (entry.spriteMapMaterialized) return SpriteColdLoadState.Ready;
+    if (TryEnsureEntrySpriteMapMaterialized(entry)) return SpriteColdLoadState.Ready;
+    return SpriteColdLoadState.Missing;
+  }
+
   public static string GetQueueSourceBreakdown() {
     var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
     var deferredCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -507,6 +529,6 @@ public static partial class TextureResidencyCache {
       }
     }
     
-    Debug.Log(sb.ToString());
+    RuntimeLog.Log(sb.ToString());
   }
 }

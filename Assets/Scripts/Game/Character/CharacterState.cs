@@ -6,10 +6,14 @@ using UnityEditor;
 #endif
 
 public class CharacterState : MonoBehaviour {
+  static CharacterState runtimeInstance;
+
   public int level = 0;
 
   private Action offLoadGame;
   private GearController gearController;
+  private bool formsSavePending;
+  private int formsSaveSlot = -1;
 
   // Cache list to avoid allocations
   private readonly List<string> cachedKeys = new();
@@ -28,7 +32,13 @@ public class CharacterState : MonoBehaviour {
   }
 
   void Awake() {
+    runtimeInstance = this;
     EnsureRuntimeReferences();
+  }
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetRuntimeInstance() {
+    runtimeInstance = null;
   }
 
   void Start() {
@@ -37,12 +47,24 @@ public class CharacterState : MonoBehaviour {
   }
 
   void OnDestroy() {
+    FlushPendingFormsSave();
+    ContentEpisodeProgression.FlushPendingSave();
+    if (runtimeInstance == this) {
+      runtimeInstance = null;
+    }
     offLoadGame?.Invoke();
 #if UNITY_EDITOR
     if (!Application.isPlaying) {
       Selection.activeObject = null;
     }
 #endif
+  }
+
+  void OnApplicationPause(bool isPaused) {
+    if (isPaused) {
+      FlushPendingFormsSave();
+      ContentEpisodeProgression.FlushPendingSave();
+    }
   }
 
   public void LoadState() {
@@ -52,7 +74,7 @@ public class CharacterState : MonoBehaviour {
     var loadedForms = SaveSlotManager.Load(SaveKeys.Forms);
     var loadedStats = SaveSlotManager.Load(SaveKeys.Stats);
     if (ShouldLogLoadStateDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[CharacterState][LoadState] stage=begin" +
         " slot=" + SaveSlotManager.slot +
         " forms_keys=" + (loadedForms != null ? loadedForms.Count : 0) +
@@ -72,7 +94,7 @@ public class CharacterState : MonoBehaviour {
     NotifyFormStateChanged(EsperanzaForms.GetActive(), "load_state");
 
     if (ShouldLogLoadStateDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[CharacterState][LoadState] stage=complete" +
         " slot=" + SaveSlotManager.slot +
         " active_form=" + EsperanzaForms.GetActive() +
@@ -87,7 +109,7 @@ public class CharacterState : MonoBehaviour {
     ResetRuntimeState();
     DialogController.SaveState("new_game");
     if (ShouldLogLoadStateDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[CharacterState][LoadState] stage=new_game_begin" +
         " slot=" + SaveSlotManager.slot +
         " active_form=" + EsperanzaForms.GetActive() +
@@ -102,7 +124,7 @@ public class CharacterState : MonoBehaviour {
     NotifyFormStateChanged(EsperanzaForms.GetActive(), "new_game");
 
     if (ShouldLogLoadStateDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[CharacterState][LoadState] stage=new_game_complete" +
         " slot=" + SaveSlotManager.slot +
         " active_form=" + EsperanzaForms.GetActive() +
@@ -122,7 +144,7 @@ public class CharacterState : MonoBehaviour {
 
     var previousForm = EsperanzaForms.GetActive();
     if (string.Equals(previousForm, resolvedForm, StringComparison.OrdinalIgnoreCase)) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[CharacterState][SetActiveForm] Ignored no-op request current='" + previousForm +
         "' source='" + (source ?? "") + "'"
       );
@@ -138,7 +160,7 @@ public class CharacterState : MonoBehaviour {
     }
 
     NotifyFormStateChanged(resolvedForm, source);
-    Debug.Log(
+    RuntimeLog.Log(
       "[CharacterState][SetActiveForm] previous='" + previousForm +
       "' next='" + resolvedForm +
       "' source='" + (source ?? "") +
@@ -187,22 +209,24 @@ public class CharacterState : MonoBehaviour {
     }
 
     var levelsGained = progress.level - previousLevel;
-    var saved = SaveFormsState();
+    QueueFormsSave();
     MessageBus.Send(CharacterMessageTopics.FormProgressChanged, resolvedForm);
 
-    Debug.Log(
-      "[CharacterState][GrantFormXp] form='" + resolvedForm +
-      "' amount=" + amount +
-      " source='" + (source ?? "") +
-      "' prev_level=" + previousLevel +
-      " next_level=" + progress.level +
-      " prev_current_xp=" + previousCurrentXp +
-      " next_current_xp=" + progress.currentXp +
-      " prev_next_level_xp=" + previousNextLevelXp +
-      " next_next_level_xp=" + progress.nextLevelXp +
-      " levels_gained=" + levelsGained +
-      " saved=" + (saved ? 1 : 0)
-    );
+    if (ShouldLogLoadStateDebug()) {
+      RuntimeLog.Log(
+        "[CharacterState][GrantFormXp] form='" + resolvedForm +
+        "' amount=" + amount +
+        " source='" + (source ?? "") +
+        "' prev_level=" + previousLevel +
+        " next_level=" + progress.level +
+        " prev_current_xp=" + previousCurrentXp +
+        " next_current_xp=" + progress.currentXp +
+        " prev_next_level_xp=" + previousNextLevelXp +
+        " next_next_level_xp=" + progress.nextLevelXp +
+        " levels_gained=" + levelsGained +
+        " save_queued=1"
+      );
+    }
 
     return levelsGained;
   }
@@ -214,6 +238,124 @@ public class CharacterState : MonoBehaviour {
     }
 
     return EsperanzaForms.GetProgressCopy(resolvedForm);
+  }
+
+  public int GrantAbilityXp(string abilityName, int amount, string source = "runtime") {
+    if (!EsperanzaAbilities.TryResolveAbilityAnimation(abilityName, out var animationName)) {
+      Debug.LogWarning("[CharacterState] Ignored XP grant for unknown ability='" + (abilityName ?? "") + "'");
+      return 0;
+    }
+
+    if (amount <= 0) {
+      Debug.LogWarning(
+        "[CharacterState][GrantAbilityXp] Ignored non-positive XP amount=" + amount +
+        " ability='" + animationName + "'" +
+        " source='" + (source ?? "") + "'"
+      );
+      return 0;
+    }
+
+    var progress = EsperanzaAbilities.EnsureProgress(animationName);
+    if (progress == null) {
+      return 0;
+    }
+
+    var previousLevel = progress.level;
+    var previousCurrentXp = progress.currentXp;
+    var previousNextLevelXp = progress.nextLevelXp;
+
+    progress.currentXp += amount;
+    while (progress.currentXp >= progress.nextLevelXp) {
+      progress.currentXp -= progress.nextLevelXp;
+      progress.level += 1;
+      progress.nextLevelXp = EsperanzaAbilities.ResolveNextLevelXp(progress.level);
+    }
+
+    var levelsGained = progress.level - previousLevel;
+    QueueFormsSave();
+    MessageBus.Send(CharacterMessageTopics.AbilityProgressChanged, animationName);
+
+    if (ShouldLogLoadStateDebug()) {
+      RuntimeLog.Log(
+        "[CharacterState][GrantAbilityXp] ability='" + animationName +
+        "' amount=" + amount +
+        " source='" + (source ?? "") +
+        "' prev_level=" + previousLevel +
+        " next_level=" + progress.level +
+        " prev_current_xp=" + previousCurrentXp +
+        " next_current_xp=" + progress.currentXp +
+        " prev_next_level_xp=" + previousNextLevelXp +
+        " next_next_level_xp=" + progress.nextLevelXp +
+        " levels_gained=" + levelsGained +
+        " save_queued=1"
+      );
+    }
+
+    return levelsGained;
+  }
+
+  public AbilityProgressState GetAbilityProgress(string abilityName) {
+    return EsperanzaAbilities.GetProgressCopy(abilityName);
+  }
+
+  public void FlushPendingProgressSave() {
+    FlushPendingFormsSave();
+  }
+
+  public static bool FlushPendingProgressBeforeSlotChange() {
+    return runtimeInstance == null || runtimeInstance.TryFlushPendingFormsSave();
+  }
+
+  public bool SetAbilityLoadout(string formName, IList<string> abilities, string source = "runtime") {
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm)) {
+      return false;
+    }
+    if (!EsperanzaAbilityLoadouts.SetAbilities(resolvedForm, abilities)) {
+      return false;
+    }
+
+    var saved = SaveFormsState();
+    foreach (var changedForm in EsperanzaForms.KnownForms) {
+      MessageBus.Send(CharacterMessageTopics.AbilityLoadoutChanged, changedForm);
+    }
+    RuntimeLog.Log(
+      "[CharacterState][SetAbilityLoadout] form='" + resolvedForm +
+      "' ability_count=" + EsperanzaAbilityLoadouts.GetAbilitiesCopy(resolvedForm).Count +
+      " source='" + (source ?? "") +
+      "' saved=" + (saved ? 1 : 0)
+    );
+    return true;
+  }
+
+  public bool MoveAbilityToForm(
+    string abilityName,
+    string targetFormName,
+    int targetIndex,
+    string source = "runtime"
+  ) {
+    if (!EsperanzaAbilityLoadouts.MoveAbility(
+          abilityName,
+          targetFormName,
+          targetIndex,
+          out var changedForms
+        )) {
+      return false;
+    }
+
+    var saved = SaveFormsState();
+    for (var i = 0; i < changedForms.Count; i++) {
+      MessageBus.Send(CharacterMessageTopics.AbilityLoadoutChanged, changedForms[i]);
+    }
+
+    RuntimeLog.Log(
+      "[CharacterState][MoveAbilityToForm] ability='" + (abilityName ?? "") +
+      "' target_form='" + (targetFormName ?? "") +
+      "' target_index=" + targetIndex +
+      " source='" + (source ?? "") +
+      "' saved=" + (saved ? 1 : 0)
+    );
+    return true;
   }
 
   public int GetAvailableStatPoints(string formName) {
@@ -242,7 +384,7 @@ public class CharacterState : MonoBehaviour {
 
     var availablePoints = GetAvailableStatPoints(resolvedForm);
     if (availablePoints <= 0) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[CharacterState][TryAddFormStatPoint] Ignored spend form='" + resolvedForm +
         "' stat='" + resolvedStat +
         "' source='" + (source ?? "") +
@@ -256,7 +398,7 @@ public class CharacterState : MonoBehaviour {
     var nextValue = FormStatsValues.GetValue(resolvedForm, resolvedStat);
     var remainingPoints = GetAvailableStatPoints(resolvedForm);
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[CharacterState][TryAddFormStatPoint] form='" + resolvedForm +
       "' stat='" + resolvedStat +
       "' source='" + (source ?? "") +
@@ -306,7 +448,7 @@ public class CharacterState : MonoBehaviour {
     var saved = SaveStatsState();
     MessageBus.Send(CharacterMessageTopics.FormStatsChanged, resolvedForm);
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[CharacterState][AddStats] form='" + resolvedForm +
       "' stat='" + resolvedStat +
       "' amount=" + amount +
@@ -341,6 +483,8 @@ public class CharacterState : MonoBehaviour {
       }
     }
 
+    FormStatIncreases.ApplyBonusToFlatStats(AllStatValues.Esperanza);
+
     foreach (var form in FormStatsValues.values) {
       foreach (var majorStat in form.Value) {
         level += majorStat.Value;
@@ -350,6 +494,8 @@ public class CharacterState : MonoBehaviour {
 
   void ResetRuntimeState() {
     EsperanzaForms.ResetRuntimeState();
+    EsperanzaAbilities.ResetRuntimeState();
+    EsperanzaAbilityLoadouts.ResetRuntimeState();
     FormStatsValues.ResetToDefaults();
     EquippedItems.ResetToDefaults();
     DialogController.ResetRuntimeState("character_reset");
@@ -372,6 +518,20 @@ public class CharacterState : MonoBehaviour {
       EsperanzaForms.ApplyProgressState(formProgress);
     } else {
       EsperanzaForms.ApplyProgressState(null);
+    }
+
+    if (loadedForms.HasPrefix(SaveKeys.AbilityProgress)) {
+      var abilityProgress = loadedForms.GetComplex<Dictionary<string, AbilityProgressState>>(SaveKeys.AbilityProgress);
+      EsperanzaAbilities.ApplyProgressState(abilityProgress);
+    } else {
+      EsperanzaAbilities.ApplyProgressState(null);
+    }
+
+    if (loadedForms.HasPrefix(SaveKeys.AbilityLoadouts)) {
+      var abilityLoadouts = loadedForms.GetComplex<Dictionary<string, List<string>>>(SaveKeys.AbilityLoadouts);
+      EsperanzaAbilityLoadouts.ApplyLoadedState(abilityLoadouts);
+    } else {
+      EsperanzaAbilityLoadouts.ApplyLoadedState(null);
     }
 
     var requestedActiveForm = loadedForms.ContainsKey(SaveKeys.ActiveForm)
@@ -410,19 +570,55 @@ public class CharacterState : MonoBehaviour {
   }
 
   bool SaveFormsState() {
+    if (formsSavePending && formsSaveSlot != SaveSlotManager.slot) {
+      Debug.LogWarning(
+        "[CharacterState][SaveFormsState] Refused cross-slot progress save." +
+        " pending_slot=" + formsSaveSlot +
+        " current_slot=" + SaveSlotManager.slot
+      );
+      return false;
+    }
+
     try {
       var formsSave = new SaveData {
         [SaveKeys.ActiveForm] = EsperanzaForms.GetActive()
       };
       formsSave.SetComplex(SaveKeys.UnlockedForms, EsperanzaForms.GetUnlockedSnapshot());
       formsSave.SetComplex(SaveKeys.FormProgress, EsperanzaForms.GetProgressSnapshot());
+      formsSave.SetComplex(SaveKeys.AbilityProgress, EsperanzaAbilities.GetProgressSnapshot());
+      formsSave.SetComplex(SaveKeys.AbilityLoadouts, EsperanzaAbilityLoadouts.GetSnapshot());
       SaveSlotManager.Save(SaveKeys.Forms, formsSave);
+      formsSavePending = false;
+      formsSaveSlot = -1;
       return true;
     }
     catch (Exception e) {
       Debug.LogWarning("[CharacterState][SaveFormsState] Failed to save forms state: " + e.Message);
       return false;
     }
+  }
+
+  void QueueFormsSave() {
+    if (!formsSavePending) {
+      formsSaveSlot = SaveSlotManager.slot;
+    }
+    formsSavePending = true;
+  }
+
+  void FlushPendingFormsSave() {
+    TryFlushPendingFormsSave();
+  }
+
+  bool TryFlushPendingFormsSave() {
+    if (!formsSavePending) {
+      return true;
+    }
+
+    if (SaveFormsState()) {
+      return true;
+    }
+
+    return false;
   }
 
   bool SaveStatsState() {
@@ -439,7 +635,7 @@ public class CharacterState : MonoBehaviour {
   }
 
   void NotifyFormStateChanged(string resolvedForm, string source) {
-    Debug.Log(
+    RuntimeLog.Log(
       "[CharacterState][NotifyFormStateChanged] form='" + (resolvedForm ?? "") +
       "' source='" + (source ?? "") + "'"
     );
@@ -452,7 +648,7 @@ public class CharacterState : MonoBehaviour {
     var useSilverRatio = UnityEngine.Random.value < 0.5f;
     var ratio = useSilverRatio ? EsperanzaForms.SilverRatio : EsperanzaForms.GoldenRatio;
     var nextThreshold = Mathf.CeilToInt((float)(currentThreshold * ratio));
-    Debug.Log(
+    RuntimeLog.Log(
       "[CharacterState][LevelCurve] form='" + (formName ?? "") +
       "' next_level=" + nextLevel +
       " source='" + (source ?? "") +

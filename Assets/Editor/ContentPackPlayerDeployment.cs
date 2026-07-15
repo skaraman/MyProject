@@ -216,7 +216,7 @@ internal sealed class ContentPackPlayerDeployment : IPreprocessBuildWithReport, 
     }
 
     ValidateCatalogTarget(record, platform);
-    ValidateCatalogFreshness(record);
+    ValidateCatalogFingerprint(record);
     ValidateBundlePayload(record);
     return record;
   }
@@ -238,15 +238,17 @@ internal sealed class ContentPackPlayerDeployment : IPreprocessBuildWithReport, 
     );
   }
 
-  static void ValidateCatalogFreshness(ManifestRecord record) {
-    var manifestTime = File.GetLastWriteTimeUtc(record.manifestPath);
-    var catalogTime = File.GetLastWriteTimeUtc(record.catalogPath);
-    if (catalogTime.AddSeconds(2) >= manifestTime) {
+  static void ValidateCatalogFingerprint(ManifestRecord record) {
+    var fingerprintPath = Path.Combine(
+      record.bundleRoot,
+      ContentPackPipeline.RuntimeCatalogFingerprintFileName
+    );
+    if (File.Exists(fingerprintPath)) {
       return;
     }
 
     throw new BuildFailedException(
-      "[ContentPackDeployment] Runtime catalog is older than its manifest." +
+      "[ContentPackDeployment] Runtime catalog has no input fingerprint." +
       " pack_id='" + record.manifest.packId + "'" +
       " catalog='" + record.catalogPath + "'" +
       " action='Run Tools > Content Packs > Build Smart.'"

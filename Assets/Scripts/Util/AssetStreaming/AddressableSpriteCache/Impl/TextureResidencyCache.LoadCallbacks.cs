@@ -127,7 +127,7 @@ public static partial class TextureResidencyCache {
           var directResourceLocationCount = entry.pendingAssetLoadResourceLocationCount;
           var directExpectedSiblingSliceCount = entry.pendingAssetLoadExpectedSiblingSliceCount;
           if (ShouldLogAtlasNameDiagnostics(entry.address)) {
-            Debug.Log(
+            RuntimeLog.Log(
               "[TextureResidencyCache] Direct sprite primary load" +
               " atlas='" + (entry.address ?? "") + "'" +
               " requested='" + (entry.lastRequestedAddress ?? "") + "'" +

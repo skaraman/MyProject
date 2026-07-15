@@ -19,11 +19,60 @@ public sealed class EnemyDefeatedEvent {
 }
 
 public static class ContentEpisodeProgression {
+  struct RuntimeObjective {
+    public string action;
+    public string subject;
+    public int requiredCount;
+    public string countKey;
+    public int currentCount;
+  }
+
+  public const string ObjectivesCompletedTopic = "episode.objectives.completed";
+
   const string SaveName = "episode";
   const string EpisodeIdKey = "episodeId";
   const string SliceIdKey = "sliceId";
   const string SliceIndexKey = "sliceIndex";
+  const string CompletedPartCountKey = "completedPartCount";
+  const string CompletedPartPrefix = "completedPart_";
   const string ObjectiveCountPrefix = "objectiveCount_";
+
+  static int cachedCompletedPartSlot = -1;
+  static int cachedCompletedPartCount = -1;
+  static int episodeRevision;
+  static SaveData cachedData;
+  static int cachedDataSlot = -1;
+  static bool savePending;
+  static readonly List<RuntimeObjective> runtimeObjectives = new(16);
+  static readonly List<ContentObjectiveDefinition> runtimeObjectiveDefinitions = new(16);
+  static string runtimeObjectiveEpisodeId = "";
+  static int runtimeObjectiveRegistryVersion = -1;
+  static bool runtimeObjectiveCountsDirty;
+
+  public static int EpisodeRevision => episodeRevision;
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetRuntimeCaches() {
+    cachedCompletedPartSlot = -1;
+    cachedCompletedPartCount = -1;
+    episodeRevision = 0;
+    cachedData = null;
+    cachedDataSlot = -1;
+    savePending = false;
+    runtimeObjectiveCountsDirty = false;
+    ClearRuntimeObjectiveCache();
+  }
+
+  public static void PrepareRuntimeCaches() {
+    if (!HasRuntimeEpisodes()) {
+      WriteRuntimeObjectiveCountsToData();
+      ClearRuntimeObjectiveCache();
+      return;
+    }
+
+    var state = ResolveSavedOrInitialState();
+    EnsureRuntimeObjectiveCache(state);
+  }
 
   public static bool HasRuntimeEpisodes() {
     var registry = ActiveContentRegistryRuntime.Registry;
@@ -38,11 +87,12 @@ public static class ContentEpisodeProgression {
     if (!HasRuntimeEpisodes()) return;
 
     if (isNewGame) {
-      SaveState(ResolveInitialState(), "new_game:" + (source ?? ""));
+      ResetSavedState(ResolveInitialState(), "new_game:" + (source ?? ""));
       return;
     }
 
     EnsureSavedState("load_game:" + (source ?? ""));
+    RestartIncompleteCurrentEpisodePart("load_game:" + (source ?? ""));
   }
 
   public static void ConfigureForCurrentRuntimeState(string source) {
@@ -76,24 +126,96 @@ public static class ContentEpisodeProgression {
     return NormalizeToken(state.episodeId);
   }
 
-  public static bool TryAdvanceForEnemyDefeated(EnemyDefeatedEvent defeatedEvent, string source) {
-    if (defeatedEvent == null) return false;
+  public static IReadOnlyList<ContentObjectiveDefinition> ResolveCurrentObjectives() {
+    if (!HasRuntimeEpisodes()) {
+      WriteRuntimeObjectiveCountsToData();
+      ClearRuntimeObjectiveCache();
+      return Array.Empty<ContentObjectiveDefinition>();
+    }
+
+    var state = ResolveSavedOrInitialState();
+    EnsureRuntimeObjectiveCache(state);
+    return runtimeObjectiveDefinitions;
+  }
+
+  public static bool HasCurrentObjectives() {
+    PrepareRuntimeCaches();
+    return runtimeObjectives.Count > 0;
+  }
+
+  public static bool HasIncompleteCurrentObjectives() {
     if (!HasRuntimeEpisodes()) return false;
 
     var state = ResolveSavedOrInitialState();
-    if (!TryGetCurrentObjective(state, out var objective)) return false;
-    if (!TryParseDefeatObjective(objective.objective, out var targetEnemyType, out var targetCount)) return false;
-    if (!string.Equals(NormalizeToken(defeatedEvent.enemyType), targetEnemyType, StringComparison.OrdinalIgnoreCase)) {
-      return false;
+    EnsureRuntimeObjectiveCache(state);
+    if (runtimeObjectives.Count <= 0) return false;
+
+    return !AreObjectivesComplete(runtimeObjectives);
+  }
+
+  public static bool TryResolveCurrentSpawnCount(string enemyType, out int spawnCount) {
+    return TryResolveCurrentEnemyRule(
+      enemyType,
+      useRespawnRules: false,
+      out spawnCount
+    );
+  }
+
+  public static bool TryResolveCurrentRespawnSeconds(string enemyType, out int respawnSeconds) {
+    return TryResolveCurrentEnemyRule(
+      enemyType,
+      useRespawnRules: true,
+      out respawnSeconds
+    );
+  }
+
+  public static int ResolveCompletedPartCount() {
+    if (cachedCompletedPartSlot == SaveSlotManager.slot && cachedCompletedPartCount >= 0) {
+      return cachedCompletedPartCount;
     }
 
     var data = LoadData();
-    var countKey = BuildObjectiveCountKey(objective);
-    var nextCount = ReadInt(data, countKey, 0) + 1;
-    data[countKey] = nextCount;
-    SaveSlotManager.Save(SaveName, data);
+    var completedPartCount = ReadInt(data, CompletedPartCountKey, -1);
+    if (completedPartCount < 0 && HasRuntimeEpisodes()) {
+      completedPartCount = InferCompletedPartCount(ResolveSavedOrInitialState());
+    }
 
-    if (nextCount < targetCount) {
+    cachedCompletedPartSlot = SaveSlotManager.slot;
+    cachedCompletedPartCount = Mathf.Max(0, completedPartCount);
+    return cachedCompletedPartCount;
+  }
+
+  public static bool TryAdvanceForEnemyDefeated(EnemyDefeatedEvent defeatedEvent, string source) {
+    if (defeatedEvent == null) return false;
+
+    return TryAdvanceForObjectiveEvent(
+      "Kill",
+      defeatedEvent.enemyType,
+      source
+    );
+  }
+
+  public static bool TryAdvanceForObjectiveEvent(
+    string action,
+    string subject,
+    string source
+  ) {
+    if (!HasRuntimeEpisodes()) return false;
+
+    var state = ResolveSavedOrInitialState();
+    EnsureRuntimeObjectiveCache(state);
+    if (runtimeObjectives.Count <= 0) return false;
+
+    var changed = ApplyObjectiveEvent(
+      runtimeObjectives,
+      action,
+      subject
+    );
+    if (!changed) return false;
+
+    QueueRuntimeObjectiveSave();
+
+    if (!AreObjectivesComplete(runtimeObjectives)) {
       return false;
     }
 
@@ -106,68 +228,247 @@ public static class ContentEpisodeProgression {
     var state = ResolveSavedOrInitialState();
     var episode = FindEpisode(state.episodeId);
     if (episode == null || episode.slices == null || episode.slices.Count <= 0) return false;
+    if (!IsEpisodeProgressSlice(state.sliceId)) return false;
+
+    var data = LoadData();
+    if (!MarkPartCompleted(data, state)) {
+      return false;
+    }
+
+    if (TryResolveNextProgressState(state, episode, out var nextState)) {
+      SaveState(data, nextState, source);
+      return true;
+    }
+
+    SaveState(data, state, source);
+    return true;
+  }
+
+  static bool TryResolveNextProgressState(
+    EpisodeProgressState state,
+    ContentEpisodeDefinition episode,
+    out EpisodeProgressState nextState
+  ) {
+    nextState = default;
 
     for (var i = state.sliceIndex + 1; i < episode.slices.Count; i++) {
       var nextSliceId = NormalizeToken(episode.slices[i]);
       if (string.IsNullOrWhiteSpace(nextSliceId)) continue;
       if (!IsEpisodeProgressSlice(nextSliceId)) continue;
 
-      SaveState(new EpisodeProgressState(episode.id, nextSliceId, i), source);
+      nextState = new EpisodeProgressState(episode.id, nextSliceId, i);
       return true;
     }
 
-    return false;
-  }
-
-  static bool TryGetCurrentObjective(EpisodeProgressState state, out ContentObjectiveDefinition objective) {
-    objective = null;
-
-    var currentSlice = FindSlice(state.sliceId);
-    if (currentSlice == null || currentSlice.ids == null) return false;
-
-    for (var i = 0; i < currentSlice.ids.Count; i++) {
-      var packId = NormalizeToken(currentSlice.ids[i]);
-      if (string.IsNullOrWhiteSpace(packId)) continue;
-      if (!TryGetObjectiveForPack(packId, out objective)) continue;
-      return true;
+    var nextEpisode = FindNextEpisode(episode);
+    if (nextEpisode == null || nextEpisode.slices == null || nextEpisode.slices.Count <= 0) {
+      return false;
     }
 
-    return false;
+    var nextSliceIndex = ResolveInitialSliceIndex(nextEpisode);
+    var firstSliceId = NormalizeToken(nextEpisode.slices[nextSliceIndex]);
+    if (string.IsNullOrWhiteSpace(firstSliceId)) {
+      return false;
+    }
+    if (!IsEpisodeProgressSlice(firstSliceId)) {
+      return false;
+    }
+
+    nextState = new EpisodeProgressState(nextEpisode.id, firstSliceId, nextSliceIndex);
+    return true;
   }
 
-  static bool TryGetObjectiveForPack(string packId, out ContentObjectiveDefinition objective) {
-    objective = null;
+  static bool MarkPartCompleted(SaveData data, EpisodeProgressState state) {
+    if (data == null) {
+      return false;
+    }
+
+    var completionKey = BuildCompletedPartKey(state);
+    if (ReadBool(data, completionKey, false)) {
+      return false;
+    }
+
+    var completedPartCount = Mathf.Max(0, ReadInt(data, CompletedPartCountKey, 0));
+    completedPartCount += 1;
+
+    data[completionKey] = true;
+    data[CompletedPartCountKey] = completedPartCount;
+    cachedCompletedPartSlot = SaveSlotManager.slot;
+    cachedCompletedPartCount = completedPartCount;
+    return true;
+  }
+
+  static void EnsureRuntimeObjectiveCache(EpisodeProgressState state) {
+    var normalizedEpisodeId = NormalizeToken(state.episodeId);
+    var registryVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (runtimeObjectiveRegistryVersion == registryVersion &&
+        string.Equals(
+          runtimeObjectiveEpisodeId,
+          normalizedEpisodeId,
+          StringComparison.OrdinalIgnoreCase
+        )) {
+      return;
+    }
+
+    WriteRuntimeObjectiveCountsToData();
+    ClearRuntimeObjectiveCache();
+    runtimeObjectiveEpisodeId = normalizedEpisodeId;
+    runtimeObjectiveRegistryVersion = registryVersion;
+    if (string.IsNullOrWhiteSpace(normalizedEpisodeId)) return;
+
     var registry = ActiveContentRegistryRuntime.Registry;
     var objectives = registry != null ? registry.Objectives : null;
-    if (objectives == null) return false;
+    if (objectives == null) return;
+    var data = LoadData();
 
     for (var i = 0; i < objectives.Count; i++) {
       var candidate = objectives[i];
       if (candidate == null) continue;
-      if (!string.Equals(NormalizeToken(candidate.packId), packId, StringComparison.OrdinalIgnoreCase)) continue;
-      objective = candidate;
-      return true;
-    }
+      if (!string.Equals(
+        NormalizeToken(candidate.id),
+        normalizedEpisodeId,
+        StringComparison.OrdinalIgnoreCase
+      )) continue;
 
-    return false;
+      runtimeObjectiveDefinitions.Add(candidate);
+      if (!TryParseObjectiveKey(
+            candidate.objective,
+            out var action,
+            out var subject,
+            out var requiredCount
+          )) {
+        continue;
+      }
+
+      var countKey = BuildObjectiveCountKey(candidate);
+      runtimeObjectives.Add(new RuntimeObjective {
+        action = action,
+        subject = subject,
+        requiredCount = requiredCount,
+        countKey = countKey,
+        currentCount = ReadInt(data, countKey, 0)
+      });
+    }
   }
 
-  static bool TryParseDefeatObjective(string objective, out string enemyType, out int targetCount) {
-    enemyType = "";
+  static void ClearRuntimeObjectiveCache() {
+    runtimeObjectives.Clear();
+    runtimeObjectiveDefinitions.Clear();
+    runtimeObjectiveEpisodeId = "";
+    runtimeObjectiveRegistryVersion = -1;
+  }
+
+  static bool ApplyObjectiveEvent(
+    List<RuntimeObjective> objectives,
+    string action,
+    string subject
+  ) {
+    if (objectives == null) return false;
+
+    var changed = false;
+    var normalizedAction = NormalizeToken(action);
+    var normalizedSubject = NormalizeToken(subject);
+
+    for (var i = 0; i < objectives.Count; i++) {
+      var objective = objectives[i];
+      if (!string.Equals(normalizedAction, objective.action, StringComparison.OrdinalIgnoreCase)) continue;
+      if (!string.Equals(normalizedSubject, objective.subject, StringComparison.OrdinalIgnoreCase)) continue;
+
+      if (objective.currentCount >= objective.requiredCount) continue;
+
+      objective.currentCount += 1;
+      objectives[i] = objective;
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  static bool TryResolveCurrentEnemyRule(
+    string enemyType,
+    bool useRespawnRules,
+    out int value
+  ) {
+    value = 0;
+    var normalizedEnemyType = NormalizeToken(enemyType);
+    if (string.IsNullOrWhiteSpace(normalizedEnemyType)) return false;
+
+    var objectives = ResolveCurrentObjectives();
+    var found = false;
+    for (var objectiveIndex = 0; objectiveIndex < objectives.Count; objectiveIndex++) {
+      var objective = objectives[objectiveIndex];
+      if (objective == null) continue;
+
+      var rules = useRespawnRules ? objective.respawns : objective.spawns;
+      if (rules == null) continue;
+
+      for (var ruleIndex = 0; ruleIndex < rules.Count; ruleIndex++) {
+        if (!TryParseEnemyRule(rules[ruleIndex], out var subject, out var ruleValue)) continue;
+        if (!string.Equals(normalizedEnemyType, subject, StringComparison.OrdinalIgnoreCase)) continue;
+
+        if (!found) {
+          value = ruleValue;
+          found = true;
+          continue;
+        }
+
+        value = useRespawnRules
+          ? Mathf.Min(value, ruleValue)
+          : Mathf.Max(value, ruleValue);
+      }
+    }
+
+    return found;
+  }
+
+  static bool TryParseEnemyRule(string rule, out string subject, out int value) {
+    subject = "";
+    value = 0;
+
+    var normalized = NormalizeToken(rule);
+    var parts = normalized.Split('_');
+    if (parts.Length != 2) return false;
+
+    subject = NormalizeToken(parts[0]);
+    if (string.IsNullOrWhiteSpace(subject)) return false;
+    if (!int.TryParse(parts[1], out value)) return false;
+    return value >= 0;
+  }
+
+  static bool AreObjectivesComplete(
+    IReadOnlyList<RuntimeObjective> objectives
+  ) {
+    if (objectives == null || objectives.Count <= 0) return false;
+
+    for (var i = 0; i < objectives.Count; i++) {
+      var objective = objectives[i];
+      if (objective.currentCount < objective.requiredCount) return false;
+    }
+
+    return true;
+  }
+
+  static bool TryParseObjectiveKey(
+    string objective,
+    out string action,
+    out string subject,
+    out int targetCount
+  ) {
+    action = "";
+    subject = "";
     targetCount = 0;
 
     var normalized = NormalizeToken(objective);
-    if (!normalized.StartsWith("Defeat_", StringComparison.OrdinalIgnoreCase)) return false;
+    var parts = normalized.Split('_');
+    if (parts.Length != 3) return false;
 
-    var body = normalized.Substring("Defeat_".Length);
-    var lastSeparator = body.LastIndexOf('_');
-    if (lastSeparator <= 0 || lastSeparator >= body.Length - 1) return false;
+    action = NormalizeToken(parts[0]);
+    subject = NormalizeToken(parts[1]);
+    if (!int.TryParse(parts[2], out targetCount)) return false;
+    if (targetCount <= 0) return false;
 
-    enemyType = NormalizeToken(body.Substring(0, lastSeparator));
-    if (!int.TryParse(body.Substring(lastSeparator + 1), out targetCount)) return false;
-
-    targetCount = Mathf.Max(1, targetCount);
-    return !string.IsNullOrWhiteSpace(enemyType);
+    return !string.IsNullOrWhiteSpace(action) &&
+           !string.IsNullOrWhiteSpace(subject);
   }
 
   static EpisodeProgressState ResolveSavedOrInitialState() {
@@ -188,9 +489,23 @@ public static class ContentEpisodeProgression {
     var episodeId = ReadString(data, EpisodeIdKey);
     var sliceId = ReadString(data, SliceIdKey);
     var sliceIndex = ReadInt(data, SliceIndexKey, -1);
-    if (TryNormalizeState(episodeId, sliceId, sliceIndex, out _)) return;
+    if (TryNormalizeState(episodeId, sliceId, sliceIndex, out var state)) {
+      EnsureCompletedPartCount(data, state, source);
+      return;
+    }
 
     SaveState(ResolveInitialState(), source);
+  }
+
+  static void EnsureCompletedPartCount(SaveData data, EpisodeProgressState state, string source) {
+    if (data.ContainsKey(CompletedPartCountKey)) {
+      cachedCompletedPartSlot = SaveSlotManager.slot;
+      cachedCompletedPartCount = Mathf.Max(0, ReadInt(data, CompletedPartCountKey, 0));
+      return;
+    }
+
+    data[CompletedPartCountKey] = InferCompletedPartCount(state);
+    SaveState(data, state, "completion_migration:" + (source ?? ""));
   }
 
   static EpisodeProgressState ResolveInitialState() {
@@ -254,15 +569,63 @@ public static class ContentEpisodeProgression {
     return false;
   }
 
+  static void ResetSavedState(EpisodeProgressState state, string source) {
+    var data = new SaveData();
+    data[CompletedPartCountKey] = 0;
+    SaveState(data, state, source);
+  }
+
+  static void RestartIncompleteCurrentEpisodePart(string source) {
+    var state = ResolveSavedOrInitialState();
+    EnsureRuntimeObjectiveCache(state);
+    if (runtimeObjectives.Count <= 0) return;
+
+    if (AreObjectivesComplete(runtimeObjectives)) return;
+
+    var changed = false;
+    for (var i = 0; i < runtimeObjectives.Count; i++) {
+      var objective = runtimeObjectives[i];
+      if (objective.currentCount <= 0) continue;
+      objective.currentCount = 0;
+      runtimeObjectives[i] = objective;
+      changed = true;
+    }
+
+    if (!changed) return;
+    QueueRuntimeObjectiveSave();
+
+    RuntimeLog.Log(
+      "[ContentEpisodeProgression] episode_part_restarted" +
+      " source='" + (source ?? "") + "'" +
+      " episode='" + NormalizeToken(state.episodeId) + "'" +
+      " slice='" + NormalizeToken(state.sliceId) + "'"
+    );
+  }
+
   static void SaveState(EpisodeProgressState state, string source) {
     var data = LoadData();
+    SaveState(data, state, source);
+  }
+
+  static void SaveState(SaveData data, EpisodeProgressState state, string source) {
+    if (data == null) {
+      data = new SaveData();
+    }
+
     data[EpisodeIdKey] = NormalizeToken(state.episodeId);
     data[SliceIdKey] = NormalizeToken(state.sliceId);
     data[SliceIndexKey] = Mathf.Max(0, state.sliceIndex);
-    SaveSlotManager.Save(SaveName, data);
+    if (!data.ContainsKey(CompletedPartCountKey)) {
+      data[CompletedPartCountKey] = 0;
+    }
+    QueueSave(data);
+    MarkEpisodeChanged();
 
-    Debug.Log(
-      "[ContentEpisodeProgression] state_saved" +
+    cachedCompletedPartSlot = SaveSlotManager.slot;
+    cachedCompletedPartCount = Mathf.Max(0, ReadInt(data, CompletedPartCountKey, 0));
+
+    RuntimeLog.Log(
+      "[ContentEpisodeProgression] state_staged" +
       " source='" + (source ?? "") + "'" +
       " episode='" + NormalizeToken(state.episodeId) + "'" +
       " slice='" + NormalizeToken(state.sliceId) + "'" +
@@ -316,6 +679,32 @@ public static class ContentEpisodeProgression {
     return null;
   }
 
+  static ContentEpisodeDefinition FindNextEpisode(ContentEpisodeDefinition currentEpisode) {
+    if (currentEpisode == null) {
+      return null;
+    }
+
+    var registry = ActiveContentRegistryRuntime.Registry;
+    var episodes = registry != null ? registry.Episodes : null;
+    if (episodes == null || episodes.Count <= 0) {
+      return null;
+    }
+
+    for (var i = 0; i < episodes.Count - 1; i++) {
+      var candidate = episodes[i];
+      if (candidate == null) continue;
+      if (!string.Equals(
+        NormalizeToken(candidate.id),
+        NormalizeToken(currentEpisode.id),
+        StringComparison.OrdinalIgnoreCase
+      )) continue;
+
+      return episodes[i + 1];
+    }
+
+    return null;
+  }
+
   static ContentSliceDefinition FindSlice(string sliceId) {
     var normalized = NormalizeToken(sliceId);
     if (string.IsNullOrWhiteSpace(normalized)) return null;
@@ -355,12 +744,139 @@ public static class ContentEpisodeProgression {
   }
 
   static string BuildObjectiveCountKey(ContentObjectiveDefinition objective) {
-    var key = !string.IsNullOrWhiteSpace(objective.id) ? objective.id : objective.packId;
-    return ObjectiveCountPrefix + NormalizeToken(key).Replace(' ', '_');
+    var episodeId = NormalizeToken(objective.id).Replace(' ', '_');
+    var objectiveKey = NormalizeToken(objective.objective).Replace(' ', '_');
+    return ObjectiveCountPrefix + episodeId + "_" + objectiveKey;
+  }
+
+  static string BuildCompletedPartKey(EpisodeProgressState state) {
+    return CompletedPartPrefix + NormalizeToken(state.episodeId) + "_" + NormalizeToken(state.sliceId);
+  }
+
+  static int InferCompletedPartCount(EpisodeProgressState state) {
+    var completedPartCount = 0;
+    var registry = ActiveContentRegistryRuntime.Registry;
+    var episodes = registry != null ? registry.Episodes : null;
+    if (episodes == null) {
+      return completedPartCount;
+    }
+
+    for (var i = 0; i < episodes.Count; i++) {
+      var episode = episodes[i];
+      if (episode == null || episode.slices == null) continue;
+
+      var isCurrentEpisode = string.Equals(
+        NormalizeToken(episode.id),
+        NormalizeToken(state.episodeId),
+        StringComparison.OrdinalIgnoreCase
+      );
+
+      for (var sliceIndex = 0; sliceIndex < episode.slices.Count; sliceIndex++) {
+        if (!IsEpisodeProgressSlice(episode.slices[sliceIndex])) continue;
+        if (isCurrentEpisode && sliceIndex >= state.sliceIndex) continue;
+        completedPartCount += 1;
+      }
+
+      if (isCurrentEpisode) {
+        break;
+      }
+    }
+
+    return completedPartCount;
   }
 
   static SaveData LoadData() {
-    return SaveSlotManager.Load(SaveName) ?? new SaveData();
+    var currentSlot = SaveSlotManager.slot;
+    if (cachedData != null && cachedDataSlot == currentSlot) {
+      return cachedData;
+    }
+
+    runtimeObjectiveCountsDirty = false;
+    ClearRuntimeObjectiveCache();
+    cachedData = SaveSlotManager.Load(SaveName) ?? new SaveData();
+    cachedDataSlot = currentSlot;
+    savePending = false;
+    return cachedData;
+  }
+
+  static void QueueSave(SaveData data) {
+    if (cachedData != null && !ReferenceEquals(cachedData, data)) {
+      runtimeObjectiveCountsDirty = false;
+      ClearRuntimeObjectiveCache();
+    }
+    cachedData = data ?? new SaveData();
+    cachedDataSlot = SaveSlotManager.slot;
+    savePending = true;
+  }
+
+  static void QueueRuntimeObjectiveSave() {
+    runtimeObjectiveCountsDirty = true;
+    savePending = true;
+  }
+
+  static void WriteRuntimeObjectiveCountsToData() {
+    if (!runtimeObjectiveCountsDirty || cachedData == null) {
+      return;
+    }
+
+    for (var i = 0; i < runtimeObjectives.Count; i++) {
+      var objective = runtimeObjectives[i];
+      if (objective.currentCount <= 0) {
+        cachedData.Remove(objective.countKey);
+        continue;
+      }
+      cachedData[objective.countKey] = objective.currentCount;
+    }
+    runtimeObjectiveCountsDirty = false;
+  }
+
+  public static bool FlushPendingSave() {
+    if (!savePending || cachedData == null) {
+      return true;
+    }
+    if (cachedDataSlot != SaveSlotManager.slot) {
+      return false;
+    }
+
+    try {
+      WriteRuntimeObjectiveCountsToData();
+      SaveSlotManager.Save(SaveName, cachedData);
+      savePending = false;
+      return true;
+    }
+    catch (Exception exception) {
+      Debug.LogWarning(
+        "[ContentEpisodeProgression] Failed to flush pending state: " +
+        exception.Message
+      );
+      return false;
+    }
+  }
+
+  public static void DiscardRuntimeCacheForSlot(int slotNumber) {
+    var cacheChanged = false;
+    if (cachedDataSlot == slotNumber) {
+      cachedData = null;
+      cachedDataSlot = -1;
+      savePending = false;
+      runtimeObjectiveCountsDirty = false;
+      ClearRuntimeObjectiveCache();
+      cacheChanged = true;
+    }
+    if (cachedCompletedPartSlot == slotNumber) {
+      cachedCompletedPartSlot = -1;
+      cachedCompletedPartCount = -1;
+      cacheChanged = true;
+    }
+    if (cacheChanged) {
+      MarkEpisodeChanged();
+    }
+  }
+
+  static void MarkEpisodeChanged() {
+    unchecked {
+      episodeRevision += 1;
+    }
   }
 
   static string ReadString(SaveData data, string key) {
@@ -375,6 +891,18 @@ public static class ContentEpisodeProgression {
 
     try {
       return Convert.ToInt32(value);
+    }
+    catch {
+      return fallback;
+    }
+  }
+
+  static bool ReadBool(SaveData data, string key, bool fallback) {
+    if (data == null || string.IsNullOrWhiteSpace(key)) return fallback;
+    if (!data.TryGetValue(key, out var value) || value == null) return fallback;
+
+    try {
+      return Convert.ToBoolean(value);
     }
     catch {
       return fallback;

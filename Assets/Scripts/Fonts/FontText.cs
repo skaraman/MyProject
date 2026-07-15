@@ -3,6 +3,54 @@ using System.Collections.Generic;
 using CustomInspector;
 using UnityEngine;
 
+public static class IntegerTextCache {
+  const int CachedValueLimit = 4096;
+  static readonly string[] values = new string[CachedValueLimit + 1];
+  static readonly string[] slashPrefixedValues = new string[CachedValueLimit + 1];
+
+  public static void Warm(int maxInclusive) {
+    var warmLimit = Mathf.Clamp(maxInclusive, 0, CachedValueLimit);
+    for (var value = 0; value <= warmLimit; value++) {
+      if (values[value] == null) {
+        values[value] = value.ToString();
+      }
+      if (slashPrefixedValues[value] == null) {
+        slashPrefixedValues[value] = "/" + values[value];
+      }
+    }
+  }
+
+  public static string Get(int value) {
+    if (value < 0 || value > CachedValueLimit) {
+      return value.ToString();
+    }
+
+    var cachedValue = values[value];
+    if (cachedValue != null) {
+      return cachedValue;
+    }
+
+    cachedValue = value.ToString();
+    values[value] = cachedValue;
+    return cachedValue;
+  }
+
+  public static string GetSlashPrefixed(int value) {
+    if (value < 0 || value > CachedValueLimit) {
+      return "/" + value;
+    }
+
+    var cachedValue = slashPrefixedValues[value];
+    if (cachedValue != null) {
+      return cachedValue;
+    }
+
+    cachedValue = "/" + Get(value);
+    slashPrefixedValues[value] = cachedValue;
+    return cachedValue;
+  }
+}
+
 public class FontText : MonoBehaviour {
   readonly struct GlyphMetricCacheKey : IEquatable<GlyphMetricCacheKey> {
     public readonly string font;
@@ -33,6 +81,7 @@ public class FontText : MonoBehaviour {
   static readonly Dictionary<string, float> glyphHeightByFont = new(StringComparer.Ordinal);
 
   public GameObject characterPrefab;
+  [SerializeField, Min(0)] int prewarmCharacterCapacity;
   [Button(nameof(Reset), label = "Reset Text", size = Size.small)]
   [Button(nameof(Generate), label = "Force Text", size = Size.small)]
 
@@ -72,10 +121,35 @@ public class FontText : MonoBehaviour {
   private ComponentPropagator cachedComponentPropagator;
   private bool pendingRegenerate;
   private bool isGenerating;
+  private bool glyphHierarchyChanged;
 
   void OnEnable() {
     if (characterPrefab == null) return;
+    EnsureGlyphCapacity(prewarmCharacterCapacity);
     Generate();
+  }
+
+  public void EnsureGlyphCapacity(int requiredCapacity) {
+    if (characterPrefab == null) {
+      return;
+    }
+
+    requiredCapacity = Mathf.Max(requiredCapacity, 0);
+    var currentCapacity = activeChars.Count + charPool.Count;
+    while (currentCapacity < requiredCapacity) {
+      var characterObject = Instantiate(characterPrefab, transform, false);
+      characterObject.SetActive(false);
+      charPool.Push(characterObject);
+      glyphHierarchyChanged = true;
+      currentCapacity += 1;
+    }
+
+    if (activeChars.Capacity < requiredCapacity) {
+      activeChars.Capacity = requiredCapacity;
+      activeCharRenderers.Capacity = requiredCapacity;
+      activeCharSourceIndices.Capacity = requiredCapacity;
+    }
+    PropagateGlyphHierarchyIfChanged();
   }
 
   void Update() {
@@ -131,7 +205,7 @@ public class FontText : MonoBehaviour {
     SyncActiveGlyphRendererStates();
     ApplyVisibleCharacterCountToGlyphs();
     prevContent = content;
-    ForceGlyphPropagation();
+    PropagateGlyphHierarchyIfChanged();
     }
     finally {
       isGenerating = false;
@@ -176,7 +250,14 @@ public class FontText : MonoBehaviour {
   }
 
   GameObject GetCharFromPool() {
-    var obj = charPool.Count > 0 ? charPool.Pop() : Instantiate(characterPrefab);
+    GameObject obj;
+    if (charPool.Count > 0) {
+      obj = charPool.Pop();
+    }
+    else {
+      obj = Instantiate(characterPrefab);
+      glyphHierarchyChanged = true;
+    }
     obj.transform.SetParent(transform, false);
     obj.transform.SetAsLastSibling();
     obj.SetActive(true);
@@ -212,6 +293,7 @@ public class FontText : MonoBehaviour {
       var go = child.gameObject;
       if (!activeChars.Contains(go) && !charPool.Contains(go)) {
         DestroyImmediate(go);
+        glyphHierarchyChanged = true;
       }
     }
     childScratch.Clear();
@@ -265,17 +347,26 @@ public class FontText : MonoBehaviour {
       return 0f;
     }
 
-    var measureObject = GetCharFromPool();
-    measureObject.SetActive(false);
-
-    var fc = measureObject.GetComponent<FontCharacter>();
-    var sr = measureObject.GetComponent<SpriteRenderer>();
-    SyncGlyphRendererState(sr);
+    GameObject measureObject = null;
+    FontCharacter fc = null;
+    SpriteRenderer sr = null;
 
     var simulatedWidth = 0f;
     var displayWidth = 0f;
     while (endIndex < content.Length && content[endIndex] != ' ' && content[endIndex] != '\n') {
-      if (TryGetCharacterMetrics(fc, sr, content[endIndex], out var charWidth, out _)) {
+      var character = content[endIndex];
+      var hasMetrics = TryGetCachedGlyphMetrics(character, out var charWidth, out _);
+      if (!hasMetrics) {
+        if (measureObject == null) {
+          measureObject = GetCharFromPool();
+          measureObject.SetActive(false);
+          fc = measureObject.GetComponent<FontCharacter>();
+          sr = measureObject.GetComponent<SpriteRenderer>();
+          SyncGlyphRendererState(sr);
+        }
+        hasMetrics = TryGetCharacterMetrics(fc, sr, character, out charWidth, out _);
+      }
+      if (hasMetrics) {
         var advanceWidth = mono > 0 ? Mathf.Max(mono, charWidth) : charWidth;
         var rightEdge = simulatedWidth + advanceWidth;
         simulatedWidth = rightEdge + padding;
@@ -287,7 +378,9 @@ public class FontText : MonoBehaviour {
       endIndex++;
     }
 
-    RecycleChar(measureObject);
+    if (measureObject != null) {
+      RecycleChar(measureObject);
+    }
     return displayWidth;
   }
 
@@ -364,10 +457,16 @@ public class FontText : MonoBehaviour {
     glyphRenderer.flipY = cachedHostRenderer.flipY;
   }
 
-  void ForceGlyphPropagation() {
+  void PropagateGlyphHierarchyIfChanged() {
+    if (!glyphHierarchyChanged) return;
+
     CacheRuntimeReferences();
-    if (cachedComponentPropagator == null) return;
+    if (cachedComponentPropagator == null) {
+      glyphHierarchyChanged = false;
+      return;
+    }
     cachedComponentPropagator.ForcePropagation();
+    glyphHierarchyChanged = false;
   }
 
   void SyncActiveGlyphRendererStates() {
@@ -567,6 +666,9 @@ public class FontText : MonoBehaviour {
 
   public void Reset() {
     foreach (var obj in activeChars) DestroyImmediate(obj);
+    if (activeChars.Count > 0 || charPool.Count > 0) {
+      glyphHierarchyChanged = true;
+    }
     activeChars.Clear();
     activeCharRenderers.Clear();
     activeCharSourceIndices.Clear();
@@ -577,6 +679,7 @@ public class FontText : MonoBehaviour {
       var t = transform.GetChild(i).gameObject;
       if (!activeChars.Contains(t) && !charPool.Contains(t)) {
         gameObjectScratch.Add(t);
+        glyphHierarchyChanged = true;
       }
     }
     for (var i = 0; i < gameObjectScratch.Count; i++) {

@@ -29,7 +29,7 @@ public partial class SingleSceneManager {
     var remainingText = float.IsInfinity(deadline)
       ? "inf"
       : Mathf.Max(deadline - Time.realtimeSinceStartup, 0f).ToString("0.000");
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PreUnlockBudget] stage=" + stage +
       " state=" + state +
       " remaining_s=" + remainingText +
@@ -187,7 +187,7 @@ public partial class SingleSceneManager {
     if (readyAddresses.Count <= 0) {
       TextureResidencyCache.ReleaseOwnerPins(PreUnlockResidentPinOwnerId);
       if (!ShouldLogLoadingProgressDebug()) return;
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PreUnlockPin] stage=" + stage +
         " tracked_addresses=" + trackedAddresses.Count +
         " pinned_ready_addresses=0 queue_only_skip=1"
@@ -204,7 +204,7 @@ public partial class SingleSceneManager {
 
     if (!ShouldLogLoadingProgressDebug()) return;
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][PreUnlockPin] stage=" + stage +
       " tracked_addresses=" + trackedAddresses.Count +
       " pinned_ready_addresses=" + readyAddresses.Count +
@@ -222,93 +222,7 @@ public partial class SingleSceneManager {
     if (!Application.isPlaying) return;
     TextureResidencyCache.ReleaseOwnerPins(PreUnlockResidentPinOwnerId);
     if (!hadTrackedAddresses || !ShouldLogLoadingProgressDebug()) return;
-    Debug.Log("[SingleSceneManager][PreUnlockPin] release reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
-  }
-
-  void StopDeferredPostRevealWarmup(string reason) {
-    var hadQueuedAddresses = deferredPostRevealWarmupAddressScratch.Count > 0;
-    deferredPostRevealWarmupAddressScratch.Clear();
-    deferredPostRevealWarmupSeenAddressScratch.Clear();
-    if (deferredPostRevealWarmupRoutine == null) {
-      if (!hadQueuedAddresses || !ShouldLogLoadingProgressDebug()) return;
-      Debug.Log("[SingleSceneManager][DeferredWarmup] stage=clear reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
-      return;
-    }
-
-    StopCoroutine(deferredPostRevealWarmupRoutine);
-    deferredPostRevealWarmupRoutine = null;
-    if (!ShouldLogLoadingProgressDebug()) return;
-    Debug.Log("[SingleSceneManager][DeferredWarmup] stage=stop reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
-  }
-
-  void QueueDeferredPostRevealWarmupAddresses(List<string> addresses, int startInclusive, int count, string stage) {
-    if (!Application.isPlaying || addresses == null || addresses.Count <= 0 || count <= 0) return;
-    var start = Mathf.Clamp(startInclusive, 0, addresses.Count);
-    var endExclusive = Mathf.Clamp(start + Mathf.Max(count, 0), start, addresses.Count);
-    var added = 0;
-    for (var i = start; i < endExclusive; i++) {
-      var normalized = string.IsNullOrWhiteSpace(addresses[i]) ? "" : addresses[i].Trim();
-      if (string.IsNullOrWhiteSpace(normalized)) continue;
-      if (!deferredPostRevealWarmupSeenAddressScratch.Add(normalized)) continue;
-      deferredPostRevealWarmupAddressScratch.Add(normalized);
-      added++;
-    }
-    if (added <= 0 || !ShouldLogLoadingProgressDebug()) return;
-    Debug.Log(
-      "[SingleSceneManager][DeferredWarmup] stage=queue" +
-      " source=" + (string.IsNullOrWhiteSpace(stage) ? "-" : stage.Trim()) +
-      " added=" + added +
-      " pending=" + deferredPostRevealWarmupAddressScratch.Count
-    );
-  }
-
-  void StartDeferredPostRevealWarmupIfNeeded(string reason) {
-    if (!Application.isPlaying) return;
-    if (deferredPostRevealWarmupRoutine != null) return;
-    if (deferredPostRevealWarmupAddressScratch.Count <= 0) return;
-    deferredPostRevealWarmupRoutine = StartCoroutine(RunDeferredPostRevealWarmupRoutine(reason));
-  }
-
-  IEnumerator RunDeferredPostRevealWarmupRoutine(string reason) {
-    while (Application.isPlaying && SpriteStreamingLoadingState.IsLoadingOverlayActive) {
-      yield return null;
-    }
-    if (!Application.isPlaying) {
-      deferredPostRevealWarmupRoutine = null;
-      yield break;
-    }
-
-    var processedAddressCount = deferredPostRevealWarmupAddressScratch.Count;
-
-    if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
-        "[SingleSceneManager][DeferredWarmup] stage=begin" +
-        " reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()) +
-        " pending=" + processedAddressCount
-      );
-    }
-
-    if (processedAddressCount > 0) {
-      yield return PreloadAnimationAddressBatch(
-        deferredPostRevealWarmupAddressScratch,
-        0,
-        processedAddressCount,
-        resetLoadingProgress: false,
-        trackResidentPins: false,
-        settleAfterEnqueue: false
-      );
-    }
-
-    if (ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
-        "[SingleSceneManager][DeferredWarmup] stage=complete" +
-        " processed=" + processedAddressCount
-      );
-    }
-
-    deferredPostRevealWarmupAddressScratch.Clear();
-    deferredPostRevealWarmupSeenAddressScratch.Clear();
-    deferredPostRevealWarmupRoutine = null;
+    RuntimeLog.Log("[SingleSceneManager][PreUnlockPin] release reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()));
   }
 
   int ResolvePreUnlockBlockingPrefixCount(List<string> addresses, int playerAddressCount = -1) {
@@ -332,8 +246,8 @@ public partial class SingleSceneManager {
     var preUnlockStartedAt = Time.realtimeSinceStartup;
     ResetPreUnlockResidentPins();
     if (ShouldLogLoadFlowWarnings()) {
-      Debug.Log("[SingleSceneManager][PreUnlock] Starting WaitForStreamingIdleBeforeUnlock...");
-      Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+      RuntimeLog.Log("[SingleSceneManager][PreUnlock] Starting WaitForStreamingIdleBeforeUnlock...");
+      RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
       TextureResidencyCache.LogRequestDiagnosticsSummary();
     }
     if (!waitForStreamingIdleBeforeFadeOut) {
@@ -366,8 +280,8 @@ public partial class SingleSceneManager {
         BuildPreUnlockThresholdFields()
       );
       if (ShouldLogLoadFlowWarnings()) {
-        Debug.Log("[SingleSceneManager][PreUnlock] Exiting WaitForStreamingIdleBeforeUnlock (no_idle_wait)...");
-        Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+        RuntimeLog.Log("[SingleSceneManager][PreUnlock] Exiting WaitForStreamingIdleBeforeUnlock (no_idle_wait)...");
+        RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
         TextureResidencyCache.LogRequestDiagnosticsSummary();
       }
       yield break;
@@ -492,8 +406,8 @@ public partial class SingleSceneManager {
           BuildPreUnlockThresholdFields()
         );
         if (ShouldLogLoadFlowWarnings()) {
-          Debug.Log("[SingleSceneManager][PreUnlock] Exiting WaitForStreamingIdleBeforeUnlock (stable_ready)...");
-          Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+          RuntimeLog.Log("[SingleSceneManager][PreUnlock] Exiting WaitForStreamingIdleBeforeUnlock (stable_ready)...");
+          RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
           TextureResidencyCache.LogRequestDiagnosticsSummary();
         }
         yield break;
@@ -551,8 +465,8 @@ public partial class SingleSceneManager {
             BuildPreUnlockThresholdFields()
           );
           if (ShouldLogLoadFlowWarnings()) {
-            Debug.Log("[SingleSceneManager][PreUnlock] Exiting WaitForStreamingIdleBeforeUnlock (timeout_release)...");
-            Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+            RuntimeLog.Log("[SingleSceneManager][PreUnlock] Exiting WaitForStreamingIdleBeforeUnlock (timeout_release)...");
+            RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
             TextureResidencyCache.LogRequestDiagnosticsSummary();
           }
           yield break;
@@ -607,6 +521,9 @@ public partial class SingleSceneManager {
     bool dialogReady,
     bool locationActivationPending
   ) {
+    if (!IsRuntimeRevealSetupReady()) {
+      return false;
+    }
     if (!resolverIdle || !playerReady || !uiReady || !dialogReady || locationActivationPending || !IsCriticalEnemiesReady()) {
       return false;
     }
@@ -625,6 +542,9 @@ public partial class SingleSceneManager {
     bool dialogReady,
     bool locationActivationPending
   ) {
+    if (!IsRuntimeRevealSetupReady()) {
+      return "Preparing runtime";
+    }
     if (locationActivationPending) {
       return "Activating gameplay";
     }
@@ -679,7 +599,7 @@ public partial class SingleSceneManager {
 
     lastState = state;
     var blockerSummary = playerReady || !TryGetPlayerFirstFrameBlocker(out var blocker, generateSummary: true) ? "-" : blocker;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][RevealSettle] state='" + state +
       "' elapsed_s=" + (Time.realtimeSinceStartup - startedAt).ToString("0.000") +
       " queued=" + queue.queuedCount +
@@ -715,7 +635,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowField(builder, "loading_status", ResolveLoadFlowValue(loadingStatusDetail));
     AppendLoadFlowField(builder, "active_input_map", ResolveLoadFlowValue(activeInputMap));
     AppendGameplayLoadPipelineFields(builder);
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   IEnumerator WaitForRevealActivationSettle() {
@@ -727,8 +647,8 @@ public partial class SingleSceneManager {
     var stableStartedAt = -1f;
     string lastLoggedState = null;
     if (ShouldLogLoadFlowWarnings()) {
-      Debug.Log("[SingleSceneManager][RevealSettle] Starting WaitForRevealActivationSettle...");
-      Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+      RuntimeLog.Log("[SingleSceneManager][RevealSettle] Starting WaitForRevealActivationSettle...");
+      RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
     }
 
     while (true) {
@@ -799,13 +719,13 @@ public partial class SingleSceneManager {
             " location_deferred_pending=" + (locationDeferredPending ? 1 : 0)
           );
           if (ShouldLogLoadFlowWarnings()) {
-            Debug.Log(
+            RuntimeLog.Log(
               "[SingleSceneManager][RevealSettle] exit" +
               " elapsed_s=" + (Time.realtimeSinceStartup - startedAt).ToString("0.000") +
               " stable_s=" + stableElapsed.ToString("0.000") +
               " stable_frames=" + stableFrames
             );
-            Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+            RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
           }
           yield break;
         }
@@ -854,7 +774,7 @@ public partial class SingleSceneManager {
             " current_section=" + ResolveCurrentSection() +
             " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation)
           );
-          Debug.Log(TextureResidencyCache.GetQueueSourceBreakdown());
+          RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());
         }
         yield break;
       }

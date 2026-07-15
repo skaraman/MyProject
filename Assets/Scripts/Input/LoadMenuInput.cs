@@ -14,6 +14,8 @@ public class LoadMenuInput : ButtonGroup {
   public GameObject scrollWrap;
   public SaveSlotView scrollView;
   public GameObject closeButton;
+  public SaveSlot[] slots;
+  private static readonly Collider2D[] _overlapHits = new Collider2D[32];
 
   bool pressed = false;
   bool dragging = false;
@@ -169,19 +171,21 @@ public class LoadMenuInput : ButtonGroup {
     var worldPos = Camera.main.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, Camera.main.nearClipPlane));
     var point2D = new Vector2(worldPos.x, worldPos.y);
 
-    var hits = Physics2D.OverlapPointAll(point2D);
+    var filter = ContactFilter2D.noFilter;
+    var hitCount = Physics2D.OverlapPoint(point2D, filter, _overlapHits);
 
-    if (hits.Length == 0) {
+    if (hitCount == 0) {
       return;
     }
 
-    System.Array.Sort(hits, (a, b) => {
+    System.Array.Sort(_overlapHits, 0, hitCount, System.Collections.Generic.Comparer<Collider2D>.Create((a, b) => {
       if (a?.transform == null || b?.transform == null) return 0;
       return b.transform.position.z.CompareTo(a.transform.position.z);
-    });
+    }));
 
     if (!slotSelectionLocked) {
-      foreach (var hit in hits) {
+      for (var i = 0; i < hitCount; i++) {
+        var hit = _overlapHits[i];
         if (hit?.gameObject == null) continue;
         if (hit.gameObject.name == "Delete") {
           var slotIndex = ResolveButtonIndex(hit.gameObject);
@@ -194,7 +198,8 @@ public class LoadMenuInput : ButtonGroup {
         }
       }
 
-      foreach (var hit in hits) {
+      for (var i = 0; i < hitCount; i++) {
+        var hit = _overlapHits[i];
         if (hit?.gameObject == null) continue;
         var hitIndex = ResolveButtonIndex(hit.gameObject);
         if (hitIndex >= 0) {
@@ -206,7 +211,8 @@ public class LoadMenuInput : ButtonGroup {
       }
     }
 
-    foreach (var hit in hits) {
+    for (var i = 0; i < hitCount; i++) {
+      var hit = _overlapHits[i];
       if (hit?.gameObject != null) {
         if (IsObjectOrChildOf(hit.gameObject, closeButton)) {
           BackOut();
@@ -330,7 +336,7 @@ public class LoadMenuInput : ButtonGroup {
     if (TryResolveSelectedSlotNumber(out var slotNumber)) {
       LockSaveSlotInteraction();
       SaveSlotManager.SetSlot(slotNumber);
-      Debug.Log($"Slot set {SaveSlotManager.slot}");
+      RuntimeLog.Log($"Slot set {SaveSlotManager.slot}");
       MessageBus.Send("startGame");
     }
   }

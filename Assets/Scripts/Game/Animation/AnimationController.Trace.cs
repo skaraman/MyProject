@@ -3,6 +3,7 @@ using System;
 using UnityEngine;
 
 public partial class AnimationController {
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void BeginActivePunchTrace(AnimData anim, string category) {
     if (anim == null || string.IsNullOrWhiteSpace(currentAnimation)) {
       ResetActivePunchTraceState();
@@ -31,6 +32,7 @@ public partial class AnimationController {
     );
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void TraceActivePunchFrameStep(int targetFrame, float deltaMs) {
     if (!activePunchTrace) return;
     if (activePunchTracePreviousFrame == int.MinValue) {
@@ -56,6 +58,7 @@ public partial class AnimationController {
     activePunchTracePreviousFrame = toFrame;
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void EndActivePunchTrace(string reason, int finalFrame) {
     if (!activePunchTrace) return;
     var elapsedMs = Mathf.Max((Time.realtimeSinceStartup - activePunchTraceStartRealtime) * 1000f, 0f);
@@ -71,6 +74,7 @@ public partial class AnimationController {
     ResetActivePunchTraceState();
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void ResetActivePunchTraceState() {
     activePunchTrace = false;
     activePunchTraceAnimation = null;
@@ -81,6 +85,7 @@ public partial class AnimationController {
     activePunchTraceSkippedFrames = 0;
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void LogAttackTrace(
     string stage,
     string requestedAnimation = null,
@@ -90,7 +95,7 @@ public partial class AnimationController {
     string note = null
   ) {
     if (!ShouldLogAttackTrace(requestedAnimation, resolvedAnimation, queuedAnimationName, category)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[AnimationController][AttackTrace] stage='" + (stage ?? "") +
       "' requested='" + (requestedAnimation ?? "") +
       "' resolved='" + (resolvedAnimation ?? "") +

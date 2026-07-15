@@ -92,7 +92,7 @@ public static class AssetLoadTraceMonitor {
     EnsureInitialized();
   }
 
-  static bool IsEnabled {
+  public static bool IsEnabled {
     get {
       if (!Application.isPlaying) return false;
       if (!Application.isEditor && !Debug.isDebugBuild) return false;

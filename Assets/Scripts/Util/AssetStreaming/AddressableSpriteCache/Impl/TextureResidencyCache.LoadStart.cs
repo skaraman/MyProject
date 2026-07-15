@@ -28,9 +28,44 @@ public static partial class TextureResidencyCache {
     };
   }
 
+  static void EnsureLoadCollections(CacheEntry entry) {
+    if (entry == null) return;
+
+    if (entry.pendingAssetLoadLocations == null) {
+      entry.pendingAssetLoadLocations = new List<IResourceLocation>(4);
+    }
+    if (entry.activeAssetLoadLocations == null) {
+      entry.activeAssetLoadLocations = new List<IResourceLocation>(4);
+    }
+    if (entry.spritesByName == null) {
+      entry.spritesByName = new Dictionary<string, Sprite>(StringComparer.Ordinal);
+    }
+    if (entry.generatedSprites == null) {
+      entry.generatedSprites = new List<Sprite>();
+    }
+    if (entry.registeredTextureIds == null) {
+      entry.registeredTextureIds = new HashSet<ulong>();
+    }
+  }
+
+  static void EnsureExactSliceSupplementCollections(CacheEntry entry) {
+    if (entry == null) return;
+
+    if (entry.exactSliceSupplementHandles == null) {
+      entry.exactSliceSupplementHandles = new List<AsyncOperationHandle<Sprite>>();
+    }
+    if (entry.pendingExactSliceSupplementAddresses == null) {
+      entry.pendingExactSliceSupplementAddresses = new HashSet<string>(StringComparer.Ordinal);
+    }
+    if (entry.failedExactSliceSupplementAddresses == null) {
+      entry.failedExactSliceSupplementAddresses = new HashSet<string>(StringComparer.Ordinal);
+    }
+  }
+
   static void StartLoad(CacheEntry entry) {
     if (entry == null || entry.isEvicted || entry.loadStarted || entry.isDone) return;
 
+    EnsureLoadCollections(entry);
     entry.loadStarted = true;
     entry.isDone = false;
     entry.isSuccess = false;
@@ -40,8 +75,12 @@ public static partial class TextureResidencyCache {
     entry.deferredSpriteMapMaterialization = false;
     entry.generatedSpriteSetComplete = false;
     GeneratedAtlasSpriteSynthesisUtility.DestroySprites(entry.generatedSprites);
-    entry.pendingExactSliceSupplementAddresses.Clear();
-    entry.failedExactSliceSupplementAddresses.Clear();
+    if (entry.pendingExactSliceSupplementAddresses != null) {
+      entry.pendingExactSliceSupplementAddresses.Clear();
+    }
+    if (entry.failedExactSliceSupplementAddresses != null) {
+      entry.failedExactSliceSupplementAddresses.Clear();
+    }
     entry.editorAtlasSupplementAttempted = false;
     entry.activeAssetLoadLocations.Clear();
     entry.lastAccessTicks = DateTime.UtcNow.Ticks;
@@ -49,7 +88,7 @@ public static partial class TextureResidencyCache {
     entry.atlasDirectFallbackAttempted = false;
     var primaryLoadMode = ResolvePrimaryLoadMode(entry.address);
     if (ShouldLogRequestFrameDiagnostics()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[TextureResidencyCache][PrimaryLoad] mode=" + primaryLoadMode +
         " address='" + entry.address + "'" +
         " overlay_active=" + (SpriteStreamingLoadingState.IsLoadingOverlayActive ? 1 : 0) +
@@ -158,12 +197,16 @@ public static partial class TextureResidencyCache {
     entry.pendingMetadataDrivenAtlasLoad = false;
     entry.pendingAssetLoadResourceLocationCount = 0;
     entry.pendingAssetLoadExpectedSiblingSliceCount = 0;
-    entry.pendingAssetLoadLocations.Clear();
+    if (entry.pendingAssetLoadLocations != null) {
+      entry.pendingAssetLoadLocations.Clear();
+    }
   }
 
   static void ClearActiveAssetLoadLocations(CacheEntry entry) {
     if (entry == null) return;
-    entry.activeAssetLoadLocations.Clear();
+    if (entry.activeAssetLoadLocations != null) {
+      entry.activeAssetLoadLocations.Clear();
+    }
   }
 
   static int ResolvePendingAssetLoadStartBudgetPerFrame() {
@@ -250,7 +293,7 @@ public static partial class TextureResidencyCache {
     var key = normalizedAtlasAddress + "|" + normalizedMetadataAddress;
     if (!editorOffsetMetadataFallbackLogs.Add(key)) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[TextureResidencyCache] Offset-only atlas metadata fallback" +
       " atlas='" + normalizedAtlasAddress + "'" +
       " metadata='" + normalizedMetadataAddress + "'" +

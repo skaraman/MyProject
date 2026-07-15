@@ -141,7 +141,7 @@ public class AnchoredSpriteStretch : MonoBehaviour {
     }
 #endif
     if (!enableDebugLogs) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[AnchoredSpriteStretch] Set origin from transform on " + gameObject.name +
       " origin=" + originLocalPosition +
       " local_pos=" + transform.localPosition
@@ -474,7 +474,7 @@ public class AnchoredSpriteStretch : MonoBehaviour {
   void LogAppliedValues(Sprite sprite, Vector2 targetSizePixels, Vector3 resolvedScale, Vector3 resolvedPosition) {
     if (!enableDebugLogs) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[AnchoredSpriteStretch] Applied on " + gameObject.name +
       " sprite='" + sprite.name + "'" +
       " max_px=" + maxSizePixels +

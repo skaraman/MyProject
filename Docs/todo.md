@@ -1,6 +1,4 @@
 
-setup addressables
-TEST BUILD
 
 Blast vfx and flying ball
   -> create prefab for ball (with light)
@@ -8,18 +6,22 @@ Blast vfx and flying ball
   -> gen the ball at end of the blast
   -> ball velocity and hitboxes
   -> shiny svfx
+
 test enemy ai + chase and hit
 add hp and hp bar
+
 add death on hp 0
+
 add form change
-possibly character UI 
-possibly character gear changing??
+ character UI 
+ character gear changing
 
 desaturate skin - add skin color
+
 desaturate environment - add environment color
-confirm all eyes are dark/dense enough (png compression/dupe and merge)
 
 add blast effect
+
 add blast lights
 
 worry about combos (split up interrupts and combo interrupts)
@@ -39,3 +41,10 @@ music and sounds
 
 
 TEST BUILD
+
+
+item drop
+
+item rarity
+
+item ui design

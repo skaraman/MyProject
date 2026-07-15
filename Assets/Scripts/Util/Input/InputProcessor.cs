@@ -33,7 +33,7 @@ public class InputProcessor : MonoBehaviour {
     activeMap = mapName ?? activeMap;
     var map = input.asset.FindActionMap(activeMap);
     map?.Enable();
-    //Debug.Log($"[InputProcessor] Switched to: {activeMap}");
+    //RuntimeLog.Log($"[InputProcessor] Switched to: {activeMap}");
   }
 
   void DisableAllMaps() {
@@ -96,7 +96,7 @@ public class InputProcessor : MonoBehaviour {
       value = ctx.ReadValueAsObject();
     }
 
-    //Debug.Log($"[InputProcessor] {name} = {value}");
+    //RuntimeLog.Log($"[InputProcessor] {name} = {value}");
     MessageBus.Send(name, value);
   }
 
@@ -119,7 +119,7 @@ public class InputProcessor : MonoBehaviour {
 
     if (!shouldSuppress) return false;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[InputProcessor] Suppressed shifted escape dispatch map=" + mapName +
       " action=" + actionName +
       " control=" + ctx.control.path
@@ -172,7 +172,7 @@ public class InputProcessor : MonoBehaviour {
         action.canceled += Process;
       }
     }
-    //Debug.Log("[InputProcessor] SetupAllCalls finished");
+    //RuntimeLog.Log("[InputProcessor] SetupAllCalls finished");
   }
 
   private void RemoveAllCalls() {
@@ -182,7 +182,7 @@ public class InputProcessor : MonoBehaviour {
         action.performed -= Process;
       }
     }
-    //Debug.Log("[InputProcessor] RemoveAllCalls finished");
+    //RuntimeLog.Log("[InputProcessor] RemoveAllCalls finished");
   }
 
   public void Rebind(string mapName, string actionName, List<string> bindings) {

@@ -83,7 +83,7 @@ public class CameraPositionFollower : MonoBehaviour {
     hasCapturedOffset = true;
 
     if (!ShouldLogSetup()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[CameraPositionFollower] Captured offset reason='" + reason +
       "' object='" + cachedTransform.name +
       "' camera='" + resolvedCamera.name +
@@ -125,7 +125,7 @@ public class CameraPositionFollower : MonoBehaviour {
   void LogResolvedCamera() {
     if (!ShouldLogSetup()) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[CameraPositionFollower] Bound object='" + cachedTransform.name +
       "' camera='" + resolvedCamera.name +
       "' capture_initial_offset=" + (captureInitialOffset ? "1" : "0") +

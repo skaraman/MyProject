@@ -105,7 +105,7 @@ public class GameplayInput : MonoBehaviour {
 
   bool _IsPressed(object o) {
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive) {
-      Debug.Log("[GameplayInput] Input blocked during loading overlay.");
+      RuntimeLog.Log("[GameplayInput] Input blocked during loading overlay.");
       return false;
     }
     return InputMessageValue.IsPressed(o);
@@ -615,6 +615,7 @@ public class GameplayInput : MonoBehaviour {
     }
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void _LogPostRevealAttackProbe(
     string stage,
     string actionKey,
@@ -622,6 +623,7 @@ public class GameplayInput : MonoBehaviour {
     bool hasPlayedResult,
     bool played
   ) {
+    if (ForceDisableDebugLogsForPerfPass) return;
     if (!SingleSceneManager.ShouldLogGameplayPostRevealInputTrace()) return;
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
     var deferred = TextureResidencyCache.GetDeferredSnapshot();
@@ -645,7 +647,7 @@ public class GameplayInput : MonoBehaviour {
                          out firstFrameReady,
                          out readinessWindowReady
                        );
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayInput][PostRevealAttack] stage='" + (stage ?? "") +
       "' action='" + (actionKey ?? "") +
       "' mapped='" + (mappedAnimation ?? "") +
@@ -734,18 +736,20 @@ public class GameplayInput : MonoBehaviour {
     return anim.To == 1 || anim.To == 2;
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void _LogAttackGate(string reason, string currentAnimation, string requestedAnimation) {
     if (ForceDisableDebugLogsForPerfPass) return;
     if (!logAttackGate) return;
     if (lastAttackGateLogFrame == Time.frameCount) return;
     lastAttackGateLogFrame = Time.frameCount;
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayInput] attack gate reason='" + reason +
       "' current='" + (currentAnimation ?? "") +
       "' requested='" + (requestedAnimation ?? "") + "'"
     );
   }
 
+  [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
   void _LogAttackFlow(
     string stage,
     string actionKey = null,
@@ -759,7 +763,7 @@ public class GameplayInput : MonoBehaviour {
     var controllerPlaying = gearController != null &&
       gearController.Controller != null &&
       gearController.Controller.IsPlaying;
-    Debug.Log(
+    RuntimeLog.Log(
       "[GameplayInput][AttackTrace] stage='" + (stage ?? "") +
       "' action='" + (actionKey ?? "") +
       "' mapped='" + (mappedAnimation ?? "") +

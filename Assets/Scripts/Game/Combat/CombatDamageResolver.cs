@@ -12,7 +12,12 @@ public struct CombatDamageResult {
   public CombatDamageKind kind;
   public float amount;
   public float baseDamage;
+  public float armorBeforePenetration;
   public float armorApplied;
+  public float penetrationApplied;
+  public float evadeChance;
+  public float evadeRoll;
+  public bool evaded;
   public float criticalChance;
   public float luckyChance;
   public float directChance;
@@ -31,6 +36,8 @@ public static class CombatDamageResolver {
     public const string LuckyDamage = "LDMG";
     public const string DirectChance = "DCHC";
     public const string DirectDamage = "DDMG";
+    public const string Evade = "EVD";
+    public const string Penetration = "PEN";
   }
 
   readonly struct AttackerCombatStats {
@@ -41,6 +48,7 @@ public static class CombatDamageResolver {
     public float LuckyDamage { get; }
     public float DirectChance { get; }
     public float DirectDamage { get; }
+    public float Penetration { get; }
 
     public AttackerCombatStats(IReadOnlyDictionary<string, float> stats) {
       Damage = GetStat(stats, CombatStatKeys.Damage);
@@ -50,27 +58,35 @@ public static class CombatDamageResolver {
       LuckyDamage = GetStat(stats, CombatStatKeys.LuckyDamage);
       DirectChance = GetStat(stats, CombatStatKeys.DirectChance);
       DirectDamage = GetStat(stats, CombatStatKeys.DirectDamage);
+      Penetration = GetStat(stats, CombatStatKeys.Penetration);
     }
   }
 
   public static CombatDamageResult ResolveEsperanzaHit(
     IReadOnlyDictionary<string, float> attackerStats,
-    IReadOnlyDictionary<string, float> defenderStats
+    IReadOnlyDictionary<string, float> defenderStats,
+    float abilityRawDamage
   ) {
     var attacker = new AttackerCombatStats(attackerStats);
     var armor = GetStat(defenderStats, CombatStatKeys.Armor);
+    var evadeChance = GetStat(defenderStats, CombatStatKeys.Evade);
 
     var criticalChance = Mathf.Clamp01(attacker.CriticalChance);
     var luckyChance = Mathf.Clamp01(attacker.LuckyChance);
     var directChance = Mathf.Clamp01(attacker.DirectChance);
+
+    var resolvedAbilityDamage = Mathf.Max(abilityRawDamage, 0f);
+    var baseAttackDamage = attacker.Damage + resolvedAbilityDamage;
 
     // Special hits use independent rolls with explicit Critical > Lucky > Direct priority.
     var criticalRoll = Random.value;
     if (RollSucceeds(criticalChance, criticalRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Critical,
-        baseDamage: attacker.CriticalDamage,
-        armorApplied: armor,
+        baseDamage: baseAttackDamage + attacker.CriticalDamage,
+        armor: armor,
+        penetration: attacker.Penetration,
+        evadeChance: evadeChance,
         criticalChance: criticalChance,
         luckyChance: luckyChance,
         directChance: directChance,
@@ -84,8 +100,10 @@ public static class CombatDamageResolver {
     if (RollSucceeds(luckyChance, luckyRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Lucky,
-        baseDamage: attacker.LuckyDamage,
-        armorApplied: 0f,
+        baseDamage: baseAttackDamage + attacker.LuckyDamage,
+        armor: armor,
+        penetration: attacker.Penetration,
+        evadeChance: evadeChance,
         criticalChance: criticalChance,
         luckyChance: luckyChance,
         directChance: directChance,
@@ -99,8 +117,10 @@ public static class CombatDamageResolver {
     if (RollSucceeds(directChance, directRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Direct,
-        baseDamage: attacker.DirectDamage,
-        armorApplied: 0f,
+        baseDamage: baseAttackDamage + attacker.DirectDamage,
+        armor: armor,
+        penetration: attacker.Penetration,
+        evadeChance: evadeChance,
         criticalChance: criticalChance,
         luckyChance: luckyChance,
         directChance: directChance,
@@ -112,8 +132,10 @@ public static class CombatDamageResolver {
 
     return BuildResult(
       kind: CombatDamageKind.Damage,
-      baseDamage: attacker.Damage,
-      armorApplied: armor,
+      baseDamage: baseAttackDamage,
+      armor: armor,
+      penetration: attacker.Penetration,
+      evadeChance: evadeChance,
       criticalChance: criticalChance,
       luckyChance: luckyChance,
       directChance: directChance,
@@ -130,7 +152,9 @@ public static class CombatDamageResolver {
     return BuildResult(
       kind: CombatDamageKind.Damage,
       baseDamage: GetStat(attackerStats, CombatStatKeys.Damage),
-      armorApplied: GetStat(defenderStats, CombatStatKeys.Armor),
+      armor: GetStat(defenderStats, CombatStatKeys.Armor),
+      penetration: GetStat(attackerStats, CombatStatKeys.Penetration),
+      evadeChance: GetStat(defenderStats, CombatStatKeys.Evade),
       criticalChance: 0f,
       luckyChance: 0f,
       directChance: 0f,
@@ -143,7 +167,9 @@ public static class CombatDamageResolver {
   static CombatDamageResult BuildResult(
     CombatDamageKind kind,
     float baseDamage,
-    float armorApplied,
+    float armor,
+    float penetration,
+    float evadeChance,
     float criticalChance,
     float luckyChance,
     float directChance,
@@ -154,7 +180,12 @@ public static class CombatDamageResolver {
     var result = new CombatDamageResult {
       kind = kind,
       baseDamage = Mathf.Max(baseDamage, 0f),
-      armorApplied = Mathf.Max(armorApplied, 0f),
+      armorBeforePenetration = Mathf.Max(armor, 0f),
+      armorApplied = 0f,
+      penetrationApplied = 0f,
+      evadeChance = Mathf.Clamp01(evadeChance),
+      evadeRoll = -1f,
+      evaded = false,
       criticalChance = criticalChance,
       luckyChance = luckyChance,
       directChance = directChance,
@@ -162,11 +193,50 @@ public static class CombatDamageResolver {
       luckyRoll = luckyRoll,
       directRoll = directRoll
     };
+    ResolveDefense(ref result, penetration);
     result.amount = ResolveFinalAmount(result);
     return result;
   }
 
+  static void ResolveDefense(ref CombatDamageResult result, float penetration) {
+    var resolvedPenetration = Mathf.Max(penetration, 0f);
+
+    switch (result.kind) {
+      case CombatDamageKind.Damage:
+        ApplyPenetratedArmor(ref result, resolvedPenetration);
+        RollEvade(ref result);
+        break;
+      case CombatDamageKind.Critical:
+        result.armorApplied = result.armorBeforePenetration;
+        RollEvade(ref result);
+        break;
+      case CombatDamageKind.Lucky:
+        ApplyPenetratedArmor(ref result, resolvedPenetration);
+        break;
+      case CombatDamageKind.Direct:
+        break;
+    }
+  }
+
+  static void ApplyPenetratedArmor(ref CombatDamageResult result, float penetration) {
+    result.penetrationApplied = Mathf.Min(penetration, result.armorBeforePenetration);
+    result.armorApplied = result.armorBeforePenetration - result.penetrationApplied;
+  }
+
+  static void RollEvade(ref CombatDamageResult result) {
+    if (result.evadeChance <= 0f) {
+      return;
+    }
+
+    result.evadeRoll = Random.value;
+    result.evaded = RollSucceeds(result.evadeChance, result.evadeRoll);
+  }
+
   static float ResolveFinalAmount(CombatDamageResult result) {
+    if (result.evaded) {
+      return 0f;
+    }
+
     var finalAmount = result.baseDamage;
 
     switch (result.kind) {
@@ -179,6 +249,7 @@ public static class CombatDamageResolver {
         finalAmount -= result.armorApplied;
         break;
       case CombatDamageKind.Lucky:
+        finalAmount -= result.armorApplied;
         break;
     }
 

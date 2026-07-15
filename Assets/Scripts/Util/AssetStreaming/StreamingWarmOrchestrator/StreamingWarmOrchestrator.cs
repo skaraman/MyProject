@@ -137,7 +137,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     );
 
     if (debugLogs) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[StreamingWarmOrchestrator] Runtime asset warm started" +
         " context=" + context +
         " tracked_id=" + trackedWarmId +
@@ -384,7 +384,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     }
 
     if (debugLogs && resolverWaitFrames > 0) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[StreamingWarmOrchestrator] Resolver warmup wait complete. context=" + context +
         " frames=" + resolverWaitFrames +
         " idle=" + (resolverIdleForAddressSweep ? 1 : 0)
@@ -398,7 +398,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
 
     if (debugLogs) {
       var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
-      Debug.Log(
+      RuntimeLog.Log(
         "[StreamingWarmOrchestrator] Start context=" + context +
         " timeout_s=" + request.timeoutSeconds.ToString("0.00") +
         " hard_timeout_s=" + request.hardTimeoutSeconds.ToString("0.00") +
@@ -485,7 +485,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
         criticalReady = spriteCriticalReady && runtimeSnapshot.criticalReady;
         reachedThreshold = criticalReady && ratio >= requiredReadyRatio;
         if (debugLogs && SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
-          Debug.Log(
+          RuntimeLog.Log(
             $"[StreamingWarmOrchestrator][DebugLoop] reachedThreshold={reachedThreshold} " +
             $"criticalReady={criticalReady} (sprite={spriteCriticalReady}, runtime={runtimeSnapshot.criticalReady}) " +
             $"ratio={ratio:0.000} (required={requiredReadyRatio:0.000}) " +
@@ -515,7 +515,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
       if (shouldSampleProgress && debugLogs && now >= nextProgressLogAt && !reachedThreshold) {
         var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
         var runtimeSnapshot = GetRuntimeWarmSnapshot(activeRuntimeTrackedWarmId);
-        Debug.Log(
+        RuntimeLog.Log(
           "[StreamingWarmOrchestrator] Progress context=" + context +
           " ready=" + readyCount + "/" + totalCount +
           " critical=" + criticalReadyCount + "/" + criticalTotalCount +
@@ -595,7 +595,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     SpriteStreamingDiagnostics.RecordWarmCheckpoint(result);
     if (debugLogs) {
       var deferredSnapshot = TextureResidencyCache.GetDeferredSnapshot();
-      Debug.Log(
+      RuntimeLog.Log(
         "[StreamingWarmOrchestrator] Complete context=" + context +
         " reached_threshold=" + result.reachedReadyThreshold +
         " completed_in_time=" + result.completedWithinTimeout +

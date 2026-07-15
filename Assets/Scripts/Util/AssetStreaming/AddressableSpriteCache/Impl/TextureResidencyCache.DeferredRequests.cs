@@ -150,7 +150,7 @@ public static partial class TextureResidencyCache {
       entry.spriteMapMaterialized = ShouldMarkSpriteMapMaterialized(entry, loadedSpriteCount);
       entry.deferredSpriteMapMaterialization = !entry.spriteMapMaterialized && CanMaterializeEntrySpriteMapOnDemand(entry);
       if (!entry.spriteMapMaterialized && ShouldLogAtlasNameDiagnostics(entry.address)) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[TextureResidencyCache] Atlas entry kept in pending map state" +
           " atlas='" + (entry.address ?? "") + "'" +
           " requested='" + (entry.lastRequestedAddress ?? "") + "'" +

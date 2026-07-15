@@ -24,6 +24,20 @@ public partial class GearController {
     animationController?.PlayAnimation(anim, forceRestart, resolveInterrupts);
   }
 
+  public void SetSceneAppearanceAtlasPinsManaged(
+    bool managed,
+    string ownerId = "",
+    int expectedPinCount = 0
+  ) {
+    sceneAppearanceAtlasPinsManaged = managed;
+    if (managed) {
+      StopStartupAppearanceWarmup();
+      StopEquipWarmupQueue();
+      pendingEquipWarmupPartPrefixes = null;
+    }
+    animationController?.SetAppearancePinsExternallyManaged(managed, ownerId, expectedPinCount);
+  }
+
   private void HookAnimationEvents() {
     if (animationController == null) return;
     animationController.OnEffectTriggered = HandleEffectTriggered;
@@ -126,7 +140,7 @@ public partial class GearController {
     if (projectileManager != null || !Application.isPlaying) return;
     projectileManager = SingleSceneManager.ResolveGameplayProjectileManager();
     if (projectileManager == null || !ShouldLogRuntimeInitDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[GearController] ResolvedProjectileManager" +
       " source=" + NormalizeDebugValue(source) +
       " object=" + gameObject.name +

@@ -4,6 +4,7 @@ using UnityEngine;
 
 public static class SpriteUiPinService {
   static readonly HashSet<SpriteWithNormals> registeredTargets = new();
+  static readonly Dictionary<SpriteWithNormals, string> ownerIdsByTarget = new();
   static readonly HashSet<string> knownOwnerIds = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> activeOwnerIds = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<SpriteWithNormals> staleTargets = new();
@@ -12,13 +13,12 @@ public static class SpriteUiPinService {
   static readonly HashSet<string> addressSetBuffer = new(StringComparer.OrdinalIgnoreCase);
   static SpriteUiPinServiceRunner runner;
   static float nextRefreshTime;
-  static bool enableUiPinDiagnostics = true;
-  static float uiPinSlowStepThresholdMs = 50f;
   const int LoadingOverlayUiPinAddressCap = 128;
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
     registeredTargets.Clear();
+    ownerIdsByTarget.Clear();
     knownOwnerIds.Clear();
     activeOwnerIds.Clear();
     staleTargets.Clear();
@@ -32,14 +32,19 @@ public static class SpriteUiPinService {
   public static void Register(SpriteWithNormals target) {
     if (target == null) return;
     if (!target.IsUiTarget()) return;
-    registeredTargets.Add(target);
+    if (registeredTargets.Add(target)) {
+      ownerIdsByTarget[target] = BuildOwnerId(target);
+    }
     EnsureRunner();
   }
 
   public static void Unregister(SpriteWithNormals target) {
-    if (target == null) return;
+    if (ReferenceEquals(target, null)) return;
     registeredTargets.Remove(target);
-    var ownerId = BuildOwnerId(target);
+    if (!ownerIdsByTarget.TryGetValue(target, out var ownerId)) {
+      ownerId = BuildOwnerId(target);
+    }
+    ownerIdsByTarget.Remove(target);
     ReleaseOwner(ownerId);
   }
 
@@ -54,24 +59,13 @@ public static class SpriteUiPinService {
 
   internal static void Tick() {
     if (!Application.isPlaying) return;
-    var diagnosticsEnabled = ShouldLogUiPinDiagnostics();
-    var tickStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
-    var processedTargets = 0;
-    var slowTargetCount = 0;
 
     var streamingEnabled = SpriteStreamingRuntimeSettings.EnableAppearanceSetStreaming &&
                           SpriteStreamingRuntimeSettings.EnablePinnedHotset &&
                           SpriteStreamingRuntimeSettings.PinAllUi;
 
     if (!streamingEnabled) {
-      var releaseStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
       ReleaseAllKnownOwners();
-      if (diagnosticsEnabled) {
-        var releaseMs = ComputeElapsedMs(releaseStartedAt);
-        if (releaseMs >= ResolveUiPinSlowThresholdMs()) {
-
-        }
-      }
       return;
     }
 
@@ -88,17 +82,17 @@ public static class SpriteUiPinService {
     staleTargets.Clear();
 
     foreach (var target in registeredTargets) {
-      var targetStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
-      var collectMs = 0f;
-      var updatePinsMs = 0f;
+      ownerIdsByTarget.TryGetValue(target, out var ownerId);
       if (target == null) {
         staleTargets.Add(target);
         continue;
       }
 
-      var ownerId = BuildOwnerId(target);
+      if (string.IsNullOrWhiteSpace(ownerId)) {
+        ownerId = BuildOwnerId(target);
+        ownerIdsByTarget[target] = ownerId;
+      }
       if (string.IsNullOrWhiteSpace(ownerId)) continue;
-      processedTargets++;
       if (!target.isActiveAndEnabled || !target.IsUiTarget() || target.DoNotRender) {
         ReleaseOwner(ownerId);
         staleTargets.Add(target);
@@ -108,21 +102,16 @@ public static class SpriteUiPinService {
       addressBuffer.Clear();
       addressSetBuffer.Clear();
       if (target.IsAnimation) {
-        var collectStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
         var startFrame = Mathf.Max(target.LastRequestedFrame, 1);
         var lookAhead = Mathf.Max(SpriteStreamingRuntimeSettings.PinWindowFrames - 1, 0);
-        target.CollectAnimationWindowAddresses(
+        target.CollectAnimationAtlasAddresses(
           categoryOverride: null,
           startFrame: startFrame,
-          endFrame: startFrame,
-          lookAheadFrames: lookAhead,
+          endFrame: startFrame + lookAhead,
           outAddresses: addressBuffer,
           seenAddresses: addressSetBuffer,
           maxUniqueAddresses: maxPinAddresses
         );
-        if (diagnosticsEnabled) {
-          collectMs = ComputeElapsedMs(collectStartedAt);
-        }
       }
       else if (target.TryGetFrameAddressPair(0, out var pair)) {
         AddAddress(addressBuffer, pair.StreamingColorAddress, addressSetBuffer);
@@ -134,26 +123,15 @@ public static class SpriteUiPinService {
         continue;
       }
 
-      var updatePinsStartedAt = diagnosticsEnabled ? Time.realtimeSinceStartup : 0f;
       TextureResidencyCache.UpdateOwnerPins(ownerId, TextureResidencyCache.PinClass.UI, addressBuffer, TextureResidencyCache.LoadPriority.Warmup);
-      if (diagnosticsEnabled) {
-        updatePinsMs = ComputeElapsedMs(updatePinsStartedAt);
-      }
       activeOwnerIds.Add(ownerId);
       knownOwnerIds.Add(ownerId);
-
-      if (diagnosticsEnabled) {
-        var targetMs = ComputeElapsedMs(targetStartedAt);
-        var thresholdMs = ResolveUiPinSlowThresholdMs();
-        if (targetMs >= thresholdMs || collectMs >= thresholdMs || updatePinsMs >= thresholdMs) {
-          slowTargetCount++;
-
-        }
-      }
     }
 
     for (var i = 0; i < staleTargets.Count; i++) {
-      registeredTargets.Remove(staleTargets[i]);
+      var staleTarget = staleTargets[i];
+      registeredTargets.Remove(staleTarget);
+      ownerIdsByTarget.Remove(staleTarget);
     }
 
     staleOwnerIds.Clear();
@@ -167,20 +145,18 @@ public static class SpriteUiPinService {
     }
     staleOwnerIds.Clear();
 
-    if (diagnosticsEnabled) {
-      var tickMs = ComputeElapsedMs(tickStartedAt);
-      if (tickMs >= ResolveUiPinSlowThresholdMs()) {
-
-      }
-    }
   }
 
   static void ReleaseAllKnownOwners() {
     if (knownOwnerIds.Count <= 0) return;
-    var owners = new List<string>(knownOwnerIds);
-    for (var i = 0; i < owners.Count; i++) {
-      TextureResidencyCache.ReleaseOwnerPins(owners[i]);
+    staleOwnerIds.Clear();
+    foreach (var ownerId in knownOwnerIds) {
+      staleOwnerIds.Add(ownerId);
     }
+    for (var i = 0; i < staleOwnerIds.Count; i++) {
+      TextureResidencyCache.ReleaseOwnerPins(staleOwnerIds[i]);
+    }
+    staleOwnerIds.Clear();
     knownOwnerIds.Clear();
     activeOwnerIds.Clear();
   }
@@ -211,18 +187,6 @@ public static class SpriteUiPinService {
     addresses.Add(normalized);
   }
 
-  static bool ShouldLogUiPinDiagnostics() {
-    if (!enableUiPinDiagnostics) return false;
-    return Application.isEditor || Debug.isDebugBuild;
-  }
-
-  static float ResolveUiPinSlowThresholdMs() {
-    return Mathf.Max(uiPinSlowStepThresholdMs, 1f);
-  }
-
-  static float ComputeElapsedMs(float startedAt) {
-    return Mathf.Max((Time.realtimeSinceStartup - startedAt) * 1000f, 0f);
-  }
 }
 
 sealed class SpriteUiPinServiceRunner : MonoBehaviour {

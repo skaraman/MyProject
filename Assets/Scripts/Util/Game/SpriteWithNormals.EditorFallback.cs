@@ -59,7 +59,7 @@ public partial class SpriteWithNormals {
     var offsetChanged = !ApproximatelyVector3(previousAppliedOffsetLocalUnits, appliedOffsetLocalUnits);
     if (!moved && !offsetChanged && string.IsNullOrWhiteSpace(reason)) return;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[SpriteWithNormals][Offset] object='" + gameObject.name +
       "' category='" + (category ?? "") +
       "' requested_frame=" + _lastRequestedFrame +
@@ -102,7 +102,7 @@ public partial class SpriteWithNormals {
         ShouldDeferEditorSliceFallbackForAddress(sliceAddress)) {
       var deferredKey = $"{channel}|editor_fallback_deferred|{sliceAddress}";
       if (_sliceMismatchWarnings.Add(deferredKey) && ShouldLogVerboseEditorFallbackDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[SpriteWithNormals] Deferred editor slice fallback on " + gameObject.name +
           " channel=" + channel +
           " address='" + sliceAddress + "'" +
@@ -153,7 +153,8 @@ public partial class SpriteWithNormals {
 
 #if UNITY_EDITOR
   public static void InvalidateEditorRuntimeAtlasAvailabilityCache() {
-    editorRuntimeAtlasAvailabilityByPath.Clear();
+    editorRuntimeAtlasAddressIndex.Clear();
+    editorRuntimeAtlasAddressIndexBuilt = false;
   }
 
   static bool IsEditorRuntimeAtlasAddressAvailable(string runtimeAddress) {
@@ -164,36 +165,38 @@ public partial class SpriteWithNormals {
 
     atlasAssetPath = atlasAssetPath.Trim();
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
-    if (editorRuntimeAtlasAvailabilityByPath.TryGetValue(atlasAssetPath, out var cachedAvailable)) {
-      return cachedAvailable;
-    }
+    EnsureEditorRuntimeAtlasAddressIndex();
+    return editorRuntimeAtlasAddressIndex.Contains(atlasAssetPath);
+  }
 
-    var available = false;
+  static void EnsureEditorRuntimeAtlasAddressIndex() {
+    if (editorRuntimeAtlasAddressIndexBuilt) return;
+    editorRuntimeAtlasAddressIndexBuilt = true;
+    editorRuntimeAtlasAddressIndex.Clear();
+
+    const string addressPrefix = "m_Address: ";
     var groupFolderPath = Path.Combine("Assets", "AddressableAssetsData", "AssetGroups");
-    if (Directory.Exists(groupFolderPath)) {
-      var expectedAddressLine = "m_Address: " + atlasAssetPath;
-      var groupAssetPaths = Directory.GetFiles(groupFolderPath, "*.asset", SearchOption.TopDirectoryOnly);
-      for (var i = 0; i < groupAssetPaths.Length; i++) {
-        var groupAssetPath = groupAssetPaths[i];
-        if (string.IsNullOrWhiteSpace(groupAssetPath)) continue;
+    if (!Directory.Exists(groupFolderPath)) return;
 
-        try {
-          foreach (var line in File.ReadLines(groupAssetPath)) {
-            if (!string.Equals(line.Trim(), expectedAddressLine, StringComparison.Ordinal)) continue;
-            available = true;
-            break;
-          }
-        }
-        catch {
-          continue;
-        }
+    var groupAssetPaths = Directory.GetFiles(groupFolderPath, "*.asset", SearchOption.TopDirectoryOnly);
+    for (var i = 0; i < groupAssetPaths.Length; i++) {
+      var groupAssetPath = groupAssetPaths[i];
+      if (string.IsNullOrWhiteSpace(groupAssetPath)) continue;
 
-        if (available) break;
+      try {
+        foreach (var line in File.ReadLines(groupAssetPath)) {
+          var trimmedLine = line.Trim();
+          if (!trimmedLine.StartsWith(addressPrefix, StringComparison.Ordinal)) continue;
+
+          var address = trimmedLine.Substring(addressPrefix.Length).Trim();
+          if (string.IsNullOrWhiteSpace(address)) continue;
+          editorRuntimeAtlasAddressIndex.Add(address);
+        }
+      }
+      catch {
+        continue;
       }
     }
-
-    editorRuntimeAtlasAvailabilityByPath[atlasAssetPath] = available;
-    return available;
   }
 
   void ApplyEditorPreview(SpriteAddressPair pair, SpriteLookupKey lookupKey) {

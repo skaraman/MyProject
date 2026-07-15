@@ -57,11 +57,13 @@ public static partial class TextureResidencyCache {
     EnsureRequestedSliceSupplement(entry, requestedAddress);
     var normalizedRequestedAddress = string.IsNullOrWhiteSpace(requestedAddress) ? "" : requestedAddress.Trim();
     if (!string.IsNullOrWhiteSpace(normalizedRequestedAddress)) {
-      if (entry.pendingExactSliceSupplementAddresses.Contains(normalizedRequestedAddress)) {
+      if (entry.pendingExactSliceSupplementAddresses != null &&
+          entry.pendingExactSliceSupplementAddresses.Contains(normalizedRequestedAddress)) {
         return SpriteColdLoadState.Pending;
       }
 
-      if (entry.failedExactSliceSupplementAddresses.Contains(normalizedRequestedAddress)) {
+      if (entry.failedExactSliceSupplementAddresses != null &&
+          entry.failedExactSliceSupplementAddresses.Contains(normalizedRequestedAddress)) {
         return SpriteColdLoadState.Missing;
       }
     }
@@ -92,17 +94,22 @@ public static partial class TextureResidencyCache {
       return;
     }
 
-    // Preserve exact lease keys so warm readiness is checked for every requested slice.
-    // Cache ownership still normalizes to the parent and loads its Sprite list once.
+    // Residency ownership is one lease per physical parent atlas.
+    // Keep one exact request per parent so load hints and atlas expansion remain intact.
     desiredOwnerAddressScratch.Clear();
+    desiredOwnerRequestScratch.Clear();
     for (var i = 0; i < addresses.Count; i++) {
-      var normalizedAddress = NormalizePinLeaseAddress(addresses[i]);
+      var requestedAddress = addresses[i];
+      var normalizedAddress = NormalizePinLeaseAddress(requestedAddress);
       if (string.IsNullOrWhiteSpace(normalizedAddress)) continue;
       desiredOwnerAddressScratch.Add(normalizedAddress);
+      if (desiredOwnerRequestScratch.ContainsKey(normalizedAddress)) continue;
+      desiredOwnerRequestScratch[normalizedAddress] = requestedAddress;
     }
 
     if (desiredOwnerAddressScratch.Count == 0) {
       desiredOwnerAddressScratch.Clear();
+      desiredOwnerRequestScratch.Clear();
       ReleaseOwnerPins(normalizedOwnerId);
       return;
     }
@@ -114,6 +121,7 @@ public static partial class TextureResidencyCache {
       existingState.pinClass = pinClass;
       existingState.lastRefreshTicks = DateTime.UtcNow.Ticks;
       desiredOwnerAddressScratch.Clear();
+      desiredOwnerRequestScratch.Clear();
       return;
     }
 
@@ -168,9 +176,13 @@ public static partial class TextureResidencyCache {
           classBudgetDropped++;
           continue;
         }
+        if (!desiredOwnerRequestScratch.TryGetValue(desiredAddress, out var requestedAddress) ||
+            string.IsNullOrWhiteSpace(requestedAddress)) {
+          requestedAddress = desiredAddress;
+        }
         var lease = AcquireAsyncNormalized(
+          requestedAddress,
           desiredAddress,
-          NormalizeAddress(desiredAddress),
           priority,
           runPumpAndMaintain: false,
           sourceTag: "UpdateOwnerPins",
@@ -193,12 +205,12 @@ public static partial class TextureResidencyCache {
     finally {
       ownerReleaseAddressScratch.Clear();
       desiredOwnerAddressScratch.Clear();
+      desiredOwnerRequestScratch.Clear();
       ownerPinMutationDepth = Math.Max(ownerPinMutationDepth - 1, 0);
     }
 
-    Pump();
-    MaintainBudget();
-    RecordPinStateIfEnabled();
+    pendingBudgetMaintain = true;
+    pendingQueueStateRecord = true;
   }
 
   public static void ReleaseOwnerPins(string ownerId) {
@@ -218,8 +230,15 @@ public static partial class TextureResidencyCache {
       ownerPinMutationDepth = Math.Max(ownerPinMutationDepth - 1, 0);
     }
 
-    MaintainBudget();
-    RecordPinStateIfEnabled();
+    pendingBudgetMaintain = true;
+    pendingQueueStateRecord = true;
+  }
+
+  public static int GetOwnerPinCount(string ownerId) {
+    var normalizedOwnerId = NormalizeOwnerId(ownerId);
+    if (string.IsNullOrWhiteSpace(normalizedOwnerId)) return 0;
+    if (!ownerPins.TryGetValue(normalizedOwnerId, out var state) || state == null) return 0;
+    return Math.Max(state.leases.Count, 0);
   }
 
   public static PinSnapshot GetPinSnapshot() {

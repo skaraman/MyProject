@@ -42,7 +42,7 @@ public class SaveSlot : MonoBehaviour {
     UpdateDetailFontText(EnsureDateText(), "Date - " + saveDate);
 
     if (!enableDebugLogs) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SaveSlot] saveNumber=" + saveNumber +
       " playtime=" + playtime +
       " level=" + level +

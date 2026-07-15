@@ -140,7 +140,7 @@ public class TimeScaledTransform : MonoBehaviour {
     var newRot = prevRotation + rotDiff * factor;
     var newScale = prevScale + scaleDiff * factor;
 
-    //Debug.Log($"[TimeScale] Index: {timeScaleIndex}, Factor: {factor}, PosDiff: {posDiff}, NewPos: {newPos}");
+    //RuntimeLog.Log($"[TimeScale] Index: {timeScaleIndex}, Factor: {factor}, PosDiff: {posDiff}, NewPos: {newPos}");
 
     cachedTransform.position = newPos;
     cachedTransform.eulerAngles = newRot;

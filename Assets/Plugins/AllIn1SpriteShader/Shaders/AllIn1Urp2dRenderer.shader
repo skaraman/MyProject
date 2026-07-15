@@ -386,6 +386,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
             #pragma fragment CombinedShapeLightFragment
 			
 			#pragma multi_compile_instancing
+			#pragma multi_compile _ SKINNED_SPRITE
             #pragma multi_compile USE_SHAPE_LIGHT_TYPE_0 __
             #pragma multi_compile USE_SHAPE_LIGHT_TYPE_1 __
             #pragma multi_compile USE_SHAPE_LIGHT_TYPE_2 __
@@ -414,6 +415,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 			HLSLPROGRAM
 			#pragma vertex NormalsRenderingVertex
             #pragma fragment NormalsRenderingFragment
+			#pragma multi_compile _ SKINNED_SPRITE
 			
 			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/Core2D.hlsl"
 			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/NormalsRenderingShared.hlsl"
@@ -440,6 +442,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
             #pragma fragment CombinedShapeLightFragment
 			
 			#pragma multi_compile_instancing
+			#pragma multi_compile _ SKINNED_SPRITE
             #pragma multi_compile USE_SHAPE_LIGHT_TYPE_0 __
             #pragma multi_compile USE_SHAPE_LIGHT_TYPE_1 __
             #pragma multi_compile USE_SHAPE_LIGHT_TYPE_2 __

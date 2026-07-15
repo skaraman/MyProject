@@ -3,21 +3,67 @@ using UnityEngine;
 
 public partial class SpriteWithNormals {
   void ApplySprites(Sprite colorSprite, Sprite normalSprite, string colorSliceAddress) {
+    RenderApplyProfilerMarker.Begin();
     var renderedColorSprite = ResolveRenderedSprite(colorSprite, useNormalFill: false);
-    if (_renderer.sprite != renderedColorSprite) {
+    var spriteChanged = _renderer.sprite != renderedColorSprite;
+    if (spriteChanged) {
       _renderer.sprite = renderedColorSprite;
     }
     ApplyConfiguredTrimmedOffset(colorSprite, colorSliceAddress);
     var renderedNormalSprite = ResolveRenderedSprite(normalSprite, useNormalFill: true);
     var normalTexture = renderedNormalSprite != null ? renderedNormalSprite.texture : GetFallbackNormalTexture();
-    var normalTextureId = ObjectEntityId.GetRawValue(normalTexture);
-    if (normalTextureId == _lastAppliedNormalTextureId) return;
+    var normalChanged = !_hasAppliedNormalTexture || !ReferenceEquals(normalTexture, _lastAppliedNormalTexture);
+    var uvRectNeedsApply = spriteChanged || !_hasAppliedSpriteUvRect;
+    if (!uvRectNeedsApply && !normalChanged) {
+      RenderApplyProfilerMarker.End();
+      return;
+    }
 
     _mpb ??= new MaterialPropertyBlock();
     _renderer.GetPropertyBlock(_mpb);
-    if (normalTexture != null) _mpb.SetTexture(NormalMapPropertyId, normalTexture);
+    if (uvRectNeedsApply) {
+      var spriteUvRect = GetSpriteUvRect(renderedColorSprite);
+      var spriteEffectActive = GetSpriteEffectActive(colorSprite);
+      _mpb.SetVector(SpriteUvRectPropertyId, spriteUvRect);
+      _mpb.SetFloat(SpriteEffectActivePropertyId, spriteEffectActive);
+      _hasAppliedSpriteUvRect = true;
+    }
+    if (normalChanged && normalTexture != null) {
+      _mpb.SetTexture(NormalMapPropertyId, normalTexture);
+    }
     _renderer.SetPropertyBlock(_mpb);
-    _lastAppliedNormalTextureId = normalTextureId;
+    _lastAppliedNormalTexture = normalTexture;
+    _hasAppliedNormalTexture = true;
+    RenderApplyProfilerMarker.End();
+  }
+
+  Vector4 GetSpriteUvRect(Sprite sprite) {
+    if (sprite == null || sprite.texture == null) {
+      return new Vector4(0f, 0f, 1f, 1f);
+    }
+
+    var spriteUvs = sprite.uv;
+    if (spriteUvs == null || spriteUvs.Length == 0) {
+      return new Vector4(0f, 0f, 1f, 1f);
+    }
+
+    var minUv = spriteUvs[0];
+    var maxUv = spriteUvs[0];
+    for (var i = 1; i < spriteUvs.Length; i++) {
+      minUv = Vector2.Min(minUv, spriteUvs[i]);
+      maxUv = Vector2.Max(maxUv, spriteUvs[i]);
+    }
+
+    var size = maxUv - minUv;
+    return new Vector4(minUv.x, minUv.y, size.x, size.y);
+  }
+
+  float GetSpriteEffectActive(Sprite sprite) {
+    if (sprite == null) return 0f;
+    if (string.IsNullOrWhiteSpace(sprite.name)) return 1f;
+
+    var isEmptySprite = sprite.name.IndexOf("Empty", StringComparison.OrdinalIgnoreCase) >= 0;
+    return isEmptySprite ? 0f : 1f;
   }
 
   void ClearRenderedSprites() {
@@ -88,15 +134,6 @@ public partial class SpriteWithNormals {
     var paddedHeight = sourceHeight + (marginY * 2);
     if (paddedWidth <= 0 || paddedHeight <= 0) return false;
 
-    Color[] sourcePixels;
-    try {
-      sourcePixels = sourceSprite.texture.GetPixels(sourceX, sourceY, sourceWidth, sourceHeight);
-    }
-    catch (Exception ex) {
-      WarnPaddingCreationFailureOnce(sourceSprite, marginX, marginY, useNormalFill, ex);
-      return false;
-    }
-
     var paddedTexture = new Texture2D(paddedWidth, paddedHeight, TextureFormat.RGBA32, false, useNormalFill) {
       filterMode = sourceSprite.texture.filterMode,
       wrapMode = TextureWrapMode.Clamp,
@@ -107,7 +144,23 @@ public partial class SpriteWithNormals {
     var fillColor = useNormalFill ? FlatNormalPaddingColor : TransparentPaddingColor;
     var fillPixels = BuildFillPixels(paddedWidth, paddedHeight, fillColor);
     paddedTexture.SetPixels32(fillPixels);
-    paddedTexture.SetPixels(marginX, marginY, sourceWidth, sourceHeight, sourcePixels);
+
+    if (!TryCopySourcePixels(
+      sourceSprite.texture,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      marginX,
+      marginY,
+      useNormalFill,
+      paddedTexture,
+      out var copyException)) {
+      DestroyGeneratedObject(paddedTexture);
+      WarnPaddingCreationFailureOnce(sourceSprite, marginX, marginY, useNormalFill, copyException);
+      return false;
+    }
+
     paddedTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
 
     var paddedPivot = new Vector2(sourceSprite.pivot.x + marginX, sourceSprite.pivot.y + marginY);
@@ -134,6 +187,105 @@ public partial class SpriteWithNormals {
     _generatedPaddedTextures.Add(paddedTexture);
     _generatedPaddedSpriteAssets.Add(paddedSprite);
     return true;
+  }
+
+  static bool TryCopySourcePixels(
+    Texture2D sourceTexture,
+    int sourceX,
+    int sourceY,
+    int sourceWidth,
+    int sourceHeight,
+    int destinationX,
+    int destinationY,
+    bool useLinearColor,
+    Texture2D destinationTexture,
+    out Exception copyException
+  ) {
+    copyException = null;
+
+    if (sourceTexture.isReadable) {
+      try {
+        var sourcePixels = sourceTexture.GetPixels(sourceX, sourceY, sourceWidth, sourceHeight);
+        destinationTexture.SetPixels(
+          destinationX,
+          destinationY,
+          sourceWidth,
+          sourceHeight,
+          sourcePixels
+        );
+        return true;
+      }
+      catch (Exception ex) {
+        copyException = ex;
+      }
+    }
+
+    try {
+      CopySourcePixelsFromGpu(
+        sourceTexture,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        destinationX,
+        destinationY,
+        useLinearColor,
+        destinationTexture
+      );
+      return true;
+    }
+    catch (Exception ex) {
+      copyException = ex;
+      return false;
+    }
+  }
+
+  static void CopySourcePixelsFromGpu(
+    Texture2D sourceTexture,
+    int sourceX,
+    int sourceY,
+    int sourceWidth,
+    int sourceHeight,
+    int destinationX,
+    int destinationY,
+    bool useLinearColor,
+    Texture2D destinationTexture
+  ) {
+    var readWrite = useLinearColor
+      ? RenderTextureReadWrite.Linear
+      : RenderTextureReadWrite.sRGB;
+    var renderTexture = RenderTexture.GetTemporary(
+      sourceWidth,
+      sourceHeight,
+      0,
+      RenderTextureFormat.ARGB32,
+      readWrite
+    );
+    var previousRenderTexture = RenderTexture.active;
+
+    try {
+      var sourceScale = new Vector2(
+        (float)sourceWidth / sourceTexture.width,
+        (float)sourceHeight / sourceTexture.height
+      );
+      var sourceOffset = new Vector2(
+        (float)sourceX / sourceTexture.width,
+        (float)sourceY / sourceTexture.height
+      );
+
+      Graphics.Blit(sourceTexture, renderTexture, sourceScale, sourceOffset);
+      RenderTexture.active = renderTexture;
+      destinationTexture.ReadPixels(
+        new Rect(0f, 0f, sourceWidth, sourceHeight),
+        destinationX,
+        destinationY,
+        recalculateMipMaps: false
+      );
+    }
+    finally {
+      RenderTexture.active = previousRenderTexture;
+      RenderTexture.ReleaseTemporary(renderTexture);
+    }
   }
 
   static Color32[] BuildFillPixels(int width, int height, Color32 fillColor) {
@@ -201,6 +353,7 @@ public partial class SpriteWithNormals {
 
     var metadataState = ResolveTrimmedOffsetState(_appliedColorSliceAddress, colorSprite, out var offsetLocalUnits);
     if (metadataState == SpriteColdLoadState.Pending) {
+      RegisterTrimmedOffsetMetadataReadyCallback(colorSprite, _appliedColorSliceAddress);
       return;
     }
 
@@ -210,6 +363,28 @@ public partial class SpriteWithNormals {
     }
 
     ApplyTrimmedOffsetLocal(offsetLocalUnits, colorSprite, _appliedColorSliceAddress);
+  }
+
+  void RegisterTrimmedOffsetMetadataReadyCallback(Sprite colorSprite, string colorSliceAddress) {
+    if (colorSprite == null || string.IsNullOrWhiteSpace(colorSliceAddress)) return;
+    var flipX = _renderer != null && _renderer.flipX;
+    var flipY = _renderer != null && _renderer.flipY;
+    TrimmedSpriteOffsetResolver.TryGetExactLocalOffset(
+      colorSliceAddress,
+      colorSprite,
+      out _,
+      flipX,
+      flipY,
+      _trimmedOffsetMetadataReadyCallback
+    );
+  }
+
+  void OnTrimmedOffsetMetadataReady() {
+    if (!isActiveAndEnabled || !useTrimmedAtlasOffset) return;
+    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+    if (_renderer == null || _renderer.sprite == null) return;
+    if (string.IsNullOrWhiteSpace(_appliedColorSliceAddress)) return;
+    ApplyConfiguredTrimmedOffset(_renderer.sprite, _appliedColorSliceAddress);
   }
 
   SpriteColdLoadState ResolveTrimmedOffsetState(string colorSliceAddress, Sprite colorSprite, out Vector3 offsetLocalUnits) {
@@ -224,8 +399,7 @@ public partial class SpriteWithNormals {
       colorSprite,
       out offsetLocalUnits,
       flipX,
-      flipY,
-      OnTrimmedOffsetMetadataReady)) {
+      flipY)) {
       return SpriteColdLoadState.Missing;
     }
 
@@ -303,24 +477,6 @@ public partial class SpriteWithNormals {
     ApplyConfiguredTrimmedOffset(currentSprite, _appliedColorSliceAddress);
   }
 
-  void OnTrimmedOffsetMetadataReady() {
-    if (!useTrimmedAtlasOffset) return;
-    if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer == null || _renderer.sprite == null) return;
-    if (string.IsNullOrWhiteSpace(_appliedColorSliceAddress)) return;
-    if (ShouldLogRuntimeOffsetDebug()) {
-      Debug.Log(
-        "[SpriteWithNormals][Offset] object='" + gameObject.name +
-        "' category='" + (category ?? "") +
-        "' requested_frame=" + _lastRequestedFrame +
-        " stage='metadata_ready'" +
-        " address='" + _appliedColorSliceAddress + "'" +
-        " current_local=" + FormatTrimmedOffsetVector(transform.localPosition)
-      );
-    }
-    ApplyConfiguredTrimmedOffset(_renderer.sprite, _appliedColorSliceAddress);
-  }
-
   void SyncSerializedTrimmedOffsetState() {
     NormalizeSerializedTrimmedOffsetState();
     _lastAppliedTrimmedOffsetLocalUnits = serializedAppliedTrimmedOffsetLocalUnits;
@@ -353,7 +509,7 @@ public partial class SpriteWithNormals {
     }
 
     if (restoredBasePosition && ShouldLogRuntimeOffsetDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SpriteWithNormals] Normalized persisted trimmed offset state for '" + name +
         "'. current=(" + currentLocalPosition.x.ToString("0.###") + "," + currentLocalPosition.y.ToString("0.###") +
         ") base=(" + serializedBasePosition.x.ToString("0.###") + "," + serializedBasePosition.y.ToString("0.###") +
@@ -432,7 +588,7 @@ public partial class SpriteWithNormals {
         ApproximatelyVector3(currentLocalPosition, sourceOffsetLocalUnits * 2f) ||
         ApproximatelyVector3(currentLocalPosition, appliedOffsetLocalUnits) ||
         ApproximatelyVector3(currentLocalPosition, appliedOffsetLocalUnits * 2f)) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SpriteWithNormals] Normalized edit-mode trimmed offset baseline for '" + name +
         "'. current=(" + currentLocalPosition.x.ToString("0.###") + "," + currentLocalPosition.y.ToString("0.###") +
         ") source_offset=(" + sourceOffsetLocalUnits.x.ToString("0.###") + "," + sourceOffsetLocalUnits.y.ToString("0.###") +

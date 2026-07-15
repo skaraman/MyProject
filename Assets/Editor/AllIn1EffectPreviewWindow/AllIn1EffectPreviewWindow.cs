@@ -45,6 +45,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   string[] availableAtlasSpriteLabels = new string[0];
   string[] availableAtlasSpriteLabelsWithDefault = { "Procedural Default" };
   readonly SpriteTextureCache mainMaskTextureCache = new("MainMask");
+  readonly SpriteTextureCache normalMaskTextureCache = new("NormalMask");
   string activeTextureSlotName;
   Vector2 scrollPosition;
   double lastEditorTime;
@@ -75,25 +76,25 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     }
     activeDrawer.OnEnable(this);
     EnsurePreviewAssets();
+    ResetEditorClock();
     EditorApplication.update -= HandleEditorUpdate;
     EditorApplication.update += HandleEditorUpdate;
-    ResetEditorClock();
   }
 
   void OnDisable() {
-    EditorApplication.update -= HandleEditorUpdate;
     if (activeDrawer != null) {
       activeDrawer.OnDisable();
     }
     DestroyPreviewAssets();
+    EditorApplication.update -= HandleEditorUpdate;
   }
 
   void OnDestroy() {
-    EditorApplication.update -= HandleEditorUpdate;
     if (activeDrawer != null) {
       activeDrawer.OnDisable();
     }
     DestroyPreviewAssets();
+    EditorApplication.update -= HandleEditorUpdate;
   }
 
   void OnGUI() {
@@ -275,7 +276,14 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
       DrawSourcePreview(previewRect, previewTexture);
       ApplyPreviewMaterialState(previewTexture, previewTime);
-      EditorGUI.DrawPreviewTexture(previewRect, previewTexture, previewMaterial, ScaleMode.StretchToFill);
+      
+      if (Event.current.type == EventType.Repaint) {
+        int pass = previewMaterial.FindPass("Universal Forward");
+        if (pass == -1) pass = previewMaterial.FindPass("ForwardBase");
+        if (pass == -1) pass = 0;
+        
+        Graphics.DrawTexture(previewRect, previewTexture, new Rect(0, 0, 1, 1), 0, 0, 0, 0, Color.white, previewMaterial, pass);
+      }
     }
   }
 
@@ -328,9 +336,35 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     previewMaterial.mainTexture = sourceTexture;
     SetTextureIfPresent("_MainTex", sourceTexture);
 
+    if (mainMaskSprite != null) {
+      string spritePath = AssetDatabase.GetAssetPath(mainMaskSprite);
+      if (!string.IsNullOrEmpty(spritePath) && spritePath.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase)) {
+        string normalPath = spritePath.Substring(0, spritePath.Length - 4) + ".jpg";
+        
+        Sprite normalSprite = null;
+        var allAssets = AssetDatabase.LoadAllAssetsAtPath(normalPath);
+        foreach(var asset in allAssets) {
+            if (asset is Sprite s && s.name == mainMaskSprite.name) {
+                normalSprite = s;
+                break;
+            }
+        }
+        
+        if (normalSprite != null) {
+            var normalTex = normalMaskTextureCache.GetTexture(normalSprite);
+            if (normalTex != null) {
+                SetTextureIfPresent("_NormalMap", normalTex);
+            }
+        }
+      }
+    }
+
     if (previewMaterial.HasProperty("_PreviewTime")) {
       previewMaterial.SetFloat("_PreviewTime", timeValue);
     }
+    
+    // Support shaders that rely on standard Unity time
+    previewMaterial.SetVector("_Time", new Vector4(timeValue / 20f, timeValue, timeValue * 2f, timeValue * 3f));
 
     if (activeDrawer != null) {
       activeDrawer.ApplyMaterialState(previewMaterial);
@@ -465,7 +499,10 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
   void HandleEditorUpdate() {
     if (!this) return;
-    if (!animatePreview) return;
+    if (!animatePreview) {
+      lastEditorTime = EditorApplication.timeSinceStartup;
+      return;
+    }
 
     var now = EditorApplication.timeSinceStartup;
     if (lastEditorTime <= 0d) {

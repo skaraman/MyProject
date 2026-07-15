@@ -49,7 +49,7 @@ public class HurtBox2D : MonoBehaviour {
     // Validate the hit is true (basic validation - hurtbox is active and hitbox is valid)
     if (!hitBox.isActiveAndEnabled) return false;
 
-    if (ignoreEnemyHitBoxes && hitBox.GetComponentInParent<EnemyInfo>() != null) return false;
+    if (ignoreEnemyHitBoxes && hitBox.IsEnemyOwned) return false;
 
     // Hit is validated as true - invoke event with context
     OnHit?.Invoke(hitBox);

@@ -57,7 +57,7 @@ public partial class SingleSceneManager {
     AppendLoadFlowInt(builder, "active_enemies", activeEnemies != null ? activeEnemies.Length : 0);
     AppendLoadFlowInt(builder, "queue_queued", queue.queuedCount);
     AppendLoadFlowInt(builder, "queue_in_flight", queue.inFlightCount);
-    Debug.Log(builder.ToString());
+    RuntimeLog.Log(builder.ToString());
   }
 
   void LogWarmRequestScope(
@@ -77,7 +77,7 @@ public partial class SingleSceneManager {
     float requiredRatio
   ) {
     if (!ShouldLogLoadingProgressDebug()) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][WarmScope] context=" + context +
       " current_location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
       " blocking_libraries=" + (criticalLibraries != null ? criticalLibraries.Count : 0) +
@@ -317,7 +317,7 @@ public partial class SingleSceneManager {
 
     var addedCount = Mathf.Max(outAddresses.Count - beforeCount, 0);
     if (addedCount > 0 && ShouldLogLoadingProgressDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][EnemyProjectileWarmup]" +
         " location=" + ResolveLoadFlowValue(LocationManager.currentLocation) +
         " enemy_types=" + combatPopulationTypes.Count +
@@ -446,7 +446,7 @@ public partial class SingleSceneManager {
     if (spawner != null) {
       var map = spawner.BuildCurrentLocationArchetypeMapForWarmup();
       if (map != null && map.Count > 0) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[SingleSceneManager] Using active location prefab enemy archetypes for warmup" +
           " location='" + LocationManager.currentLocation + "'" +
           " archetypes=" + map.Count
@@ -500,7 +500,7 @@ public partial class SingleSceneManager {
       cachedPlayerGearController = ResolveBestAvailablePlayerController();
       lastPlayerResolveTime = now;
       if (ShouldLogLoadFlowDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[SingleSceneManager][PlayerResolve] resolved " +
           DescribeGearController(cachedPlayerGearController) +
           " scene_active=" + (Scene != null && Scene.activeInHierarchy ? 1 : 0)

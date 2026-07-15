@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
@@ -13,6 +14,8 @@ using UnityEditor;
 #endif
 
 public static partial class TextureResidencyCache {
+  static readonly ProfilerMarker PumpProfilerMarker = new ProfilerMarker("TextureResidencyCache.Pump");
+
   public enum LoadPriority {
     Immediate = 0,
     Warmup = 1,
@@ -45,14 +48,14 @@ public static partial class TextureResidencyCache {
     public AsyncOperationHandle<TextAsset> metadataAtlasMetadataHandle;
     public GeneratedAtlasSpriteSynthesisUtility.AtlasImportPayload parsedGroupedMetadata;
     public GeneratedAtlasSpriteSynthesisUtility.AtlasImportPayload parsedMetadataAtlasMetadata;
-    public readonly List<AsyncOperationHandle<Sprite>> exactSliceSupplementHandles = new();
-    public readonly List<IResourceLocation> pendingAssetLoadLocations = new(4);
-    public readonly List<IResourceLocation> activeAssetLoadLocations = new(4);
-    public readonly HashSet<string> pendingExactSliceSupplementAddresses = new(StringComparer.Ordinal);
-    public readonly HashSet<string> failedExactSliceSupplementAddresses = new(StringComparer.Ordinal);
-    public readonly Dictionary<string, Sprite> spritesByName = new(StringComparer.Ordinal);
-    public readonly List<Sprite> generatedSprites = new();
-    public readonly HashSet<ulong> registeredTextureIds = new();
+    public List<AsyncOperationHandle<Sprite>> exactSliceSupplementHandles;
+    public List<IResourceLocation> pendingAssetLoadLocations;
+    public List<IResourceLocation> activeAssetLoadLocations;
+    public HashSet<string> pendingExactSliceSupplementAddresses;
+    public HashSet<string> failedExactSliceSupplementAddresses;
+    public Dictionary<string, Sprite> spritesByName;
+    public List<Sprite> generatedSprites;
+    public HashSet<ulong> registeredTextureIds;
     public Sprite primarySprite;
     public bool generatedSpriteSetComplete;
     public int pinCount;
@@ -198,7 +201,9 @@ public static partial class TextureResidencyCache {
     public string Address => entry != null ? entry.address : "";
     public bool HasPendingSpriteMapSupplement =>
       entry != null &&
-      (entry.editorAtlasSupplementPending || entry.pendingExactSliceSupplementAddresses.Count > 0);
+      (entry.editorAtlasSupplementPending ||
+       (entry.pendingExactSliceSupplementAddresses != null &&
+        entry.pendingExactSliceSupplementAddresses.Count > 0));
 
     public bool TryGetSprite(string spriteName, out Sprite sprite) {
       sprite = null;
@@ -230,6 +235,7 @@ public static partial class TextureResidencyCache {
       EnsureRequestedSliceSupplement(entry, sliceOrAtlasAddress);
       var normalizedSliceAddress = string.IsNullOrWhiteSpace(sliceOrAtlasAddress) ? "" : sliceOrAtlasAddress.Trim();
       return !string.IsNullOrWhiteSpace(normalizedSliceAddress) &&
+             entry.pendingExactSliceSupplementAddresses != null &&
              entry.pendingExactSliceSupplementAddresses.Contains(normalizedSliceAddress);
     }
 
@@ -302,6 +308,7 @@ public static partial class TextureResidencyCache {
   static readonly Stack<Lease> pooledLeases = new();
   static readonly Dictionary<string, OwnerPinState> ownerPins = new(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> desiredOwnerAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, string> desiredOwnerRequestScratch = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<string> ownerReleaseAddressScratch = new(256);
   static readonly HashSet<string> expandedAtlasKeys = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<string, int> atlasExpansionRetryFrames = new(StringComparer.OrdinalIgnoreCase);

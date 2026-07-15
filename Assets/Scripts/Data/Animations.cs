@@ -5,6 +5,7 @@ public class AnimData {
   public int start;
   public int end;
   public float duration;
+  public string category;
   public bool isLocomotion;
   public bool loop;
   public int To;
@@ -23,7 +24,7 @@ public static class Animations {
     { "Attack", new AnimData { start = 1, end = 32, duration = 600 } },
     { "Jump", new AnimData { start = 2, end = 196, duration = 1750 } },
     { "Hurt", new AnimData { start = 1, end = 60, duration = 175 } },
-    { "Death", new AnimData { start = 1, end = 74, duration = 1500 } }
+    { "BaseDeath1", new AnimData { start = 1, end = 74, duration = 1500, category = "DeathOne" } }
   };
 
   public static Dictionary<string, AnimData> LesserDevil { get; } = new Dictionary<string, AnimData> {
@@ -32,7 +33,7 @@ public static class Animations {
     { "Attack", new AnimData { start = 1, end = 28, duration = 650 } },
     { "Jump", new AnimData { start = 1, end = 40, duration = 1200 } },
     { "Hurt", new AnimData { start = 1, end = 24, duration = 400 } },
-    { "Death", new AnimData { start = 1, end = 52, duration = 1600 } }
+    { "BaseDeath1", new AnimData { start = 1, end = 52, duration = 1600, category = "Death" } }
   };
 
 

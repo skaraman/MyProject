@@ -111,6 +111,6 @@ public static class AnimationLinkUtility {
   }
 
   static string NormalizeKey(string value) {
-    return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+    return string.IsNullOrWhiteSpace(value) ? "" : value;
   }
 }

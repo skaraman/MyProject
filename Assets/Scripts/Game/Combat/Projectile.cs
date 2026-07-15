@@ -297,7 +297,7 @@ public class Projectile : MonoBehaviour {
     lastAppliedRuntimeSpawnOffsetX = runtimeSpawnOffsetX;
     lastAppliedRuntimeSpawnOffsetY = runtimeSpawnOffsetY;
     if (Application.isEditor || Debug.isDebugBuild) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[Projectile] AppliedRuntimeSpawnOffsetTuning" +
         " source=" + source +
         " key='" + poolKey + "'" +

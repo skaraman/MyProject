@@ -82,7 +82,7 @@ public class ProjectileData {
 
     if (Application.isEditor || Debug.isDebugBuild) {
       var loadSeconds = Time.realtimeSinceStartup - startedAt;
-      Debug.Log(
+      RuntimeLog.Log(
         "[Projectiles] LoadedProjectilePrefab" +
         " key='" + key + "'" +
         " address='" + address + "'" +

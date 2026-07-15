@@ -5,6 +5,15 @@ using System.Text;
 using UnityEngine;
 
 public partial class LocationManager : MonoBehaviour {
+  sealed class CachedLocationInstance {
+    public GameObject prefab;
+    public GameObject instance;
+    public int saveSlot;
+    public int registryVersion;
+    public int episodeRevision;
+    public long lastUsedSequence;
+  }
+
   const float OverlayLocationResolverBarrierTimeoutSeconds = 8.0f;
   const float OverlayActivationCapacityWaitTimeoutSeconds = 0.1f;
   const float ProtectedOverlayActivationCapacityWaitTimeoutSeconds = 0.05f;
@@ -26,6 +35,7 @@ public partial class LocationManager : MonoBehaviour {
   const int ProtectedOverlayActivationBurstPerFrame = 128;
   const int OverlayActivationBurstPerFrame = 2;
   const int RuntimeActivationBurstPerFrame = 1;
+  const int MaxRetainedLocationInstances = 2;
 
   static LocationManager runtimeInstance;
 
@@ -33,7 +43,35 @@ public partial class LocationManager : MonoBehaviour {
   public static string currentLocation = "nowhere";
 
   public static void UpdateLocation(string newLocation) {
-    currentLocation = string.IsNullOrWhiteSpace(newLocation) ? "nowhere" : newLocation.Trim();
+    var resolvedLocation = string.IsNullOrWhiteSpace(newLocation)
+      ? "nowhere"
+      : newLocation.Trim();
+    if (!LocationEnemyData.ContainsLocation(resolvedLocation)) {
+      Debug.LogWarning(
+        "[LocationManager] Ignored unknown location update '" +
+        resolvedLocation +
+        "'."
+      );
+      return;
+    }
+    if (SingleSceneManager.TryBeginRuntimeLocationTransition(resolvedLocation)) {
+      return;
+    }
+
+    CommitLocationUpdate(resolvedLocation);
+  }
+
+  internal static void CommitLocationForLoadingFlow(string newLocation) {
+    var resolvedLocation = LocationEnemyData.NormalizeLocationId(newLocation);
+    if (!LocationEnemyData.ContainsLocation(resolvedLocation)) {
+      return;
+    }
+
+    CommitLocationUpdate(resolvedLocation);
+  }
+
+  static void CommitLocationUpdate(string resolvedLocation) {
+    currentLocation = resolvedLocation;
     MessageBus.Send("LocationUpdated", currentLocation);
   }
 
@@ -52,12 +90,20 @@ public partial class LocationManager : MonoBehaviour {
   readonly List<string> relativeNodeSegmentsScratch = new(16);
   readonly List<Component> activationComponentScratch = new(32);
   readonly StringBuilder stagePlanSummaryBuilder = new(512);
+  readonly Dictionary<string, CachedLocationInstance> locationInstanceCache =
+    new(StringComparer.OrdinalIgnoreCase);
   LocationInfo activeLocation;
   string currentLocationId = "";
   GameObject activeLocationInstance;
+  string activeLocationInstanceId = "";
+  GameObject activeLocationInstancePrefab;
+  int activeLocationInstanceSaveSlot = -1;
+  int activeLocationInstanceRegistryVersion = -1;
+  int activeLocationInstanceEpisodeRevision = -1;
   Coroutine pendingBlockingLocationActivationRoutine;
   Coroutine pendingDeferredLocationActivationRoutine;
   int pendingLocationActivationGeneration;
+  long locationCacheSequence;
 
   public static bool HasPendingActivationWork =>
     runtimeInstance != null &&
@@ -97,6 +143,7 @@ public partial class LocationManager : MonoBehaviour {
       runtimeInstance = null;
     }
     StopPendingLocationActivation();
+    DestroyAllLocationInstances();
     for (var i = 0; i < actions.Count; i++) {
       actions[i]?.Invoke();
     }
@@ -122,7 +169,10 @@ public partial class LocationManager : MonoBehaviour {
     }
 
     if (updateTrackerIfDifferent && !string.Equals(currentLocation, resolvedId, StringComparison.OrdinalIgnoreCase)) {
-      UpdateLocation(resolvedId);
+      if (SingleSceneManager.TryBeginRuntimeLocationTransition(resolvedId)) {
+        return true;
+      }
+      CommitLocationUpdate(resolvedId);
       updateTrackerIfDifferent = false;
     }
 
@@ -155,7 +205,7 @@ public partial class LocationManager : MonoBehaviour {
         " pending_deferred=" + (pendingDeferredActivation ? 1 : 0)
       );
       if (logVerbose) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[LocationManager] Skipping duplicate pending location load id='" + resolvedId +
           "' pending_blocking=" + (pendingBlockingActivation ? 1 : 0) +
           " pending_deferred=" + (pendingDeferredActivation ? 1 : 0) +
@@ -167,7 +217,7 @@ public partial class LocationManager : MonoBehaviour {
     }
 
     if (refreshPendingLocationUnderOverlay && logVerbose) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[LocationManager] Refreshing active location under overlay id='" + resolvedId +
         "' pending_blocking=" + (pendingBlockingActivation ? 1 : 0) +
         " pending_deferred=" + (pendingDeferredActivation ? 1 : 0) +
@@ -184,7 +234,7 @@ public partial class LocationManager : MonoBehaviour {
       enemyLoadingPipeline.RequestLoad(resolvedId);
 
     if (logVerbose) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[LocationManager] Loaded location id='" + resolvedId +
         "' name='" + activeLocation.name +
         "' enemies=" + activeLocation.enemies.Count +
@@ -215,7 +265,7 @@ public partial class LocationManager : MonoBehaviour {
   }
 
   void LogMainMenuPrefablessLocation(LocationInfo info) {
-    Debug.Log(
+    RuntimeLog.Log(
       "[LocationManager] Main menu location intentionally uses no prefab." +
       " location_id='" + (info != null ? info.id : "") + "'" +
       " clearing_active_location=1"
@@ -269,6 +319,9 @@ public partial class LocationManager : MonoBehaviour {
       : locationRoot != null
         ? locationRoot
         : transform;
+    if (TryReuseCachedLocationInstance(info.id, prefab, prefabData, parent, requestStartedAt)) {
+      return;
+    }
     var blockingLibraries = locationLibraryListScratch;
     var deferredLibraries = locationDeferredLibraryListScratch;
     CollectPrefabLibraries(prefab, blockingLibraries, includeBlockingStages: true, includeDeferredStages: false);
@@ -291,13 +344,211 @@ public partial class LocationManager : MonoBehaviour {
   }
 
   void ClearLocationInstance() {
+    var activationWasPending = pendingBlockingLocationActivationRoutine != null ||
+                               pendingDeferredLocationActivationRoutine != null;
     StopPendingLocationActivation();
     if (activeLocationInstance == null) return;
-    if (activeLocationInstance.activeSelf) {
-      activeLocationInstance.SetActive(false);
-    }
-    Destroy(activeLocationInstance);
+    var instance = activeLocationInstance;
+    var locationId = activeLocationInstanceId;
+    var prefab = activeLocationInstancePrefab;
+    var saveSlot = activeLocationInstanceSaveSlot;
+    var registryVersion = activeLocationInstanceRegistryVersion;
+    var episodeRevision = activeLocationInstanceEpisodeRevision;
     activeLocationInstance = null;
+    activeLocationInstanceId = "";
+    activeLocationInstancePrefab = null;
+    activeLocationInstanceSaveSlot = -1;
+    activeLocationInstanceRegistryVersion = -1;
+    activeLocationInstanceEpisodeRevision = -1;
+    if (instance.activeSelf) {
+      instance.SetActive(false);
+    }
+
+    if (!activationWasPending &&
+        !string.IsNullOrWhiteSpace(locationId) &&
+        prefab != null) {
+      CacheLocationInstance(
+        locationId,
+        prefab,
+        instance,
+        saveSlot,
+        registryVersion,
+        episodeRevision
+      );
+      return;
+    }
+
+    Destroy(instance);
+  }
+
+  void SetActiveLocationInstance(string locationId, GameObject prefab, GameObject instance) {
+    activeLocationInstance = instance;
+    activeLocationInstanceId = LocationEnemyData.NormalizeLocationId(locationId);
+    activeLocationInstancePrefab = prefab;
+    activeLocationInstanceSaveSlot = SaveSlotManager.slot;
+    activeLocationInstanceRegistryVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    activeLocationInstanceEpisodeRevision = ContentEpisodeProgression.EpisodeRevision;
+  }
+
+  void CacheLocationInstance(
+    string locationId,
+    GameObject prefab,
+    GameObject instance,
+    int saveSlot,
+    int registryVersion,
+    int episodeRevision
+  ) {
+    if (instance == null || prefab == null || string.IsNullOrWhiteSpace(locationId)) {
+      return;
+    }
+
+    if (locationInstanceCache.TryGetValue(locationId, out var existing) &&
+        existing != null) {
+      if (existing.instance != null && existing.instance != instance) {
+        Destroy(existing.instance);
+      }
+      existing.prefab = prefab;
+      existing.instance = instance;
+      StampCachedLocationIdentity(
+        existing,
+        saveSlot,
+        registryVersion,
+        episodeRevision
+      );
+      TrimLocationInstanceCache();
+      return;
+    }
+
+    var cached = new CachedLocationInstance {
+      prefab = prefab,
+      instance = instance
+    };
+    StampCachedLocationIdentity(
+      cached,
+      saveSlot,
+      registryVersion,
+      episodeRevision
+    );
+    locationInstanceCache[locationId] = cached;
+    TrimLocationInstanceCache();
+  }
+
+  bool TryReuseCachedLocationInstance(
+    string locationId,
+    GameObject prefab,
+    LocationPrefabData prefabData,
+    Transform parent,
+    float requestStartedAt
+  ) {
+    if (prefab == null || prefabData == null || parent == null) {
+      return false;
+    }
+    if (!locationInstanceCache.TryGetValue(locationId, out var cached) ||
+        cached == null ||
+        cached.instance == null) {
+      locationInstanceCache.Remove(locationId);
+      return false;
+    }
+    if (cached.prefab != prefab || !IsCachedLocationIdentityCurrent(cached)) {
+      Destroy(cached.instance);
+      locationInstanceCache.Remove(locationId);
+      return false;
+    }
+
+    var instance = cached.instance;
+    var instanceTransform = instance.transform;
+    instanceTransform.SetParent(parent, false);
+    instanceTransform.localPosition = prefabData.localPosition;
+    instanceTransform.localRotation = Quaternion.Euler(prefabData.localEulerAngles);
+    instanceTransform.localScale = prefabData.localScale;
+    SetActiveLocationInstance(locationId, prefab, instance);
+    TouchCachedLocation(cached);
+    instance.SetActive(true);
+    MessageBus.Send("LocationLocationChanged", instance);
+    LogLocationLoadTiming(
+      "reuse_cached_instance",
+      locationId,
+      requestStartedAt,
+      Time.realtimeSinceStartup,
+      "instance=" + instance.name
+    );
+    return true;
+  }
+
+  void StampCachedLocationIdentity(
+    CachedLocationInstance cached,
+    int saveSlot,
+    int registryVersion,
+    int episodeRevision
+  ) {
+    if (cached == null) {
+      return;
+    }
+
+    cached.saveSlot = saveSlot;
+    cached.registryVersion = registryVersion;
+    cached.episodeRevision = episodeRevision;
+    TouchCachedLocation(cached);
+  }
+
+  void TouchCachedLocation(CachedLocationInstance cached) {
+    locationCacheSequence += 1;
+    cached.lastUsedSequence = locationCacheSequence;
+  }
+
+  static bool IsCachedLocationIdentityCurrent(CachedLocationInstance cached) {
+    return cached != null &&
+           cached.saveSlot == SaveSlotManager.slot &&
+           cached.registryVersion == ActiveContentRegistryRuntime.ReloadVersion &&
+           cached.episodeRevision == ContentEpisodeProgression.EpisodeRevision;
+  }
+
+  void TrimLocationInstanceCache() {
+    while (locationInstanceCache.Count > MaxRetainedLocationInstances) {
+      string oldestKey = null;
+      CachedLocationInstance oldest = null;
+      foreach (var pair in locationInstanceCache) {
+        var candidate = pair.Value;
+        if (candidate == null || candidate.instance == activeLocationInstance) {
+          continue;
+        }
+        if (oldest != null && candidate.lastUsedSequence >= oldest.lastUsedSequence) {
+          continue;
+        }
+        oldestKey = pair.Key;
+        oldest = candidate;
+      }
+
+      if (oldestKey == null) {
+        return;
+      }
+      if (oldest != null && oldest.instance != null) {
+        Destroy(oldest.instance);
+      }
+      locationInstanceCache.Remove(oldestKey);
+    }
+  }
+
+  void DestroyAllLocationInstances() {
+    var activeInstance = activeLocationInstance;
+    if (activeInstance != null) {
+      Destroy(activeInstance);
+    }
+
+    foreach (var pair in locationInstanceCache) {
+      var cached = pair.Value;
+      if (cached == null || cached.instance == null || cached.instance == activeInstance) {
+        continue;
+      }
+      Destroy(cached.instance);
+    }
+    locationInstanceCache.Clear();
+    activeLocationInstance = null;
+    activeLocationInstanceId = "";
+    activeLocationInstancePrefab = null;
+    activeLocationInstanceSaveSlot = -1;
+    activeLocationInstanceRegistryVersion = -1;
+    activeLocationInstanceEpisodeRevision = -1;
   }
 
   void StopPendingLocationActivation() {

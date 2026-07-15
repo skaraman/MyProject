@@ -6,6 +6,7 @@ using UnityEngine;
 [RequireComponent(typeof(EnemyInfo))]
 public class EnemyController : MonoBehaviour {
   const float PlayerTransformRefreshSeconds = 0.5f;
+  static readonly Dictionary<string, Dictionary<string, string>> EmptyInterruptData = new();
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
   [Button(nameof(AwardPlaceholderKillXp), label = "Award XP", size = Size.small)] public bool awardPlaceholderXp;
@@ -42,6 +43,7 @@ public class EnemyController : MonoBehaviour {
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private readonly List<string> linkedEffectWarmKeyScratch = new();
   private readonly HashSet<string> linkedEffectWarmKeySeenScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly List<string> deathAnimationScratch = new();
   private bool effectControllerInitialized;
   private bool effectResetToEmptyPending;
   private Dictionary<string, AnimData> animationData;
@@ -130,6 +132,14 @@ public class EnemyController : MonoBehaviour {
       enemyInfo.enemyType = enemyType;
     }
 
+    if (!changed && animationData != null) {
+      RefreshRuntimeResidency(force: true);
+      if (playDefaultImmediately && !string.IsNullOrEmpty(defaultAnimation)) {
+        return PlayAnimation(defaultAnimation, true);
+      }
+      return true;
+    }
+
     if (changed) {
       animationController?.StopAnimation(false);
     }
@@ -166,7 +176,7 @@ public class EnemyController : MonoBehaviour {
 
     if (string.IsNullOrWhiteSpace(normalizedType)) {
       animationData = null;
-      interruptData = new Dictionary<string, Dictionary<string, string>>();
+      interruptData = EmptyInterruptData;
       hBoxData = null;
       return;
     }
@@ -178,7 +188,7 @@ public class EnemyController : MonoBehaviour {
 
     interruptData = Interrupts.Enemies.TryGetValue(normalizedType, out var interrupts)
       ? interrupts
-      : new Dictionary<string, Dictionary<string, string>>();
+      : EmptyInterruptData;
     hBoxData = HBoxes.Enemies.TryGetValue(normalizedType, out var hboxes) ? hboxes : null;
   }
 
@@ -220,6 +230,63 @@ public class EnemyController : MonoBehaviour {
       return false;
     }
     return animationController != null && animationController.PlayAnimation(animationName, forceRestart);
+  }
+
+  public bool TryPlayDeathAnimation(
+    string damageSubtype,
+    out string selectedAnimation,
+    out float durationSeconds
+  ) {
+    selectedAnimation = "";
+    durationSeconds = 0f;
+    deathAnimationScratch.Clear();
+
+    var normalizedSubtype = string.IsNullOrWhiteSpace(damageSubtype)
+      ? "Base"
+      : damageSubtype.Trim();
+    var animationPrefix = normalizedSubtype + "Death";
+
+    if (animationData == null || animationData.Count <= 0) {
+      return false;
+    }
+
+    foreach (var animation in animationData) {
+      if (!IsNumberedDeathAnimation(animation.Key, animationPrefix)) {
+        continue;
+      }
+
+      deathAnimationScratch.Add(animation.Key);
+    }
+
+    if (deathAnimationScratch.Count <= 0) {
+      return false;
+    }
+
+    var selectedIndex = UnityEngine.Random.Range(0, deathAnimationScratch.Count);
+    selectedAnimation = deathAnimationScratch[selectedIndex];
+    if (!PlayAnimation(selectedAnimation, forceRestart: true)) {
+      selectedAnimation = "";
+      return false;
+    }
+
+    durationSeconds = GetAnimationDurationSeconds(selectedAnimation);
+    return true;
+  }
+
+  static bool IsNumberedDeathAnimation(string animationName, string animationPrefix) {
+    if (string.IsNullOrWhiteSpace(animationName)) {
+      return false;
+    }
+    if (!animationName.StartsWith(animationPrefix, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var suffix = animationName.Substring(animationPrefix.Length);
+    if (!int.TryParse(suffix, out var animationNumber)) {
+      return false;
+    }
+
+    return animationNumber > 0;
   }
 
   public void PauseAnimation() {
@@ -286,7 +353,7 @@ public class EnemyController : MonoBehaviour {
       placeholderKillXpReward,
       "enemy_placeholder:" + NormalizeEnemyType(enemyType)
     );
-    Debug.Log(
+    RuntimeLog.Log(
       "[EnemyController][AwardPlaceholderKillXp] enemy_type='" + (enemyType ?? "") +
       "' reward=" + placeholderKillXpReward +
       " active_form='" + activeForm +
@@ -411,7 +478,7 @@ public class EnemyController : MonoBehaviour {
     if (projectileManager != null || !Application.isPlaying) return;
     projectileManager = SingleSceneManager.ResolveGameplayProjectileManager();
     if (projectileManager == null || !(Application.isEditor || Debug.isDebugBuild)) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[EnemyController] ResolvedProjectileManager" +
       " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
       " object=" + gameObject.name +
@@ -437,7 +504,7 @@ public class EnemyController : MonoBehaviour {
     }
 
     if (linkedEffectWarmKeyScratch.Count > 0 && (Application.isEditor || Debug.isDebugBuild)) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[EnemyController] PrimedLinkedEffects" +
         " source=" + (string.IsNullOrWhiteSpace(source) ? "-" : source.Trim()) +
         " object=" + gameObject.name +

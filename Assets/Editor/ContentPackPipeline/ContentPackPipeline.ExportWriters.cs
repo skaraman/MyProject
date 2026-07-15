@@ -15,128 +15,71 @@ using Process = System.Diagnostics.Process;
 using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 public static partial class ContentPackPipeline {
-  static Dictionary<string, AssignedAsset> AssignPackAssets(List<PackDefinition> packDefinitions, List<string> errors) {
-    var usageByAssetPath = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-    var packById = packDefinitions.ToDictionary(pack => pack.packId, StringComparer.OrdinalIgnoreCase);
+  static List<AssignedAsset> AssignPackAssets(List<PackDefinition> packDefinitions, List<string> errors) {
+    var result = new List<AssignedAsset>();
+    for (var packIndex = 0; packIndex < packDefinitions.Count; packIndex++) {
+      var pack = packDefinitions[packIndex];
+      if (pack == null || pack.assetDependencies == null) {
+        continue;
+      }
 
-    foreach (var pack in packDefinitions) {
-      if (pack == null || pack.assetDependencies == null) continue;
       for (var i = 0; i < pack.assetDependencies.Count; i++) {
         var assetPath = NormalizeAssetPath(pack.assetDependencies[i]);
-        if (string.IsNullOrWhiteSpace(assetPath)) continue;
-        if (!usageByAssetPath.TryGetValue(assetPath, out var usage)) {
-          usage = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-          usageByAssetPath[assetPath] = usage;
+        if (string.IsNullOrWhiteSpace(assetPath)) {
+          continue;
         }
-        usage.Add(pack.packId);
-      }
-    }
+        if (assetPath.StartsWith("Assets/Generated/", StringComparison.OrdinalIgnoreCase)) {
+          errors.Add(
+            "Generated assets are not allowed in external packs." +
+            " pack_id='" + pack.packId + "'" +
+            " asset='" + assetPath + "'"
+          );
+          continue;
+        }
 
-    var result = new Dictionary<string, AssignedAsset>(StringComparer.OrdinalIgnoreCase);
-    foreach (var pair in usageByAssetPath) {
-      var assetPath = pair.Key;
-      if (assetPath.StartsWith("Assets/Generated/", StringComparison.OrdinalIgnoreCase)) {
-        errors.Add("Generated assets are not allowed in external packs. asset='" + assetPath + "'");
-        continue;
-      }
+        var originalGuid = AssetDatabase.AssetPathToGUID(assetPath);
+        if (string.IsNullOrWhiteSpace(originalGuid)) {
+          errors.Add(
+            "Asset is missing a GUID and cannot be exported." +
+            " pack_id='" + pack.packId + "'" +
+            " asset='" + assetPath + "'"
+          );
+          continue;
+        }
 
-      var assignedPackId = ResolveAssignedPackId(assetPath, pair.Value, packDefinitions);
-      if (!packById.TryGetValue(assignedPackId, out var pack)) {
-        errors.Add("Failed to resolve assigned pack for asset '" + assetPath + "'.");
-        continue;
+        var relativePath = ResolveExportRelativePath(pack, assetPath);
+        result.Add(new AssignedAsset {
+          assetPath = assetPath,
+          originalGuid = originalGuid,
+          newGuid = ComputeDeterministicExportGuid(pack.packId, assetPath),
+          packId = pack.packId,
+          externalAssetPath = NormalizeFullPath(Path.Combine(pack.externalRootPath, relativePath)),
+          stageAssetPath = NormalizeAssetPath(pack.stageAssetRoot + "/" + relativePath)
+        });
       }
-
-      var originalGuid = AssetDatabase.AssetPathToGUID(assetPath);
-      if (string.IsNullOrWhiteSpace(originalGuid)) {
-        errors.Add("Asset is missing a GUID and cannot be exported. asset='" + assetPath + "'");
-        continue;
-      }
-
-      var relativePath = ResolveExportRelativePath(pack, assetPath);
-      result[assetPath] = new AssignedAsset {
-        assetPath = assetPath,
-        originalGuid = originalGuid,
-        newGuid = ComputeDeterministicExportGuid(assignedPackId, assetPath),
-        packId = assignedPackId,
-        externalAssetPath = NormalizeFullPath(Path.Combine(pack.externalRootPath, relativePath)),
-        stageAssetPath = NormalizeAssetPath(pack.stageAssetRoot + "/" + relativePath)
-      };
     }
 
     return result;
   }
 
-  static string ResolveAssignedPackId(string assetPath, HashSet<string> usage, List<PackDefinition> packDefinitions) {
-    var ownedPackId = ResolveOwnedPackId(assetPath, packDefinitions);
-    if (!string.IsNullOrWhiteSpace(ownedPackId)) {
-      return ownedPackId;
-    }
-
-    if (usage == null || usage.Count <= 0) return CorePackId;
-    if (usage.Contains(CorePackId) || usage.Count > 1) return CorePackId;
-    foreach (var packId in usage) return packId;
-    return CorePackId;
-  }
-
-  static string ResolveOwnedPackId(string assetPath, List<PackDefinition> packDefinitions) {
-    var normalizedAssetPath = NormalizeAssetPath(assetPath);
-    if (string.IsNullOrWhiteSpace(normalizedAssetPath) || packDefinitions == null || packDefinitions.Count <= 0) {
-      return "";
-    }
-
-    string bestPackId = "";
-    var bestMatchLength = -1;
-
-    for (var packIndex = 0; packIndex < packDefinitions.Count; packIndex++) {
-      var pack = packDefinitions[packIndex];
-      if (pack == null || pack.ownedRoots == null || pack.ownedRoots.Count <= 0) {
-        continue;
-      }
-
-      for (var rootIndex = 0; rootIndex < pack.ownedRoots.Count; rootIndex++) {
-        var ownedRoot = NormalizeAssetPath(pack.ownedRoots[rootIndex]);
-        if (string.IsNullOrWhiteSpace(ownedRoot)) {
-          continue;
-        }
-
-        var isDirectMatch = string.Equals(normalizedAssetPath, ownedRoot, StringComparison.OrdinalIgnoreCase);
-        var isUnderRoot = normalizedAssetPath.StartsWith(ownedRoot + "/", StringComparison.OrdinalIgnoreCase);
-        if (!isDirectMatch && !isUnderRoot) {
-          continue;
-        }
-
-        if (ownedRoot.Length < bestMatchLength) {
-          continue;
-        }
-
-        if (ownedRoot.Length == bestMatchLength &&
-            string.Equals(bestPackId, CorePackId, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(pack.packId, CorePackId, StringComparison.OrdinalIgnoreCase)) {
-          bestPackId = pack.packId;
-          continue;
-        }
-
-        if (ownedRoot.Length > bestMatchLength) {
-          bestMatchLength = ownedRoot.Length;
-          bestPackId = pack.packId;
-        }
-      }
-    }
-
-    return bestPackId;
-  }
-
   static void WriteAssignedAssets(
-    Dictionary<string, AssignedAsset> assignedAssets,
+    List<AssignedAsset> assignedAssets,
     List<string> errors,
     TransitionPipelineMode mode,
     ExportSyncStats stats
   ) {
-    var guidMap = BuildGuidMap(assignedAssets);
-    var orderedAssets = assignedAssets.Values.OrderBy(asset => asset.externalAssetPath, StringComparer.OrdinalIgnoreCase).ToList();
+    var guidMapsByPackId = BuildGuidMapsByPackId(assignedAssets);
+    var orderedAssets = assignedAssets
+      .OrderBy(asset => asset.externalAssetPath, StringComparer.OrdinalIgnoreCase)
+      .ToList();
 
     for (var i = 0; i < orderedAssets.Count; i++) {
       var assigned = orderedAssets[i];
+      if (!guidMapsByPackId.TryGetValue(assigned.packId, out var guidMap)) {
+        errors.Add("Failed to build pack GUID map. pack_id='" + assigned.packId + "'.");
+        continue;
+      }
+
       try {
         CopyAssetPayload(assigned.assetPath, assigned.externalAssetPath, guidMap, mode, stats);
         CopyMetaPayload(assigned.assetPath, assigned.externalAssetPath, guidMap, mode, stats);
@@ -154,7 +97,7 @@ public static partial class ContentPackPipeline {
 
   static void ApplyAssignedRuntimeAddressMetadata(
     List<PackDefinition> packDefinitions,
-    Dictionary<string, AssignedAsset> assignedAssets
+    List<AssignedAsset> assignedAssets
   ) {
     if (packDefinitions == null) return;
 
@@ -172,7 +115,7 @@ public static partial class ContentPackPipeline {
 
     if (assignedAssets == null || assignedAssets.Count <= 0) return;
 
-    var orderedAssets = assignedAssets.Values
+    var orderedAssets = assignedAssets
       .OrderBy(asset => asset.packId, StringComparer.OrdinalIgnoreCase)
       .ThenBy(asset => asset.stageAssetPath, StringComparer.OrdinalIgnoreCase)
       .ToList();
@@ -190,12 +133,21 @@ public static partial class ContentPackPipeline {
     }
   }
 
-  static Dictionary<string, string> BuildGuidMap(Dictionary<string, AssignedAsset> assignedAssets) {
-    var guidMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var assigned in assignedAssets.Values) {
+  static Dictionary<string, Dictionary<string, string>> BuildGuidMapsByPackId(
+    List<AssignedAsset> assignedAssets
+  ) {
+    var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < assignedAssets.Count; i++) {
+      var assigned = assignedAssets[i];
+      if (!result.TryGetValue(assigned.packId, out var guidMap)) {
+        guidMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        result.Add(assigned.packId, guidMap);
+      }
+
       guidMap[assigned.originalGuid] = assigned.newGuid;
     }
-    return guidMap;
+
+    return result;
   }
 
   static string ComputeDeterministicExportGuid(string packId, string assetPath) {
@@ -235,7 +187,9 @@ public static partial class ContentPackPipeline {
       return;
     }
 
-    if (mode == TransitionPipelineMode.Smart && File.Exists(targetFullPath)) {
+    if (mode == TransitionPipelineMode.Smart &&
+        File.Exists(targetFullPath) &&
+        FilesHaveSameBinaryHash(sourceFullPath, targetFullPath)) {
       if (stats != null) {
         stats.assetPayloadsSkipped++;
       }
@@ -246,6 +200,33 @@ public static partial class ContentPackPipeline {
     if (stats != null) {
       stats.assetPayloadsWritten++;
     }
+  }
+
+  static bool FilesHaveSameBinaryHash(string sourceFullPath, string targetFullPath) {
+    var sourceInfo = new FileInfo(sourceFullPath);
+    var targetInfo = new FileInfo(targetFullPath);
+    if (sourceInfo.Length != targetInfo.Length) {
+      return false;
+    }
+
+    using var sourceStream = File.OpenRead(sourceFullPath);
+    using var targetStream = File.OpenRead(targetFullPath);
+    using var sourceHashAlgorithm = SHA256.Create();
+    using var targetHashAlgorithm = SHA256.Create();
+
+    var sourceHash = sourceHashAlgorithm.ComputeHash(sourceStream);
+    var targetHash = targetHashAlgorithm.ComputeHash(targetStream);
+    if (sourceHash.Length != targetHash.Length) {
+      return false;
+    }
+
+    for (var i = 0; i < sourceHash.Length; i++) {
+      if (sourceHash[i] != targetHash[i]) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   static string ResolveExportRelativePath(PackDefinition pack, string assetPath) {

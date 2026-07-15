@@ -1,6 +1,41 @@
 using System;
 
 public partial class SpriteWithNormals {
+  readonly struct AnimationAtlasCacheKey : IEquatable<AnimationAtlasCacheKey> {
+    public readonly string category;
+    public readonly int startFrame;
+    public readonly int endFrame;
+    public readonly int contentReloadVersion;
+
+    public AnimationAtlasCacheKey(string category, int startFrame, int endFrame, int contentReloadVersion) {
+      this.category = category ?? "";
+      this.startFrame = startFrame;
+      this.endFrame = endFrame;
+      this.contentReloadVersion = contentReloadVersion;
+    }
+
+    public bool Equals(AnimationAtlasCacheKey other) {
+      return startFrame == other.startFrame &&
+             endFrame == other.endFrame &&
+             contentReloadVersion == other.contentReloadVersion &&
+             string.Equals(category, other.category, StringComparison.Ordinal);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is AnimationAtlasCacheKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = StringComparer.Ordinal.GetHashCode(category ?? "");
+        hash = (hash * 397) ^ startFrame;
+        hash = (hash * 397) ^ endFrame;
+        hash = (hash * 397) ^ contentReloadVersion;
+        return hash;
+      }
+    }
+  }
+
   readonly struct PairLookupCacheKey : IEquatable<PairLookupCacheKey> {
     public readonly string libraryName;
     public readonly string labelPrefix;

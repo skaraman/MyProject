@@ -156,7 +156,7 @@ public static class RuntimeAssetCache {
     );
     trackedRequests[trackedId] = tracker;
     if (ShouldLogDebug()) {
-      Debug.Log($"[RuntimeAssetCache] BeginTrackedWarmup: id={trackedId}, reason='{reason}', expectsCritical={tracker.expectsCriticalSources}");
+      RuntimeLog.Log($"[RuntimeAssetCache] BeginTrackedWarmup: id={trackedId}, reason='{reason}', expectsCritical={tracker.expectsCriticalSources}");
     }
     runner.StartCoroutine(
       ResolveWarmupSourcesRoutine(
@@ -249,7 +249,7 @@ public static class RuntimeAssetCache {
     }
 
     if (!ShouldLogDebug() || keysToRemove.Count <= 0) return;
-    Debug.Log(
+    RuntimeLog.Log(
       "[RuntimeAssetCache] Cleared session scope" +
       " released=" + keysToRemove.Count +
       " reason='" + (reason ?? "") + "'"
@@ -273,7 +273,7 @@ public static class RuntimeAssetCache {
     if (asset == null) return false;
 
     if (ShouldLogDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[RuntimeAssetCache] Cache hit" +
         " address='" + normalizedAddress + "'" +
         " type=" + supportedType.Name +
@@ -304,7 +304,7 @@ public static class RuntimeAssetCache {
     string reason = ""
   ) {
     if (ShouldLogDebug()) {
-      Debug.Log($"[RuntimeAssetCache] ResolveWarmupSourcesRoutine START for tracker={tracker?.id}");
+      RuntimeLog.Log($"[RuntimeAssetCache] ResolveWarmupSourcesRoutine START for tracker={tracker?.id}");
     }
     var seenSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     yield return ResolveSourceList(criticalAddresses, isLabel: false, markCritical: true, scope, tracker, seenSources, reason);
@@ -315,13 +315,13 @@ public static class RuntimeAssetCache {
     if (tracker != null) {
       if (tracker.cancelled) {
         if (ShouldLogDebug()) {
-          Debug.Log($"[RuntimeAssetCache] ResolveWarmupSourcesRoutine CANCELLED for tracker={tracker.id}");
+          RuntimeLog.Log($"[RuntimeAssetCache] ResolveWarmupSourcesRoutine CANCELLED for tracker={tracker.id}");
         }
         yield break;
       }
       tracker.prepared = true;
       if (ShouldLogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[RuntimeAssetCache] Tracked warm prepared" +
           " id=" + tracker.id +
           " reason='" + tracker.reason + "'" +
@@ -361,7 +361,7 @@ public static class RuntimeAssetCache {
     string reason
   ) {
     if (ShouldLogDebug()) {
-      Debug.Log($"[RuntimeAssetCache] ResolveSourceRoutine: source='{source}', isLabel={isLabel}, tracker={tracker?.id}");
+      RuntimeLog.Log($"[RuntimeAssetCache] ResolveSourceRoutine: source='{source}', isLabel={isLabel}, tracker={tracker?.id}");
     }
     var queueHits = 0;
     var queueEnqueues = 0;
@@ -379,7 +379,7 @@ public static class RuntimeAssetCache {
       }
 
       if (ShouldLogDebug()) {
-        Debug.Log($"[RuntimeAssetCache] ResolveSourceRoutine handle done: source='{source}', status={handle.Status}, count={(handle.Status == AsyncOperationStatus.Succeeded ? handle.Result?.Count : 0)}");
+        RuntimeLog.Log($"[RuntimeAssetCache] ResolveSourceRoutine handle done: source='{source}', status={handle.Status}, count={(handle.Status == AsyncOperationStatus.Succeeded ? handle.Result?.Count : 0)}");
       }
 
       if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null) {
@@ -444,7 +444,7 @@ public static class RuntimeAssetCache {
 
     if (!ShouldLogDebug()) yield break;
 
-    Debug.Log(
+    RuntimeLog.Log(
       "[RuntimeAssetCache] Source resolved" +
       " key='" + source + "'" +
       " label=" + (isLabel ? 1 : 0) +
@@ -468,7 +468,7 @@ public static class RuntimeAssetCache {
       var failed = IsEntryFailed(key);
       if (ready || failed) readyCount++;
       if (logSnapshotKeys) {
-        Debug.Log($"[RuntimeAssetCache][DebugSnapshot] id={tracker.id} allKey='{key}' ready={ready} failed={failed}");
+        RuntimeLog.Log($"[RuntimeAssetCache][DebugSnapshot] id={tracker.id} allKey='{key}' ready={ready} failed={failed}");
       }
     }
 
@@ -478,7 +478,7 @@ public static class RuntimeAssetCache {
       var failed = IsEntryFailed(key);
       if (ready || failed) criticalReadyCount++;
       if (logSnapshotKeys) {
-        Debug.Log($"[RuntimeAssetCache][DebugSnapshot] id={tracker.id} criticalKey='{key}' ready={ready} failed={failed}");
+        RuntimeLog.Log($"[RuntimeAssetCache][DebugSnapshot] id={tracker.id} criticalKey='{key}' ready={ready} failed={failed}");
       }
     }
 
@@ -519,6 +519,7 @@ public static class RuntimeAssetCache {
 
   static void RecordRuntimeAssetTraceQueue(CacheEntry entry, bool highPriority) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "RuntimeAssetCache",
       stage: "queue",
@@ -532,6 +533,7 @@ public static class RuntimeAssetCache {
 
   static void RecordRuntimeAssetTracePromote(CacheEntry entry) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "RuntimeAssetCache",
       stage: "promote",
@@ -543,6 +545,7 @@ public static class RuntimeAssetCache {
 
   static void RecordRuntimeAssetTraceStart(CacheEntry entry) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "RuntimeAssetCache",
       stage: "start",
@@ -554,6 +557,7 @@ public static class RuntimeAssetCache {
 
   static void RecordRuntimeAssetTraceComplete(CacheEntry entry, UnityEngine.Object asset, bool loadSucceeded) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "RuntimeAssetCache",
       stage: loadSucceeded ? "complete" : "fail",
@@ -569,6 +573,7 @@ public static class RuntimeAssetCache {
 
   static void RecordRuntimeAssetTraceRelease(CacheEntry entry, string reason) {
     if (entry == null) return;
+    if (!AssetLoadTraceMonitor.IsEnabled) return;
     AssetLoadTraceMonitor.RecordEvent(
       source: "RuntimeAssetCache",
       stage: "release",
@@ -626,7 +631,7 @@ public static class RuntimeAssetCache {
       entry.lastError = "";
       RecordRuntimeAssetTraceComplete(entry, operation.Result, loadSucceeded: true);
       if (ShouldLogDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[RuntimeAssetCache] Loaded asset" +
           " address='" + entry.address + "'" +
           " type=" + entry.assetType.Name +
@@ -749,7 +754,7 @@ public static class RuntimeAssetCache {
     UnityEngine.Object.DontDestroyOnLoad(go);
     runner = go.AddComponent<RuntimeAssetCacheRunner>();
     if (ShouldLogDebug()) {
-      Debug.Log("[RuntimeAssetCache] Created RuntimeAssetCacheRunner game object.");
+      RuntimeLog.Log("[RuntimeAssetCache] Created RuntimeAssetCacheRunner game object.");
     }
   }
 

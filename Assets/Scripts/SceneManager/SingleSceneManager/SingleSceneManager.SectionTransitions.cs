@@ -64,7 +64,7 @@ public partial class SingleSceneManager {
     }
     QueueMenuRuntimeAssetWarmup("open_settings_menu");
     PrepareSettingsMenuState(openedFromPause ? Section.Pause : Section.MainMenu);
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][SettingsMenu] action=open" +
       " from=" + ResolveCurrentSection() +
       " return_target=" + settingsReturnTarget +
@@ -76,7 +76,7 @@ public partial class SingleSceneManager {
   void CloseSettingsMenu() {
     if (SettingsMenu != null && !SettingsMenu.activeInHierarchy) return;
     var targetSection = settingsReturnTarget == Section.Pause ? Section.Pause : Section.MainMenu;
-    Debug.Log(
+    RuntimeLog.Log(
       "[SingleSceneManager][SettingsMenu] action=close" +
       " to=" + targetSection +
       " instant_switch=1"
@@ -384,7 +384,7 @@ public partial class SingleSceneManager {
     }
 
     if ((rootWasInactive || managerWasDisabled) && ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][ProjectileManager] stage=ensure_damage_root_enabled" +
         " source=" + ResolveLoadFlowValue(source) +
         " root_active=" + (damageRoot.activeSelf ? 1 : 0) +
@@ -418,7 +418,7 @@ public partial class SingleSceneManager {
     if (gameplayProjectileManager != null &&
         !ReferenceEquals(previousManager, gameplayProjectileManager) &&
         ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][ProjectileManager] stage=resolved" +
         " manager=" + gameplayProjectileManager.gameObject.name +
         " root=" + (damageRoot != null ? damageRoot.name : "-")
@@ -521,7 +521,7 @@ public partial class SingleSceneManager {
       pendingPauseDialogResumeToken = 0;
       activePauseDialogResumeToken = nextPauseDialogResumeToken++;
       if (ShouldLogPauseDialogResumeDebug()) {
-        Debug.Log(
+        RuntimeLog.Log(
           "[SingleSceneManager][PauseDialogResume] suspend_token=" + activePauseDialogResumeToken +
           " section=" + ResolveCurrentSection()
         );
@@ -535,7 +535,7 @@ public partial class SingleSceneManager {
     pendingPauseDialogResumeToken = activePauseDialogResumeToken;
     activePauseDialogResumeToken = 0;
     if (pendingPauseDialogResumeToken > 0 && ShouldLogPauseDialogResumeDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][PauseDialogResume] resume_token=" + pendingPauseDialogResumeToken +
         " section=" + ResolveCurrentSection()
       );
@@ -547,7 +547,7 @@ public partial class SingleSceneManager {
     dialogInputOverrideActive = true;
     RefreshSceneTimeForCurrentUiState("dialog_started");
     if (ShouldLogGameplayRuntimeDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][DialogInput] active=1 source='" + (payload != null ? payload.ToString() : "") +
         "' current_section=" + ResolveCurrentSection() +
         " scene_multiplier=" + TimeScale.GetSceneMultiplier()
@@ -560,7 +560,7 @@ public partial class SingleSceneManager {
     dialogInputOverrideActive = false;
     RefreshSceneTimeForCurrentUiState("dialog_finished");
     if (ShouldLogGameplayRuntimeDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][DialogInput] active=0 source='" + (payload != null ? payload.ToString() : "") +
         "' current_section=" + ResolveCurrentSection() +
         " scene_multiplier=" + TimeScale.GetSceneMultiplier()
@@ -590,6 +590,17 @@ public partial class SingleSceneManager {
   }
 
   void StopSectionTransition(bool clearLoadingOverlay = true, bool restoreVisibleState = true) {
+    if (runtimeLocationTransitionRoutine != null) {
+      StopCoroutine(runtimeLocationTransitionRoutine);
+      runtimeLocationTransitionRoutine = null;
+      runtimeLocationTransitionInProgress = false;
+      runtimeLocationTransitionCommitApplied = false;
+      queuedRuntimeLocationId = "";
+      pendingGameplayLocationId = "";
+      ResumePlayerAnimationAfterLoadingOverlay("location_transition_cancelled");
+      ReleasePreUnlockResidentPins("location_transition_cancelled");
+      EndGameplayLoadFlowTrace(activeGameplayLoadFlowId, "location_transition_cancelled");
+    }
     if (sectionTransitionRoutine != null) {
       StopCoroutine(sectionTransitionRoutine);
       sectionTransitionRoutine = null;
@@ -640,7 +651,7 @@ public partial class SingleSceneManager {
     if (!IsDebugMainMenuShortcutPressed()) return;
     var current = ResolveCurrentSection();
     if (ShouldLogLoadFlowDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[SingleSceneManager][DebugShortcut] action=return_to_main_menu" +
         " section=" + current +
         " scene_active=" + (Scene != null && Scene.activeInHierarchy ? 1 : 0) +

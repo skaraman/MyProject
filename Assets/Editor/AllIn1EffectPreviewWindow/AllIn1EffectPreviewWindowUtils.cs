@@ -82,14 +82,30 @@ public static class AllIn1EffectPreviewWindowUtils {
     return new Rect(x, y, width, height);
   }
 
-  public static float LayeredNoise(float x, float y, float seed) {
+  public static float SeamlessLayeredNoise(float u, float v, float scaleX, float scaleY, float seed) {
     var amplitude = 0.5f;
     var frequency = 1f;
     var sum = 0f;
     var weight = 0f;
 
     for (var i = 0; i < 3; i++) {
-      var value = Mathf.PerlinNoise((x * frequency) + seed, (y * frequency) + (seed * 0.37f));
+      float sx = scaleX * frequency;
+      float sy = scaleY * frequency;
+      
+      float x = u * sx;
+      float y = v * sy;
+      
+      float n00 = Mathf.PerlinNoise(x + seed, y + seed);
+      float n10 = Mathf.PerlinNoise(x - sx + seed, y + seed);
+      float n01 = Mathf.PerlinNoise(x + seed, y - sy + seed);
+      float n11 = Mathf.PerlinNoise(x - sx + seed, y - sy + seed);
+      
+      float value = Mathf.Lerp(
+        Mathf.Lerp(n00, n10, u),
+        Mathf.Lerp(n01, n11, u),
+        v
+      );
+      
       sum += value * amplitude;
       weight += amplitude;
       amplitude *= 0.5f;

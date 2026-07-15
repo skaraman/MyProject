@@ -4,10 +4,15 @@ using CustomInspector;
 using UnityEngine;
 
 public class Spawner : MonoBehaviour {
+  const string AutoDialogTrigger = "auto";
+
   sealed class SpawnRuleState {
     public string enemyType;
     public GameObject prefab;
     public int maxAlive;
+    public int initialSpawnedCount;
+    public int respawnDelaySeconds = -1;
+    public List<float> pendingRespawnSeconds = new();
     public int level;
     public List<DemonStatModifier> statBonuses = new();
   }
@@ -24,26 +29,36 @@ public class Spawner : MonoBehaviour {
   private float timer = 0f;
   private bool canSpawn = false;
   private bool spawnGateOpen = false;
+  private bool spawnReadinessReceived = false;
+  private bool waitingForEpisodeDialog = false;
   private LocationInfo LocationData;
   readonly Dictionary<GameObject, Pool> enemyPoolsByPrefab = new();
   readonly Dictionary<GameObject, Pool> activeInstancePools = new();
   readonly List<SpawnRuleState> activeSpawnRules = new();
   readonly List<SpawnRuleState> spawnCandidateScratch = new();
   readonly List<HurtBox2D> hurtBoxScratch = new();
+  readonly List<GameObject> activeEnemyScratch = new(32);
 
   private List<Action> actions = new();
   string pendingSpawnLocationId = "";
   string lastDeferredInitState = "";
   GameObject initializedLocationInstance;
   string initializedLocationId = "";
+  int initializedEpisodeRevision = -1;
+  int initializedRegistryVersion = -1;
+  int spawnWarmupGeneration;
 
   void Start() {
     actions.Add(MessageBus.On("ReadyForSpawns", o => OnReadyForSpawns()));
     actions.Add(MessageBus.On("LocationUpdated", o => OnLocationUpdated(o)));
     actions.Add(MessageBus.On("LocationLocationChanged", o => OnLocationLocationChanged(o)));
+    actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
+    actions.Add(MessageBus.On(CharacterMessageTopics.DialogStateReady, o => OnDialogStateReady()));
+    actions.Add(MessageBus.On(ContentEpisodeProgression.ObjectivesCompletedTopic, o => OnEpisodeObjectivesCompleted()));
   }
 
   void OnDestroy() {
+    spawnWarmupGeneration += 1;
     for (var i = 0; i < actions.Count; i++) {
       actions[i]?.Invoke();
     }
@@ -52,9 +67,8 @@ public class Spawner : MonoBehaviour {
   }
 
   public void InitLocation() {
-    spawnGateOpen = true;
-    pendingSpawnLocationId = NormalizeLocationId(LocationManager.currentLocation);
-    TryInitializeLocation("manual");
+    spawnReadinessReceived = true;
+    TryOpenSpawnGate("manual", ignoreDialogGate: false);
   }
 
   public int GetCurrentLocationArchetypeWarmupCount() {
@@ -63,9 +77,65 @@ public class Spawner : MonoBehaviour {
   }
 
   void OnReadyForSpawns() {
+    spawnReadinessReceived = true;
+    TryOpenSpawnGate("ready_for_spawns", ignoreDialogGate: false);
+  }
+
+  void OnDialogFinished(object payload) {
+    if (!waitingForEpisodeDialog) return;
+
+    var reason = payload != null ? payload.ToString() : "";
+    if (!reason.EndsWith("_complete", StringComparison.OrdinalIgnoreCase)) return;
+
+    TryOpenSpawnGate("dialog_finished", ignoreDialogGate: true);
+  }
+
+  void OnDialogStateReady() {
+    if (!waitingForEpisodeDialog) return;
+    TryOpenSpawnGate("dialog_state_ready", ignoreDialogGate: false);
+  }
+
+  void TryOpenSpawnGate(string source, bool ignoreDialogGate) {
+    if (!spawnReadinessReceived) return;
+
+    if (ContentEpisodeProgression.HasCurrentObjectives()) {
+      if (!ContentEpisodeProgression.HasIncompleteCurrentObjectives()) {
+        CloseSpawnGate();
+        return;
+      }
+
+      var locationId = NormalizeLocationId(LocationManager.currentLocation);
+      var hasPendingDialog = DialogController.HasPendingTriggeredSequence(
+        locationId,
+        AutoDialogTrigger
+      );
+      if (!ignoreDialogGate &&
+          (!DialogController.IsStateReadyForCurrentSlot || hasPendingDialog)) {
+        waitingForEpisodeDialog = true;
+        spawnGateOpen = false;
+        canSpawn = false;
+        return;
+      }
+    }
+
+    waitingForEpisodeDialog = false;
     spawnGateOpen = true;
     pendingSpawnLocationId = NormalizeLocationId(LocationManager.currentLocation);
-    TryInitializeLocation("ready_for_spawns");
+    TryInitializeLocation(source);
+  }
+
+  void CloseSpawnGate() {
+    spawnWarmupGeneration += 1;
+    spawnReadinessReceived = false;
+    waitingForEpisodeDialog = false;
+    spawnGateOpen = false;
+    canSpawn = false;
+    timer = 0f;
+    ReturnActiveEnemiesToPools();
+  }
+
+  void OnEpisodeObjectivesCompleted() {
+    CloseSpawnGate();
   }
 
   void EnsureWarmupSpawnRules() {
@@ -79,72 +149,60 @@ public class Spawner : MonoBehaviour {
   }
 
   void OnLocationUpdated(object payload) {
+    spawnWarmupGeneration += 1;
     pendingSpawnLocationId = NormalizeLocationId(payload as string);
-    if (string.IsNullOrWhiteSpace(pendingSpawnLocationId) ||
-        string.Equals(pendingSpawnLocationId, LocationEnemyData.MainMenuLocationId, StringComparison.OrdinalIgnoreCase)) {
-      spawnGateOpen = false;
-    }
+    spawnReadinessReceived = false;
+    waitingForEpisodeDialog = false;
+    spawnGateOpen = false;
     canSpawn = false;
     timer = 0f;
-    ClearEnemyPools();
+    ReturnActiveEnemiesToPools();
     activeSpawnRules.Clear();
     LocationData = null;
     lastDeferredInitState = "";
     initializedLocationInstance = null;
     initializedLocationId = "";
+    initializedEpisodeRevision = -1;
+    initializedRegistryVersion = -1;
   }
 
   void OnLocationLocationChanged(object payload) {
-    if (!spawnGateOpen) return;
-
     if (!(payload is GameObject locationInstance) || locationInstance == null) {
       canSpawn = false;
       return;
     }
 
-    TryInitializeLocation("location_instance_changed");
+    var locationId = NormalizeLocationId(LocationManager.currentLocation);
+    if (string.Equals(
+      locationId,
+      LocationEnemyData.MainMenuLocationId,
+      StringComparison.OrdinalIgnoreCase
+    )) {
+      CloseSpawnGate();
+      return;
+    }
+
+    spawnReadinessReceived = true;
+    TryOpenSpawnGate("location_instance_changed", ignoreDialogGate: false);
+  }
+
+  public bool PrepareRuntimeForReveal() {
+    return TryPrepareLocationPools("loading_reveal", out _);
   }
 
   bool TryInitializeLocation(string source) {
-    var activeLocationInstance = ResolveActiveLocationInstance();
-    if (activeLocationInstance == null) {
-      LogDeferredInitState(source, "active_location_instance_missing");
-      canSpawn = false;
+    if (!TryPrepareLocationPools(source, out var activeLocationInstance)) {
       return false;
     }
-
-    if (!TryResolveLocation(out LocationData)) {
-      Debug.LogError("[Spawner] No valid location found for location '" + LocationManager.currentLocation + "'.");
-      canSpawn = false;
-      return false;
-    }
-    if (ReferenceEquals(initializedLocationInstance, activeLocationInstance) &&
-        string.Equals(initializedLocationId, LocationData.id, StringComparison.OrdinalIgnoreCase) &&
-        enemyPoolsByPrefab.Count > 0) {
-      return true;
-    }
-    if (!TryBuildActiveSpawnRules()) {
-      Debug.LogWarning(
-        "[Spawner] Location '" + LocationData.id + "' has no prefab-based spawn rules on the active location instance. Spawning disabled."
-      );
-      canSpawn = false;
-      return false;
-    }
-
-    canSpawn = false;
-    timer = 0f;
-    ClearEnemyPools();
-    if (!TryInitializeEnemyPools()) {
-      canSpawn = false;
-      return false;
-    }
-    initializedLocationInstance = activeLocationInstance;
-    initializedLocationId = LocationData != null ? LocationData.id : pendingSpawnLocationId;
+    spawnWarmupGeneration += 1;
+    var warmupGeneration = spawnWarmupGeneration;
+    var warmupLocationId = NormalizeLocationId(LocationManager.currentLocation);
 
     if (!Application.isPlaying || !prewarmEnemyWaveBeforeSpawning) {
       lastDeferredInitState = "";
       canSpawn = true;
-      Debug.Log(
+      SpawnInitialWave();
+      RuntimeLog.Log(
         "[Spawner] Spawn init ready source='" + source +
         "' location='" + (LocationData != null ? LocationData.id : pendingSpawnLocationId) +
         "' active_location='" + activeLocationInstance.name +
@@ -158,11 +216,12 @@ public class Spawner : MonoBehaviour {
       timer = 0f;
       lastDeferredInitState = "";
       canSpawn = true;
-      Debug.Log(
+      SpawnInitialWave();
+      RuntimeLog.Log(
         "[Spawner] Skipping local enemy-wave warmup because an active loading overlay/warm gate is already warming startup archetypes." +
         " location='" + LocationManager.currentLocation + "'"
       );
-      Debug.Log(
+      RuntimeLog.Log(
         "[Spawner] Spawn init ready source='" + source +
         "' location='" + (LocationData != null ? LocationData.id : pendingSpawnLocationId) +
         "' active_location='" + activeLocationInstance.name +
@@ -176,7 +235,8 @@ public class Spawner : MonoBehaviour {
     if (archetypes.Count <= 0) {
       lastDeferredInitState = "";
       canSpawn = true;
-      Debug.Log(
+      SpawnInitialWave();
+      RuntimeLog.Log(
         "[Spawner] Spawn init ready source='" + source +
         "' location='" + (LocationData != null ? LocationData.id : pendingSpawnLocationId) +
         "' active_location='" + activeLocationInstance.name +
@@ -190,7 +250,8 @@ public class Spawner : MonoBehaviour {
     if (orchestrator == null) {
       lastDeferredInitState = "";
       canSpawn = true;
-      Debug.Log(
+      SpawnInitialWave();
+      RuntimeLog.Log(
         "[Spawner] Spawn init ready source='" + source +
         "' location='" + (LocationData != null ? LocationData.id : pendingSpawnLocationId) +
         "' active_location='" + activeLocationInstance.name +
@@ -209,15 +270,70 @@ public class Spawner : MonoBehaviour {
       skipIfTokenAlreadyWarm: true
     );
     orchestrator.Run(request, _ => {
+      if (warmupGeneration != spawnWarmupGeneration ||
+          !spawnGateOpen ||
+          !spawnReadinessReceived ||
+          !string.Equals(
+            warmupLocationId,
+            NormalizeLocationId(LocationManager.currentLocation),
+            StringComparison.OrdinalIgnoreCase
+          ) ||
+          !ReferenceEquals(activeLocationInstance, ResolveActiveLocationInstance())) {
+        return;
+      }
+
       timer = 0f;
       lastDeferredInitState = "";
       canSpawn = true;
-      Debug.Log(
+      SpawnInitialWave();
+      RuntimeLog.Log(
         "[Spawner] Enemy warmup complete location='" + (LocationData != null ? LocationData.id : pendingSpawnLocationId) +
         "' rules=" + activeSpawnRules.Count +
         " can_spawn=1"
       );
     });
+    return true;
+  }
+
+  bool TryPrepareLocationPools(string source, out GameObject activeLocationInstance) {
+    activeLocationInstance = ResolveActiveLocationInstance();
+    if (activeLocationInstance == null) {
+      LogDeferredInitState(source, "active_location_instance_missing");
+      canSpawn = false;
+      return false;
+    }
+
+    if (!TryResolveLocation(out LocationData)) {
+      Debug.LogError("[Spawner] No valid location found for location '" + LocationManager.currentLocation + "'.");
+      canSpawn = false;
+      return false;
+    }
+    if (ReferenceEquals(initializedLocationInstance, activeLocationInstance) &&
+        string.Equals(initializedLocationId, LocationData.id, StringComparison.OrdinalIgnoreCase) &&
+        initializedEpisodeRevision == ContentEpisodeProgression.EpisodeRevision &&
+        initializedRegistryVersion == ActiveContentRegistryRuntime.ReloadVersion &&
+        enemyPoolsByPrefab.Count > 0) {
+      return true;
+    }
+    if (!TryBuildActiveSpawnRules()) {
+      Debug.LogWarning(
+        "[Spawner] Location '" + LocationData.id + "' has no prefab-based spawn rules on the active location instance. Spawning disabled."
+      );
+      canSpawn = false;
+      return false;
+    }
+
+    canSpawn = false;
+    timer = 0f;
+    ReturnActiveEnemiesToPools();
+    if (!TryInitializeEnemyPools()) {
+      canSpawn = false;
+      return false;
+    }
+    initializedLocationInstance = activeLocationInstance;
+    initializedLocationId = LocationData != null ? LocationData.id : pendingSpawnLocationId;
+    initializedEpisodeRevision = ContentEpisodeProgression.EpisodeRevision;
+    initializedRegistryVersion = ActiveContentRegistryRuntime.ReloadVersion;
     return true;
   }
 
@@ -234,16 +350,43 @@ public class Spawner : MonoBehaviour {
   void Update() {
     if (!canSpawn) return;
     if (LocationData == null || LocationData.spawnInterval <= 0f) return;
-    timer += TimeScale.GetDeltaTime(this);
+
+    var deltaTime = TimeScale.GetDeltaTime(this);
+    UpdateRespawnTimers(deltaTime);
+    timer += deltaTime;
     if (timer >= LocationData.spawnInterval) {
       SpawnEnemy();
       timer = 0f;
     }
   }
 
-  private void SpawnEnemy() {
+  void SpawnInitialWave() {
+    if (!Application.isPlaying) return;
+
+    var initialSpawnCount = 0;
+    for (var i = 0; i < activeSpawnRules.Count; i++) {
+      var spawnRule = activeSpawnRules[i];
+      if (spawnRule == null) continue;
+      initialSpawnCount += Mathf.Max(0, spawnRule.maxAlive - spawnRule.initialSpawnedCount);
+    }
+
+    var spawnedCount = 0;
+    for (var i = 0; i < initialSpawnCount; i++) {
+      if (!SpawnEnemy()) break;
+      spawnedCount += 1;
+    }
+
+    RuntimeLog.Log(
+      "[Spawner] Initial episode wave spawned" +
+      " requested=" + initialSpawnCount +
+      " spawned=" + spawnedCount +
+      " episode='" + ContentEpisodeProgression.ResolveCurrentEpisodeId() + "'"
+    );
+  }
+
+  private bool SpawnEnemy() {
     if (!TryPickSpawnRule(out var spawnRule)) {
-      return;
+      return false;
     }
     var selectedEnemyType = spawnRule.enemyType;
 
@@ -254,11 +397,19 @@ public class Spawner : MonoBehaviour {
         "[Spawner] Missing pool for enemy type '" + selectedEnemyType + "' prefab='" +
         (spawnRule.prefab != null ? spawnRule.prefab.name : "-") + "'."
       );
-      return;
+      return false;
     }
 
-    var spawned = pool.Spawn(spawnPosition, Quaternion.identity);
-    if (spawned == null) return;
+    var spawned = pool.Acquire(spawnPosition, Quaternion.identity);
+    if (spawned == null) return false;
+
+    if (spawnRule.initialSpawnedCount < spawnRule.maxAlive) {
+      spawnRule.initialSpawnedCount += 1;
+    }
+    else {
+      ConsumeReadyRespawn(spawnRule);
+    }
+
     activeInstancePools[spawned] = pool;
 
     ApplySpawnContextToEnemy(spawned, spawnRule);
@@ -266,13 +417,16 @@ public class Spawner : MonoBehaviour {
     var enemyController = spawned.GetComponent<EnemyController>();
     if (enemyController != null) {
       enemyController.SetEnemyType(selectedEnemyType, playDefaultImmediately: true);
-      return;
+      pool.Activate(spawned);
+      return true;
     }
 
     var enemyInfo = spawned.GetComponent<EnemyInfo>();
     if (enemyInfo != null) {
       enemyInfo.enemyType = selectedEnemyType;
     }
+    pool.Activate(spawned);
+    return true;
   }
 
   public void DespawnEnemy(GameObject enemy) {
@@ -284,8 +438,15 @@ public class Spawner : MonoBehaviour {
       return;
     }
 
+    var spawnRule = FindSpawnRule(pool);
     activeInstancePools.Remove(enemy);
     pool.Despawn(enemy);
+
+    if (spawnRule == null) return;
+    if (spawnRule.respawnDelaySeconds < 0) return;
+    if (!spawnGateOpen) return;
+
+    spawnRule.pendingRespawnSeconds.Add(spawnRule.respawnDelaySeconds);
   }
 
   public Vector3 GetSpawnPosition(bool rightSide) {
@@ -297,7 +458,7 @@ public class Spawner : MonoBehaviour {
     var x = rightSide ? worldRight + offset : worldLeft - offset;
     var spawnPosition = new Vector3(x, y, transform.position.z);
     if (ShouldLogGameplaySpawnDebug()) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[OffscreenSpawner]" +
         " right_side=" + (rightSide ? 1 : 0) +
         " world_left=" + worldLeft +
@@ -369,17 +530,23 @@ public class Spawner : MonoBehaviour {
     for (var i = 0; i < activeSpawnRules.Count; i++) {
       var spawnRule = activeSpawnRules[i];
       if (spawnRule == null || string.IsNullOrWhiteSpace(spawnRule.enemyType) || spawnRule.prefab == null) continue;
-      var pool = new Pool();
-      pool.Initialize(spawnRule.prefab, ParentHolder.transform, poolSize: Mathf.Max(spawnRule.maxAlive, 1));
-      enemyPoolsByPrefab[spawnRule.prefab] = pool;
-      Debug.Log(
+      var requiredPoolSize = Mathf.Max(spawnRule.maxAlive, 1);
+      if (!enemyPoolsByPrefab.TryGetValue(spawnRule.prefab, out var pool) || pool == null) {
+        pool = new Pool();
+        pool.Initialize(spawnRule.prefab, ParentHolder.transform, poolSize: requiredPoolSize);
+        enemyPoolsByPrefab[spawnRule.prefab] = pool;
+      }
+      else {
+        pool.EnsureCapacity(requiredPoolSize);
+      }
+      RuntimeLog.Log(
         "[Spawner] Initialized enemy pool" +
         " enemy_type='" + spawnRule.enemyType + "'" +
         " prefab='" + spawnRule.prefab.name + "'" +
         " level=" + spawnRule.level +
         " bonuses=" + (spawnRule.statBonuses != null ? spawnRule.statBonuses.Count : 0) +
         " max_alive=" + spawnRule.maxAlive +
-        " pool_size=" + Mathf.Max(spawnRule.maxAlive, 1)
+        " pool_size=" + requiredPoolSize
       );
     }
 
@@ -401,8 +568,29 @@ public class Spawner : MonoBehaviour {
     var rules = spawnRules.EnemyPrefabRules;
     for (var i = 0; i < rules.Count; i++) {
       var rule = rules[i];
-      if (rule == null || rule.prefab == null || rule.maxAlive <= 0) continue;
-      TryAddSpawnRule(rule.prefab, rule.maxAlive, rule.level, rule.statBonuses);
+      if (rule == null || rule.prefab == null) continue;
+
+      if (!ContentEpisodeProgression.HasCurrentObjectives()) continue;
+
+      var maxAlive = 0;
+      var respawnDelaySeconds = -1;
+      if (!TryResolveEnemyTypeFromPrefab(rule.prefab, out var enemyType)) continue;
+      if (!ContentEpisodeProgression.TryResolveCurrentSpawnCount(enemyType, out maxAlive)) continue;
+      if (!ContentEpisodeProgression.TryResolveCurrentRespawnSeconds(
+        enemyType,
+        out respawnDelaySeconds
+      )) {
+        respawnDelaySeconds = -1;
+      }
+
+      if (maxAlive <= 0) continue;
+      TryAddSpawnRule(
+        rule.prefab,
+        maxAlive,
+        respawnDelaySeconds,
+        rule.level,
+        rule.statBonuses
+      );
     }
 
     if (activeSpawnRules.Count <= 0) {
@@ -410,7 +598,7 @@ public class Spawner : MonoBehaviour {
     }
 
     if (logSummary) {
-      Debug.Log(
+      RuntimeLog.Log(
         "[Spawner] Using location prefab spawn rules" +
         " location='" + (LocationData != null ? LocationData.id : LocationManager.currentLocation) + "'" +
         " prefab_root='" + spawnRules.gameObject.name + "'" +
@@ -420,7 +608,13 @@ public class Spawner : MonoBehaviour {
     return true;
   }
 
-  bool TryAddSpawnRule(GameObject enemyPrefab, int maxAlive, int level, IList<DemonStatModifier> statBonuses) {
+  bool TryAddSpawnRule(
+    GameObject enemyPrefab,
+    int maxAlive,
+    int respawnDelaySeconds,
+    int level,
+    IList<DemonStatModifier> statBonuses
+  ) {
     if (enemyPrefab == null || maxAlive <= 0) return false;
     if (!TryResolveEnemyTypeFromPrefab(enemyPrefab, out var enemyType)) {
       Debug.LogWarning("[Spawner] Skipping spawn rule because enemy type could not be resolved from prefab '" + enemyPrefab.name + "'.");
@@ -433,18 +627,28 @@ public class Spawner : MonoBehaviour {
       if (!ReferenceEquals(existing.prefab, enemyPrefab)) continue;
       existing.enemyType = normalizedEnemyType;
       existing.maxAlive = Mathf.Max(existing.maxAlive, maxAlive);
+      if (existing.pendingRespawnSeconds.Capacity < existing.maxAlive) {
+        existing.pendingRespawnSeconds.Capacity = existing.maxAlive;
+      }
+      existing.respawnDelaySeconds = ResolveRespawnDelay(
+        existing.respawnDelaySeconds,
+        respawnDelaySeconds
+      );
       existing.level = Mathf.Max(level, 1);
       existing.statBonuses = CloneStatBonuses(statBonuses);
       return true;
     }
 
-    activeSpawnRules.Add(new SpawnRuleState {
+    var spawnRule = new SpawnRuleState {
       enemyType = normalizedEnemyType,
       prefab = enemyPrefab,
       maxAlive = Mathf.Max(maxAlive, 1),
+      respawnDelaySeconds = respawnDelaySeconds,
       level = Mathf.Max(level, 1),
       statBonuses = CloneStatBonuses(statBonuses)
-    });
+    };
+    spawnRule.pendingRespawnSeconds.Capacity = spawnRule.maxAlive;
+    activeSpawnRules.Add(spawnRule);
     return true;
   }
 
@@ -475,6 +679,11 @@ public class Spawner : MonoBehaviour {
       if (candidate == null || candidate.prefab == null || candidate.maxAlive <= 0) continue;
       if (!enemyPoolsByPrefab.TryGetValue(candidate.prefab, out var pool) || pool == null) continue;
       if (pool.ActiveCount >= candidate.maxAlive) continue;
+
+      var hasInitialSpawn = candidate.initialSpawnedCount < candidate.maxAlive;
+      var hasReadyRespawn = HasReadyRespawn(candidate);
+      if (!hasInitialSpawn && !hasReadyRespawn) continue;
+
       spawnCandidateScratch.Add(candidate);
     }
 
@@ -485,6 +694,58 @@ public class Spawner : MonoBehaviour {
 
     spawnRule = spawnCandidateScratch[UnityEngine.Random.Range(0, spawnCandidateScratch.Count)];
     return spawnRule != null;
+  }
+
+  void UpdateRespawnTimers(float deltaTime) {
+    if (deltaTime <= 0f) return;
+
+    for (var ruleIndex = 0; ruleIndex < activeSpawnRules.Count; ruleIndex++) {
+      var spawnRule = activeSpawnRules[ruleIndex];
+      if (spawnRule == null || spawnRule.pendingRespawnSeconds == null) continue;
+
+      for (var timerIndex = 0; timerIndex < spawnRule.pendingRespawnSeconds.Count; timerIndex++) {
+        spawnRule.pendingRespawnSeconds[timerIndex] -= deltaTime;
+      }
+    }
+  }
+
+  static bool HasReadyRespawn(SpawnRuleState spawnRule) {
+    if (spawnRule == null || spawnRule.pendingRespawnSeconds == null) return false;
+
+    for (var i = 0; i < spawnRule.pendingRespawnSeconds.Count; i++) {
+      if (spawnRule.pendingRespawnSeconds[i] <= 0f) return true;
+    }
+
+    return false;
+  }
+
+  static void ConsumeReadyRespawn(SpawnRuleState spawnRule) {
+    if (spawnRule == null || spawnRule.pendingRespawnSeconds == null) return;
+
+    for (var i = 0; i < spawnRule.pendingRespawnSeconds.Count; i++) {
+      if (spawnRule.pendingRespawnSeconds[i] > 0f) continue;
+      spawnRule.pendingRespawnSeconds.RemoveAt(i);
+      return;
+    }
+  }
+
+  SpawnRuleState FindSpawnRule(Pool pool) {
+    if (pool == null) return null;
+
+    for (var i = 0; i < activeSpawnRules.Count; i++) {
+      var spawnRule = activeSpawnRules[i];
+      if (spawnRule == null || spawnRule.prefab == null) continue;
+      if (!enemyPoolsByPrefab.TryGetValue(spawnRule.prefab, out var candidatePool)) continue;
+      if (ReferenceEquals(candidatePool, pool)) return spawnRule;
+    }
+
+    return null;
+  }
+
+  static int ResolveRespawnDelay(int currentDelay, int candidateDelay) {
+    if (currentDelay < 0) return candidateDelay;
+    if (candidateDelay < 0) return currentDelay;
+    return Mathf.Min(currentDelay, candidateDelay);
   }
 
   GameObject ResolveActiveLocationInstance() {
@@ -552,6 +813,31 @@ public class Spawner : MonoBehaviour {
     return clone;
   }
 
+  void ReturnActiveEnemiesToPools() {
+    activeEnemyScratch.Clear();
+    foreach (var pair in activeInstancePools) {
+      if (pair.Key != null) {
+        activeEnemyScratch.Add(pair.Key);
+      }
+    }
+
+    for (var i = 0; i < activeEnemyScratch.Count; i++) {
+      var enemy = activeEnemyScratch[i];
+      if (activeInstancePools.TryGetValue(enemy, out var pool)) {
+        pool?.Despawn(enemy);
+      }
+    }
+    activeInstancePools.Clear();
+    activeEnemyScratch.Clear();
+
+    for (var i = 0; i < activeSpawnRules.Count; i++) {
+      var spawnRule = activeSpawnRules[i];
+      if (spawnRule == null) continue;
+      spawnRule.initialSpawnedCount = 0;
+      spawnRule.pendingRespawnSeconds.Clear();
+    }
+  }
+
   void ClearEnemyPools() {
     foreach (var pair in enemyPoolsByPrefab) {
       pair.Value?.Clear();
@@ -580,7 +866,7 @@ public class Spawner : MonoBehaviour {
     }
 
     lastDeferredInitState = message;
-    Debug.Log("[Spawner] Deferred spawn init " + message);
+    RuntimeLog.Log("[Spawner] Deferred spawn init " + message);
   }
 }
 

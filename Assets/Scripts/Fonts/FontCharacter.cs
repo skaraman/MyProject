@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
+using UnityEngine.U2D.Animation;
 
 public class FontCharacter : MonoBehaviour {
   const string DefaultFontLibraryName = "UI/Fonts";
@@ -39,7 +39,7 @@ public class FontCharacter : MonoBehaviour {
     {'~', "~"}
   };
 
-  public Component spriteResolver;
+  public SpriteResolver spriteResolver;
   SpriteWithNormals spriteWithNormals;
   SpriteRenderer spriteRenderer;
   FontText parentFontText;
@@ -48,7 +48,6 @@ public class FontCharacter : MonoBehaviour {
 
   public char character { set; get; } = 'T';
   public string font { set; get; } = "Hand";
-  private MethodInfo setCategoryAndLabelMethod;
   bool canRenderCurrentGlyph = true;
   bool waitingForGlyphReadyRetry;
   SpriteColdLoadState glyphLoadState = SpriteColdLoadState.Ready;
@@ -120,7 +119,7 @@ public class FontCharacter : MonoBehaviour {
 
   void CacheDependencies() {
     if (spriteResolver == null) {
-      spriteResolver = GetComponent("SpriteResolver");
+      spriteResolver = GetComponent<SpriteResolver>();
     }
 
     if (spriteWithNormals == null) {
@@ -135,10 +134,6 @@ public class FontCharacter : MonoBehaviour {
       parentFontText = GetComponentInParent<FontText>();
     }
 
-    if (spriteResolver != null && setCategoryAndLabelMethod == null) {
-      setCategoryAndLabelMethod = spriteResolver.GetType().GetMethod("SetCategoryAndLabel",
-          new[] { typeof(string), typeof(string) });
-    }
   }
 
   GlyphRendererState CaptureRendererState() {
@@ -202,8 +197,8 @@ public class FontCharacter : MonoBehaviour {
   }
 
   void ApplySpriteResolver(string label) {
-    if (spriteResolver == null || setCategoryAndLabelMethod == null) return;
-    setCategoryAndLabelMethod.Invoke(spriteResolver, new object[] { font, label });
+    if (spriteResolver == null) return;
+    spriteResolver.SetCategoryAndLabel(font, label);
   }
 
   SpriteColdLoadState ResolveGlyphColdLoadState() {

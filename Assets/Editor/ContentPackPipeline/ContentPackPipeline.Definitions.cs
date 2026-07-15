@@ -29,6 +29,7 @@ public static partial class ContentPackPipeline {
   public const string StageGearsAssetPath = StageRootAssetPath + "/Gears";
   public const string StageSlicesAssetPath = StageRootAssetPath + "/Slices";
   public const string StageEpisodesAssetPath = StageRootAssetPath + "/Episodes";
+  public const string RuntimeCatalogFingerprintFileName = "contentpack-input.sha256";
   const string EsperanzaGroupedGearRoot = StageGearsAssetPath;
   const string AllIn1ShaderRoot = "Assets/Plugins/AllIn1SpriteShader/Shaders";
 
