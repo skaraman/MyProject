@@ -156,11 +156,16 @@ public class EnemyHealth : MonoBehaviour {
 
     var defenderStats = enemyInfo != null ? enemyInfo.ResolvedStats : null;
     var abilityRawDamage = EsperanzaAbilities.GetRawDamage(hitBox.hitId);
+    var abilityDamageMultiplier = EsperanzaAbilities.GetDamageMultiplier(hitBox.hitId);
     var damageResult = CombatDamageResolver.ResolveEsperanzaHit(
       AllStatValues.Esperanza,
       defenderStats,
-      abilityRawDamage
+      abilityRawDamage,
+      abilityDamageMultiplier
     );
+    if (damageResult.amount != null && damageResult.amount.IsPositive) {
+      HitEmphasisBurst.Play(hurtBox, hitBox);
+    }
     ApplyDamage(damageResult, hitBox.hitId, abilityRawDamage);
   }
 
@@ -253,7 +258,7 @@ public class EnemyHealth : MonoBehaviour {
 
     GrantAbilityHitXp(hitId, actualDamage);
 
-    SpawnDamageNumber(damageResult.amount);
+    SpawnDamageNumber(damageResult.amount, damageResult.kind);
     UpdateVisuals();
 
     if (ShouldLogDebug()) {
@@ -264,6 +269,9 @@ public class EnemyHealth : MonoBehaviour {
         " damage_kind='" + damageResult.kind + "'" +
         " hit_id='" + (hitId ?? "") + "'" +
         " ability_damage=" + abilityRawDamage +
+        " flat_damage=" + damageResult.flatDamage.ToDisplayString() +
+        " ability_multiplier=" + damageResult.abilityDamageMultiplier.ToString("0.###") +
+        " range_multiplier=" + damageResult.damageRangeMultiplier.ToString("0.###") +
         " base_damage=" + damageResult.baseDamage.ToDisplayString() +
         " armor_before_pen=" + damageResult.armorBeforePenetration.ToDisplayString() +
         " penetration_applied=" + damageResult.penetrationApplied.ToDisplayString() +
@@ -341,7 +349,7 @@ public class EnemyHealth : MonoBehaviour {
   Pool damageNumberPool;
   GameObject damageNumberPoolPrefab;
 
-  void SpawnDamageNumber(EndlessNumber amount) {
+  void SpawnDamageNumber(EndlessNumber amount, CombatDamageKind damageKind) {
     if (damageNumberPrefab == null || amount == null || !amount.IsPositive) return;
 
     EnsureDamageNumberPool();
@@ -373,6 +381,7 @@ public class EnemyHealth : MonoBehaviour {
     motion.Play(DamageNumberLifetimeSeconds);
 
     damageNumberPool.Activate(dmgObj);
+    motion.SetMainColor(fontText, CombatNumberPalette.ResolveDamage(damageKind));
     damageNumberPool.DespawnAfter(dmgObj, DamageNumberLifetimeSeconds);
   }
 
@@ -417,13 +426,17 @@ public class EnemyHealth : MonoBehaviour {
     displayedCurrentHp = enemyInfo.currentHp.Copy();
     displayedMaxHp = maxHp.Copy();
 
-    if (currentHpChanged && healthText != null) {
-      healthText.content = FormatHealthAmount(enemyInfo.currentHp, slashPrefixed: false);
+    if ((currentHpChanged || maxHpChanged) && healthText != null) {
+      healthText.content = FormatHealthAmount(
+        enemyInfo.currentHp,
+        maxHp,
+        slashPrefixed: false
+      );
       healthText.Generate();
     }
 
     if (maxHpChanged && maxHealthText != null) {
-      maxHealthText.content = FormatHealthAmount(maxHp, slashPrefixed: true);
+      maxHealthText.content = FormatHealthAmount(maxHp, maxHp, slashPrefixed: true);
       maxHealthText.Generate();
     }
 
@@ -445,10 +458,26 @@ public class EnemyHealth : MonoBehaviour {
       : IntegerTextCache.Get(0);
   }
 
-  static string FormatHealthAmount(EndlessNumber amount, bool slashPrefixed) {
-    var formattedAmount = amount != null && amount.IsPositive
-      ? amount.ToGlyphString()
-      : IntegerTextCache.Get(0);
+  static string FormatHealthAmount(
+    EndlessNumber amount,
+    EndlessNumber maximumAmount,
+    bool slashPrefixed
+  ) {
+    var formattedAmount = IntegerTextCache.Get(0);
+    if (amount != null && amount.IsPositive) {
+      var amountSuffix = amount.CompactSuffix;
+      var maximumSuffix = maximumAmount != null ? maximumAmount.CompactSuffix : "";
+      var sharesMaximumSuffix = !slashPrefixed &&
+                                !string.IsNullOrEmpty(maximumSuffix) &&
+                                string.Equals(
+                                  amountSuffix,
+                                  maximumSuffix,
+                                  System.StringComparison.Ordinal
+                                );
+      formattedAmount = sharesMaximumSuffix
+        ? amount.ToCompactMantissaString()
+        : amount.ToGlyphString();
+    }
     return slashPrefixed ? "/" + formattedAmount : formattedAmount;
   }
 

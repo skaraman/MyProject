@@ -3641,7 +3641,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 5.4, y: 1.07}
+  m_Size: {x: 5.4, y: 1.05}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 0
@@ -45664,6 +45664,7 @@ GameObject:
   m_Component:
   - component: {fileID: 414472903}
   - component: {fileID: 414472904}
+  - component: {fileID: 987654321}
   m_Layer: 6
   m_Name: LIGHTS
   m_TagString: Untagged
@@ -45710,7 +45711,7 @@ MonoBehaviour:
   nightAmount: 0
   shadowSortingLayer: GameMG
   shadowSortingOrder: 1000
-  sunShadowDirection: {x: 0.45, y: -1}
+  sunShadowDirection: {x: 0, y: -1}
   sunShadowOpacity: 0.28
   localShadowOpacity: 0.24
   localLightSwitchHysteresis: 0.15
@@ -51838,6 +51839,54 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   spriteResolver: {fileID: 469856638}
+--- !u!1 &469904478
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 469904479}
+  - component: {fileID: 2147000002}
+  m_Layer: 6
+  m_Name: ControlsPage
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &469904479
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 469904478}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1805954778}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2147000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 469904478}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5c6574d379b4ad9a174c43b722c7ae2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  bindingSprite: {fileID: 5821839773869540889, guid: d4ecde9f7c081bd40bdd0f77fb18c8d5, type: 3}
+  dividerSprite: {fileID: -8942817527115040722, guid: d4ecde9f7c081bd40bdd0f77fb18c8d5, type: 3}
+  previousPageSprite: {fileID: -1158871858569825772, guid: d4ecde9f7c081bd40bdd0f77fb18c8d5, type: 3}
+  nextPageSprite: {fileID: 6114706908185900674, guid: d4ecde9f7c081bd40bdd0f77fb18c8d5, type: 3}
 --- !u!1 &471141251
 GameObject:
   m_ObjectHideFlags: 0
@@ -91404,8 +91453,8 @@ MonoBehaviour:
   m_SelectionSources:
     rid: 8997989836200345610
   m_FalloffIntensity: 0.808
-  m_Color: {r: 1, g: 0.84228, b: 0.14117646, a: 1}
-  m_Intensity: 1.63
+  m_Color: {r: 1, g: 0.96, b: 0.88, a: 1}
+  m_Intensity: 1.2
   m_LightVolumeIntensity: 0
   m_LightVolumeEnabled: 0
   m_ApplyToSortingLayers: 0fd32e51cbb7f124d92f446e
@@ -108314,6 +108363,42 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   spriteResolver: {fileID: 986856851}
+--- !u!114 &987654321
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 414472902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 33145c9fb7bc7b443b474b7d316923c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::DayNightCycle2D
+  cycleDurationMinutes: 24
+  currentHour: 12
+  timeSpeedMultiplier: 1
+  pauseTime: 0
+  sunGlobalLight: {fileID: 825027689}
+  moonGlobalLight: {fileID: 0}
+  ambientGlobalLight: {fileID: 2079573733}
+  sceneLighting: {fileID: 414472904}
+  daySunColor: {r: 1, g: 0.96, b: 0.88, a: 1}
+  daySunIntensity: 1.2
+  nightMoonColor: {r: 0.35, g: 0.45, b: 0.75, a: 1}
+  nightMoonIntensity: 0.3
+  transitionSunColor: {r: 1, g: 0.62, b: 0.38, a: 1}
+  dayAmbientColor: {r: 0.95, g: 0.95, b: 1, a: 1}
+  dayAmbientIntensity: 1
+  nightAmbientColor: {r: 0.14, g: 0.16, b: 0.38, a: 1}
+  nightAmbientIntensity: 0.28
+  transitionAmbientColor: {r: 0.72, g: 0.48, b: 0.52, a: 1}
+  updateShadowDirection: 1
+  morningShadowDir: {x: 1, y: -0.4}
+  noonShadowDir: {x: 0, y: -1}
+  eveningShadowDir: {x: -1, y: -0.4}
+  nightMoonShadowDir: {x: -0.5, y: -0.8}
+  dayCount: 1
 --- !u!1 &992017107
 GameObject:
   m_ObjectHideFlags: 0
@@ -144761,7 +144846,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 5.4, y: 1.07}
+  m_Size: {x: 5.44, y: 1.08}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 0
@@ -192983,6 +193068,7 @@ Transform:
   - {fileID: 353358846}
   - {fileID: 1424620046}
   - {fileID: 801563551}
+  - {fileID: 469904479}
   m_Father: {fileID: 510416587}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1807550193
@@ -207487,7 +207573,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 5.4, y: 1.07}
+  m_Size: {x: 5.4, y: 1.05}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 0
@@ -219620,8 +219706,8 @@ MonoBehaviour:
   m_SelectionSources:
     rid: 8997989836200345609
   m_FalloffIntensity: 0.5
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1.01
+  m_Color: {r: 0.95, g: 0.95, b: 1, a: 1}
+  m_Intensity: 1
   m_LightVolumeIntensity: 0
   m_LightVolumeEnabled: 0
   m_ApplyToSortingLayers: 0fd32e51cbb7f124c1aacab68fb6c544d92f446e

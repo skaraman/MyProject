@@ -49,7 +49,7 @@ public partial class AnimationController {
 
   public float GetAnimationDurationSeconds(string animationName) {
     if (animationData != null && animationData.TryGetValue(animationName, out var anim) && anim.duration > 0) {
-      return ResolveAnimationDurationMilliseconds(anim) / 1000f;
+      return ResolveAnimationPlaybackDurationMilliseconds(anim) / 1000f;
     }
     return 0f;
   }
@@ -63,8 +63,12 @@ public partial class AnimationController {
     if (!animationData.TryGetValue(resolvedAnimation, out var animation)) return false;
     if (animation == null || animation.duration <= 0) return false;
 
-    var threshold = ResolveAnimationDurationMilliseconds(animation) * Mathf.Clamp01(normalizedTime);
-    return animationTimer >= threshold;
+    var legDuration = ResolveAnimationDurationMilliseconds(animation);
+    var elapsed = animation.pingPongOnce && pingPong
+      ? legDuration + animationTimer
+      : animationTimer;
+    var threshold = ResolveAnimationPlaybackDurationMilliseconds(animation) * Mathf.Clamp01(normalizedTime);
+    return elapsed >= threshold;
   }
 
   public void QueueFlip() {
@@ -158,7 +162,7 @@ public partial class AnimationController {
         else {
           currentFrame = anim.end;
           isPlaying = false;
-          if (anim.pingPong) {
+          if (anim.pingPong || anim.pingPongOnce) {
             animationTimer = 0f;
             isPlaying = true;
             pingPong = true;
@@ -170,12 +174,17 @@ public partial class AnimationController {
       int frameOffset = Mathf.FloorToInt((anim.end - anim.start) * normalTime);
       currentFrame = anim.end - frameOffset;
       if (normalTime >= 1f) {
-        isPlaying = true;
         currentFrame = anim.start;
         pingPong = false;
         animationTimer = 0f;
-        SetBounces(resetOffensiveHBoxes: true);
-        cycleReset = true;
+        if (anim.pingPongOnce) {
+          isPlaying = false;
+        }
+        else {
+          isPlaying = true;
+          SetBounces(resetOffensiveHBoxes: true);
+          cycleReset = true;
+        }
       }
     }
 
@@ -196,7 +205,9 @@ public partial class AnimationController {
     TryTriggerFrameEvents(anim, lastFrame, currentFrame);
     lastFrame = currentFrame;
     TraceActivePunchFrameStep(currentFrame, deltaMs);
-    if (!isPlaying && !anim.loop && !anim.pingPong && currentFrame >= anim.end) {
+    if (!isPlaying && !anim.loop &&
+        ((!anim.pingPong && !anim.pingPongOnce && currentFrame >= anim.end) ||
+         (anim.pingPongOnce && currentFrame <= anim.start))) {
       EndActivePunchTrace("completed", currentFrame);
     }
   }
@@ -209,6 +220,11 @@ public partial class AnimationController {
       animation.duration / 1000f,
       AttackSpeedSeconds
     ) * 1000f;
+  }
+
+  float ResolveAnimationPlaybackDurationMilliseconds(AnimData animation) {
+    var duration = ResolveAnimationDurationMilliseconds(animation);
+    return animation != null && animation.pingPongOnce ? duration * 2f : duration;
   }
 
   float ResolveCurrentAnimationDurationScale() {
@@ -334,6 +350,7 @@ public partial class AnimationController {
       StreamingWarmOrchestrator.IsWarmGateRunning;
     if (loadingOverlayWarmGateActive) return false;
     if (spriteTargets.Count > MaxTargetsForGateReadinessChecks) return false;
+    if (HasSeenAnimationCategory(targetCategory)) return false;
     if (!HasMixedVisibleSpriteTargets()) return false;
     if (AreAllTargetsReadyForFrame(targetCategory, frame)) return false;
 

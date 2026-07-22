@@ -95,7 +95,8 @@ public static class DialogData {
         CreateNode(
           lineNumber: 1,
           text: "Your life is forfeit!",
-          emotion: "Normal"
+          emotion: "Normal",
+          soundEffectId: "dialog.imp"
         )
       ),
       new DialogSpeakerDefinition(
@@ -106,7 +107,8 @@ public static class DialogData {
         CreateNode(
           lineNumber: 2,
           text: "Whoa that thing talked!",
-          emotion: "Surprise"
+          emotion: "Surprise",
+          soundEffectId: "dialog.esperanza"
         )
       )
     )
@@ -150,7 +152,8 @@ public static class DialogData {
     string speakerName = "",
     string avatarForm = "",
     GameplayDialogController.DialogOtherType otherType = GameplayDialogController.DialogOtherType.Auto,
-    string portraitLibraryName = ""
+    string portraitLibraryName = "",
+    string soundEffectId = ""
   ) {
     return new GameplayDialogController.GameplayDialogNode {
       lineNumber = Mathf.Max(lineNumber, 0),
@@ -160,7 +163,8 @@ public static class DialogData {
       speakerName = speakerName ?? "",
       avatarForm = avatarForm ?? "",
       otherType = otherType,
-      portraitLibraryName = portraitLibraryName ?? ""
+      portraitLibraryName = portraitLibraryName ?? "",
+      soundEffectId = soundEffectId ?? ""
     };
   }
 

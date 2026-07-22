@@ -152,6 +152,13 @@ public static class DemonStats {
 
     definition.ResolveStatsInto(resolvedStats, statNameScratch, level, bonuses);
     ApplyEpisodeProgressMultiplier(resolvedStats, statNameScratch);
+
+    // DEBUG START: Force exact Imp health after level, bonus, and episode scaling. Remove to restore normal HP.
+    if (string.Equals(NormalizeDemonType(demonType), ImpData.EnemyType, StringComparison.OrdinalIgnoreCase)) {
+      resolvedStats["HP"] = new StatValue("HP", 10000d);
+    }
+    // DEBUG END: Force exact Imp health after level, bonus, and episode scaling.
+
     return true;
   }
 

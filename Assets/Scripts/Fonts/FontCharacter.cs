@@ -114,7 +114,7 @@ public class FontCharacter : MonoBehaviour {
 
   bool TryGetGlyphLabel(out string label) {
     if (EndlessNumberSuffixMap.TryGetSpriteToken(character, out var spriteToken)) {
-      label = IntegerTextCache.Get(spriteToken);
+      label = EndlessNumberSuffixMap.GetSpriteLabel(spriteToken);
       return true;
     }
     if (cacheBank.TryGetValue(character, out label)) return true;

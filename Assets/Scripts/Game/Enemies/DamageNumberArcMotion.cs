@@ -1,8 +1,11 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 [DisallowMultipleComponent]
 public class DamageNumberArcMotion : MonoBehaviour {
+  static readonly int MainColorPropertyId = Shader.PropertyToID("_Color");
+
   const float MinimumLifetimeSeconds = 0.01f;
   const float MinimumArcHeight = 0.75f;
   const float MaximumArcHeight = 1.05f;
@@ -15,10 +18,13 @@ public class DamageNumberArcMotion : MonoBehaviour {
   const float FinalScale = 1.3f;
 
   Coroutine motion;
+  readonly List<SpriteRenderer> textRenderers = new(8);
+  MaterialPropertyBlock textPropertyBlock;
   Vector3 restingLocalScale;
   float lifetimeSeconds = 1.5f;
 
   void Awake() {
+    textPropertyBlock = new MaterialPropertyBlock();
     restingLocalScale = transform.localScale;
   }
 
@@ -37,6 +43,25 @@ public class DamageNumberArcMotion : MonoBehaviour {
     lifetimeSeconds = Mathf.Max(durationSeconds, MinimumLifetimeSeconds);
     if (isActiveAndEnabled) {
       StartMotion();
+    }
+  }
+
+  public void SetMainColor(FontText fontText, Color color) {
+    if (fontText == null) {
+      return;
+    }
+
+    textRenderers.Clear();
+    fontText.GetComponentsInChildren(true, textRenderers);
+    for (var i = 0; i < textRenderers.Count; i++) {
+      var renderer = textRenderers[i];
+      if (renderer != null) {
+        renderer.color = Color.white;
+        textPropertyBlock.Clear();
+        renderer.GetPropertyBlock(textPropertyBlock);
+        textPropertyBlock.SetColor(MainColorPropertyId, color);
+        renderer.SetPropertyBlock(textPropertyBlock);
+      }
     }
   }
 

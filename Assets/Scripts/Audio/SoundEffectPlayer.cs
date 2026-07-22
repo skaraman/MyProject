@@ -20,6 +20,7 @@ public sealed class SoundEffectRequest {
 
 public sealed class SoundEffectPlayer : MonoBehaviour {
   sealed class PendingPlay {
+    public long sequence;
     public float effectVolume;
     public float requestedVolume;
     public float pitch;
@@ -76,9 +77,12 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
 
   public const string PlayMessage = "soundEffect.play";
   public const string MenuSelectSoundId = "menu.select";
+  public const string EsperanzaHurt1SoundId = "esperanza.hurt1";
+  public const string EsperanzaHurt2SoundId = "esperanza.hurt2";
   const string Episode1_1AmbienceSoundId = "ambience.episode1.1";
   const string Episode1_1AmbienceLoopId = "episode.ambience";
   const string Episode1_1Id = "Episode1.1";
+  const float GameplayCriticalPreloadTimeoutSeconds = 2f;
 
   static SoundEffectPlayer runtimeInstance;
 
@@ -109,18 +113,42 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
   bool IsApplicationSuspended => !applicationFocused || applicationPaused;
   bool IsPlaybackSuspended => pauseMenuOpen || IsApplicationSuspended;
 
-  public static void Play(string soundId) {
-    Play(soundId, 1f, 1f);
+  public static long Play(string soundId) {
+    return Play(soundId, 1f, 1f);
   }
 
-  public static void Play(string soundId, float volume, float pitch = 1f) {
+  public static long Play(string soundId, float volume, float pitch = 1f) {
     if (runtimeInstance == null) {
       Debug.LogWarning("[SoundEffectPlayer] Play ignored because no player is active.");
-      return;
+      return 0;
     }
 
     var request = new SoundEffectRequest(soundId, volume, pitch);
-    runtimeInstance.RequestPlay(request);
+    return runtimeInstance.RequestPlay(request);
+  }
+
+  public static void Stop(long sequence) {
+    if (runtimeInstance != null) {
+      runtimeInstance.StopSequenceInternal(sequence);
+    }
+  }
+
+  public static IEnumerator PreloadGameplayCriticalClips() {
+    var player = runtimeInstance;
+    if (player == null || !player.isActiveAndEnabled) {
+      yield break;
+    }
+
+    var hurt1 = player.GetOrRequestDefinedClip(EsperanzaHurt1SoundId);
+    var hurt2 = player.GetOrRequestDefinedClip(EsperanzaHurt2SoundId);
+    var deadline = Time.realtimeSinceStartup + GameplayCriticalPreloadTimeoutSeconds;
+    while (ReferenceEquals(runtimeInstance, player) &&
+           player.isActiveAndEnabled &&
+           Time.realtimeSinceStartup < deadline &&
+           ((hurt1 != null && hurt1.loading) ||
+            (hurt2 != null && hurt2.loading))) {
+      yield return null;
+    }
   }
 
   public static bool SetLoop(
@@ -404,9 +432,9 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     Debug.LogError("[SoundEffectPlayer] Invalid soundEffect.play payload.");
   }
 
-  void RequestPlay(SoundEffectRequest request) {
+  long RequestPlay(SoundEffectRequest request) {
     if (request == null || string.IsNullOrWhiteSpace(request.soundId)) {
-      return;
+      return 0;
     }
 
     var soundId = request.soundId.Trim();
@@ -416,15 +444,17 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
       StringComparison.OrdinalIgnoreCase
     );
     if (IsApplicationSuspended || (pauseMenuOpen && !canPlayDuringPauseMenu)) {
-      return;
+      return 0;
     }
 
     if (definitions == null || !definitions.TryGetValue(soundId, out var definition)) {
       Debug.LogWarning("[SoundEffectPlayer] Unknown sound id '" + soundId + "'.");
-      return;
+      return 0;
     }
 
+    var seq = ++voiceSequence;
     var pending = new PendingPlay {
+      sequence = seq,
       effectVolume = definition.volume,
       requestedVolume = Mathf.Max(request.volume, 0f),
       pitch = Mathf.Clamp(request.pitch, 0.1f, 3f),
@@ -432,6 +462,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     };
 
     RequestClip(definition.clipAddress, pending);
+    return seq;
   }
 
   float ResolveVolume(float effectVolume, float requestedVolume) {
@@ -451,6 +482,15 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     }
 
     entry.pending.Add(pending);
+  }
+
+  ClipCacheEntry GetOrRequestDefinedClip(string soundId) {
+    if (definitions == null ||
+        !definitions.TryGetValue(soundId, out var definition)) {
+      return null;
+    }
+
+    return GetOrRequestClip(definition.clipAddress);
   }
 
   ClipCacheEntry GetOrRequestClip(string address) {
@@ -604,7 +644,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
       return;
     }
 
-    voice.sequence = ++voiceSequence;
+    voice.sequence = pending.sequence > 0 ? pending.sequence : ++voiceSequence;
     voice.canPlayDuringPauseMenu = pending.canPlayDuringPauseMenu;
     voice.playbackSuspended = false;
     voice.effectVolume = pending.effectVolume;
@@ -915,6 +955,26 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
 
     loop.source.Stop();
     loop.source.clip = null;
+  }
+
+  void StopSequenceInternal(long sequence) {
+    if (sequence == 0) return;
+
+    for (var i = 0; i < voices.Count; i++) {
+      if (voices[i].sequence == sequence) {
+        voices[i].source.Stop();
+        return;
+      }
+    }
+
+    foreach (var entry in clipCache.Values) {
+      for (var i = 0; i < entry.pending.Count; i++) {
+        if (entry.pending[i].sequence == sequence) {
+          entry.pending.RemoveAt(i);
+          return;
+        }
+      }
+    }
   }
 
   Voice ResolveVoice() {

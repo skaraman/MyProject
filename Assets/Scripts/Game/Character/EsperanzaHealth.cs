@@ -5,11 +5,20 @@ using UnityEngine.Events;
 [RequireComponent(typeof(HurtBox2D))]
 public sealed class EsperanzaHealth : MonoBehaviour {
   const string HurtAnimation = "Hurt";
+  const int SharedDamageNumberPoolSize = 24;
+  const float DamageNumberLifetimeSeconds = 1.5f;
+  const int DamageNumberGlyphCapacity = 7;
 
   HurtBox2D hurtBox;
   CharacterState characterState;
   GearController gearController;
   UnityAction<HitBox2D> hitListener;
+  Pool damageNumberPool;
+  GameObject damageNumberPoolPrefab;
+
+  [Header("Visual Feedback")]
+  [SerializeField, Tooltip("Prefab used to show red damage numbers over ESPER.")]
+  GameObject damageNumberPrefab;
 
   static bool ShouldLogCombatDebug() {
     return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
@@ -54,10 +63,10 @@ public sealed class EsperanzaHealth : MonoBehaviour {
     var actualDamage = state.ApplyDamage(damageResult.amount, hitBox.hitId);
     var currentHealth = state.CurrentHealth;
     var maximumHealth = state.MaximumHealth;
-    MessageBus.Send(
-      CharacterMessageTopics.HitReceived,
-      new CharacterDamageEvent(actualDamage, currentHealth, maximumHealth, hitBox.hitId)
-    );
+    if (actualDamage != null && actualDamage.IsPositive) {
+      HitEmphasisBurst.Play(hurtBox, hitBox);
+    }
+    SpawnDamageNumber(actualDamage);
     ResolveGearController()?.TryPlayAnimation(
       HurtAnimation,
       forceRestart: true,
@@ -75,6 +84,60 @@ public sealed class EsperanzaHealth : MonoBehaviour {
         " hp_max=" + maximumHealth.ToDisplayString()
       );
     }
+  }
+
+  void SpawnDamageNumber(EndlessNumber amount) {
+    if (damageNumberPrefab == null || amount == null || !amount.IsPositive) {
+      return;
+    }
+
+    EnsureDamageNumberPool();
+    if (damageNumberPool == null) {
+      return;
+    }
+
+    var damageObject = damageNumberPool.Acquire(ResolveDamageNumberSpawnPosition(), Quaternion.identity);
+    if (damageObject == null) {
+      return;
+    }
+
+    var fontText = damageObject.GetComponentInChildren<FontText>(includeInactive: true);
+    if (fontText != null) {
+      fontText.EnsureGlyphCapacity(DamageNumberGlyphCapacity);
+      fontText.content = amount.ToGlyphString();
+    }
+
+    var motion = damageObject.GetComponent<DamageNumberArcMotion>();
+    if (motion == null) {
+      motion = damageObject.AddComponent<DamageNumberArcMotion>();
+    }
+    motion.Play(DamageNumberLifetimeSeconds);
+
+    damageNumberPool.Activate(damageObject);
+    motion.SetMainColor(fontText, CombatNumberPalette.PlayerDamage);
+    damageNumberPool.DespawnAfter(damageObject, DamageNumberLifetimeSeconds);
+  }
+
+  Vector3 ResolveDamageNumberSpawnPosition() {
+    var hurtCollider = hurtBox != null ? hurtBox.GetComponent<Collider2D>() : null;
+    return hurtCollider != null ? hurtCollider.bounds.center : transform.position;
+  }
+
+  void EnsureDamageNumberPool() {
+    if (damageNumberPrefab == null) {
+      return;
+    }
+    if (damageNumberPool != null && damageNumberPoolPrefab == damageNumberPrefab) {
+      return;
+    }
+
+    damageNumberPoolPrefab = damageNumberPrefab;
+    damageNumberPool = Pool.GetShared(
+      damageNumberPrefab,
+      null,
+      SharedDamageNumberPoolSize,
+      false
+    );
   }
 
   CharacterState ResolveCharacterState() {

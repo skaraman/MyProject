@@ -1,7 +1,6 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -348,7 +347,7 @@ public static partial class ContentPackPipeline {
     }
 
     for (var token = 1; token <= EndlessNumberSuffixMap.TokenRadix; token++) {
-      var label = token.ToString(CultureInfo.InvariantCulture);
+      var label = EndlessNumberSuffixMap.GetSpriteLabel(token);
       if (!labels.Contains(label)) {
         errors.Add(
           "Core damage-number tier library is missing sprite token '" + label +

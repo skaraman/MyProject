@@ -88,13 +88,29 @@ namespace CustomInspector.Editor
             public void Initialize(SerializedProperty property, PropertyAttribute attribute, FieldInfo fieldInfo)
             {
                 Type fieldType = DirtyValue.GetType(property);
+                Type dictType = fieldType;
 
-                if (!fieldType.IsGenericType || fieldType.GetGenericArguments().Length != 2)
+                while (dictType != null)
+                {
+                    if (dictType.IsGenericType && dictType.GetGenericArguments().Length == 2)
+                    {
+                        Type genericTypeDef = dictType.GetGenericTypeDefinition();
+                        if (genericTypeDef == typeof(SerializableDictionary<,>) ||
+                            genericTypeDef == typeof(SerializableSortedDictionary<,>) ||
+                            genericTypeDef == typeof(ReorderableDictionary<,>))
+                        {
+                            break;
+                        }
+                    }
+                    dictType = dictType.BaseType;
+                }
+
+                if (dictType == null)
                 {
                     ErrorMessage = "[Dictionary]-attribute is only valid on Custominspector dictionaries.";
                     return;
                 }
-                var args = fieldType.GetGenericArguments();
+                var args = dictType.GetGenericArguments();
 
                 DictionaryAttribute attr = attribute as DictionaryAttribute;
                 KeyWidth = attr?.keySize ?? DictionaryAttribute.defaultKeySize;
@@ -107,8 +123,8 @@ namespace CustomInspector.Editor
                     CustomValueLabel = attr.valueLabel;
                 }
 
-                if (fieldType.GetGenericTypeDefinition() == typeof(SerializableDictionary<,>)
-                    || fieldType.GetGenericTypeDefinition() == typeof(SerializableSortedDictionary<,>))
+                if (dictType.GetGenericTypeDefinition() == typeof(SerializableDictionary<,>)
+                    || dictType.GetGenericTypeDefinition() == typeof(SerializableSortedDictionary<,>))
                 {
                     string keysListPath = "keys.values.values";
                     string valuesListPath = "values.values";
@@ -153,8 +169,8 @@ namespace CustomInspector.Editor
                             $"\n{amount} elements deleted");
                     }
 
-                    Type keyType = fieldType.GetGenericArguments()[0];
-                    Type valueType = fieldType.GetGenericArguments()[1];
+                    Type keyType = dictType.GetGenericArguments()[0];
+                    Type valueType = dictType.GetGenericArguments()[1];
                     Gui = (position, label, property) =>
                     {
                         SerializedProperty keys = property.FindPropertyRelative(keysListPath);
@@ -250,7 +266,7 @@ namespace CustomInspector.Editor
                         return totalHeight;
                     };
                 }
-                else if (fieldType.GetGenericTypeDefinition() == typeof(ReorderableDictionary<,>))
+                else if (dictType.GetGenericTypeDefinition() == typeof(ReorderableDictionary<,>))
                 {
                     string path = "keyValuePairs";
                     SerializedProperty keyValuePairs_instantiate = property.FindPropertyRelative(path);
@@ -261,8 +277,8 @@ namespace CustomInspector.Editor
                         return;
                     }
 
-                    Type keyType = fieldType.GetGenericArguments()[0];
-                    Type valueType = fieldType.GetGenericArguments()[1];
+                    Type keyType = dictType.GetGenericArguments()[0];
+                    Type valueType = dictType.GetGenericArguments()[1];
                     Gui = (position, label, prop) =>
                     {
                         SerializedProperty keyValuePairs = prop.FindPropertyRelative(path);

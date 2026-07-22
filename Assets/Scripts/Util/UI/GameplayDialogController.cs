@@ -74,6 +74,7 @@ public class GameplayDialogController : MonoBehaviour {
     public string avatarForm = "";
     public string portraitLibraryName = "";
     public string emotion = "Normal";
+    public string soundEffectId = "";
     [TextArea(2, 6)]
     public string text = "";
   }
@@ -145,6 +146,7 @@ public class GameplayDialogController : MonoBehaviour {
   bool debugSeenOverrideInitialized;
   bool appliedDebugSeenOverride;
   string suppressedAutoDialogLocationId = "";
+  long activeDialogVoiceSequence;
 
   public bool IsDialogActive => dialogueActive;
   public bool HasResolvedUiReferencesForLoadingProgress {
@@ -411,6 +413,8 @@ public class GameplayDialogController : MonoBehaviour {
     activeLocationDialogId = "";
     ApplyText(dialogText, "");
     ClearSpeakerState();
+    SoundEffectPlayer.Stop(activeDialogVoiceSequence);
+    activeDialogVoiceSequence = 0;
     SetDialogVisible(false, source);
   }
 
@@ -816,6 +820,13 @@ public class GameplayDialogController : MonoBehaviour {
     typewriterCharacterProgress = 0f;
     ApplyNodeVisuals(node, source);
     ApplyVisibleText();
+
+    SoundEffectPlayer.Stop(activeDialogVoiceSequence);
+    activeDialogVoiceSequence = 0;
+    if (!string.IsNullOrWhiteSpace(node.soundEffectId)) {
+        activeDialogVoiceSequence = SoundEffectPlayer.Play(node.soundEffectId);
+    }
+
     var markedSeen = DialogController.MarkSeen(node, source + "_show");
 
     if (ShouldLogDialogDebug()) {

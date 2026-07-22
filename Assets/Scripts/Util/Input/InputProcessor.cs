@@ -4,6 +4,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class InputProcessor : MonoBehaviour {
+  public const string BindingOverridesPlayerPrefsKey = "Esperanza.InputBindingOverrides.v1";
+
   const float ScalarDispatchEpsilon = 0.0001f;
   const float VectorDispatchEpsilonSqr = 0.0001f;
   [System.NonSerialized] public TestActions input;
@@ -13,9 +15,11 @@ public class InputProcessor : MonoBehaviour {
   readonly Dictionary<InputAction, float> lastScalarDispatchValues = new();
   readonly Dictionary<InputAction, Vector2> lastVectorDispatchValues = new();
   public string ActiveMap => activeMap;
+  public InputActionAsset Actions => input?.asset;
 
   void OnEnable() {
     input = new TestActions();
+    LoadSavedBindingOverrides();
     SetupAllCalls();
     SwitchMap(defaultMap != "" ? defaultMap : "mainMenu");
   }
@@ -197,10 +201,57 @@ public class InputProcessor : MonoBehaviour {
   }
 
   public string SaveBindings() {
-    return input.SaveBindingOverridesAsJson();
+    return Actions != null ? Actions.SaveBindingOverridesAsJson() : "";
   }
 
   public void LoadBindings(string json) {
-    input.LoadBindingOverridesFromJson(json);
+    if (Actions == null) return;
+
+    if (string.IsNullOrWhiteSpace(json)) {
+      Actions.RemoveAllBindingOverrides();
+      return;
+    }
+
+    Actions.LoadBindingOverridesFromJson(json);
+  }
+
+  public void PersistBindingOverrides() {
+    var json = SaveBindings();
+    if (string.IsNullOrWhiteSpace(json)) {
+      PlayerPrefs.DeleteKey(BindingOverridesPlayerPrefsKey);
+      PlayerPrefs.Save();
+      return;
+    }
+
+    PlayerPrefs.SetString(BindingOverridesPlayerPrefsKey, json);
+    PlayerPrefs.Save();
+  }
+
+  public void ResetBindingOverrides() {
+    if (Actions == null) return;
+
+    Actions.RemoveAllBindingOverrides();
+    PersistBindingOverrides();
+  }
+
+  void LoadSavedBindingOverrides() {
+    if (Actions == null || !PlayerPrefs.HasKey(BindingOverridesPlayerPrefsKey)) return;
+
+    var json = PlayerPrefs.GetString(BindingOverridesPlayerPrefsKey, "");
+    if (string.IsNullOrWhiteSpace(json)) return;
+
+    try {
+      Actions.LoadBindingOverridesFromJson(json);
+    }
+    catch (System.Exception exception) {
+      Actions.RemoveAllBindingOverrides();
+      PlayerPrefs.DeleteKey(BindingOverridesPlayerPrefsKey);
+      PlayerPrefs.Save();
+      Debug.LogWarning(
+        "[InputProcessor] Could not load saved binding overrides. Defaults will be used. " +
+        exception.Message,
+        this
+      );
+    }
   }
 }

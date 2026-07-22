@@ -205,11 +205,13 @@ public static class HBoxes {
   //**** Effects
   public static Dictionary<string, List<HBox>> EffectHit { get; } = new Dictionary<string, List<HBox>> {
     ["BlastBall"] = new List<HBox> {
-      new(0.01f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
-      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
-      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
-      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
-      new(0.05f, new List<Vector2> { new(0,0), new(0,0), new(0,0), new(0,0), new(0,0) }),
+      new(0.01f, new List<Vector2> {
+        new(0.14886114f, 0.047422167f),
+        new(-0.0007316563f, 0.070754774f),
+        new(-0.006851636f, -0.07811799f),
+        new(0.14954904f, -0.060703326f),
+        new(0.14920509f, -0.00664058f)
+      })
     }
   };
 

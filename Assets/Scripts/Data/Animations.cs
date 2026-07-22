@@ -10,6 +10,8 @@ public class AnimData {
   public bool loop;
   public int To;
   public bool pingPong;
+  // Plays one forward and reverse leg; duration applies to each leg.
+  public bool pingPongOnce;
   public string effect;
   public int effectFrame;
   public string projectile;
@@ -22,7 +24,7 @@ public static class Animations {
     { "Run", new AnimData { start = 1, end = 30, duration = 850, isLocomotion = true, loop = true } },
     { "Attack", new AnimData { start = 1, end = 28, duration = 650 } },
     { "Jump", new AnimData { start = 1, end = 40, duration = 1200 } },
-    { "Hurt", new AnimData { start = 1, end = 24, duration = 400 } },
+    { "Hurt", new AnimData { start = 1, end = 24, duration = 400, pingPongOnce = true } },
     { "BaseDeath1", new AnimData { start = 1, end = 52, duration = 1600, category = "Death" } }
   };
 
@@ -40,7 +42,7 @@ public static class Animations {
     { "Dance", new AnimData { start = 1, end = 480, duration = 6000, loop = true } },
     { "Block", new AnimData { start = 1, end = 42, duration = 500 } },
     { "Dodge", new AnimData { start = 1, end = 58, duration = 250 } },
-    { "Hurt", new AnimData { start = 1, end = 17, duration = 400 } },
+    { "Hurt", new AnimData { start = 1, end = 17, duration = 400, pingPongOnce = true } },
     { "Stance", new AnimData { start = 1, end = 59, duration = 1000, isLocomotion = true, pingPong = true } },
 
 

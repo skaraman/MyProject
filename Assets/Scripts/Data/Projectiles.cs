@@ -18,6 +18,7 @@ public class ProjectileData {
   public bool despawnOnAnyCollision;
   public LayerMask collisionLayers = ~0;
   public bool ignoreSameRoot = true;
+  public string hitSoundId;
 
   GameObject cachedPrefab;
   AsyncOperationHandle<GameObject> cachedPrefabHandle;
@@ -137,7 +138,8 @@ public static class Projectiles {
       despawnOnHurtBoxHit = true,
       despawnOnAnyCollision = false,
       collisionLayers = 1 << 7,
-      ignoreSameRoot = true
+      ignoreSameRoot = true,
+      hitSoundId = "esperanza.blastHit"
     }
   };
 

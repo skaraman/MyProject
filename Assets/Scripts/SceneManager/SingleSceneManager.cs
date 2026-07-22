@@ -615,6 +615,10 @@ public partial class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("settingsMenu.click", o => OnSettingsMenuClick(o)));
     actions.Add(MessageBus.On("settingsMenu.hover", o => OnSettingsMenuHover(o)));
     actions.Add(MessageBus.On("settingsMenu.unhover", o => OnSettingsMenuUnhover()));
+    actions.Add(MessageBus.On("settingsMenu.up", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuNavigate(Vector2Int.up); }));
+    actions.Add(MessageBus.On("settingsMenu.left", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuNavigate(Vector2Int.left); }));
+    actions.Add(MessageBus.On("settingsMenu.right", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuNavigate(Vector2Int.right); }));
+    actions.Add(MessageBus.On("settingsMenu.down", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuNavigate(Vector2Int.down); }));
     actions.Add(MessageBus.On("settingsMenu.select", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuSelect(); }));
     actions.Add(MessageBus.On("settingsMenu.cancel", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuCancel(); }));
 

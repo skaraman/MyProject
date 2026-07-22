@@ -86,8 +86,9 @@ public class HealthBarControl : MonoBehaviour {
   private MaterialPropertyBlock nrgExtendFillProperties;
   private string lastLabelPrefix;
   private EndlessNumber lastHp;
+  private EndlessNumber lastMaxHp;
   private EndlessNumber lastNrg;
-  private System.Action offHitReceived;
+  private System.Action offDamaged;
   private Coroutine hurtAvatarCoroutine;
 
   void Awake() {
@@ -103,6 +104,7 @@ public class HealthBarControl : MonoBehaviour {
     ClampMeterControls();
     if (Application.isPlaying) {
       lastHp = null;
+      lastMaxHp = null;
       lastNrg = null;
       return;
     }
@@ -111,8 +113,8 @@ public class HealthBarControl : MonoBehaviour {
 
   void OnEnable() {
     if (Application.isPlaying) {
-      offHitReceived?.Invoke();
-      offHitReceived = MessageBus.On(CharacterMessageTopics.HitReceived, HandleCharacterHit);
+      offDamaged?.Invoke();
+      offDamaged = MessageBus.On(CharacterMessageTopics.Damaged, HandleCharacterDamaged);
       RestoreAvatarExpression();
       return;
     }
@@ -125,8 +127,8 @@ public class HealthBarControl : MonoBehaviour {
       return;
     }
 
-    offHitReceived?.Invoke();
-    offHitReceived = null;
+    offDamaged?.Invoke();
+    offDamaged = null;
     if (hurtAvatarCoroutine != null) {
       StopCoroutine(hurtAvatarCoroutine);
       hurtAvatarCoroutine = null;
@@ -157,10 +159,16 @@ public class HealthBarControl : MonoBehaviour {
     RefreshVitals();
   }
 
-  void RefreshVitals(bool force = false) {
-    var hp = ResolveCurrentHealth();
-    if (force || lastHp == null || lastHp != hp) {
+  void RefreshVitals(
+    bool force = false,
+    EndlessNumber currentHealthOverride = null,
+    EndlessNumber maximumHealthOverride = null
+  ) {
+    var hp = currentHealthOverride ?? ResolveCurrentHealth();
+    var maxHp = maximumHealthOverride ?? ResolveMaximumHealth();
+    if (force || lastHp == null || lastHp != hp || lastMaxHp == null || lastMaxHp != maxHp) {
       lastHp = hp.Copy();
+      lastMaxHp = maxHp.Copy();
       if (healthText != null) {
         healthText.content = FormatVitalAmount(hp);
         healthText.Generate();
@@ -184,7 +192,8 @@ public class HealthBarControl : MonoBehaviour {
         hpCurveFill,
         hpExtendFill,
         hpCurveFillProperties,
-        hpExtendFillProperties
+        hpExtendFillProperties,
+        maxHp
       );
     }
 
@@ -241,6 +250,11 @@ public class HealthBarControl : MonoBehaviour {
     return state != null ? state.CurrentHealth : GetTotalVitality("HP");
   }
 
+  EndlessNumber ResolveMaximumHealth() {
+    var state = ResolveCharacterState();
+    return state != null ? state.MaximumHealth : GetTotalVitality("HP");
+  }
+
   CharacterState ResolveCharacterState() {
     if (characterState != null) {
       return characterState;
@@ -284,15 +298,31 @@ public class HealthBarControl : MonoBehaviour {
     SpriteRenderer curveFill,
     SpriteRenderer extendFill,
     MaterialPropertyBlock curveFillProperties,
-    MaterialPropertyBlock extendFillProperties
+    MaterialPropertyBlock extendFillProperties,
+    EndlessNumber segmentMaximum = null
   ) {
     SetActive(curve, true);
 
     var curveMaximumValue = new EndlessNumber(curveMaximum);
-    var normalizedCurveFill = Mathf.Clamp01((float)total.RatioTo(curveMaximumValue));
+    var usesDynamicSegmentMaximum = segmentMaximum != null && segmentMaximum.IsPositive;
+    var curveSegmentMaximum = usesDynamicSegmentMaximum
+      ? EndlessNumber.Min(segmentMaximum, curveMaximumValue)
+      : curveMaximumValue;
+    var normalizedCurveFill = curveSegmentMaximum.IsPositive
+      ? Mathf.Clamp01((float)total.RatioTo(curveSegmentMaximum))
+      : 0f;
+    var availableCurveFill = usesDynamicSegmentMaximum
+      ? Mathf.Clamp(
+        Mathf.Clamp01((float)curveSegmentMaximum.RatioTo(curveMaximumValue)) * maximumCurveFill,
+        minimumCurveFill,
+        maximumCurveFill
+      )
+      : maximumCurveFill;
     var curveFillAmount = !total.IsPositive
       ? 0f
-      : Mathf.Clamp(normalizedCurveFill * maximumCurveFill, minimumCurveFill, maximumCurveFill);
+      : usesDynamicSegmentMaximum
+        ? normalizedCurveFill * availableCurveFill
+        : Mathf.Clamp(normalizedCurveFill * maximumCurveFill, minimumCurveFill, maximumCurveFill);
     ApplyRadialFill(
       curveFill,
       curveFillProperties,
@@ -357,8 +387,12 @@ public class HealthBarControl : MonoBehaviour {
     RefreshVitals(force: true);
   }
 
-  void HandleCharacterHit(CharacterDamageEvent damageEvent) {
-    RefreshVitals(force: true);
+  void HandleCharacterDamaged(CharacterDamageEvent damageEvent) {
+    RefreshVitals(
+      force: true,
+      currentHealthOverride: damageEvent.CurrentHealth,
+      maximumHealthOverride: damageEvent.MaximumHealth
+    );
     var avatar = ResolveHealthAvatar();
     if (avatar == null) {
       return;

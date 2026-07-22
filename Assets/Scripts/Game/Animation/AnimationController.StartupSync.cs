@@ -40,6 +40,7 @@ public partial class AnimationController {
     if (enabledTargetCount > MaxTargetsForGateReadinessChecks) return false;
     if (string.IsNullOrWhiteSpace(category)) return false;
     if (animation == null) return false;
+    if (HasSeenAnimationCategory(category)) return false;
     if (HasCurrentAppearancePinCoverage()) return false;
     if (!HasMixedVisibleSpriteTargets()) return false;
 

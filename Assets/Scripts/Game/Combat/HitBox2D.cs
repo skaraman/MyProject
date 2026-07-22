@@ -57,21 +57,25 @@ public class HitBox2D : MonoBehaviour {
   }
 
   private void HandleContact(Collider2D other) {
-    if (!isActiveAndEnabled || other == null) return;
-    if (ignoreSameRoot && IsOwnedBySameActor(other)) return;
-    var now = TimeScale.GetNow(this);
-    if (hitCooldown > 0f && now < nextHitTime) return;
+    TryHit(other);
+  }
 
-    if (!HurtBox2D.TryResolve(other, out var hurtBox)) return;
-    if (!hurtBox.isActiveAndEnabled) return;
+  public bool TryHit(Collider2D other) {
+    if (!isActiveAndEnabled || other == null) return false;
+    if (ignoreSameRoot && IsOwnedBySameActor(other)) return false;
+    var now = TimeScale.GetNow(this);
+    if (hitCooldown > 0f && now < nextHitTime) return false;
+
+    if (!HurtBox2D.TryResolve(other, out var hurtBox)) return false;
+    if (!hurtBox.isActiveAndEnabled) return false;
 
     var hurtBoxId = 0UL;
     if (hitEachHurtBoxOnce) {
       hurtBoxId = ObjectEntityId.GetRawValue(hurtBox);
-      if (hitHurtBoxIds.Contains(hurtBoxId)) return;
+      if (hitHurtBoxIds.Contains(hurtBoxId)) return false;
     }
 
-    if (!hurtBox.TryReceiveHit(this)) return;
+    if (!hurtBox.TryReceiveHit(this)) return false;
 
     if (hitEachHurtBoxOnce) {
       hitHurtBoxIds.Add(hurtBoxId);
@@ -80,6 +84,8 @@ public class HitBox2D : MonoBehaviour {
     if (hitCooldown > 0f) {
       nextHitTime = now + hitCooldown;
     }
+
+    return true;
   }
 
   private bool IsOwnedBySameActor(Collider2D other) {

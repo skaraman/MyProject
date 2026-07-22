@@ -63,6 +63,8 @@ public class DayNightCycle2D : MonoBehaviour {
   // Time tracking
   int lastNotifiedHour = -1;
   int lastNotifiedMinute = -1;
+  string lastObservedLocationId = "";
+  Action unsubscribeLocationUpdates;
 
   [SerializeField, Min(1)] int dayCount = 1;
 
@@ -157,11 +159,24 @@ public class DayNightCycle2D : MonoBehaviour {
     if (Instance == null) {
       Instance = this;
     }
+    if (Application.isPlaying && unsubscribeLocationUpdates == null) {
+      unsubscribeLocationUpdates = MessageBus.On("LocationUpdated", OnLocationUpdated);
+    }
     AutoResolveReferences();
     ApplyLightingForCurrentTime();
   }
 
+  void OnDisable() {
+    unsubscribeLocationUpdates?.Invoke();
+    unsubscribeLocationUpdates = null;
+    if (Instance == this) {
+      Instance = null;
+    }
+  }
+
   void OnDestroy() {
+    unsubscribeLocationUpdates?.Invoke();
+    unsubscribeLocationUpdates = null;
     if (Instance == this) {
       Instance = null;
     }
@@ -210,12 +225,32 @@ public class DayNightCycle2D : MonoBehaviour {
     CurrentHour = Mathf.Clamp(hour, 0, 23) + (Mathf.Clamp(minute, 0, 59) / 60f);
   }
 
+  public void RandomizeTime() {
+    SetTime(UnityEngine.Random.Range(0f, 24f));
+    CheckTimeEvents();
+  }
+
   public void Pause() {
     pauseTime = true;
   }
 
   public void Resume() {
     pauseTime = false;
+  }
+
+  void OnLocationUpdated(object payload) {
+    var locationId = LocationEnemyData.NormalizeLocationId(Convert.ToString(payload));
+    if (string.Equals(lastObservedLocationId, locationId, StringComparison.OrdinalIgnoreCase)) {
+      return;
+    }
+
+    lastObservedLocationId = locationId;
+    if (!LocationEnemyData.ContainsLocation(locationId) ||
+        string.Equals(locationId, LocationEnemyData.MainMenuLocationId, StringComparison.OrdinalIgnoreCase)) {
+      return;
+    }
+
+    RandomizeTime();
   }
 
   void AutoResolveReferences() {

@@ -100,16 +100,24 @@ public partial class SingleSceneManager {
 
   void OnSettingsMenuHover(object payload) {
     settingsHoveredTarget = payload as GameObject;
+    ResolveSettingsAudioPageController()?.SetHoveredTarget(settingsHoveredTarget);
   }
 
   void OnSettingsMenuUnhover() {
     settingsHoveredTarget = null;
+    ResolveSettingsAudioPageController()?.ClearHoveredTarget();
+  }
+
+  void OnSettingsMenuNavigate(Vector2Int direction) {
+    settingsHoveredTarget = null;
+    ResolveSettingsAudioPageController()?.TryNavigate(direction);
   }
 
   void OnSettingsMenuSelect() {
     var audioPageController = ResolveSettingsAudioPageController();
-    if (audioPageController != null && audioPageController.TryHandleClick(settingsHoveredTarget)) return;
-    if (!IsSettingsCloseTarget(settingsHoveredTarget)) return;
+    var target = settingsHoveredTarget ?? audioPageController?.SelectedSettingsTarget;
+    if (audioPageController != null && audioPageController.TryHandleSelect(target)) return;
+    if (!IsSettingsCloseTarget(target)) return;
     CloseSettingsMenu();
   }
 

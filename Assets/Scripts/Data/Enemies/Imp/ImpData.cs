@@ -64,7 +64,8 @@ public static partial class ImpData {
     ["Hurt"] = new AnimData {
       start = 1,
       end = 60,
-      duration = 175
+      duration = 175,
+      pingPongOnce = true
     },
     ["Death_Base_1"] = new AnimData {
       start = 1,

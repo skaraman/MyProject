@@ -11,7 +11,10 @@ public enum CombatDamageKind {
 public struct CombatDamageResult {
   public CombatDamageKind kind;
   public EndlessNumber amount;
+  public EndlessNumber flatDamage;
   public EndlessNumber baseDamage;
+  public float abilityDamageMultiplier;
+  public float damageRangeMultiplier;
   public EndlessNumber armorBeforePenetration;
   public EndlessNumber armorApplied;
   public EndlessNumber penetrationApplied;
@@ -27,6 +30,13 @@ public struct CombatDamageResult {
 }
 
 public static class CombatDamageResolver {
+  public const float MinimumDamageRangeMultiplier = 0.5f;
+  public const float MaximumDamageRangeMultiplier = 1.5f;
+
+  // DEBUG START: Temporary combat test override. Remove this flag and its guarded block below.
+  static readonly bool DebugForceEsperLuckyDamage = true;
+  // DEBUG END: Temporary combat test override.
+
   static class CombatStatKeys {
     public const string Armor = "ARM";
     public const string Damage = "DMG";
@@ -65,7 +75,8 @@ public static class CombatDamageResolver {
   public static CombatDamageResult ResolveEsperanzaHit(
     IReadOnlyDictionary<string, StatValue> attackerStats,
     IReadOnlyDictionary<string, StatValue> defenderStats,
-    int abilityRawDamage
+    int abilityRawDamage,
+    float abilityDamageMultiplier
   ) {
     var attacker = new AttackerCombatStats(attackerStats);
     var armor = GetEndlessStat(defenderStats, CombatStatKeys.Armor);
@@ -77,13 +88,36 @@ public static class CombatDamageResolver {
 
     var resolvedAbilityDamage = Mathf.Max(abilityRawDamage, 0);
     var baseAttackDamage = attacker.Damage.Copy().AddInPlace(resolvedAbilityDamage);
+    var damageRangeMultiplier = RollDamageRangeMultiplier();
+
+    // DEBUG START: Force every ESPER hit through the normal Lucky damage/defense path.
+    if (DebugForceEsperLuckyDamage) {
+      return BuildResult(
+        kind: CombatDamageKind.Lucky,
+        flatDamage: baseAttackDamage + attacker.LuckyDamage,
+        abilityDamageMultiplier: abilityDamageMultiplier,
+        damageRangeMultiplier: damageRangeMultiplier,
+        armor: armor,
+        penetration: attacker.Penetration,
+        evadeChance: evadeChance,
+        criticalChance: criticalChance,
+        luckyChance: 1f,
+        directChance: directChance,
+        criticalRoll: -1f,
+        luckyRoll: 0f,
+        directRoll: -1f
+      );
+    }
+    // DEBUG END: Force every ESPER hit through the normal Lucky damage/defense path.
 
     // Special hits use independent rolls with explicit Critical > Lucky > Direct priority.
     var criticalRoll = Random.value;
     if (RollSucceeds(criticalChance, criticalRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Critical,
-        baseDamage: baseAttackDamage + attacker.CriticalDamage,
+        flatDamage: baseAttackDamage + attacker.CriticalDamage,
+        abilityDamageMultiplier: abilityDamageMultiplier,
+        damageRangeMultiplier: damageRangeMultiplier,
         armor: armor,
         penetration: attacker.Penetration,
         evadeChance: evadeChance,
@@ -100,7 +134,9 @@ public static class CombatDamageResolver {
     if (RollSucceeds(luckyChance, luckyRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Lucky,
-        baseDamage: baseAttackDamage + attacker.LuckyDamage,
+        flatDamage: baseAttackDamage + attacker.LuckyDamage,
+        abilityDamageMultiplier: abilityDamageMultiplier,
+        damageRangeMultiplier: damageRangeMultiplier,
         armor: armor,
         penetration: attacker.Penetration,
         evadeChance: evadeChance,
@@ -117,7 +153,9 @@ public static class CombatDamageResolver {
     if (RollSucceeds(directChance, directRoll)) {
       return BuildResult(
         kind: CombatDamageKind.Direct,
-        baseDamage: baseAttackDamage + attacker.DirectDamage,
+        flatDamage: baseAttackDamage + attacker.DirectDamage,
+        abilityDamageMultiplier: abilityDamageMultiplier,
+        damageRangeMultiplier: damageRangeMultiplier,
         armor: armor,
         penetration: attacker.Penetration,
         evadeChance: evadeChance,
@@ -132,7 +170,9 @@ public static class CombatDamageResolver {
 
     return BuildResult(
       kind: CombatDamageKind.Damage,
-      baseDamage: baseAttackDamage,
+      flatDamage: baseAttackDamage,
+      abilityDamageMultiplier: abilityDamageMultiplier,
+      damageRangeMultiplier: damageRangeMultiplier,
       armor: armor,
       penetration: attacker.Penetration,
       evadeChance: evadeChance,
@@ -151,7 +191,9 @@ public static class CombatDamageResolver {
   ) {
     return BuildResult(
       kind: CombatDamageKind.Damage,
-      baseDamage: GetEndlessStat(attackerStats, CombatStatKeys.Damage),
+      flatDamage: GetEndlessStat(attackerStats, CombatStatKeys.Damage),
+      abilityDamageMultiplier: 1f,
+      damageRangeMultiplier: RollDamageRangeMultiplier(),
       armor: GetEndlessStat(defenderStats, CombatStatKeys.Armor),
       penetration: GetEndlessStat(attackerStats, CombatStatKeys.Penetration),
       evadeChance: GetPercentageStat(defenderStats, CombatStatKeys.Evade),
@@ -166,7 +208,9 @@ public static class CombatDamageResolver {
 
   static CombatDamageResult BuildResult(
     CombatDamageKind kind,
-    EndlessNumber baseDamage,
+    EndlessNumber flatDamage,
+    float abilityDamageMultiplier,
+    float damageRangeMultiplier,
     EndlessNumber armor,
     EndlessNumber penetration,
     float evadeChance,
@@ -177,9 +221,23 @@ public static class CombatDamageResolver {
     float luckyRoll,
     float directRoll
   ) {
+    var resolvedFlatDamage = NonNegative(flatDamage);
+    var resolvedAbilityDamageMultiplier = Mathf.Max(0f, abilityDamageMultiplier);
+    var resolvedDamageRangeMultiplier = Mathf.Clamp(
+      damageRangeMultiplier,
+      MinimumDamageRangeMultiplier,
+      MaximumDamageRangeMultiplier
+    );
+    var scaledBaseDamage = resolvedFlatDamage.Copy()
+      .MultiplyInPlace(resolvedAbilityDamageMultiplier)
+      .MultiplyInPlace(resolvedDamageRangeMultiplier);
+
     var result = new CombatDamageResult {
       kind = kind,
-      baseDamage = NonNegative(baseDamage),
+      flatDamage = resolvedFlatDamage,
+      baseDamage = scaledBaseDamage,
+      abilityDamageMultiplier = resolvedAbilityDamageMultiplier,
+      damageRangeMultiplier = resolvedDamageRangeMultiplier,
       armorBeforePenetration = NonNegative(armor),
       armorApplied = new EndlessNumber(),
       penetrationApplied = new EndlessNumber(),
@@ -196,6 +254,10 @@ public static class CombatDamageResolver {
     ResolveDefense(ref result, penetration);
     result.amount = ResolveFinalAmount(result);
     return result;
+  }
+
+  static float RollDamageRangeMultiplier() {
+    return Random.Range(MinimumDamageRangeMultiplier, MaximumDamageRangeMultiplier);
   }
 
   static void ResolveDefense(ref CombatDamageResult result, EndlessNumber penetration) {
@@ -253,7 +315,10 @@ public static class CombatDamageResolver {
         break;
     }
 
-    return NonNegative(finalAmount);
+    finalAmount = NonNegative(finalAmount).RoundToWholeInPlace();
+    return finalAmount.IsPositive
+      ? finalAmount
+      : new EndlessNumber(1d);
   }
 
   static bool RollSucceeds(float chance, float roll) {

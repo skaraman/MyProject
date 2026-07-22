@@ -52,6 +52,7 @@ public class Projectile : MonoBehaviour {
   private string effectKey;
   private Vector3 direction;
   private Transform target;
+  private string hitSoundId;
   private AnimationController animationController = new();
   private Dictionary<string, AnimData> animationData;
   private bool animationControllerInitialized;
@@ -71,14 +72,17 @@ public class Projectile : MonoBehaviour {
   private readonly GameObject[] hBoxTargetObjects = new GameObject[1];
   private readonly Dictionary<string, Dictionary<string, List<HBox>>> runtimeHBoxData = new();
   private readonly Dictionary<string, List<HBox>> runtimeHBoxSequences = new();
+  private readonly Collider2D[] overlapResults = new Collider2D[16];
   private SpriteWithNormals configuredSpriteTarget;
   private PolygonCollider2D configuredHitboxCollider;
+  private HitBox2D offensiveHitBox;
 
   public string PoolKey => poolKey;
 
   void Awake() {
     if (spriteTarget == null) spriteTarget = GetComponentInChildren<SpriteWithNormals>();
     if (hitboxCollider == null) hitboxCollider = GetComponentInChildren<PolygonCollider2D>();
+    if (hitboxCollider != null) hitboxCollider.TryGetComponent(out offensiveHitBox);
     rb2d = GetComponent<Rigidbody2D>();
     CaptureAuthoredSettings();
     InitializeAnimationController();
@@ -91,6 +95,7 @@ public class Projectile : MonoBehaviour {
   void Update() {
     var scaledDeltaTime = TimeScale.GetDeltaTime(this);
     animationController.Tick(scaledDeltaTime);
+    TryHitOverlappingHurtBoxes();
     UpdateLifetime(scaledDeltaTime);
     TryApplyRuntimeSpawnOffsetTuning("update");
   }
@@ -116,6 +121,7 @@ public class Projectile : MonoBehaviour {
     this.owner = owner;
     poolKey = ResolveKey(key);
     RestoreAuthoredSettings();
+    hitSoundId = null;
     ApplyProjectileData(poolKey);
     effectKey = !string.IsNullOrEmpty(effectKeyOverride) ? NormalizeKey(effectKeyOverride) : poolKey;
     this.target = target;
@@ -252,6 +258,7 @@ public class Projectile : MonoBehaviour {
     despawnOnAnyCollision = data.despawnOnAnyCollision;
     collisionLayers = data.collisionLayers;
     ignoreSameRoot = data.ignoreSameRoot;
+    hitSoundId = data.hitSoundId;
   }
 
   void CaptureRuntimeSpawnOffsetState() {
@@ -398,16 +405,56 @@ public class Projectile : MonoBehaviour {
 
   private void HandleContact(Collider2D other) {
     if (!isActiveAndEnabled || other == null) return;
-    if (ignoreSameRoot && other.transform.root == transform.root) return;
 
-    if (HurtBox2D.TryResolve(other, out _)) {
-      if (despawnOnHurtBoxHit) Despawn();
+    if (HurtBox2D.TryResolve(other, out var hurtBox)) {
+      TryAcceptHurtBoxContact(other, hurtBox);
       return;
     }
 
+    if (ignoreSameRoot &&
+        (other.transform == transform || other.transform.IsChildOf(transform))) {
+      return;
+    }
     if (!despawnOnAnyCollision) return;
     if ((collisionLayers.value & (1 << other.gameObject.layer)) == 0) return;
     Despawn();
+  }
+
+  private void TryHitOverlappingHurtBoxes() {
+    if (offensiveHitBox == null ||
+        hitboxCollider == null ||
+        !hitboxCollider.enabled) {
+      return;
+    }
+
+    var overlapCount = hitboxCollider.Overlap(ContactFilter2D.noFilter, overlapResults);
+    for (var i = 0; i < overlapCount; i++) {
+      var other = overlapResults[i];
+      overlapResults[i] = null;
+      if (!HurtBox2D.TryResolve(other, out var hurtBox)) continue;
+      if (!TryAcceptHurtBoxContact(other, hurtBox)) continue;
+      for (var remaining = i + 1; remaining < overlapCount; remaining++) {
+        overlapResults[remaining] = null;
+      }
+      return;
+    }
+  }
+
+  private bool TryAcceptHurtBoxContact(Collider2D other, HurtBox2D hurtBox) {
+    if (offensiveHitBox == null || other == null || hurtBox == null) return false;
+
+    var accepted = offensiveHitBox.TryHit(other);
+    var acceptedEarlierThisFrame = hurtBox.LastHitBox == offensiveHitBox &&
+                                   hurtBox.LastHitFrame == Time.frameCount;
+    if (!accepted && !acceptedEarlierThisFrame) return false;
+
+    if (!string.IsNullOrWhiteSpace(hitSoundId)) {
+      SoundEffectPlayer.Play(hitSoundId);
+    }
+    if (despawnOnHurtBoxHit) {
+      Despawn();
+    }
+    return true;
   }
 
   private string ResolveKey(string key) {

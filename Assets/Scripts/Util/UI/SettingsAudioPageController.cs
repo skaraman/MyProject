@@ -4,11 +4,16 @@ using UnityEngine.InputSystem;
 public class SettingsAudioPageController : MonoBehaviour {
   const string SettingsTitle = "Settings";
   const string AudioTitle = "Audio";
+  const string ControlsTitle = "Controls";
 
   GameObject buttons;
   GameObject audioPage;
+  GameObject controlsPage;
   GameObject audioButton;
+  GameObject controlsButton;
   GameObject closeButton;
+  SettingsButtons settingsButtons;
+  SettingsControlsPageController controlsPageController;
   GameObject sfxSlider;
   Transform sfxHandle;
   BoxCollider2D sfxSliderCollider;
@@ -23,9 +28,13 @@ public class SettingsAudioPageController : MonoBehaviour {
   AnimateFields gearAnimation;
   AnimateFields titleAnimation;
   bool isAudioPageOpen;
+  bool isControlsPageOpen;
   bool isDraggingSfxSlider;
   bool isDraggingMusicSlider;
   bool resetHeaderOnNextLateUpdate;
+  GameObject selectedSettingsTarget;
+
+  public GameObject SelectedSettingsTarget => selectedSettingsTarget;
 
   void Awake() {
     ResolveReferences();
@@ -70,8 +79,24 @@ public class SettingsAudioPageController : MonoBehaviour {
   }
 
   public bool TryHandleClick(GameObject target) {
+    if (isControlsPageOpen) {
+      if (controlsPageController != null && controlsPageController.TryHandleClick(target)) {
+        return true;
+      }
+
+      if (IsTargetOrChildOf(target, closeButton)) {
+        ShowButtons(resetHeader: false);
+        return true;
+      }
+    }
+
     if (IsTargetOrChildOf(target, audioButton)) {
       ShowAudioPage();
+      return true;
+    }
+
+    if (IsTargetOrChildOf(target, controlsButton)) {
+      ShowControlsPage();
       return true;
     }
 
@@ -103,7 +128,105 @@ public class SettingsAudioPageController : MonoBehaviour {
     return false;
   }
 
+  public bool TryHandleSelect(GameObject target) {
+    if (isControlsPageOpen && IsTargetOrChildOf(target, closeButton)) {
+      ShowButtons(resetHeader: false);
+      return true;
+    }
+
+    if (isControlsPageOpen && controlsPageController != null) {
+      return controlsPageController.TryHandleSelect(target);
+    }
+
+    return TryHandleClick(target != null ? target : selectedSettingsTarget);
+  }
+
+  public bool TryNavigate(Vector2Int direction) {
+    ResolveReferences();
+    if (isControlsPageOpen && controlsPageController != null) {
+      return controlsPageController.TryNavigate(direction);
+    }
+    if (isAudioPageOpen || direction.y == 0 || settingsButtons == null) return false;
+    if (settingsButtons.buttons.Count == 0) return false;
+
+    var index = settingsButtons.activeIndex;
+    if (index < 0) {
+      index = direction.y < 0 ? 0 : settingsButtons.buttons.Count - 1;
+    }
+    else {
+      index = (index + (direction.y < 0 ? 1 : -1) + settingsButtons.buttons.Count) %
+              settingsButtons.buttons.Count;
+    }
+
+    settingsButtons.SetActiveIndexWithSound(index);
+    selectedSettingsTarget = settingsButtons.GetActiveButton();
+    return true;
+  }
+
+  public void SetHoveredTarget(GameObject target) {
+    ResolveReferences();
+    if (isControlsPageOpen && controlsPageController != null) {
+      var hoveringClose = IsTargetOrChildOf(target, closeButton);
+      SetCloseHighlight(hoveringClose);
+      if (hoveringClose) {
+        controlsPageController.ClearHoveredTarget();
+        return;
+      }
+
+      controlsPageController.SetHoveredTarget(target);
+      return;
+    }
+
+    if (settingsButtons == null) return;
+    for (var i = 0; i < settingsButtons.buttons.Count; i++) {
+      var button = settingsButtons.buttons[i];
+      if (!IsTargetOrChildOf(target, button)) continue;
+
+      selectedSettingsTarget = button;
+      settingsButtons.SetActiveIndex(i);
+      return;
+    }
+  }
+
+  public void ClearHoveredTarget() {
+    if (isControlsPageOpen && controlsPageController != null) {
+      controlsPageController.ClearHoveredTarget();
+      SetCloseHighlight(false);
+    }
+  }
+
+  void SetCloseHighlight(bool highlighted) {
+    if (settingsButtons == null || closeButton == null) return;
+
+    if (!highlighted) {
+      if (settingsButtons.GetActiveButton() == closeButton) {
+        settingsButtons.SetActiveIndex(-1);
+      }
+      if (selectedSettingsTarget == closeButton) {
+        selectedSettingsTarget = null;
+      }
+      return;
+    }
+
+    for (var i = 0; i < settingsButtons.buttons.Count; i++) {
+      if (!IsTargetOrChildOf(closeButton, settingsButtons.buttons[i])) continue;
+
+      selectedSettingsTarget = closeButton;
+      settingsButtons.SetActiveIndex(i);
+      return;
+    }
+  }
+
   public bool TryReturnToButtons() {
+    if (isControlsPageOpen) {
+      if (controlsPageController != null && controlsPageController.CancelActiveRebind()) {
+        return true;
+      }
+
+      ShowButtons(resetHeader: false);
+      return true;
+    }
+
     if (!isAudioPageOpen) return false;
 
     ShowButtons(resetHeader: false);
@@ -115,8 +238,10 @@ public class SettingsAudioPageController : MonoBehaviour {
 
     MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
     isAudioPageOpen = true;
+    isControlsPageOpen = false;
     SetTitle(AudioTitle);
     SetActive(buttons, false);
+    SetActive(controlsPage, false);
     SetActive(audioPage, true);
     SyncSfxControl();
     SyncMusicControl();
@@ -124,13 +249,32 @@ public class SettingsAudioPageController : MonoBehaviour {
     titleAnimation?.Play();
   }
 
-  void ShowButtons(bool resetHeader) {
-    var wasAudioPageOpen = isAudioPageOpen;
+  void ShowControlsPage() {
+    if (isControlsPageOpen) return;
+
+    MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
     isAudioPageOpen = false;
+    isControlsPageOpen = true;
     isDraggingSfxSlider = false;
     isDraggingMusicSlider = false;
+    SetTitle(ControlsTitle);
+    SetActive(buttons, false);
+    SetActive(audioPage, false);
+    SetActive(controlsPage, true);
+    gearAnimation?.Play();
+    titleAnimation?.Play();
+  }
+
+  void ShowButtons(bool resetHeader) {
+    var wasSubPageOpen = isAudioPageOpen || isControlsPageOpen;
+    isAudioPageOpen = false;
+    isControlsPageOpen = false;
+    isDraggingSfxSlider = false;
+    isDraggingMusicSlider = false;
+    controlsPageController?.CancelActiveRebind();
     SetTitle(SettingsTitle);
     SetActive(audioPage, false);
+    SetActive(controlsPage, false);
     SetActive(buttons, true);
 
     if (resetHeader) {
@@ -139,7 +283,7 @@ public class SettingsAudioPageController : MonoBehaviour {
       return;
     }
 
-    if (wasAudioPageOpen) {
+    if (wasSubPageOpen) {
       MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
       gearAnimation?.PlayReverse();
       titleAnimation?.PlayReverse();
@@ -150,10 +294,21 @@ public class SettingsAudioPageController : MonoBehaviour {
     var root = transform;
     buttons ??= FindDirectChild(root, "Buttons");
     audioPage ??= FindDirectChild(root, "AudioPage");
+    controlsPage ??= FindDirectChild(root, "ControlsPage");
     closeButton ??= FindDirectChild(root, "Close");
+
+    if (buttons != null) {
+      settingsButtons ??= buttons.GetComponent<SettingsButtons>();
+    }
 
     if (buttons != null && audioButton == null) {
       audioButton = FindDirectChild(buttons.transform, "Audio");
+    }
+    if (buttons != null && controlsButton == null) {
+      controlsButton = FindDirectChild(buttons.transform, "Controls");
+    }
+    if (controlsPage != null) {
+      controlsPageController ??= controlsPage.GetComponent<SettingsControlsPageController>();
     }
 
     var sfx = audioPage != null ? FindDirectChild(audioPage.transform, "SFX") : null;

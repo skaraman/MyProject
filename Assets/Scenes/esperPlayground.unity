@@ -1744,6 +1744,7 @@ GameObject:
   m_Component:
   - component: {fileID: 414472903}
   - component: {fileID: 414472904}
+  - component: {fileID: 987654321}
   m_Layer: 6
   m_Name: LIGHTS
   m_TagString: Untagged
@@ -1794,6 +1795,42 @@ MonoBehaviour:
   sunShadowOpacity: 0.28
   localShadowOpacity: 0.24
   localLightSwitchHysteresis: 0.15
+--- !u!114 &987654321
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 414472902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 33145c9fb7bc7b443b474b7d316923c6, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Project.Internal::DayNightCycle2D
+  cycleDurationMinutes: 24
+  currentHour: 12
+  timeSpeedMultiplier: 1
+  pauseTime: 0
+  sunGlobalLight: {fileID: 825027689}
+  moonGlobalLight: {fileID: 0}
+  ambientGlobalLight: {fileID: 2079573733}
+  sceneLighting: {fileID: 414472904}
+  daySunColor: {r: 1, g: 0.96, b: 0.88, a: 1}
+  daySunIntensity: 1.2
+  nightMoonColor: {r: 0.35, g: 0.45, b: 0.75, a: 1}
+  nightMoonIntensity: 0.3
+  transitionSunColor: {r: 1, g: 0.62, b: 0.38, a: 1}
+  dayAmbientColor: {r: 0.95, g: 0.95, b: 1, a: 1}
+  dayAmbientIntensity: 1
+  nightAmbientColor: {r: 0.14, g: 0.16, b: 0.38, a: 1}
+  nightAmbientIntensity: 0.28
+  transitionAmbientColor: {r: 0.72, g: 0.48, b: 0.52, a: 1}
+  updateShadowDirection: 1
+  morningShadowDir: {x: 1, y: -0.4}
+  noonShadowDir: {x: 0, y: -1}
+  eveningShadowDir: {x: -1, y: -0.4}
+  nightMoonShadowDir: {x: -0.5, y: -0.8}
+  dayCount: 1
 --- !u!1 &421031839
 GameObject:
   m_ObjectHideFlags: 0

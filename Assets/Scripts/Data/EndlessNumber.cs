@@ -205,6 +205,16 @@ public sealed class EndlessNumber :
     return FormatNormalized(normalizedMantissa, normalizedGroup, useSpriteGlyphs: true);
   }
 
+  public string ToCompactMantissaString() {
+    GetNormalizedComponents(this, out var normalizedMantissa, out var normalizedGroup);
+    return FormatNormalized(
+      normalizedMantissa,
+      normalizedGroup,
+      useSpriteGlyphs: false,
+      includeSuffix: false
+    );
+  }
+
   public static string Format(double value) {
     var group = 0L;
     NormalizeComponents(ref value, ref group, throwOnInvalid: true);
@@ -274,6 +284,28 @@ public sealed class EndlessNumber :
     }
 
     return (int)Math.Round(value, MidpointRounding.AwayFromZero);
+  }
+
+  public EndlessNumber RoundToWholeInPlace() {
+    GetNormalizedComponents(this, out var normalizedMantissa, out var normalizedGroup);
+    if (normalizedMantissa == 0d) {
+      return Set(0d);
+    }
+
+    // Beyond this range a double cannot represent fractional whole-number units,
+    // so the normalized value is already whole at EndlessNumber's precision.
+    const double MaximumExactInteger = 9007199254740991d;
+    if (normalizedGroup > 5L) {
+      return Set(normalizedMantissa, normalizedGroup);
+    }
+
+    var groupScale = Math.Pow(Thousand, normalizedGroup);
+    var unscaledValue = normalizedMantissa * groupScale;
+    if (Math.Abs(unscaledValue) > MaximumExactInteger) {
+      return Set(normalizedMantissa, normalizedGroup);
+    }
+
+    return Set(Math.Round(unscaledValue, MidpointRounding.AwayFromZero));
   }
 
   public static EndlessNumber Min(EndlessNumber left, EndlessNumber right) {
@@ -433,19 +465,21 @@ public sealed class EndlessNumber :
     return valueMantissa / Math.Pow(Thousand, distance);
   }
 
-  static string FormatNormalized(double valueMantissa, long valueGroup, bool useSpriteGlyphs) {
+  static string FormatNormalized(
+    double valueMantissa,
+    long valueGroup,
+    bool useSpriteGlyphs,
+    bool includeSuffix = true
+  ) {
     if (valueMantissa == 0d) {
       return "0";
     }
 
-    // Keep 0 through 9,999 un-abbreviated. Rounding is checked first so 9,999.5
-    // becomes 10 plus tier token 1 instead of leaking a fifth numeric digit.
-    if (valueGroup == 0L || (valueGroup == 1L && Math.Abs(valueMantissa) < 10d)) {
-      var unscaledValue = valueGroup == 0L
-        ? valueMantissa
-        : valueMantissa * Thousand;
-      var roundedWholeValue = Math.Round(unscaledValue, MidpointRounding.AwayFromZero);
-      if (Math.Abs(roundedWholeValue) < 10000d) {
+    // Keep only values below 1,000 un-abbreviated. Rounding is checked first so
+    // 999.5 becomes 1K instead of leaking a fourth numeric digit.
+    if (valueGroup == 0L) {
+      var roundedWholeValue = Math.Round(valueMantissa, MidpointRounding.AwayFromZero);
+      if (Math.Abs(roundedWholeValue) < Thousand) {
         return roundedWholeValue.ToString("0", CultureInfo.InvariantCulture);
       }
 
@@ -453,16 +487,16 @@ public sealed class EndlessNumber :
       valueGroup = 1L;
     }
 
-    var roundedMantissa = Math.Round(valueMantissa, 1, MidpointRounding.AwayFromZero);
-    if (Math.Abs(roundedMantissa) >= Thousand) {
-      roundedMantissa /= Thousand;
-      valueGroup = checked(valueGroup + 1L);
-    }
+    // One decimal on a normalized mantissa keeps at most four numeric positions.
+    // Truncation also prevents a damaged value from rounding back up to its maximum.
+    var displayedMantissa = Math.Truncate(valueMantissa * 10d) / 10d;
 
-    var suffix = useSpriteGlyphs
-      ? EndlessNumberSuffixMap.GetGlyphSuffix(valueGroup)
-      : "[" + EndlessNumberSuffixMap.GetTierId(valueGroup) + "]";
-    return roundedMantissa.ToString("0.#", CultureInfo.InvariantCulture) + suffix;
+    var suffix = includeSuffix
+      ? useSpriteGlyphs
+        ? EndlessNumberSuffixMap.GetGlyphSuffix(valueGroup)
+        : EndlessNumberSuffixMap.GetCompactSuffix(valueGroup)
+      : "";
+    return displayedMantissa.ToString("0.#", CultureInfo.InvariantCulture) + suffix;
   }
 
   static void GetNormalizedComponents(
@@ -517,26 +551,34 @@ public sealed class EndlessNumber :
 }
 
 public static class EndlessNumberSuffixMap {
-  // Bijective base 24: 24 = [24], 25 = [1,1], 48 = [1,24], 49 = [2,1].
+  // K and M own thousands groups 1 and 2. Named sprite tiers begin at group 3,
+  // then use bijective base 24: group 26 = [Sovereign], group 27 = [Sol, Sol].
   public const int TokenRadix = 24;
   public const string SpriteLibraryName = "UI/DamageNumbers";
   public const string SpriteCategory = "Tiers";
+  const long FirstNamedThousandsGroup = 3L;
   const char FirstSpriteGlyphCharacter = '\uE000';
   const int MaximumTokenSequenceLength = 16;
+
+  static readonly string[] SpriteLabels = {
+    "Sol", "Nova", "Eclipse", "Oculus", "Astra", "Triune", "Halo", "Orbit",
+    "Gemini", "Zenith", "Trinity", "Equinox", "Shard", "Crest", "Seraph", "Aegis",
+    "Luna", "Galaxy", "Compass", "Radiant", "Lotus", "Crown", "Ascendant", "Sovereign"
+  };
 
   public static string GetTierId(long thousandsGroup) {
     ValidateGroup(thousandsGroup);
     var tokens = GetTierTokens(thousandsGroup);
     if (tokens.Length == 0) {
-      return "";
+      return GetStandardSuffix(thousandsGroup);
     }
 
-    var builder = new StringBuilder(tokens.Length * 3);
+    var builder = new StringBuilder(tokens.Length * 8);
     for (var tokenIndex = 0; tokenIndex < tokens.Length; tokenIndex++) {
       if (tokenIndex > 0) {
         builder.Append('/');
       }
-      builder.Append(tokens[tokenIndex]);
+      builder.Append(GetSpriteLabel(tokens[tokenIndex]));
     }
 
     return builder.ToString();
@@ -546,12 +588,12 @@ public static class EndlessNumberSuffixMap {
     ValidateGroup(thousandsGroup);
     var tokens = GetTierTokens(thousandsGroup);
     if (tokens.Length == 0) {
-      return "";
+      return GetStandardSuffix(thousandsGroup);
     }
 
-    var builder = new StringBuilder(tokens.Length * 2);
+    var builder = new StringBuilder(tokens.Length * 8);
     for (var tokenIndex = 0; tokenIndex < tokens.Length; tokenIndex++) {
-      builder.Append(tokens[tokenIndex]);
+      builder.Append(GetSpriteLabel(tokens[tokenIndex]));
     }
 
     return builder.ToString();
@@ -561,6 +603,9 @@ public static class EndlessNumberSuffixMap {
     ValidateGroup(thousandsGroup);
     if (thousandsGroup == 0L) {
       return "";
+    }
+    if (thousandsGroup < FirstNamedThousandsGroup) {
+      return GetStandardSuffix(thousandsGroup);
     }
 
     var tokenBuffer = new int[MaximumTokenSequenceLength];
@@ -575,7 +620,7 @@ public static class EndlessNumberSuffixMap {
 
   public static int[] GetTierTokens(long thousandsGroup) {
     ValidateGroup(thousandsGroup);
-    if (thousandsGroup == 0L) {
+    if (thousandsGroup < FirstNamedThousandsGroup) {
       return Array.Empty<int>();
     }
 
@@ -609,7 +654,24 @@ public static class EndlessNumberSuffixMap {
       thousandsGroup = thousandsGroup * TokenRadix + token;
     }
 
+    if (thousandsGroup > long.MaxValue - (FirstNamedThousandsGroup - 1L)) {
+      thousandsGroup = 0L;
+      return false;
+    }
+    thousandsGroup += FirstNamedThousandsGroup - 1L;
+
     return true;
+  }
+
+  public static string GetSpriteLabel(int token) {
+    if (token < 1 || token > TokenRadix) {
+      throw new ArgumentOutOfRangeException(
+        nameof(token),
+        "Endless-number sprite tokens must be between 1 and 24."
+      );
+    }
+
+    return SpriteLabels[token - 1];
   }
 
   public static bool TryGetSpriteToken(char glyphCharacter, out int token) {
@@ -634,7 +696,7 @@ public static class EndlessNumberSuffixMap {
   }
 
   static int WriteTierTokens(long thousandsGroup, int[] tokenBuffer) {
-    var value = thousandsGroup;
+    var value = thousandsGroup - (FirstNamedThousandsGroup - 1L);
     var writeIndex = tokenBuffer.Length;
     while (value > 0L) {
       value--;
@@ -643,6 +705,19 @@ public static class EndlessNumberSuffixMap {
     }
 
     return writeIndex;
+  }
+
+  static string GetStandardSuffix(long thousandsGroup) {
+    switch (thousandsGroup) {
+      case 0L:
+        return "";
+      case 1L:
+        return "K";
+      case 2L:
+        return "M";
+      default:
+        throw new ArgumentOutOfRangeException(nameof(thousandsGroup));
+    }
   }
 
   static void ValidateGroup(long thousandsGroup) {

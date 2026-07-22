@@ -3,9 +3,6 @@ using UnityEngine.Events;
 
 [RequireComponent(typeof(HurtBox2D))]
 public sealed class EsperanzaHurtAudio : MonoBehaviour {
-  const string HurtSound1Id = "esperanza.hurt1";
-  const string HurtSound2Id = "esperanza.hurt2";
-
   HurtBox2D hurtBox;
   UnityAction<HitBox2D> hitListener;
 
@@ -36,6 +33,8 @@ public sealed class EsperanzaHurtAudio : MonoBehaviour {
       return;
     }
 
-    SoundEffectPlayer.Play(Random.value < 0.5f ? HurtSound1Id : HurtSound2Id);
+    SoundEffectPlayer.Play(Random.value < 0.5f
+      ? SoundEffectPlayer.EsperanzaHurt1SoundId
+      : SoundEffectPlayer.EsperanzaHurt2SoundId);
   }
 }

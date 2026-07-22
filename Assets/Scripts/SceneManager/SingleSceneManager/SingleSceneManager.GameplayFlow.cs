@@ -175,6 +175,7 @@ public partial class SingleSceneManager {
       ResolveAndApplyLocationForStart(isNewGame, loadedSlot);
     }
 
+    yield return SoundEffectPlayer.PreloadGameplayCriticalClips();
     yield return PrewarmGameplayPlayerBootstrapAssets(overlayTag);
     EnsureGameplayPlayerBootstrap(overlayTag);
 

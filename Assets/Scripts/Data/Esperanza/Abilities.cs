@@ -21,10 +21,12 @@ public class AbilityProgressState {
 public sealed class AbilityDefinition {
   public string animationName { get; }
   public string damageSubtype { get; }
+  public float damageMultiplier { get; }
 
-  public AbilityDefinition(string animationName, string damageSubtype) {
+  public AbilityDefinition(string animationName, string damageSubtype, float damageMultiplier) {
     this.animationName = animationName;
     this.damageSubtype = damageSubtype;
+    this.damageMultiplier = Mathf.Max(0f, damageMultiplier);
   }
 }
 
@@ -32,7 +34,10 @@ public static class EsperanzaAbilities {
   public const int DefaultLevel = 1;
   public const int DefaultCurrentXp = 0;
   public const int DefaultNextLevelXp = 100;
+  public const float DefaultDamageMultiplier = 1f;
 
+  static readonly Dictionary<string, float> damageMultipliersByAnimation =
+    CreateDamageMultipliers();
   static readonly Dictionary<string, AbilityDefinition> definitions = CreateDefinitions();
   static readonly Dictionary<string, string> resolvedAnimationsByInput = CreateResolutionCache();
   static readonly Dictionary<string, string> displayNamesByAnimation =
@@ -129,6 +134,12 @@ public static class EsperanzaAbilities {
   public static int GetRawDamage(string value) {
     var abilityProgress = EnsureProgress(value);
     return abilityProgress != null ? abilityProgress.level : 0;
+  }
+
+  public static float GetDamageMultiplier(string value) {
+    return TryGetDefinition(value, out var definition)
+      ? definition.damageMultiplier
+      : DefaultDamageMultiplier;
   }
 
   public static bool TryResolveAbilityAnimation(string value, out string animationName) {
@@ -234,11 +245,73 @@ public static class EsperanzaAbilities {
           continue;
         }
 
-        result[animationName] = new AbilityDefinition(animationName, form.Key);
+        var damageMultiplier = damageMultipliersByAnimation.TryGetValue(
+          animationName,
+          out var configuredMultiplier
+        )
+          ? configuredMultiplier
+          : DefaultDamageMultiplier;
+        result[animationName] = new AbilityDefinition(
+          animationName,
+          form.Key,
+          damageMultiplier
+        );
       }
     }
 
     return result;
+  }
+
+  static Dictionary<string, float> CreateDamageMultipliers() {
+    return new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase) {
+      // Base
+      ["PunchLeft"] = 1f,
+      ["PunchRight"] = 1f,
+      ["KickLeft"] = 2f,
+      ["KickRight"] = 2f,
+      ["Blast"] = 2.5f,
+      ["TwisterKick"] = 2.5f,
+
+      // Bolt
+      ["Shock"] = 1f,
+      ["ChainLighting"] = 1f,
+      ["Static"] = 1f,
+      ["LightningBolt"] = 1f,
+      ["ThunderBolt"] = 1f,
+      ["Orbit"] = 1f,
+
+      // Fire
+      ["Flamethower"] = 1f,
+      ["BurningWall"] = 1f,
+      ["Blaze"] = 1f,
+      ["PyreLight"] = 1f,
+      ["Meteor"] = 1f,
+      ["Fissure"] = 1f,
+
+      // Cold
+      ["FrostCloud"] = 1f,
+      ["IceBlast"] = 1f,
+      ["Iceclitite"] = 1f,
+      ["Iceclimite"] = 1f,
+      ["Avalanche"] = 1f,
+      ["Blizzard"] = 1f,
+
+      // Aqua
+      ["WaterBlast"] = 1f,
+      ["CrushingHydro"] = 1f,
+      ["WaterSphere"] = 1f,
+      ["PressureDeluge"] = 1f,
+      ["RainNeedles"] = 1f,
+      ["TsunamiStrike"] = 1f,
+
+      // Dark
+      ["Rip"] = 1f,
+      ["Tear"] = 1f,
+      ["Rage"] = 1f,
+      ["Seethe"] = 1f,
+      ["SoulSiphon"] = 1f,
+      ["SoulInfection"] = 1f
+    };
   }
 
   static Dictionary<string, string> CreateResolutionCache() {

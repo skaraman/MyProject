@@ -9,9 +9,21 @@ public class GameplayFormWheelController : MonoBehaviour {
   CharacterState characterState;
 
   void OnEnable() {
+    PrepareHitColliders();
     EnsureResolved();
     RegisterHandlers();
     SyncButtons("enable");
+  }
+
+  void PrepareHitColliders() {
+    // These are pointer hit targets on a camera-following overlay, not physics obstacles.
+    var colliders = GetComponentsInChildren<Collider2D>(includeInactive: true);
+    for (var i = 0; i < colliders.Length; i++) {
+      var hitCollider = colliders[i];
+      if (hitCollider != null) {
+        hitCollider.isTrigger = true;
+      }
+    }
   }
 
   void OnDisable() {
