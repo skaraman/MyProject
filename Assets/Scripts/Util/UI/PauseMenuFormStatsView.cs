@@ -32,7 +32,6 @@ public class PauseMenuFormStatsView : MonoBehaviour {
 
   string selectedForm;
   int selectedMajorIndex;
-  int hoveredButtonIndex = -1;
 
   void OnEnable() {
     EnsureResolved();
@@ -63,12 +62,14 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     }
 
     actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, form => OnFormChanged(form)));
-    actions.Add(MessageBus.On(CharacterMessageTopics.FormProgressChanged, form => RefreshForPayload(form, "form_progress_changed")));
-    actions.Add(MessageBus.On(CharacterMessageTopics.FormStatsChanged, form => RefreshForPayload(form, "form_stats_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormProgressChanged, _ => Refresh("form_progress_changed")));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormStatsChanged, _ => Refresh("form_stats_changed")));
     actions.Add(MessageBus.On("pauseMenu.hover", o => OnHover(o)));
     actions.Add(MessageBus.On("pauseMenu.unhover", o => OnUnhover()));
-    actions.Add(MessageBus.On("pauseMenu.click", o => OnClick(o)));
-    actions.Add(MessageBus.On("pauseMenu.select", o => OnSelect()));
+    actions.Add(MessageBus.On(
+      PauseMenuCharacterButtonsInput.ButtonSelectedMessage,
+      OnCharacterButtonSelected
+    ));
   }
 
   void UnregisterHandlers() {
@@ -164,29 +165,19 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     SetHoveredButton(-1);
   }
 
-  void OnClick(object payload) {
+  void OnCharacterButtonSelected(object payload) {
     if (!isActiveAndEnabled) {
       return;
     }
 
-    var target = payload as GameObject;
-    var buttonIndex = ResolveButtonIndex(target);
+    var buttonIndex = ResolveButtonIndex(payload as GameObject);
     if (buttonIndex < 0) {
       return;
     }
 
     SetHoveredButton(buttonIndex);
     SetPressedButton(buttonIndex);
-    HandleButtonAction(buttonIndex, "pause_menu_click");
-  }
-
-  void OnSelect() {
-    if (!isActiveAndEnabled || hoveredButtonIndex < 0) {
-      return;
-    }
-
-    SetPressedButton(hoveredButtonIndex);
-    HandleButtonAction(hoveredButtonIndex, "pause_menu_select");
+    HandleButtonAction(buttonIndex, "pause_menu_select");
   }
 
   void HandleButtonAction(int buttonIndex, string source) {
@@ -237,7 +228,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
 
     EnsureSelectedMajorStat(activeForm, orderedMajorStats, source);
     var selectedMajorStat = orderedMajorStats[selectedMajorIndex];
-    var availablePoints = ResolveAvailableStatPoints(activeForm);
+    var availablePoints = ResolveAvailableStatPoints();
     if (availablePoints <= 0) {
       RuntimeLog.Log(
         "[PauseMenuFormStatsView] Ignored stat spend form='" + activeForm +
@@ -286,7 +277,7 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     EnsureSelectedMajorStat(activeForm, orderedMajorStats, source);
     var selectedMajorStat = orderedMajorStats[selectedMajorIndex];
     var majorValue = FormStatsValues.GetValue(activeForm, selectedMajorStat);
-    var availablePoints = ResolveAvailableStatPoints(activeForm);
+    var availablePoints = ResolveAvailableStatPoints();
     var orderedMinorStats = FormStatIncreases.GetOrderedMinorStats(activeForm, selectedMajorStat);
     var sessionSpentCount = ResolveSessionSpendPreview(activeForm, selectedMajorStat);
 
@@ -318,11 +309,20 @@ public class PauseMenuFormStatsView : MonoBehaviour {
 
       if (orderedMinorStats != null && i < orderedMinorStats.Count) {
         var minorStat = orderedMinorStats[i];
-        var currentValue = majorValue * minorStat.Value;
-        var increaseValue = sessionSpentCount > 0 ? minorStat.Value * sessionSpentCount : 0f;
         ApplyText(row.nameText, minorStat.Key);
-        ApplyText(row.valueText, FormatNumber(currentValue));
-        ApplyText(row.increaseText, sessionSpentCount > 0 ? FormatSignedNumber(increaseValue) : "");
+        if (FormStatIncreases.IsPercentageStat(minorStat.Key)) {
+          var currentValue = majorValue * minorStat.Value;
+          var increaseValue = sessionSpentCount > 0 ? minorStat.Value * sessionSpentCount : 0f;
+          ApplyText(row.valueText, FormatNumber(currentValue));
+          ApplyText(row.increaseText, sessionSpentCount > 0 ? FormatSignedNumber(increaseValue) : "");
+        } else {
+          var currentValue = new EndlessNumber(minorStat.Value).MultiplyInPlace(majorValue);
+          var increaseValue = sessionSpentCount > 0
+            ? new EndlessNumber(minorStat.Value).MultiplyInPlace(sessionSpentCount)
+            : new EndlessNumber();
+          ApplyText(row.valueText, FormatNumber(currentValue));
+          ApplyText(row.increaseText, sessionSpentCount > 0 ? FormatSignedNumber(increaseValue) : "");
+        }
         continue;
       }
 
@@ -394,25 +394,29 @@ public class PauseMenuFormStatsView : MonoBehaviour {
     }
   }
 
-  int ResolveAvailableStatPoints(string formName) {
+  int ResolveAvailableStatPoints() {
     if (characterState != null) {
-      return characterState.GetAvailableStatPoints(formName);
+      return characterState.GetAvailableStatPoints();
     }
 
-    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
-    if (string.IsNullOrWhiteSpace(resolvedForm)) {
-      return 0;
-    }
-
-    var progress = EsperanzaForms.EnsureProgress(resolvedForm);
-    var earnedPoints = Mathf.Max(0, (progress != null ? progress.level : EsperanzaForms.DefaultLevel) - EsperanzaForms.DefaultLevel);
+    var earnedPoints = 0;
     var spentPoints = 0;
-    var orderedMajorStats = FormStatIncreases.GetOrderedMajorStats(resolvedForm);
-    for (var i = 0; i < orderedMajorStats.Count; i++) {
-      var statName = orderedMajorStats[i];
-      var currentValue = FormStatsValues.GetValue(resolvedForm, statName);
-      var defaultValue = FormStatsValues.GetDefaultValue(resolvedForm, statName);
-      spentPoints += Mathf.Max(0, currentValue - defaultValue);
+    foreach (var formName in EsperanzaForms.KnownForms) {
+      var progress = EsperanzaForms.EnsureProgress(formName);
+      earnedPoints += Mathf.Max(
+        0,
+        (progress != null ? progress.level : EsperanzaForms.DefaultLevel) - EsperanzaForms.DefaultLevel
+      );
+
+      FormStatsValues.EnsureForm(formName);
+      if (!FormStatsValues.values.TryGetValue(formName, out var stats) || stats == null) {
+        continue;
+      }
+
+      foreach (var stat in stats) {
+        var defaultValue = FormStatsValues.GetDefaultValue(formName, stat.Key);
+        spentPoints += Mathf.Max(0, stat.Value - defaultValue);
+      }
     }
 
     return Mathf.Max(0, earnedPoints - spentPoints);
@@ -443,15 +447,11 @@ public class PauseMenuFormStatsView : MonoBehaviour {
   }
 
   void SetHoveredButton(int buttonIndex) {
-    hoveredButtonIndex = buttonIndex;
     if (statsButtons == null) {
       return;
     }
 
     statsButtons.SetHoverIndex(buttonIndex);
-    if (buttonIndex < 0) {
-      statsButtons.SetActiveIndex(-1);
-    }
   }
 
   void SetPressedButton(int buttonIndex) {
@@ -571,15 +571,26 @@ public class PauseMenuFormStatsView : MonoBehaviour {
   }
 
   static string FormatNumber(float value) {
-    if (Mathf.Approximately(value, Mathf.Round(value))) {
+    if (value <= int.MaxValue &&
+        value >= int.MinValue &&
+        Mathf.Approximately(value, Mathf.Round(value))) {
       return Mathf.RoundToInt(value).ToString(CultureInfo.InvariantCulture);
     }
 
     return value.ToString("0.##", CultureInfo.InvariantCulture);
   }
 
+  static string FormatNumber(EndlessNumber value) {
+    return value != null ? value.ToGlyphString() : IntegerTextCache.Get(0);
+  }
+
   static string FormatSignedNumber(float value) {
     var prefix = value >= 0f ? "+" : "";
+    return prefix + FormatNumber(value);
+  }
+
+  static string FormatSignedNumber(EndlessNumber value) {
+    var prefix = value != null && value.Sign >= 0 ? "+" : "";
     return prefix + FormatNumber(value);
   }
 

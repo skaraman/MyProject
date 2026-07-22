@@ -342,9 +342,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::HitBox2D
   ignoreSameRoot: 1
-  hitEachHurtBoxOnce: 0
-  hitCooldown: 0.25
-  hitId: Imp1
+  hitEachHurtBoxOnce: 1
+  hitCooldown: 0
+  hitId: Imp.Jump
 --- !u!1 &964882007687400530
 GameObject:
   m_ObjectHideFlags: 0
@@ -460,7 +460,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2508680716189495012, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: -2508680716189495012, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -616,7 +616,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: hornR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -677,7 +677,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -4912237655387570350, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 386227281, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -781,7 +781,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -887,7 +887,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 32
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -5723780740828389136, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 386227281, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -915,8 +915,8 @@ MonoBehaviour:
   m_Bounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 0, y: 0, z: 0}
-  m_AlwaysUpdate: 1
-  m_AutoRebind: 1
+  m_AlwaysUpdate: 0
+  m_AutoRebind: 0
   m_BoundsMode: 0
 --- !u!114 &4519655818148437086
 MonoBehaviour:
@@ -954,7 +954,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: hornR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -980,7 +980,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_RootBones: []
   m_EndBones: []
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 11400000, guid: a317e8d8422e4f4f91eb67983a691d5c, type: 2}
   m_StartDepth: 0
   m_SiblingConstraints: 0
   m_ClosedSiblings: 0
@@ -1018,10 +1018,10 @@ MonoBehaviour:
   m_DeltaTimeMode: 0
   m_ConstantDeltaTime: 0.03
   m_Iterations: 1
-  m_SleepThreshold: 0.005
+  m_SleepThreshold: 0.000001
   m_UpdateWhenInvisible: 0
   m_GravityAligner: {fileID: 0}
-  m_Gravity: {x: 0, y: 0, z: 0}
+  m_Gravity: {x: 0, y: 0.014, z: 0}
   m_ForceModule: {fileID: 0}
   m_ForceScale: 1
   m_SimulateSpace: {fileID: 0}
@@ -1077,7 +1077,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: handL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -1138,7 +1138,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 4127741096536652481, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1398726914, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -1242,7 +1242,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1314,7 +1314,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: farmL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -1375,7 +1375,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -4106692568110710034, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1973199108, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -1479,7 +1479,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1551,7 +1551,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: torso
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -1612,7 +1612,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -8369467687288379699, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -1852304410, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -1716,7 +1716,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1788,7 +1788,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: footR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -1849,7 +1849,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2875177368227734116, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -657809369, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -1953,7 +1953,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -2025,7 +2025,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: armR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -2086,7 +2086,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 7389922210042798433, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -1959068625, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -2190,7 +2190,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -2482,7 +2482,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: thighL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -2543,7 +2543,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 4148713860722745143, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -1593796501, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -2647,7 +2647,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -2782,7 +2782,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 3751969408998419161, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: 3751969408998419161, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -2969,7 +2969,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 7141514654658448321, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: 7141514654658448321, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -3125,7 +3125,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: footL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -3186,7 +3186,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -8648199865416255102, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -1157641897, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -3290,7 +3290,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -3426,7 +3426,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: pelvis
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -3487,7 +3487,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -6369052354318740565, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 2005773406, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -3591,7 +3591,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -3946,7 +3946,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 772051552652778550, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: 772051552652778550, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -4133,7 +4133,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 772051552652778550, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: 772051552652778550, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -4257,7 +4257,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: hornL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -4318,7 +4318,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -5723780740828389136, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1659869745, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -4422,7 +4422,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -5120,15 +5120,15 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 37
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 9180251791023625898, guid: e9f3f1188f0b2ee48b453c1e15171b74, type: 3}
+  m_Sprite: {fileID: 2068449011, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1.92, y: 1.92}
+  m_Size: {x: 0.58, y: 0.35}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 0
+  m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
 --- !u!114 &4151204748237850365
@@ -5308,7 +5308,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2508680716189495012, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: -2508680716189495012, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -5395,6 +5395,7 @@ GameObject:
   - component: {fileID: 3287779749099355656}
   - component: {fileID: 2870196489028098548}
   - component: {fileID: 1234567890123456789}
+  - component: {fileID: 9000000000000000002}
   m_Layer: 6
   m_Name: Imp
   m_TagString: Untagged
@@ -5454,7 +5455,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::EnemyController
   slowDown: 0
   forceLoop: 0
-  awardPlaceholderXp: 0
   spriteObjects:
   - {fileID: 5485371309744147019}
   hBoxObjects:
@@ -5468,7 +5468,6 @@ MonoBehaviour:
   enemyType: Imp
   defaultAnimation: Run
   playOnStart: 1
-  placeholderKillXpReward: 100
   prewarmEnemyAnimationStarts: 1
   prewarmFramesPerAnimation: 4
 --- !u!114 &1009002839782859216
@@ -5478,7 +5477,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5719518687213778881}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 98ff5d32ca1ddf944938c372b4227827, type: 3}
   m_Name: 
@@ -5486,12 +5485,17 @@ MonoBehaviour:
   player: {fileID: 0}
   enemyController: {fileID: 3767119040153842213}
   moveSpeed: 2.5
-  waitRange: {x: 0.15, y: 0.45}
-  backstepRange: {x: 0.2, y: 0.45}
-  lungeRange: {x: 0.3, y: 0.65}
-  runStepRange: {x: 0.35, y: 0.7}
+  approachStepRange: {x: 0.35, y: 0.7}
   attackCooldown: 1.1
-  fallbackClosingDistance: 1.5
+  fallbackClosingDistance: 10
+  frontStagingDistanceRange: {x: 1.35, y: 2.1}
+  frontStagingVerticalLeeway: 0.55
+  frontStagingArrivalRadius: 0.35
+  maximumFrontStagingSeconds: 2.25
+  frontStagingSpeedMultiplier: 0.8
+  preferredEnemySpacing: 1.25
+  separationInfluence: 0.75
+  recoverySeparationSpeedMultiplier: 0.65
 --- !u!210 &3287779749099355656
 SortingGroup:
   m_ObjectHideFlags: 0
@@ -5538,6 +5542,25 @@ MonoBehaviour:
   damageNumberPrefab: {fileID: 5719518687213778881, guid: 89df7c78c7e217a4cb780f9b4f3d699a, type: 3}
   healthBarStretch: {fileID: 4321432125981780510}
   healthText: {fileID: 5898977810489906472}
+--- !u!114 &9000000000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5719518687213778881}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4bd3a09f6e2c48b59f71d0ac835e1462, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Project.Internal::ProjectedSpriteShadowCaster2D
+  groundAnchor: {fileID: 1649069592050807405}
+  castSunShadow: 1
+  castNearestLocalShadow: 1
+  shadowColor: {r: 0, g: 0, b: 0, a: 1}
+  shadowGroupOrderOffset: 0
+  localShadowOrderOffset: 1
+  localLightReselectSeconds: 0.12
 --- !u!1 &5737903963291482361
 GameObject:
   m_ObjectHideFlags: 0
@@ -5695,7 +5718,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: handR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -5756,7 +5779,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 5162541612250360650, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 868354054, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -5860,7 +5883,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -6332,7 +6355,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: calfR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -6393,7 +6416,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 2359615413837506782, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -921457010, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -6497,7 +6520,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -6633,7 +6656,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: head
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -6694,7 +6717,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -4076228896630056615, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1455758086, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -6798,7 +6821,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations:
   - prop: _FadeAmount
     propHash: 443
@@ -7005,7 +7028,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2463003161872905370, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: -2463003161872905370, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -7329,7 +7352,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2463003161872905370, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: -2463003161872905370, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -7510,7 +7533,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -997972493423046422, guid: 1dca10cafd56add479632a3912286b44, type: 3}
+  m_Sprite: {fileID: -997972493423046422, guid: f04282aca68dfd8bd265a03f118ef784, type: 3}
   m_Color: {r: 1, g: 0, b: 0, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -7818,7 +7841,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: thighR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -7879,7 +7902,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 6587820384825015845, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: -40464109, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -7983,7 +8006,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -8055,7 +8078,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: calfL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -8116,7 +8139,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 8938999362490931853, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 680015961, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -8220,7 +8243,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -8355,7 +8378,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 4122923815760860928, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: 4122923815760860928, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -8479,7 +8502,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: neck
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -8540,7 +8563,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 4484167359084727461, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 2076787188, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -8644,7 +8667,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -8779,7 +8802,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 3751969408998419161, guid: 1ee3db7f6075b1b4580e44db200004b6, type: 3}
+  m_Sprite: {fileID: 3751969408998419161, guid: ccfac617c3827f30e009725d740e7d36, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -8903,7 +8926,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: eyeL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -8964,7 +8987,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -5854714953031834947, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1642158044, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -9068,7 +9091,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -9174,7 +9197,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 32
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -4912237655387570350, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1659869745, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -9198,16 +9221,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.2D.Animation.Runtime::UnityEngine.U2D.Animation.SpriteSkin
   m_RootBone: {fileID: 1213996268536047871}
-  m_BoneTransforms:
-  - {fileID: 1213996268536047871}
-  - {fileID: 5623688955561310241}
-  - {fileID: 4237686052260084619}
-  - {fileID: 8191833553113504299}
+  m_BoneTransforms: []
   m_Bounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 0, y: 0, z: 0}
-  m_AlwaysUpdate: 1
-  m_AutoRebind: 0
+  m_AlwaysUpdate: 0
+  m_AutoRebind: 1
   m_BoundsMode: 0
 --- !u!114 &2641303384217917233
 MonoBehaviour:
@@ -9245,7 +9264,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: hornL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -9271,7 +9290,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_RootBones: []
   m_EndBones: []
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 11400000, guid: a317e8d8422e4f4f91eb67983a691d5c, type: 2}
   m_StartDepth: 0
   m_SiblingConstraints: 0
   m_ClosedSiblings: 0
@@ -9309,10 +9328,10 @@ MonoBehaviour:
   m_DeltaTimeMode: 0
   m_ConstantDeltaTime: 0.03
   m_Iterations: 1
-  m_SleepThreshold: 0.005
+  m_SleepThreshold: 0.000001
   m_UpdateWhenInvisible: 0
   m_GravityAligner: {fileID: 0}
-  m_Gravity: {x: 0, y: 0, z: 0}
+  m_Gravity: {x: 0, y: 0.014, z: 0}
   m_ForceModule: {fileID: 0}
   m_ForceScale: 1
   m_SimulateSpace: {fileID: 0}
@@ -9730,7 +9749,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: armL
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -9791,7 +9810,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -5678515183168758942, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 1967069684, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -9895,7 +9914,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -9967,7 +9986,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: eyeR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -10028,7 +10047,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -4058441156555343809, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 109119795, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -10132,7 +10151,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -10204,7 +10223,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::SpriteWithNormals
   libraryName: Enemies/Imp
   labelPrefix: farmR
-  category: PIECES
+  category: Pieces
   isAnimation: 0
   doNotRender: 0
   useTrimmedAtlasOffset: 0
@@ -10265,7 +10284,7 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -7273294286120937297, guid: 948edddbd113151498b664f69d91be82, type: 3}
+  m_Sprite: {fileID: 320562680, guid: 65ce7bce74d720083a6b3815e94658db, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -10369,7 +10388,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1975
+    keywordHash: 2005
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []

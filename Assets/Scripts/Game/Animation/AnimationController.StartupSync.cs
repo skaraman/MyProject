@@ -23,8 +23,28 @@ public partial class AnimationController {
            !string.IsNullOrWhiteSpace(category) &&
            !string.IsNullOrEmpty(defaultAnimation) &&
            string.IsNullOrEmpty(currentAnimation) &&
+           seenAnimationCategories.Count == 0 &&
            enabledTargetCount > 1 &&
            HasMixedVisibleSpriteTargets();
+  }
+
+  bool ShouldHoldRuntimePlayerStartFrame(
+    int enabledTargetCount,
+    string category,
+    AnimData animation
+  ) {
+    if (!Application.isPlaying) return false;
+    if (appearancePinClass != TextureResidencyCache.PinClass.Player) return false;
+    if (seenAnimationCategories.Count == 0) return false;
+    if (enabledTargetCount <= 1) return false;
+    if (enabledTargetCount > MaxTargetsForGateReadinessChecks) return false;
+    if (string.IsNullOrWhiteSpace(category)) return false;
+    if (animation == null) return false;
+    if (HasCurrentAppearancePinCoverage()) return false;
+    if (!HasMixedVisibleSpriteTargets()) return false;
+
+    var startFrame = Math.Max(animation.start, 1);
+    return !AreAllTargetsReadyForWindow(category, startFrame, startFrame);
   }
 
   void BeginStartupVisualHold() {

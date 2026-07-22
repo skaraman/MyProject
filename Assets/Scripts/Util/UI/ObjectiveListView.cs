@@ -37,10 +37,15 @@ public sealed class ObjectiveListView : MonoBehaviour {
 
     if (objectivePrefab == null) return;
 
-    var objectives = ContentEpisodeProgression.ResolveCurrentObjectives();
+    var objectives = ContentEpisodeProgression.ResolveCurrentEpisodeObjectives();
     EnsureEntryCount(Mathf.Max(objectives.Count, prewarmCapacity));
     for (var i = 0; i < objectives.Count; i++) {
-      PopulateEntry(entries[i], objectives[i]);
+      var objective = objectives[i];
+      PopulateEntry(
+        entries[i],
+        objective,
+        ContentEpisodeProgression.IsCurrentEpisodeObjectiveComplete(objective)
+      );
     }
     for (var i = objectives.Count; i < entries.Count; i++) {
       if (entries[i] != null && entries[i].activeSelf) {
@@ -69,7 +74,11 @@ public sealed class ObjectiveListView : MonoBehaviour {
     }
   }
 
-  static void PopulateEntry(GameObject entry, ContentObjectiveDefinition objective) {
+  static void PopulateEntry(
+    GameObject entry,
+    ContentObjectiveDefinition objective,
+    bool isComplete
+  ) {
     if (entry == null) return;
     if (objective == null) {
       entry.SetActive(false);
@@ -78,9 +87,9 @@ public sealed class ObjectiveListView : MonoBehaviour {
 
     var text = entry.GetComponentInChildren<FontText>(includeInactive: true);
     if (text != null) {
-      var description = objective.description ?? "";
-      var contentChanged = text.content != description;
-      text.content = description;
+      var content = isComplete ? "Complete!" : objective.description ?? "";
+      var contentChanged = text.content != content;
+      text.content = content;
       if (entry.activeSelf && contentChanged) {
         text.Generate();
       }

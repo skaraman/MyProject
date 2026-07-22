@@ -95,6 +95,122 @@ public static partial class ContentPackPipeline {
     }
   }
 
+  static bool ExportContentPackInterfaceInfoCsv(ContentPackSelection selection, bool logResult) {
+    return RunContentPackIterationCommand(
+      selection,
+      "--export-interface-info-csv",
+      "generate the content-pack recovery CSV before building",
+      "Generated content-pack recovery CSV.",
+      logResult
+    );
+  }
+
+  static bool RecoverBuildCleanPackState(ContentPackSelection selection, bool logResult) {
+    var recovered = RunContentPackIterationCommand(
+      selection,
+      "--recover-build-clean",
+      "recover the deleted content package before Build Clean",
+      "Recovered Build Clean package state.",
+      logResult
+    );
+    if (recovered) {
+      AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+    }
+    return recovered;
+  }
+
+  static bool RunContentPackIterationCommand(
+    ContentPackSelection selection,
+    string commandArgument,
+    string failureDescription,
+    string successDescription,
+    bool logResult
+  ) {
+    if (selection == null) return false;
+
+    var projectRoot = GetProjectRoot();
+    var scriptPath = Path.Combine(projectRoot, "Tools", "ContentPackIterationUI.py");
+    if (!File.Exists(scriptPath)) {
+      Debug.LogError("[ContentPackPipeline] Missing Content Pack UI script. path='" + scriptPath + "'");
+      return false;
+    }
+
+    var arguments = QuoteCliArgument(scriptPath) +
+                    " --project-root " + QuoteCliArgument(projectRoot) +
+                    " --external-root " + QuoteCliArgument(selection.ExternalRoot) +
+                    " " + commandArgument;
+    var errors = new List<string>();
+    if (TryRunContentPackIterationCommand("py", "-3 " + arguments, projectRoot, successDescription, logResult, out var error)) {
+      return true;
+    }
+    errors.Add(error);
+    if (TryRunContentPackIterationCommand("python", arguments, projectRoot, successDescription, logResult, out error)) {
+      return true;
+    }
+    errors.Add(error);
+    if (TryRunContentPackIterationCommand("python3", arguments, projectRoot, successDescription, logResult, out error)) {
+      return true;
+    }
+    errors.Add(error);
+
+    Debug.LogError(
+      "[ContentPackPipeline] Failed to " + failureDescription + ".\n" +
+      string.Join("\n", errors)
+    );
+    return false;
+  }
+
+  static bool TryRunContentPackIterationCommand(
+    string executable,
+    string arguments,
+    string projectRoot,
+    string successDescription,
+    bool logResult,
+    out string error
+  ) {
+    error = "";
+
+    try {
+      var startInfo = new ProcessStartInfo {
+        FileName = executable,
+        Arguments = arguments,
+        WorkingDirectory = projectRoot,
+        UseShellExecute = false,
+        CreateNoWindow = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true
+      };
+
+      using var process = Process.Start(startInfo);
+      if (process == null) {
+        error = executable + ": process did not start.";
+        return false;
+      }
+
+      var output = process.StandardOutput.ReadToEnd().Trim();
+      var standardError = process.StandardError.ReadToEnd().Trim();
+      process.WaitForExit();
+      if (process.ExitCode != 0) {
+        error = executable + ": exit_code=" + process.ExitCode +
+                (string.IsNullOrWhiteSpace(standardError) ? "" : " error='" + standardError + "'");
+        return false;
+      }
+
+      if (logResult) {
+        Debug.Log(
+          "[ContentPackPipeline] " + successDescription +
+          " command='" + executable + "'" +
+          (string.IsNullOrWhiteSpace(output) ? "" : " " + output)
+        );
+      }
+      return true;
+    }
+    catch (Exception ex) {
+      error = executable + ": " + ex.Message;
+      return false;
+    }
+  }
+
   static string QuoteCliArgument(string value) {
     if (string.IsNullOrEmpty(value)) {
       return "\"\"";
@@ -147,7 +263,7 @@ public static partial class ContentPackPipeline {
   }
 
   static bool RunFullMigrationPass(bool logResult, TransitionPipelineMode mode) {
-    const int stepCount = 8;
+    var stepCount = mode == TransitionPipelineMode.Clean ? 10 : 9;
     const string pipelineLabel = "Full Migration Pass";
     var summary = new TransitionRunSummary(mode);
     var startedAt = EditorApplication.timeSinceStartup;
@@ -191,15 +307,22 @@ public static partial class ContentPackPipeline {
     }
 
     try {
-      if (!RunStep("Analyze ownership + duplicates", () => {
-        summary.analysis = AnalyzeOwnershipAndDuplicates(logResult);
-        return summary.analysis != null;
-      })) return false;
-
       var selection = LoadOrCreateSelectionAsset(logResult);
       if (selection == null) {
         return false;
       }
+
+      if (mode == TransitionPipelineMode.Clean &&
+          !RunStep("Recover deleted package definitions", () =>
+            RecoverBuildCleanPackState(selection, logResult))) return false;
+
+      if (!RunStep("Snapshot pack setup CSV", () =>
+        ExportContentPackInterfaceInfoCsv(selection, logResult))) return false;
+
+      if (!RunStep("Analyze ownership + duplicates", () => {
+        summary.analysis = AnalyzeOwnershipAndDuplicates(logResult);
+        return summary.analysis != null;
+      })) return false;
 
       if (!RunStep("Export external pack content", () =>
         RefreshExportedPackSetForStage(selection, "full_migration_pass", logResult, mode, summary.export))) return false;
@@ -210,7 +333,10 @@ public static partial class ContentPackPipeline {
       })) return false;
 
       if (!RunStep("Audit legacy dependencies", () => {
-        summary.auditCompleted = AuditLegacyDependencies(summary.analysis, logResult);
+        summary.analysis = AnalyzeOwnershipAndDuplicates(logResult);
+        summary.auditCompleted =
+          summary.analysis != null &&
+          AuditLegacyDependencies(summary.analysis, logResult);
         return summary.auditCompleted;
       })) return false;
 

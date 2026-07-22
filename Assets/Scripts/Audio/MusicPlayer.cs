@@ -5,24 +5,56 @@ using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 
+public static class AudioPlaybackMessages {
+  public const string PauseMenuOpened = "audio.pauseMenuOpened";
+  public const string PauseMenuClosed = "audio.pauseMenuClosed";
+}
+
 public sealed class MusicPlayer : MonoBehaviour {
+  public const string FadeOutMessage = "music.fadeOut";
+  const string EpisodeRoutePrefix = "episode:";
+
   [SerializeField] TextAsset manifestAsset;
   [SerializeField, Range(0f, 1f)] float volume = 1f;
 
   readonly List<Action> subscriptions = new();
 
   Dictionary<string, MusicPlaylistDefinition> playlists;
+  Dictionary<string, MusicPlaylistDefinition> episodePlaylists;
   AudioSource audioSource;
   AsyncOperationHandle<AudioClip> activeClipHandle;
   MusicPlaylistDefinition activePlaylist;
   Coroutine audioDataReadyRoutine;
+  Coroutine fadeRoutine;
   string activeZone = "";
   int trackIndex;
   int failedTrackCount;
   int loadGeneration;
+  int suspendedTimeSamples;
+  bool applicationFocused = true;
+  bool applicationPaused;
+  bool pauseMenuOpen;
+  bool pauseMenuVolumeDucked;
+  float pauseMenuVolumeBeforeDucking;
   bool hasActiveClipHandle;
+  bool playbackSourcePaused;
+  bool playbackSuspended;
   bool trackIsPlaying;
   bool waitingForBlackscreen;
+  bool episodeMusicActive;
+  bool episodeMusicGameplayVisible;
+  int episodeMusicRevision = -1;
+  int episodeMusicRegistryVersion = -1;
+
+  public float Volume => volume;
+
+  public void SetVolume(float value) {
+    value = Mathf.Clamp01(value);
+    if (Mathf.Approximately(volume, value)) return;
+
+    volume = value;
+    RestoreVolume();
+  }
 
   void Awake() {
     audioSource = GetComponent<AudioSource>();
@@ -34,12 +66,28 @@ public sealed class MusicPlayer : MonoBehaviour {
     audioSource.spatialBlend = 0f;
     audioSource.ignoreListenerPause = true;
     audioSource.volume = volume;
+    pauseMenuVolumeBeforeDucking = volume;
 
-    MusicManifestCatalog.TryBuildPlaylists(manifestAsset, out playlists);
+    MusicManifestCatalog.TryBuildPlaylists(
+      manifestAsset,
+      out playlists,
+      out episodePlaylists
+    );
   }
 
   void OnEnable() {
+    applicationFocused = Application.isFocused;
+    applicationPaused = false;
+    pauseMenuOpen = SingleSceneManager.IsPauseMenuActive;
+    pauseMenuVolumeDucked = false;
+    playbackSourcePaused = false;
+    playbackSuspended = !applicationFocused;
+    suspendedTimeSamples = 0;
+
     subscriptions.Add(MessageBus.On("LocationUpdated", OnLocationUpdated));
+    subscriptions.Add(MessageBus.On(FadeOutMessage, OnFadeOut));
+    subscriptions.Add(MessageBus.On(AudioPlaybackMessages.PauseMenuOpened, OnPauseMenuOpened));
+    subscriptions.Add(MessageBus.On(AudioPlaybackMessages.PauseMenuClosed, OnPauseMenuClosed));
     subscriptions.Add(MessageBus.On(
       SingleSceneManager.BlackscreenFullyTransparentTopic,
       OnBlackscreenFullyTransparent
@@ -47,6 +95,8 @@ public sealed class MusicPlayer : MonoBehaviour {
     if (!ApplyZone(LocationManager.currentLocation)) {
       PlayAwakePlaylist();
     }
+    ApplyPauseMenuVolumeDuck();
+    UpdateEpisodeMusic();
   }
 
   void OnDisable() {
@@ -56,12 +106,23 @@ public sealed class MusicPlayer : MonoBehaviour {
 
     subscriptions.Clear();
     activeZone = "";
+    episodeMusicActive = false;
+    episodeMusicGameplayVisible = false;
+    episodeMusicRevision = -1;
+    episodeMusicRegistryVersion = -1;
     waitingForBlackscreen = false;
     loadGeneration++;
+    RestoreVolume();
     StopPlayback();
   }
 
   void Update() {
+    UpdateEpisodeMusic();
+
+    if (playbackSuspended) {
+      return;
+    }
+
     if (!trackIsPlaying || audioSource == null || audioSource.isPlaying) {
       return;
     }
@@ -76,8 +137,206 @@ public sealed class MusicPlayer : MonoBehaviour {
     LoadCurrentTrack();
   }
 
+  void OnApplicationFocus(bool hasFocus) {
+    applicationFocused = hasFocus;
+    RefreshApplicationSuspension();
+  }
+
+  void OnApplicationPause(bool isPaused) {
+    applicationPaused = isPaused;
+    RefreshApplicationSuspension();
+  }
+
+  void RefreshApplicationSuspension() {
+    if (!applicationFocused || applicationPaused) {
+      SuspendPlayback();
+      return;
+    }
+
+    ResumePlayback();
+  }
+
+  void SuspendPlayback() {
+    if (playbackSuspended) {
+      return;
+    }
+
+    playbackSuspended = true;
+    if (!trackIsPlaying || audioSource == null || audioSource.clip == null) {
+      return;
+    }
+
+    suspendedTimeSamples = audioSource.timeSamples;
+    audioSource.Pause();
+    playbackSourcePaused = true;
+  }
+
+  void ResumePlayback() {
+    if (!playbackSuspended) {
+      return;
+    }
+
+    playbackSuspended = false;
+    if (!trackIsPlaying || audioSource == null || audioSource.clip == null) {
+      return;
+    }
+
+    if (audioSource.clip.samples > 0) {
+      suspendedTimeSamples = Mathf.Clamp(
+        suspendedTimeSamples,
+        0,
+        audioSource.clip.samples - 1
+      );
+      audioSource.timeSamples = suspendedTimeSamples;
+    }
+
+    if (playbackSourcePaused) {
+      playbackSourcePaused = false;
+      audioSource.UnPause();
+      return;
+    }
+
+    audioSource.Play();
+  }
+
+  void OnPauseMenuOpened(object payload) {
+    if (pauseMenuOpen) {
+      return;
+    }
+
+    pauseMenuOpen = true;
+    ApplyPauseMenuVolumeDuck();
+  }
+
+  void OnPauseMenuClosed(object payload) {
+    if (!pauseMenuOpen) {
+      return;
+    }
+
+    pauseMenuOpen = false;
+    RestorePauseMenuVolume();
+  }
+
   void OnLocationUpdated(object payload) {
+    if (episodeMusicActive) {
+      return;
+    }
+
     ApplyZone(Convert.ToString(payload));
+  }
+
+  void UpdateEpisodeMusic() {
+    if (pauseMenuOpen) {
+      return;
+    }
+
+    var gameplayVisible = SingleSceneManager.IsGameplayActive &&
+      SingleSceneManager.IsBlackscreenFullyTransparent;
+    var episodeRevision = gameplayVisible ? ContentEpisodeProgression.EpisodeRevision : -1;
+    var registryVersion = gameplayVisible ? ActiveContentRegistryRuntime.ReloadVersion : -1;
+    if (episodeMusicGameplayVisible == gameplayVisible &&
+        episodeMusicRevision == episodeRevision &&
+        episodeMusicRegistryVersion == registryVersion) {
+      return;
+    }
+
+    var wasEpisodeMusicActive = episodeMusicActive;
+    episodeMusicGameplayVisible = gameplayVisible;
+    episodeMusicRevision = episodeRevision;
+    episodeMusicRegistryVersion = registryVersion;
+    if (gameplayVisible) {
+      episodeMusicActive = ApplyEpisode(
+        ContentEpisodeProgression.ResolveCurrentEpisodeId()
+      );
+      return;
+    }
+
+    episodeMusicActive = false;
+    if (wasEpisodeMusicActive) {
+      ApplyZone(LocationManager.currentLocation);
+    }
+  }
+
+  void OnFadeOut(object payload) {
+    var duration = payload is float requestedDuration
+      ? requestedDuration
+      : 1f;
+    duration = Mathf.Max(0f, duration);
+
+    CancelFade();
+    if (duration <= 0f) {
+      SetMusicVolume(0f);
+      return;
+    }
+
+    fadeRoutine = StartCoroutine(FadeOutRoutine(duration));
+  }
+
+  IEnumerator FadeOutRoutine(float duration) {
+    var startingVolume = GetMusicVolume();
+    var elapsed = 0f;
+
+    while (elapsed < duration) {
+      elapsed += Time.unscaledDeltaTime;
+      var progress = Mathf.Clamp01(elapsed / duration);
+      SetMusicVolume(Mathf.Lerp(startingVolume, 0f, progress));
+      yield return null;
+    }
+
+    SetMusicVolume(0f);
+    fadeRoutine = null;
+  }
+
+  void CancelFade() {
+    if (fadeRoutine != null) {
+      StopCoroutine(fadeRoutine);
+      fadeRoutine = null;
+    }
+  }
+
+  void RestoreVolume() {
+    CancelFade();
+    SetMusicVolume(volume);
+  }
+
+  void ApplyPauseMenuVolumeDuck() {
+    if (!pauseMenuOpen || pauseMenuVolumeDucked || audioSource == null) {
+      return;
+    }
+
+    pauseMenuVolumeBeforeDucking = audioSource.volume;
+    pauseMenuVolumeDucked = true;
+    audioSource.volume = pauseMenuVolumeBeforeDucking * 0.5f;
+  }
+
+  void RestorePauseMenuVolume() {
+    if (!pauseMenuVolumeDucked) {
+      return;
+    }
+
+    pauseMenuVolumeDucked = false;
+    if (audioSource != null) {
+      audioSource.volume = pauseMenuVolumeBeforeDucking;
+    }
+  }
+
+  float GetMusicVolume() {
+    if (pauseMenuVolumeDucked) {
+      return pauseMenuVolumeBeforeDucking;
+    }
+
+    return audioSource != null ? audioSource.volume : volume;
+  }
+
+  void SetMusicVolume(float value) {
+    pauseMenuVolumeBeforeDucking = Mathf.Clamp01(value);
+    if (audioSource == null) {
+      return;
+    }
+
+    audioSource.volume = pauseMenuVolumeDucked
+      ? pauseMenuVolumeBeforeDucking * 0.5f
+      : pauseMenuVolumeBeforeDucking;
   }
 
   void OnBlackscreenFullyTransparent() {
@@ -91,18 +350,34 @@ public sealed class MusicPlayer : MonoBehaviour {
 
   bool ApplyZone(string zoneId) {
     var normalizedZone = string.IsNullOrWhiteSpace(zoneId) ? "" : zoneId.Trim();
-    if (string.Equals(activeZone, normalizedZone, StringComparison.OrdinalIgnoreCase)) {
+    return ApplyPlaylist(normalizedZone, playlists);
+  }
+
+  bool ApplyEpisode(string episodeId) {
+    var normalizedEpisode = string.IsNullOrWhiteSpace(episodeId) ? "" : episodeId.Trim();
+    return ApplyPlaylist(EpisodeRoutePrefix + normalizedEpisode, episodePlaylists);
+  }
+
+  bool ApplyPlaylist(
+    string playlistId,
+    Dictionary<string, MusicPlaylistDefinition> sourcePlaylists
+  ) {
+    if (string.Equals(activeZone, playlistId, StringComparison.OrdinalIgnoreCase)) {
       return activePlaylist != null;
     }
 
-    activeZone = normalizedZone;
+    activeZone = playlistId;
+    RestoreVolume();
     trackIndex = 0;
     failedTrackCount = 0;
     waitingForBlackscreen = false;
     loadGeneration++;
     StopPlayback();
 
-    if (playlists == null || !playlists.TryGetValue(activeZone, out activePlaylist)) {
+    var lookupId = playlistId.StartsWith(EpisodeRoutePrefix, StringComparison.OrdinalIgnoreCase)
+      ? playlistId.Substring(EpisodeRoutePrefix.Length)
+      : playlistId;
+    if (sourcePlaylists == null || !sourcePlaylists.TryGetValue(lookupId, out activePlaylist)) {
       activePlaylist = null;
       return false;
     }
@@ -238,8 +513,15 @@ public sealed class MusicPlayer : MonoBehaviour {
     failedTrackCount = 0;
     audioSource.clip = clip;
     audioSource.loop = activePlaylist.loop && activePlaylist.tracks.Length == 1;
-    audioSource.Play();
     trackIsPlaying = true;
+
+    if (playbackSuspended) {
+      playbackSourcePaused = false;
+      suspendedTimeSamples = 0;
+      return;
+    }
+
+    audioSource.Play();
     RuntimeLog.Log(
       "[MusicPlayer] Playing zone='" + activeZone + "' track='" + address + "'."
     );
@@ -262,6 +544,8 @@ public sealed class MusicPlayer : MonoBehaviour {
 
   void StopPlayback() {
     trackIsPlaying = false;
+    playbackSourcePaused = false;
+    suspendedTimeSamples = 0;
     if (audioDataReadyRoutine != null) {
       StopCoroutine(audioDataReadyRoutine);
       audioDataReadyRoutine = null;

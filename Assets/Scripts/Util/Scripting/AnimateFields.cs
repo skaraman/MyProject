@@ -243,6 +243,48 @@ public class AnimateFields : MonoBehaviour {
     }
   }
 
+  sealed class FloatReverseRuntimeBinding : RuntimeBindingBase {
+    readonly Component component;
+    readonly FloatMemberAccessor accessor;
+    readonly float targetValue;
+    float from;
+
+    public FloatReverseRuntimeBinding(Component component, FloatMemberAccessor accessor, float targetValue) {
+      this.component = component;
+      this.accessor = accessor;
+      this.targetValue = targetValue;
+    }
+
+    public override void EnterStep(bool useFromOverride) {
+      from = accessor.Get(component);
+    }
+
+    public override void Apply(float eased) {
+      accessor.Set(component, from + (targetValue - from) * eased);
+    }
+  }
+
+  sealed class IntReverseRuntimeBinding : RuntimeBindingBase {
+    readonly Component component;
+    readonly IntMemberAccessor accessor;
+    readonly int targetValue;
+    int from;
+
+    public IntReverseRuntimeBinding(Component component, IntMemberAccessor accessor, int targetValue) {
+      this.component = component;
+      this.accessor = accessor;
+      this.targetValue = targetValue;
+    }
+
+    public override void EnterStep(bool useFromOverride) {
+      from = accessor.Get(component);
+    }
+
+    public override void Apply(float eased) {
+      accessor.Set(component, from + Mathf.RoundToInt((targetValue - from) * eased));
+    }
+  }
+
   sealed class FloatFromValueBinding : FromValueBindingBase {
     readonly Component component;
     readonly FloatMemberAccessor accessor;
@@ -314,6 +356,8 @@ public class AnimateFields : MonoBehaviour {
   string cachedTypeMode;
   int cachedSequenceCount = -1;
   RuntimeStep[] runtimeSteps = Array.Empty<RuntimeStep>();
+  RuntimeStep[] reverseRuntimeSteps = Array.Empty<RuntimeStep>();
+  bool isReversePlayback;
   readonly List<FromValueBindingBase> fromValueBindings = new();
   readonly Dictionary<string, MemberAccessorBase> memberCache = new();
   readonly HashSet<string> warnedUnsupportedMembers = new();
@@ -342,12 +386,14 @@ public class AnimateFields : MonoBehaviour {
     triggerOff?.Invoke();
     triggerOff = null;
     runtimeSteps = Array.Empty<RuntimeStep>();
+    reverseRuntimeSteps = Array.Empty<RuntimeStep>();
     fromValueBindings.Clear();
     memberCache.Clear();
     warnedUnsupportedMembers.Clear();
   }
 
   public void Restart() {
+    isReversePlayback = false;
     EnsureRuntimeCache();
     ResetPlaybackState();
     SetRuntimeUpdateState();
@@ -392,6 +438,7 @@ public class AnimateFields : MonoBehaviour {
 
   public void Play() {
     EnsureRuntimeCache();
+    isReversePlayback = false;
     ResetPlaybackState();
     paused = false;
     SetRuntimeUpdateState();
@@ -399,8 +446,26 @@ public class AnimateFields : MonoBehaviour {
 
   public void Stop() {
     paused = true;
+    isReversePlayback = false;
     EnsureRuntimeCache();
     ResetPlaybackState();
+    SetRuntimeUpdateState();
+  }
+
+  public void PlayReverse() {
+    EnsureRuntimeCache();
+    reverseRuntimeSteps = BuildReverseRuntimeSteps();
+    if (!hasValidTarget || reverseRuntimeSteps.Length == 0) {
+      Stop();
+      return;
+    }
+
+    isReversePlayback = true;
+    timer = 0f;
+    sequenceIt = 0;
+    sequenceCount = reverseRuntimeSteps.Length;
+    EnterCurrentStep(isFirstStep: true);
+    paused = false;
     SetRuntimeUpdateState();
   }
 
@@ -530,6 +595,51 @@ public class AnimateFields : MonoBehaviour {
 
     runtimeStep.bindings = bindings.Count > 0 ? bindings.ToArray() : Array.Empty<RuntimeBindingBase>();
     return runtimeStep;
+  }
+
+  RuntimeStep[] BuildReverseRuntimeSteps() {
+    if (target == null || fromValues == null || fromValues.Count == 0 || runtimeSteps.Length == 0) {
+      return Array.Empty<RuntimeStep>();
+    }
+
+    var bindings = new List<RuntimeBindingBase>();
+    foreach (var pair in fromValues) {
+      var key = pair.key;
+      if (string.IsNullOrEmpty(key)) continue;
+
+      var accessor = GetCachedMember(key);
+      if (accessor is FloatMemberAccessor floatAccessor) {
+        if (float.TryParse(pair.value, out var targetValue)) {
+          bindings.Add(new FloatReverseRuntimeBinding(target, floatAccessor, targetValue));
+        }
+        continue;
+      }
+
+      if (accessor is IntMemberAccessor intAccessor) {
+        if (int.TryParse(pair.value, out var targetValue)) {
+          bindings.Add(new IntReverseRuntimeBinding(target, intAccessor, targetValue));
+        }
+        continue;
+      }
+
+      if (accessor != null) {
+        WarnUnsupportedMember(accessor);
+      }
+    }
+
+    if (bindings.Count == 0) {
+      return Array.Empty<RuntimeStep>();
+    }
+
+    var forwardStep = runtimeSteps[0];
+    return new[] {
+      new RuntimeStep {
+        bindings = bindings.ToArray(),
+        duration = forwardStep.duration,
+        randomDuration = forwardStep.randomDuration,
+        easing = forwardStep.easing
+      }
+    };
   }
 
   void BuildFromValueBindings() {
@@ -765,13 +875,14 @@ public class AnimateFields : MonoBehaviour {
 
   void EnterCurrentStep(bool isFirstStep) {
     timer = 0f;
-    if (runtimeSteps == null || sequenceIt < 0 || sequenceIt >= runtimeSteps.Length) {
+    var steps = GetActiveRuntimeSteps();
+    if (steps == null || sequenceIt < 0 || sequenceIt >= steps.Length) {
       stepDuration = 0f;
       currentEasing = DefaultEasing;
       return;
     }
 
-    var step = runtimeSteps[sequenceIt];
+    var step = steps[sequenceIt];
     stepDuration = step.duration;
     if (step.randomDuration > 0f) {
       stepDuration += UnityEngine.Random.Range(0f, step.randomDuration);
@@ -785,9 +896,10 @@ public class AnimateFields : MonoBehaviour {
   }
 
   void ApplyCurrentStep(float eased) {
-    if (runtimeSteps == null || sequenceIt < 0 || sequenceIt >= runtimeSteps.Length) return;
+    var steps = GetActiveRuntimeSteps();
+    if (steps == null || sequenceIt < 0 || sequenceIt >= steps.Length) return;
 
-    var bindings = runtimeSteps[sequenceIt].bindings;
+    var bindings = steps[sequenceIt].bindings;
     for (var i = 0; i < bindings.Length; i++) {
       bindings[i].Apply(eased);
     }
@@ -798,16 +910,24 @@ public class AnimateFields : MonoBehaviour {
     sequenceIt++;
     if (sequenceIt >= sequenceCount) {
       callback?.Invoke();
-      if (loop) {
+      if (!isReversePlayback && loop) {
         ResetPlaybackState();
       }
       else {
-        Stop();
+        // Stop is an explicit reset operation. A naturally completed
+        // animation instead holds its final values.
+        paused = true;
+        isReversePlayback = false;
+        SetRuntimeUpdateState();
       }
       return;
     }
 
     EnterCurrentStep(isFirstStep: false);
+  }
+
+  RuntimeStep[] GetActiveRuntimeSteps() {
+    return isReversePlayback ? reverseRuntimeSteps : runtimeSteps;
   }
 
   bool TryGetFloatFromOverride(string key, out float value) {

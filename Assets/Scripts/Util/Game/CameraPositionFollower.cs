@@ -71,7 +71,8 @@ public class CameraPositionFollower : MonoBehaviour {
   }
 
   Camera GetNextCamera() {
-    if (targetCamera != null) return targetCamera;
+    if (targetCamera != null && targetCamera.isActiveAndEnabled) return targetCamera;
+    if (resolvedCamera != null && resolvedCamera.isActiveAndEnabled) return resolvedCamera;
     if (!useMainCameraWhenEmpty) return null;
     return Camera.main;
   }

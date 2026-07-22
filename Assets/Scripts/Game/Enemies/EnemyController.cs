@@ -4,12 +4,11 @@ using CustomInspector;
 using UnityEngine;
 
 [RequireComponent(typeof(EnemyInfo))]
-public class EnemyController : MonoBehaviour {
+public partial class EnemyController : MonoBehaviour {
   const float PlayerTransformRefreshSeconds = 0.5f;
   static readonly Dictionary<string, Dictionary<string, string>> EmptyInterruptData = new();
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
-  [Button(nameof(AwardPlaceholderKillXp), label = "Award XP", size = Size.small)] public bool awardPlaceholderXp;
 
   [Header("Sprite Parts")]
   [Tooltip("Parts that carry SpriteWithNormals components. If left empty, children are auto-discovered.")]
@@ -32,8 +31,6 @@ public class EnemyController : MonoBehaviour {
   public string enemyType;
   public string defaultAnimation = "Idle";
   public bool playOnStart = true;
-  [Header("XP Placeholder")]
-  [SerializeField, Min(0)] int placeholderKillXpReward = 100;
   [Header("Streaming Warmup")]
   [SerializeField] bool prewarmEnemyAnimationStarts = true;
   [SerializeField, Min(1)] int prewarmFramesPerAnimation = 1;
@@ -104,9 +101,11 @@ public class EnemyController : MonoBehaviour {
       effectAnimationController.Tick(scaledDeltaTime);
       TryFinalizeCompletedEffectAnimation();
     }
+    UpdateLocomotionSound();
   }
 
   void OnDisable() {
+    StopLocomotionSound();
     effectResetToEmptyPending = false;
     hasPinnedRuntimeResidency = false;
     animationController?.SetAppearancePinOwner("", TextureResidencyCache.PinClass.Enemy);
@@ -208,6 +207,7 @@ public class EnemyController : MonoBehaviour {
       "",
       TextureResidencyCache.PinClass.Enemy
     );
+    ProjectedSpriteShadowCaster2D.Ensure(gameObject, animationController);
     RefreshRuntimeResidency(force: true);
   }
 
@@ -229,7 +229,21 @@ public class EnemyController : MonoBehaviour {
       Debug.LogWarning($"[EnemyController] Animation '{animationName}' missing for '{enemyType}'.");
       return false;
     }
-    return animationController != null && animationController.PlayAnimation(animationName, forceRestart);
+    var hurtWasAlreadyPlaying =
+      !forceRestart &&
+      HurtBloodSplatter.IsHurtAnimation(animationName) &&
+      animationController != null &&
+      animationController.IsPlaying &&
+      string.Equals(
+        animationController.CurrentAnimation,
+        animationName,
+        StringComparison.OrdinalIgnoreCase
+      );
+    var played = animationController != null && animationController.PlayAnimation(animationName, forceRestart);
+    if (played && !hurtWasAlreadyPlaying && HurtBloodSplatter.IsHurtAnimation(animationName)) {
+      HurtBloodSplatter.Play(transform, IsFacingRight);
+    }
+    return played;
   }
 
   public bool TryPlayDeathAnimation(
@@ -244,14 +258,17 @@ public class EnemyController : MonoBehaviour {
     var normalizedSubtype = string.IsNullOrWhiteSpace(damageSubtype)
       ? "Base"
       : damageSubtype.Trim();
-    var animationPrefix = normalizedSubtype + "Death";
+    var categoryPrefix = "Death_" + normalizedSubtype + "_";
 
     if (animationData == null || animationData.Count <= 0) {
       return false;
     }
 
     foreach (var animation in animationData) {
-      if (!IsNumberedDeathAnimation(animation.Key, animationPrefix)) {
+      var category = animation.Value != null && !string.IsNullOrWhiteSpace(animation.Value.category)
+        ? animation.Value.category.Trim()
+        : animation.Key;
+      if (!IsNumberedDeathAnimation(category, categoryPrefix)) {
         continue;
       }
 
@@ -273,15 +290,15 @@ public class EnemyController : MonoBehaviour {
     return true;
   }
 
-  static bool IsNumberedDeathAnimation(string animationName, string animationPrefix) {
-    if (string.IsNullOrWhiteSpace(animationName)) {
+  static bool IsNumberedDeathAnimation(string category, string categoryPrefix) {
+    if (string.IsNullOrWhiteSpace(category)) {
       return false;
     }
-    if (!animationName.StartsWith(animationPrefix, StringComparison.OrdinalIgnoreCase)) {
+    if (!category.StartsWith(categoryPrefix, StringComparison.OrdinalIgnoreCase)) {
       return false;
     }
 
-    var suffix = animationName.Substring(animationPrefix.Length);
+    var suffix = category.Substring(categoryPrefix.Length);
     if (!int.TryParse(suffix, out var animationNumber)) {
       return false;
     }
@@ -335,31 +352,6 @@ public class EnemyController : MonoBehaviour {
   }
 
   public AnimationController Controller => animationController;
-
-  public void AwardPlaceholderKillXp() {
-    var characterState = SingleSceneManager.ResolveGameplayCharacterState();
-    var activeForm = EsperanzaForms.GetActive();
-    if (characterState == null) {
-      Debug.LogWarning(
-        "[EnemyController][AwardPlaceholderKillXp] Missing CharacterState" +
-        " enemy_type='" + (enemyType ?? "") +
-        "' reward=" + placeholderKillXpReward +
-        " active_form='" + activeForm + "'"
-      );
-      return;
-    }
-
-    var levelsGained = characterState.GrantActiveFormXp(
-      placeholderKillXpReward,
-      "enemy_placeholder:" + NormalizeEnemyType(enemyType)
-    );
-    RuntimeLog.Log(
-      "[EnemyController][AwardPlaceholderKillXp] enemy_type='" + (enemyType ?? "") +
-      "' reward=" + placeholderKillXpReward +
-      " active_form='" + activeForm +
-      "' levels_gained=" + levelsGained
-    );
-  }
 
   private void HookAnimationEvents() {
     if (animationController == null) return;

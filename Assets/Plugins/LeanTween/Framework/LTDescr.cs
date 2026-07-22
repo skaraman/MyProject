@@ -76,6 +76,7 @@ public class LTDescr
 	public ActionMethodDelegate initInternal {get; set; }
 	public delegate Vector3 EaseTypeDelegate();
 	public delegate void ActionMethodDelegate();
+	readonly EaseTypeDelegate linearEaseMethod;
 	#if !UNITY_3_5 && !UNITY_4_0 && !UNITY_4_0_1 && !UNITY_4_1 && !UNITY_4_2
 	public SpriteRenderer spriteRen;
 	#endif
@@ -102,7 +103,7 @@ public class LTDescr
 	}
 
 	public LTDescr(){
-
+		linearEaseMethod = easeLinear;
 	}
 
 	[System.Obsolete("Use 'LeanTween.cancel( id )' instead")]
@@ -154,7 +155,9 @@ public class LTDescr
         this.direction = this.directionLast = this.overshoot = this.scale = 1.0f;
 		this.period = 0.3f;
 		this.speed = -1f;
-		this.easeMethod = this.easeLinear;
+		this.easeMethod = linearEaseMethod;
+		this.easeInternal = null;
+		this.initInternal = null;
 		this.from = this.to = Vector3.zero;
 		this._optional.reset();
 	}
@@ -294,8 +297,8 @@ public class LTDescr
 
 	public LTDescr setScaleX(){
 		this.type = TweenAction.SCALE_X;
-		this.initInternal = ()=>{ this.fromInternal.x = trans.localScale.x; };
-		this.easeInternal = ()=>{ trans.localScale = new Vector3( easeMethod().x,trans.localScale.y,trans.localScale.z); };
+		this.initInternal = null;
+		this.easeInternal = null;
 		return this;
 	}
 
@@ -774,14 +777,14 @@ public class LTDescr
 
 	public LTDescr setCallback(){
 		this.type = TweenAction.CALLBACK;
-		this.initInternal = ()=>{};
-		this.easeInternal = this.callback;
+		this.initInternal = null;
+		this.easeInternal = null;
 		return this;
 	}
 	public LTDescr setValue3(){
 		this.type = TweenAction.VALUE3;
-		this.initInternal = ()=>{};
-		this.easeInternal = this.callback;
+		this.initInternal = null;
+		this.easeInternal = null;
 		return this;
 	}
 
@@ -797,11 +800,8 @@ public class LTDescr
 
 	public LTDescr setMoveLocal(){
 		this.type = TweenAction.MOVE_LOCAL;
-		this.initInternal = ()=>{ this.from = trans.localPosition; };
-		this.easeInternal = ()=>{ 
-			newVect = easeMethod(); 
-			trans.localPosition = newVect; 
-		};
+		this.initInternal = null;
+		this.easeInternal = null;
 		return this;
 	}
 
@@ -914,8 +914,22 @@ public class LTDescr
 		if (this.time <= 0f) // avoid dividing by zero
 			this.time = Mathf.Epsilon;
 
-        if(this.initInternal!=null)
-    		this.initInternal();
+		switch (this.type) {
+		case TweenAction.MOVE_LOCAL:
+			this.from = trans.localPosition;
+			break;
+		case TweenAction.SCALE_X:
+			this.fromInternal.x = trans.localScale.x;
+			break;
+		case TweenAction.CALLBACK:
+		case TweenAction.VALUE3:
+			break;
+		default:
+			if (this.initInternal != null) {
+				this.initInternal();
+			}
+			break;
+		}
 
 		this.diff = this.to - this.from;
 		this.diffDiv2 = this.diff * 0.5f;
@@ -988,7 +1002,27 @@ public class LTDescr
 
 			this.ratioPassed = (this.passed / this.time); // need to clamp when finished so it will finish at the exact spot and not overshoot
 
-			this.easeInternal();
+			switch (this.type) {
+			case TweenAction.MOVE_LOCAL:
+				newVect = easeMethod();
+				trans.localPosition = newVect;
+				break;
+			case TweenAction.SCALE_X:
+				newVect = easeMethod();
+				trans.localScale = new Vector3(
+					newVect.x,
+					trans.localScale.y,
+					trans.localScale.z
+				);
+				break;
+			case TweenAction.CALLBACK:
+			case TweenAction.VALUE3:
+				callback();
+				break;
+			default:
+				this.easeInternal();
+				break;
+			}
 
 			if(this.hasUpdateCallback)
 				this._optional.callOnUpdate(val, this.ratioPassed);
@@ -1326,7 +1360,11 @@ public class LTDescr
 		return this;
 	}
 
-	public LTDescr setEaseLinear(){ this.easeType = LeanTweenType.linear; this.easeMethod = this.easeLinear; return this; }
+	public LTDescr setEaseLinear(){
+		this.easeType = LeanTweenType.linear;
+		this.easeMethod = linearEaseMethod;
+		return this;
+	}
 
 	public LTDescr setEaseSpring(){ this.easeType = LeanTweenType.easeSpring; this.easeMethod = this.easeSpring; return this; }
 

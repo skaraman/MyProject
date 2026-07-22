@@ -155,9 +155,6 @@ public static partial class ContentPackPipeline {
   sealed class ExportedLocationJson {
     public string locationId;
     public string name;
-    public List<string> enemies = new();
-    public int maxEnemies;
-    public float spawnInterval;
     public string prefabAssetPath;
     public Vector3 localPosition;
     public Vector3 localEulerAngles;

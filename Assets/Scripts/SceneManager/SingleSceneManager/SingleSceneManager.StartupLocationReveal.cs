@@ -304,10 +304,7 @@ public partial class SingleSceneManager {
         " debug_location='" + ResolveLoadFlowValue(debugLocationId) + "'" +
         " resolved_location='" + startupDebugLocationId + "'" +
         " legacy_debug_prefab='" + (debugLocationPrefab != null ? debugLocationPrefab.name : "-") + "'" +
-        " reason=" + debugLocationReason +
-        " enemies=" + (locationInfo.enemies != null ? locationInfo.enemies.Count : 0) +
-        " max_enemies=" + locationInfo.maxEnemies +
-        " spawn_interval=" + locationInfo.spawnInterval.ToString("0.###")
+        " reason=" + debugLocationReason
       );
     }
   }
@@ -796,23 +793,6 @@ public partial class SingleSceneManager {
     DisableLoadingUiFeedback(clearText: true, includeLoadingLight: true);
     ReleaseLoadingScreenIfIdle();
     LogSectionTransitionState("reveal_complete", currentSection, sectionToReveal, overlayTag, false);
-    var pinReleaseDelay = Mathf.Max(postUnlockPinReleaseDelaySeconds, 0f);
-    if (pinReleaseDelay > 0f) {
-      yield return PostUnlockPinReleaseDelay;
-    }
-    var releaseOutstandingCap = Mathf.Max(postUnlockPinReleaseMaxOutstanding, 0);
-    var releaseTimeout = Mathf.Max(postUnlockPinReleaseTimeoutSeconds, 0f);
-    var releaseStartedAt = Time.realtimeSinceStartup;
-    while (true) {
-      TextureResidencyCache.PumpOncePerFrame();
-      var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
-      var deferredPending = TextureResidencyCache.GetDeferredSnapshot().pendingCount;
-      var outstanding = Mathf.Max(queue.queuedCount + queue.inFlightCount + deferredPending, 0);
-      if (outstanding <= releaseOutstandingCap) break;
-      if (releaseTimeout > 0f && (Time.realtimeSinceStartup - releaseStartedAt) >= releaseTimeout) break;
-      yield return null;
-    }
-    ReleasePreUnlockResidentPins("post_unlock");
     if (sectionToReveal == Section.Gameplay) {
       EndGameplayLoadFlowTrace(activeGameplayLoadFlowId, "reveal_complete");
     }

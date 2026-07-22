@@ -140,14 +140,65 @@ public static partial class SpriteRuntimeResolver {
 
     var normalizedLabelPrefix = NormalizeToken(key.labelPrefix);
     if (string.IsNullOrWhiteSpace(normalizedLabelPrefix)) return false;
-    if (!int.TryParse(normalizedLabelPrefix, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numericFrame)) return false;
+    if (!int.TryParse(
+      normalizedLabelPrefix,
+      NumberStyles.Integer,
+      CultureInfo.InvariantCulture,
+      out var numericFrame
+    )) return false;
     if (numericFrame < 0) return false;
 
     var aliasKey = BuildRowKey("", key.category, numericFrame);
     return rows.TryGetValue(aliasKey, out pair);
   }
 
+  static bool TryResolveNumericFormFallback(
+    Dictionary<RowLookupKey, SpriteAddressPair> rows,
+    SpriteLookupKey key,
+    out SpriteAddressPair pair
+  ) {
+    pair = default;
+    if (rows == null || rows.Count == 0) return false;
+    if (key.frame != 0) return false;
+
+    var normalizedLabelPrefix = NormalizeToken(key.labelPrefix);
+    if (string.IsNullOrWhiteSpace(normalizedLabelPrefix)) return false;
+    if (!int.TryParse(
+      normalizedLabelPrefix,
+      NumberStyles.Integer,
+      CultureInfo.InvariantCulture,
+      out var numericFrame
+    )) return false;
+    if (numericFrame < 0) return false;
+
+    var normalizedCategory = NormalizeToken(key.category);
+    var aliasKey = new RowLookupKey("", normalizedCategory, numericFrame);
+    return rows.TryGetValue(aliasKey, out pair);
+  }
+
   static bool TryBuildGearSplitNamepart(string normalizedNamepart, string labelPrefix, out string splitNamepart) {
+    var cacheKey = new GearSplitLookupKey(normalizedNamepart, labelPrefix);
+    if (gearSplitNamepartCache.TryGetValue(cacheKey, out splitNamepart)) {
+      return !string.IsNullOrEmpty(splitNamepart);
+    }
+
+    var resolved = TryBuildGearSplitNamepartUncached(
+      normalizedNamepart,
+      labelPrefix,
+      out splitNamepart
+    );
+    if (gearSplitNamepartCache.Count >= MaxGearSplitCacheEntries) {
+      gearSplitNamepartCache.Clear();
+    }
+    gearSplitNamepartCache[cacheKey] = resolved ? splitNamepart : "";
+    return resolved;
+  }
+
+  static bool TryBuildGearSplitNamepartUncached(
+    string normalizedNamepart,
+    string labelPrefix,
+    out string splitNamepart
+  ) {
     splitNamepart = "";
 
     var prefixToken = BuildGearSplitToken(labelPrefix);

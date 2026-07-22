@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Sprites;
 
 public partial class SpriteWithNormals {
   void ApplySprites(Sprite colorSprite, Sprite normalSprite, string colorSliceAddress) {
@@ -23,7 +24,7 @@ public partial class SpriteWithNormals {
     _renderer.GetPropertyBlock(_mpb);
     if (uvRectNeedsApply) {
       var spriteUvRect = GetSpriteUvRect(renderedColorSprite);
-      var spriteEffectActive = GetSpriteEffectActive(colorSprite);
+      var spriteEffectActive = GetSpriteEffectActive(colorSprite, colorSliceAddress);
       _mpb.SetVector(SpriteUvRectPropertyId, spriteUvRect);
       _mpb.SetFloat(SpriteEffectActivePropertyId, spriteEffectActive);
       _hasAppliedSpriteUvRect = true;
@@ -42,27 +43,24 @@ public partial class SpriteWithNormals {
       return new Vector4(0f, 0f, 1f, 1f);
     }
 
-    var spriteUvs = sprite.uv;
-    if (spriteUvs == null || spriteUvs.Length == 0) {
-      return new Vector4(0f, 0f, 1f, 1f);
-    }
-
-    var minUv = spriteUvs[0];
-    var maxUv = spriteUvs[0];
-    for (var i = 1; i < spriteUvs.Length; i++) {
-      minUv = Vector2.Min(minUv, spriteUvs[i]);
-      maxUv = Vector2.Max(maxUv, spriteUvs[i]);
-    }
-
-    var size = maxUv - minUv;
-    return new Vector4(minUv.x, minUv.y, size.x, size.y);
+    var outerUv = DataUtility.GetOuterUV(sprite);
+    var width = outerUv.z - outerUv.x;
+    var height = outerUv.w - outerUv.y;
+    return new Vector4(outerUv.x, outerUv.y, width, height);
   }
 
-  float GetSpriteEffectActive(Sprite sprite) {
+  float GetSpriteEffectActive(Sprite sprite, string colorSliceAddress) {
     if (sprite == null) return 0f;
-    if (string.IsNullOrWhiteSpace(sprite.name)) return 1f;
 
-    var isEmptySprite = sprite.name.IndexOf("Empty", StringComparison.OrdinalIgnoreCase) >= 0;
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorSliceAddress, out _, out var addressedSpriteName)) {
+      var isEmptyAddressedSprite = addressedSpriteName.IndexOf("Empty", StringComparison.OrdinalIgnoreCase) >= 0;
+      return isEmptyAddressedSprite ? 0f : 1f;
+    }
+
+    var spriteName = sprite.name;
+    if (string.IsNullOrWhiteSpace(spriteName)) return 1f;
+
+    var isEmptySprite = spriteName.IndexOf("Empty", StringComparison.OrdinalIgnoreCase) >= 0;
     return isEmptySprite ? 0f : 1f;
   }
 

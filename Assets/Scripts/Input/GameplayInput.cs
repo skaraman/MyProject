@@ -4,6 +4,13 @@ using UnityEngine;
 
 public class GameplayInput : MonoBehaviour {
   static readonly bool ForceDisableDebugLogsForPerfPass = true;
+  const float JumpLiftOffNormalizedTime = 0.5f;
+  const string EsperanzaAttackSound1Id = "esperanza.attack1";
+  const string EsperanzaAttackSound2Id = "esperanza.attack2";
+  const string EsperanzaPunchWoosh1SoundId = "esperanza.punchWoosh1";
+  const string EsperanzaPunchWoosh2SoundId = "esperanza.punchWoosh2";
+  const string EsperanzaKickWoosh1SoundId = "esperanza.kickWoosh1";
+  const string EsperanzaKickWoosh2SoundId = "esperanza.kickWoosh2";
 
   private enum MoveMode {
     Run,
@@ -17,16 +24,18 @@ public class GameplayInput : MonoBehaviour {
   private Rigidbody2D cameraRB;
   private GearController gearController;
   private CharacterState characterState;
+  private ProjectedSpriteShadowCaster2D projectedShadowCaster;
   public GameObject formsWheel;
 
   [Header("Movement")]
+  [SerializeField, Min(0.01f)] private float baseMoveSpeed = 10f;
   [SerializeField] private float sprintMultiplier = 2f;
   [SerializeField] private float sprintSustainSeconds = 2f;
   [SerializeField] private float sprintResumeWindowSeconds = 2f;
   [SerializeField] private float cameraFollowUnitsPerSecond = 60f;
 
   [Header("Stance")]
-  [SerializeField] private float stanceDurationSeconds = 2f;
+  [SerializeField] private float stanceDurationSeconds = 0.5f;
   [SerializeField] private float stanceMoveMultiplier = 0.15f;
 
   [Header("Jump")]
@@ -60,10 +69,12 @@ public class GameplayInput : MonoBehaviour {
 
   private bool isJumping = false;
   private bool isGrounded = true;
+  private bool jumpLiftOffStarted;
   private float stanceTimeRemainingSeconds;
   private float jumpGroundLocalY;
   private Vector2 jumpMomentum;
   private int airAttackBoostsUsed;
+  private string activeJumpAnimation;
 
   private struct PendingSuperAttack {
     public bool IsActive;
@@ -73,6 +84,7 @@ public class GameplayInput : MonoBehaviour {
 
   private PendingSuperAttack pendingSuperAttack1; // attack1 + attack2 -> superattack1
   private PendingSuperAttack pendingSuperAttack2; // attack3 + attack4 -> superattack2
+  private float lastAttackStartedAt = float.NegativeInfinity;
   private int lastAttackGateLogFrame = -1;
   private float nextPlayerReferenceResolveAt = -1f;
 
@@ -143,6 +155,7 @@ public class GameplayInput : MonoBehaviour {
     _TickStanceTimer();
     if (isJumping) {
       _ApplyJumpMomentum();
+      _TryStartJumpLiftOff();
       return;
     }
     _ProcessMovementVelocity(moveInput);
@@ -212,6 +225,7 @@ public class GameplayInput : MonoBehaviour {
     if (!IsLivePlayerRoot(playerRoot)) {
       gearController = null;
       characterState = null;
+      projectedShadowCaster = null;
       erb = null;
       return;
     }
@@ -224,6 +238,9 @@ public class GameplayInput : MonoBehaviour {
     }
     if (!IsComponentOnPlayerRoot(erb, playerRoot)) {
       erb = playerRoot.GetComponent<Rigidbody2D>();
+    }
+    if (!IsComponentOnPlayerRoot(projectedShadowCaster, playerRoot)) {
+      projectedShadowCaster = playerRoot.GetComponent<ProjectedSpriteShadowCaster2D>();
     }
   }
 
@@ -273,19 +290,43 @@ public class GameplayInput : MonoBehaviour {
   void Jump() {
     if (!isGrounded || gearController == null || erb == null) return;
 
+    var jumpAnimation = _ResolveMappedAnimation("jump", fallback: "Jump");
+    if (!_TryPlayResolvedAnimation(jumpAnimation, resolveInterrupts: true)) return;
+
     stanceTimeRemainingSeconds = 0f;
-    _TryPlayMappedAction("jump", fallback: "Jump");
     isGrounded = false;
     isJumping = true;
+    jumpLiftOffStarted = false;
     airAttackBoostsUsed = 0;
+    activeJumpAnimation = jumpAnimation;
     jumpGroundLocalY = erb.transform.localPosition.y;
     jumpMomentum = new Vector2(erb.linearVelocity.x, 0f);
+    CancelPlayerTweens();
+  }
 
+  void _TryStartJumpLiftOff() {
+    if (jumpLiftOffStarted) return;
+    if (gearController == null || gearController.Controller == null) return;
+    if (string.IsNullOrWhiteSpace(activeJumpAnimation)) return;
+    if (!gearController.Controller.HasReachedAnimationNormalizedTime(
+      activeJumpAnimation,
+      JumpLiftOffNormalizedTime
+    )) return;
+
+    jumpLiftOffStarted = true;
+    LockJumpShadowGround();
+    StartJumpMovement();
+  }
+
+  void StartJumpMovement() {
     float peakY = jumpGroundLocalY + jumpHeight;
     float halfDuration = Mathf.Max(0.01f, jumpDuration * 0.5f);
     CancelPlayerTweens();
     LeanTween.sequence()
       .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, peakY, halfDuration).setEaseOutQuad(), halfDuration))
+      .append(() => {
+        _TryPlayLocomotion("JumpFalling");
+      })
       .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, jumpGroundLocalY, halfDuration).setEaseInQuad(), halfDuration))
       .append(() => {
         isGrounded = true;
@@ -295,11 +336,21 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void HandleLanding() {
+    projectedShadowCaster?.UnlockGroundY();
+    jumpLiftOffStarted = false;
+    activeJumpAnimation = null;
     if (erb != null) {
       erb.linearVelocity = Vector2.zero;
     }
     _EnterStance();
     _TryPlayLocomotion("JumpLanding");
+  }
+
+  void LockJumpShadowGround() {
+    if (projectedShadowCaster == null && EsperanzaParent != null) {
+      projectedShadowCaster = EsperanzaParent.GetComponent<ProjectedSpriteShadowCaster2D>();
+    }
+    projectedShadowCaster?.LockGroundY();
   }
 
   void dance() {
@@ -364,6 +415,9 @@ public class GameplayInput : MonoBehaviour {
     if (erb == null || cameraRB == null) return;
 
     Vector3 targetPos = erb.transform.localPosition;
+    if (isJumping) {
+      targetPos.y = jumpGroundLocalY;
+    }
     Vector3 currentPos = cameraRB.transform.localPosition;
     var followSpeed = Mathf.Max(cameraFollowUnitsPerSecond, 0f);
     var followStep = followSpeed * Mathf.Max(GetSceneDeltaTime(), 0f);
@@ -375,22 +429,51 @@ public class GameplayInput : MonoBehaviour {
     if (gearController == null) return;
     if (gearController.CurrentAnimation == "Dance") return;
 
-    float speed = (10 + AllStatValues.Esperanza["MVSP"]);
+    // Directional gameplay actions are buttons. A gamepad stick therefore
+    // dispatches when it crosses the press threshold, while a keyboard key
+    // dispatches 1. Normalize here so both devices produce the same speed.
+    var moveDirection = moveInput.sqrMagnitude > 0.0001f
+      ? moveInput.normalized
+      : Vector2.zero;
+    float speed = Mathf.Max(baseMoveSpeed, 0f) * _ResolveMoveSpeedStatMultiplier();
     float moveMultiplier = stanceTimeRemainingSeconds > 0f ? stanceMoveMultiplier : (moveMode == MoveMode.Sprint ? sprintMultiplier : 1f);
     var sceneFactor = GetSceneTimeFactor();
 
-    erb.linearVelocityX = moveInput.x * speed * moveMultiplier * sceneFactor;
-    erb.linearVelocityY = moveInput.y * speed * moveMultiplier * sceneFactor;
+    erb.linearVelocityX = moveDirection.x * speed * moveMultiplier * sceneFactor;
+    erb.linearVelocityY = moveDirection.y * speed * moveMultiplier * sceneFactor;
 
     if (stanceTimeRemainingSeconds > 0f) return;
 
     if (gearController.Controller != null) {
-      gearController.Controller.SetFacingDirection(moveInput.x);
+      gearController.Controller.SetFacingDirection(moveDirection.x);
     }
-    else if ((moveInput.x < 0f && gearController.IsFacingRight) ||
-    (moveInput.x > 0f && !gearController.IsFacingRight)) {
+    else if ((moveDirection.x < 0f && gearController.IsFacingRight) ||
+    (moveDirection.x > 0f && !gearController.IsFacingRight)) {
       gearController.needsFlip = true;
     }
+  }
+
+  private float cachedMoveSpeedMultiplier = 1f;
+  private float nextMoveSpeedStatCheckTime = -1f;
+
+  float _ResolveMoveSpeedStatMultiplier() {
+    var now = Time.unscaledTime;
+    if (nextMoveSpeedStatCheckTime >= 0f && now < nextMoveSpeedStatCheckTime) {
+      return cachedMoveSpeedMultiplier;
+    }
+    nextMoveSpeedStatCheckTime = now + 0.1f;
+
+    var rawBonusPercent = AllStatValues.Esperanza.TryGetValue("MVSP", out var moveSpeedStat) &&
+                          moveSpeedStat != null
+      ? moveSpeedStat.PercentageValue
+      : 0f;
+    var bonusPercent = Mathf.Clamp(
+      rawBonusPercent,
+      0f,
+      FormStatIncreases.MaximumMovementSpeedBonusPercent
+    );
+    cachedMoveSpeedMultiplier = 1f + (bonusPercent / 100f);
+    return cachedMoveSpeedMultiplier;
   }
 
   void _ProcessMovementAnimation(Vector2 moveInput) {
@@ -515,9 +598,7 @@ public class GameplayInput : MonoBehaviour {
 
   bool _TryPlayResolvedAnimation(string anim, bool forceRestart = false, bool resolveInterrupts = true) {
     if (gearController == null || string.IsNullOrEmpty(anim)) return false;
-    if (gearController.Controller != null) return gearController.Controller.PlayAnimation(anim, forceRestart, resolveInterrupts);
-    gearController.PlayAnimation(anim, forceRestart, resolveInterrupts);
-    return true;
+    return gearController.TryPlayAnimation(anim, forceRestart, resolveInterrupts);
   }
 
   string _GetMappedAnimation(string actionKey) {
@@ -550,12 +631,17 @@ public class GameplayInput : MonoBehaviour {
 
   void _HandleSuperPairAttack(ref PendingSuperAttack pending, int pressedIndex, float now, string superActionKey) {
     bool hasPending = pending.IsActive;
-    bool pendingStillValid = hasPending && (now - pending.FirstPressTime) <= superAttackWindowSeconds;
+    var pendingElapsed = now - pending.FirstPressTime;
+    bool pendingStillValid = hasPending &&
+                             pendingElapsed >= 0f &&
+                             pendingElapsed <= superAttackWindowSeconds;
     bool isCompletingPair = pendingStillValid && pending.FirstAttackIndex != pressedIndex;
 
     if (isCompletingPair) {
       pending.IsActive = false;
-      _ExecuteSuperAttackAction(superActionKey, pressedIndex);
+      if (_ExecuteSuperAttackAction(superActionKey, pressedIndex)) {
+        lastAttackStartedAt = now;
+      }
       return;
     }
 
@@ -563,25 +649,37 @@ public class GameplayInput : MonoBehaviour {
       pending.IsActive = false;
     }
 
-    pending.IsActive = true;
-    pending.FirstAttackIndex = pressedIndex;
-    pending.FirstPressTime = now;
-    _ExecuteAttackAction(pressedIndex == 1 ? "attack1"
+    if (!_CanStartAttack(now, out var cooldownRemaining)) {
+      _LogAttackFlow(
+        "gate_cooldown",
+        note: "remaining_s=" + cooldownRemaining.ToString("0.###")
+      );
+      _LogAttackGate("cooldown", gearController != null ? gearController.CurrentAnimation : "", "");
+      return;
+    }
+
+    var played = _ExecuteAttackAction(pressedIndex == 1 ? "attack1"
       : pressedIndex == 2 ? "attack2"
       : pressedIndex == 3 ? "attack3"
       : pressedIndex == 4 ? "attack4"
       : null);
+    if (!played) return;
+
+    lastAttackStartedAt = now;
+    pending.IsActive = true;
+    pending.FirstAttackIndex = pressedIndex;
+    pending.FirstPressTime = now;
   }
 
-  void _ExecuteAttackAction(string actionKey) {
-    if (string.IsNullOrEmpty(actionKey)) return;
+  bool _ExecuteAttackAction(string actionKey) {
+    if (string.IsNullOrEmpty(actionKey)) return false;
     _LogAttackFlow("execute_start", actionKey: actionKey);
     var mappedAttackAnimation = _ResolveMappedAnimation(actionKey, fallback: null);
     if (string.IsNullOrWhiteSpace(mappedAttackAnimation)) {
       _LogAttackFlow("missing_map", actionKey: actionKey, note: "resolve returned null/empty");
       _LogAttackGate("missing_map", gearController != null ? gearController.CurrentAnimation : "", actionKey);
       _LogPostRevealAttackProbe("missing_map", actionKey, mappedAttackAnimation, hasPlayedResult: true, played: false);
-      return;
+      return false;
     }
     _LogPostRevealAttackProbe("execute_start", actionKey, mappedAttackAnimation, hasPlayedResult: false, played: false);
     PunchLeftTraceGate.OpenFromClick(
@@ -591,7 +689,7 @@ public class GameplayInput : MonoBehaviour {
     );
     if (_IsBlockingActionPlaybackActive(mappedAttackAnimation)) {
       _LogPostRevealAttackProbe("gate_blocked", actionKey, mappedAttackAnimation, hasPlayedResult: true, played: false);
-      return;
+      return false;
     }
 
     if (isJumping) {
@@ -610,9 +708,26 @@ public class GameplayInput : MonoBehaviour {
     );
     _LogPostRevealAttackProbe("play_result", actionKey, mappedAttackAnimation, hasPlayedResult: true, played: played);
     _LogAttackFlow("play_result", actionKey: actionKey, mappedAnimation: mappedAttackAnimation, note: "played=" + (played ? 1 : 0));
+    if (played) {
+      _PlayMeleeAttackSounds(mappedAttackAnimation);
+    }
     if (!played) {
       _LogAttackGate("play_rejected", gearController != null ? gearController.CurrentAnimation : "", mappedAttackAnimation);
     }
+    return played;
+  }
+
+  bool _CanStartAttack(float now, out float cooldownRemaining) {
+    var attackSpeedSeconds = AttackSpeedTiming.ResolveStatSeconds(AllStatValues.Esperanza);
+    var intervalSeconds = AttackSpeedTiming.ResolveAttackIntervalSeconds(attackSpeedSeconds);
+    var elapsedSeconds = now - lastAttackStartedAt;
+    if (float.IsNegativeInfinity(lastAttackStartedAt) || elapsedSeconds < 0f) {
+      cooldownRemaining = 0f;
+      return true;
+    }
+
+    cooldownRemaining = Mathf.Max(intervalSeconds - elapsedSeconds, 0f);
+    return cooldownRemaining <= 0f;
   }
 
   [System.Diagnostics.Conditional("ENABLE_RUNTIME_DEBUG_LOGS")]
@@ -674,8 +789,8 @@ public class GameplayInput : MonoBehaviour {
     );
   }
 
-  void _ExecuteSuperAttackAction(string superActionKey, int fallbackAttackIndex) {
-    if (string.IsNullOrEmpty(superActionKey)) return;
+  bool _ExecuteSuperAttackAction(string superActionKey, int fallbackAttackIndex) {
+    if (string.IsNullOrEmpty(superActionKey)) return false;
 
     if (isJumping) {
       _TryBoostJumpForAirAttack();
@@ -683,7 +798,15 @@ public class GameplayInput : MonoBehaviour {
 
     _EnterStance(resetTimer: true);
 
-    bool playedSuper = _TryPlayMappedAction(superActionKey, fallback: null, forceRestart: true);
+    var superAnimation = _ResolveMappedAnimation(superActionKey, fallback: null);
+    bool playedSuper = _TryPlayResolvedAnimation(
+      superAnimation,
+      forceRestart: true,
+      resolveInterrupts: true
+    );
+    if (playedSuper) {
+      _PlayMeleeAttackSounds(superAnimation);
+    }
     if (!playedSuper) {
       string fallbackActionKey = fallbackAttackIndex == 1 ? "attack1"
         : fallbackAttackIndex == 2 ? "attack2"
@@ -691,11 +814,41 @@ public class GameplayInput : MonoBehaviour {
         : fallbackAttackIndex == 4 ? "attack4"
         : null;
       if (!string.IsNullOrEmpty(fallbackActionKey)) {
-        _TryPlayMappedAction(fallbackActionKey, fallback: null);
+        var fallbackAnimation = _ResolveMappedAnimation(fallbackActionKey, fallback: null);
+        if (_TryPlayResolvedAnimation(fallbackAnimation, resolveInterrupts: true)) {
+          playedSuper = true;
+          _PlayMeleeAttackSounds(fallbackAnimation);
+        }
       }
     }
 
     MessageBus.Send($"gameplay.{superActionKey}", null);
+    return playedSuper;
+  }
+
+  static void _PlayMeleeAttackSounds(string animationName) {
+    if (string.IsNullOrWhiteSpace(animationName)) {
+      return;
+    }
+
+    if (animationName.IndexOf("Punch", StringComparison.OrdinalIgnoreCase) >= 0) {
+      SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
+        ? EsperanzaAttackSound1Id
+        : EsperanzaAttackSound2Id);
+      SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
+        ? EsperanzaPunchWoosh1SoundId
+        : EsperanzaPunchWoosh2SoundId);
+      return;
+    }
+
+    if (animationName.IndexOf("Kick", StringComparison.OrdinalIgnoreCase) >= 0) {
+      SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
+        ? EsperanzaAttackSound1Id
+        : EsperanzaAttackSound2Id);
+      SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
+        ? EsperanzaKickWoosh1SoundId
+        : EsperanzaKickWoosh2SoundId);
+    }
   }
 
   bool _IsBlockingActionPlaybackActive(string requestedAnimation) {
@@ -783,6 +936,7 @@ public class GameplayInput : MonoBehaviour {
 
   void _TryBoostJumpForAirAttack() {
     if (!isJumping || erb == null) return;
+    if (!jumpLiftOffStarted) return;
     if (airAttackBoostsUsed >= maxAirAttackBoostsPerJump) return;
     airAttackBoostsUsed++;
 
@@ -792,6 +946,9 @@ public class GameplayInput : MonoBehaviour {
     LeanTween.sequence()
       .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, boostedPeakY, 0.12f).setEaseOutQuad(), 0.12f))
       .append(RegisterPlayerTween(LeanTween.delayedCall(erb.gameObject, airAttackBoostHangSeconds, () => { }), airAttackBoostHangSeconds))
+      .append(() => {
+        _TryPlayLocomotion("JumpFalling");
+      })
       .append(RegisterPlayerTween(LeanTween.moveLocalY(erb.gameObject, jumpGroundLocalY, 0.18f).setEaseInQuad(), 0.18f))
       .append(() => {
         isGrounded = true;

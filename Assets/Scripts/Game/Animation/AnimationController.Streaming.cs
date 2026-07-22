@@ -40,10 +40,12 @@ public partial class AnimationController {
   }
 
   public void ReleaseAppearancePins() {
-    if (string.IsNullOrWhiteSpace(appearanceOwnerId)) return;
-    TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+    if (!string.IsNullOrWhiteSpace(appearanceOwnerId)) {
+      TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+    }
     appearancePinAddressBuffer.Clear();
     appearancePinAddressSet.Clear();
+    appliedAppearancePinAddressSet.Clear();
     InvalidateAppearancePinSnapshot();
   }
 
@@ -65,6 +67,7 @@ public partial class AnimationController {
     appearancePinClass = newPinClass;
     appearancePinAddressBuffer.Clear();
     appearancePinAddressSet.Clear();
+    appliedAppearancePinAddressSet.Clear();
     InvalidateAppearancePinSnapshot();
   }
 
@@ -776,6 +779,7 @@ public partial class AnimationController {
       TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
       appearancePinAddressBuffer.Clear();
       appearancePinAddressSet.Clear();
+      appliedAppearancePinAddressSet.Clear();
       UpdateAppearancePinSnapshot(false);
       return;
     }
@@ -785,6 +789,7 @@ public partial class AnimationController {
       TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
       appearancePinAddressBuffer.Clear();
       appearancePinAddressSet.Clear();
+      appliedAppearancePinAddressSet.Clear();
       UpdateAppearancePinSnapshot(true);
       return;
     }
@@ -827,6 +832,12 @@ public partial class AnimationController {
 
     if (appearancePinAddressBuffer.Count <= 0) {
       TextureResidencyCache.ReleaseOwnerPins(appearanceOwnerId);
+      appliedAppearancePinAddressSet.Clear();
+      UpdateAppearancePinSnapshot(true);
+      return;
+    }
+
+    if (TryRefreshUnchangedAppearancePins()) {
       UpdateAppearancePinSnapshot(true);
       return;
     }
@@ -839,7 +850,17 @@ public partial class AnimationController {
       TextureResidencyCache.LoadPriority.Warmup
     );
     PinCacheUpdateProfilerMarker.End();
+    appliedAppearancePinAddressSet.Clear();
+    appliedAppearancePinAddressSet.UnionWith(appearancePinAddressSet);
     UpdateAppearancePinSnapshot(true);
+  }
+
+  bool TryRefreshUnchangedAppearancePins() {
+    if (pinSnapshotContentReloadVersion != ActiveContentRegistryRuntime.ReloadVersion) return false;
+    if (appearancePinAddressSet.Count <= 0) return false;
+    if (!appearancePinAddressSet.SetEquals(appliedAppearancePinAddressSet)) return false;
+    if (TextureResidencyCache.GetOwnerPinCount(appearanceOwnerId) < appearancePinAddressSet.Count) return false;
+    return TextureResidencyCache.TryRefreshOwnerPins(appearanceOwnerId, appearancePinClass);
   }
 
   bool IsExternalAppearancePinCoverageCurrent() {

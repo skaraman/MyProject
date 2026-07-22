@@ -4,10 +4,13 @@ using UnityEngine;
 public class EnemyHealth : MonoBehaviour {
   const int SharedDamageNumberPoolSize = 24;
   const float DamageNumberLifetimeSeconds = 1.5f;
-  const int HealthGlyphCapacity = 4;
-  const int MaxHealthGlyphCapacity = 5;
+  const int DamageNumberGlyphCapacity = 7;
+  const int HealthGlyphCapacity = 7;
+  const int MaxHealthGlyphCapacity = 8;
 
   static readonly System.Collections.Generic.Dictionary<GameObject, FontText> damageTextByObject =
+    new(SharedDamageNumberPoolSize);
+  static readonly System.Collections.Generic.Dictionary<GameObject, DamageNumberArcMotion> damageMotionByObject =
     new(SharedDamageNumberPoolSize);
   static readonly System.Collections.Generic.Dictionary<string, string> abilityXpSourceByEnemyType =
     new(System.StringComparer.Ordinal);
@@ -16,12 +19,14 @@ public class EnemyHealth : MonoBehaviour {
   static void ResetRuntimeCaches() {
     UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= ClearSceneObjectCaches;
     damageTextByObject.Clear();
+    damageMotionByObject.Clear();
     abilityXpSourceByEnemyType.Clear();
     UnityEngine.SceneManagement.SceneManager.sceneUnloaded += ClearSceneObjectCaches;
   }
 
   static void ClearSceneObjectCaches(UnityEngine.SceneManagement.Scene scene) {
     damageTextByObject.Clear();
+    damageMotionByObject.Clear();
   }
 
   EnemyInfo enemyInfo;
@@ -32,12 +37,15 @@ public class EnemyHealth : MonoBehaviour {
   bool deathInProgress;
   bool enemyAiWasEnabledBeforeDeath;
   Coroutine deathCoroutine;
-  float displayedCurrentHp = float.NaN;
-  float displayedMaxHp = float.NaN;
+  Coroutine fallbackHurtCoroutine;
+  EndlessNumber displayedCurrentHp;
+  EndlessNumber displayedMaxHp;
   CharacterState characterState;
   string abilityXpEnemyType;
   string abilityXpSource;
   UnityEngine.Events.UnityAction<HitBox2D> hurtListener;
+  Transform facingInvariantHealthUiRoot;
+  bool healthUiHierarchyResolved;
 
   [Header("Visual Feedback")]
   [Tooltip("Prefab to spawn for showing damage numbers")]
@@ -63,17 +71,24 @@ public class EnemyHealth : MonoBehaviour {
     hurtBox = GetComponentInChildren<HurtBox2D>(includeInactive: true);
     hurtListener = HandleHit;
     ResolveHealthTextBindings();
+    ResolveFacingInvariantHealthUi();
     healthText?.EnsureGlyphCapacity(HealthGlyphCapacity);
     maxHealthText?.EnsureGlyphCapacity(MaxHealthGlyphCapacity);
     EnsureDamageNumberPool();
   }
 
   void OnEnable() {
+    ApplyFacingInvariantHealthUiScale();
     RegisterHurtBoxListener();
+  }
+
+  void LateUpdate() {
+    ApplyFacingInvariantHealthUiScale();
   }
 
   void OnDisable() {
     deathCoroutine = null;
+    fallbackHurtCoroutine = null;
     if (hurtBox != null && hurtListener != null) {
       hurtBox.OnHit.RemoveListener(hurtListener);
     }
@@ -106,8 +121,8 @@ public class EnemyHealth : MonoBehaviour {
         " source='" + (source ?? "") + "'" +
         " object='" + gameObject.name + "'" +
         " enemy_type='" + enemyInfo.enemyType + "'" +
-        " max_hp=" + enemyInfo.ResolveMaxHp().ToString("0.###") +
-        " current_hp=" + enemyInfo.currentHp.ToString("0.###")
+        " max_hp=" + enemyInfo.ResolveMaxHp().ToDisplayString() +
+        " current_hp=" + enemyInfo.currentHp.ToDisplayString()
       );
     }
   }
@@ -146,12 +161,16 @@ public class EnemyHealth : MonoBehaviour {
       defenderStats,
       abilityRawDamage
     );
-    GrantAbilityHitXp(hitBox.hitId);
     ApplyDamage(damageResult, hitBox.hitId, abilityRawDamage);
   }
 
-  void GrantAbilityHitXp(string abilityName) {
+  void GrantAbilityHitXp(string abilityName, EndlessNumber actualDamage) {
     if (!EsperanzaAbilities.TryResolveAbilityAnimation(abilityName, out var animationName)) {
+      return;
+    }
+
+    var xpAmount = actualDamage != null ? actualDamage.ToInt32Clamped() : 0;
+    if (xpAmount <= 0) {
       return;
     }
 
@@ -166,8 +185,27 @@ public class EnemyHealth : MonoBehaviour {
 
     characterState.GrantAbilityXp(
       animationName,
-      1,
+      xpAmount,
       abilityXpSource
+    );
+  }
+
+  void GrantFormKillXp(EndlessNumber maxHp) {
+    var xpAmount = maxHp != null ? maxHp.ToInt32Clamped() : 0;
+    if (xpAmount <= 0) {
+      return;
+    }
+
+    if (characterState == null) {
+      characterState = SingleSceneManager.ResolveGameplayCharacterState();
+    }
+    if (characterState == null) {
+      return;
+    }
+
+    characterState.GrantActiveFormXp(
+      xpAmount,
+      "enemy_kill:" + (enemyInfo != null ? enemyInfo.enemyType : "")
     );
   }
 
@@ -199,13 +237,21 @@ public class EnemyHealth : MonoBehaviour {
     RefreshFromEnemyInfo("spawn_context_changed");
   }
 
-  void ApplyDamage(CombatDamageResult damageResult, string hitId, float abilityRawDamage) {
+  void ApplyDamage(CombatDamageResult damageResult, string hitId, int abilityRawDamage) {
     if (enemyInfo == null) {
       return;
     }
 
     var maxHp = enemyInfo.ResolveMaxHp();
-    enemyInfo.currentHp = Mathf.Clamp(enemyInfo.currentHp - damageResult.amount, 0f, maxHp);
+    var hpBefore = EndlessNumber.Min(
+      EndlessNumber.Max(enemyInfo.currentHp ?? new EndlessNumber(), new EndlessNumber()),
+      maxHp
+    );
+    var remainingHp = hpBefore - (damageResult.amount ?? new EndlessNumber());
+    enemyInfo.currentHp.Set(EndlessNumber.Max(remainingHp, new EndlessNumber()));
+    var actualDamage = hpBefore - enemyInfo.currentHp;
+
+    GrantAbilityHitXp(hitId, actualDamage);
 
     SpawnDamageNumber(damageResult.amount);
     UpdateVisuals();
@@ -217,59 +263,130 @@ public class EnemyHealth : MonoBehaviour {
         " enemy_type='" + enemyInfo.enemyType + "'" +
         " damage_kind='" + damageResult.kind + "'" +
         " hit_id='" + (hitId ?? "") + "'" +
-        " ability_damage=" + abilityRawDamage.ToString("0.###") +
-        " base_damage=" + damageResult.baseDamage.ToString("0.###") +
-        " armor_before_pen=" + damageResult.armorBeforePenetration.ToString("0.###") +
-        " penetration_applied=" + damageResult.penetrationApplied.ToString("0.###") +
-        " armor_applied=" + damageResult.armorApplied.ToString("0.###") +
+        " ability_damage=" + abilityRawDamage +
+        " base_damage=" + damageResult.baseDamage.ToDisplayString() +
+        " armor_before_pen=" + damageResult.armorBeforePenetration.ToDisplayString() +
+        " penetration_applied=" + damageResult.penetrationApplied.ToDisplayString() +
+        " armor_applied=" + damageResult.armorApplied.ToDisplayString() +
         " evade_chance=" + damageResult.evadeChance.ToString("0.###") +
         " evade_roll=" + damageResult.evadeRoll.ToString("0.###") +
         " evaded=" + (damageResult.evaded ? 1 : 0) +
-        " damage=" + damageResult.amount.ToString("0.###") +
+        " damage=" + damageResult.amount.ToDisplayString() +
         " cchc=" + damageResult.criticalChance.ToString("0.###") +
         " croll=" + damageResult.criticalRoll.ToString("0.###") +
         " lchc=" + damageResult.luckyChance.ToString("0.###") +
         " lroll=" + damageResult.luckyRoll.ToString("0.###") +
         " dchc=" + damageResult.directChance.ToString("0.###") +
         " droll=" + damageResult.directRoll.ToString("0.###") +
-        " hp_remaining=" + enemyInfo.currentHp.ToString("0.###") +
-        " hp_max=" + maxHp.ToString("0.###")
+        " hp_remaining=" + enemyInfo.currentHp.ToDisplayString() +
+        " hp_max=" + maxHp.ToDisplayString()
       );
     }
 
-    if (enemyInfo.currentHp > 0f) {
+    if (enemyInfo.currentHp.IsPositive) {
+      if (actualDamage.IsPositive) {
+        BeginHurtReaction();
+      }
       return;
     }
 
+    GrantFormKillXp(maxHp);
     BeginDeath(hitId);
+  }
+
+  void BeginHurtReaction() {
+    if (enemyAiController == null) {
+      enemyAiController = GetComponent<EnemyAIController>();
+    }
+    if (enemyAiController != null && enemyAiController.TryPlayHurtReaction()) {
+      CancelFallbackHurtReaction();
+      return;
+    }
+
+    if (enemyController == null) {
+      enemyController = GetComponent<EnemyController>();
+    }
+    if (enemyController == null || !enemyController.PlayAnimation("Hurt", forceRestart: true)) {
+      return;
+    }
+
+    CancelFallbackHurtReaction();
+    var durationSeconds = enemyController.GetAnimationDurationSeconds("Hurt");
+    if (durationSeconds <= 0f) {
+      durationSeconds = 0.175f;
+    }
+    fallbackHurtCoroutine = StartCoroutine(CompleteFallbackHurtReaction(durationSeconds));
+  }
+
+  System.Collections.IEnumerator CompleteFallbackHurtReaction(float durationSeconds) {
+    yield return TimeScale.WaitForSecondsScaled(durationSeconds, this);
+    fallbackHurtCoroutine = null;
+
+    if (deathInProgress || enemyInfo == null || !enemyInfo.currentHp.IsPositive) {
+      yield break;
+    }
+
+    enemyController?.PlayAnimation(enemyController.defaultAnimation, forceRestart: true);
+  }
+
+  void CancelFallbackHurtReaction() {
+    if (fallbackHurtCoroutine == null) {
+      return;
+    }
+
+    StopCoroutine(fallbackHurtCoroutine);
+    fallbackHurtCoroutine = null;
   }
 
   Pool damageNumberPool;
   GameObject damageNumberPoolPrefab;
 
-  void SpawnDamageNumber(float amount) {
-    if (damageNumberPrefab == null || amount <= 0f) return;
+  void SpawnDamageNumber(EndlessNumber amount) {
+    if (damageNumberPrefab == null || amount == null || !amount.IsPositive) return;
 
     EnsureDamageNumberPool();
     if (damageNumberPool == null) {
       return;
     }
 
-    var dmgObj = damageNumberPool.Acquire(transform.position, Quaternion.identity);
+    var dmgObj = damageNumberPool.Acquire(ResolveDamageNumberSpawnPosition(), Quaternion.identity);
     if (dmgObj == null) {
       return;
     }
 
     if (!damageTextByObject.TryGetValue(dmgObj, out var fontText) || fontText == null) {
       fontText = dmgObj.GetComponentInChildren<FontText>();
+      fontText?.EnsureGlyphCapacity(DamageNumberGlyphCapacity);
       damageTextByObject[dmgObj] = fontText;
     }
     if (fontText != null) {
-      fontText.content = IntegerTextCache.Get(Mathf.RoundToInt(amount));
+      fontText.content = FormatDamageAmount(amount);
     }
+
+    if (!damageMotionByObject.TryGetValue(dmgObj, out var motion) || motion == null) {
+      motion = dmgObj.GetComponent<DamageNumberArcMotion>();
+      if (motion == null) {
+        motion = dmgObj.AddComponent<DamageNumberArcMotion>();
+      }
+      damageMotionByObject[dmgObj] = motion;
+    }
+    motion.Play(DamageNumberLifetimeSeconds);
 
     damageNumberPool.Activate(dmgObj);
     damageNumberPool.DespawnAfter(dmgObj, DamageNumberLifetimeSeconds);
+  }
+
+  Vector3 ResolveDamageNumberSpawnPosition() {
+    if (healthBarStretch == null) {
+      return transform.position;
+    }
+
+    var healthBarRenderer = healthBarStretch.GetComponent<SpriteRenderer>();
+    if (healthBarRenderer != null && healthBarRenderer.sprite != null) {
+      return healthBarRenderer.bounds.center;
+    }
+
+    return healthBarStretch.transform.position;
   }
 
   void EnsureDamageNumberPool() {
@@ -295,24 +412,44 @@ public class EnemyHealth : MonoBehaviour {
     ResolveHealthTextBindings();
 
     var maxHp = enemyInfo.ResolveMaxHp();
-    var currentHpChanged = !Mathf.Approximately(displayedCurrentHp, enemyInfo.currentHp);
-    var maxHpChanged = !Mathf.Approximately(displayedMaxHp, maxHp);
-    displayedCurrentHp = enemyInfo.currentHp;
-    displayedMaxHp = maxHp;
+    var currentHpChanged = displayedCurrentHp == null || displayedCurrentHp != enemyInfo.currentHp;
+    var maxHpChanged = displayedMaxHp == null || displayedMaxHp != maxHp;
+    displayedCurrentHp = enemyInfo.currentHp.Copy();
+    displayedMaxHp = maxHp.Copy();
 
     if (currentHpChanged && healthText != null) {
-      var displayedHp = Mathf.CeilToInt(Mathf.Max(enemyInfo.currentHp, 0f));
-      healthText.content = IntegerTextCache.Get(displayedHp);
+      healthText.content = FormatHealthAmount(enemyInfo.currentHp, slashPrefixed: false);
+      healthText.Generate();
     }
 
     if (maxHpChanged && maxHealthText != null) {
-      var displayedMax = Mathf.CeilToInt(Mathf.Max(maxHp, 0f));
-      maxHealthText.content = IntegerTextCache.GetSlashPrefixed(displayedMax);
+      maxHealthText.content = FormatHealthAmount(maxHp, slashPrefixed: true);
+      maxHealthText.Generate();
     }
 
     if ((currentHpChanged || maxHpChanged) && healthBarStretch != null) {
-      healthBarStretch.stretchPercent.x = maxHp > 0f ? (enemyInfo.currentHp / maxHp) * 100f : 0f;
+      var healthPercent = maxHp.IsPositive
+        ? Mathf.Clamp01((float)enemyInfo.currentHp.RatioTo(maxHp)) * 100f
+        : 0f;
+      healthBarStretch.stretchPercent = new Vector2(
+        healthPercent,
+        healthBarStretch.stretchPercent.y
+      );
+      healthBarStretch.RefreshStretch();
     }
+  }
+
+  static string FormatDamageAmount(EndlessNumber amount) {
+    return amount != null && amount.IsPositive
+      ? amount.ToGlyphString()
+      : IntegerTextCache.Get(0);
+  }
+
+  static string FormatHealthAmount(EndlessNumber amount, bool slashPrefixed) {
+    var formattedAmount = amount != null && amount.IsPositive
+      ? amount.ToGlyphString()
+      : IntegerTextCache.Get(0);
+    return slashPrefixed ? "/" + formattedAmount : formattedAmount;
   }
 
   void ResolveHealthTextBindings() {
@@ -367,12 +504,74 @@ public class EnemyHealth : MonoBehaviour {
     return null;
   }
 
+  void ResolveFacingInvariantHealthUi() {
+    if (healthUiHierarchyResolved) {
+      return;
+    }
+
+    healthUiHierarchyResolved = true;
+    var healthBarRoot = ResolveDirectChildUnderEnemy(
+      healthBarStretch != null ? healthBarStretch.transform : null
+    );
+    var healthNumbersRoot = ResolveDirectChildUnderEnemy(FindDescendant(transform, "HEALTH"));
+    if (healthBarRoot == null && healthNumbersRoot == null) {
+      return;
+    }
+
+    var container = new GameObject("FacingInvariantHealthUI");
+    container.layer = gameObject.layer;
+    facingInvariantHealthUiRoot = container.transform;
+    facingInvariantHealthUiRoot.SetParent(transform, worldPositionStays: false);
+    facingInvariantHealthUiRoot.localPosition = Vector3.zero;
+    facingInvariantHealthUiRoot.localRotation = Quaternion.identity;
+    facingInvariantHealthUiRoot.localScale = Vector3.one;
+
+    if (healthBarRoot != null) {
+      healthBarRoot.SetParent(facingInvariantHealthUiRoot, worldPositionStays: false);
+    }
+    if (healthNumbersRoot != null && healthNumbersRoot != healthBarRoot) {
+      healthNumbersRoot.SetParent(facingInvariantHealthUiRoot, worldPositionStays: false);
+    }
+
+    ApplyFacingInvariantHealthUiScale();
+  }
+
+  Transform ResolveDirectChildUnderEnemy(Transform candidate) {
+    while (candidate != null && candidate != transform) {
+      if (candidate.parent == transform) {
+        return candidate;
+      }
+      candidate = candidate.parent;
+    }
+
+    return null;
+  }
+
+  void ApplyFacingInvariantHealthUiScale() {
+    if (!healthUiHierarchyResolved) {
+      ResolveFacingInvariantHealthUi();
+    }
+    if (facingInvariantHealthUiRoot == null) {
+      return;
+    }
+
+    var facingSign = transform.localScale.x < 0f ? -1f : 1f;
+    var currentScale = facingInvariantHealthUiRoot.localScale;
+    if (Mathf.Approximately(currentScale.x, facingSign)) {
+      return;
+    }
+
+    currentScale.x = facingSign;
+    facingInvariantHealthUiRoot.localScale = currentScale;
+  }
+
   void BeginDeath(string finalHitId) {
     if (deathInProgress) {
       return;
     }
 
     deathInProgress = true;
+    CancelFallbackHurtReaction();
     DisableCombatForDeath();
 
     var damageSubtype = EsperanzaAbilities.ResolveDamageSubtype(finalHitId);
@@ -429,6 +628,7 @@ public class EnemyHealth : MonoBehaviour {
   }
 
   void ResetDeathState() {
+    CancelFallbackHurtReaction();
     if (deathCoroutine != null) {
       StopCoroutine(deathCoroutine);
       deathCoroutine = null;

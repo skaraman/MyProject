@@ -1182,6 +1182,10 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
     var normalizedCategoryName = (categoryName ?? "").Trim();
     if (string.IsNullOrWhiteSpace(normalizedCategoryName)) return "";
 
+    if (string.Equals(normalizedCategoryName, "death 1", StringComparison.OrdinalIgnoreCase)) {
+      return "Death_Base_1";
+    }
+
     const string standSuffix = "Stand";
     if (normalizedCategoryName.EndsWith(standSuffix, StringComparison.OrdinalIgnoreCase) &&
         normalizedCategoryName.Length > standSuffix.Length) {

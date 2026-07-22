@@ -4,6 +4,8 @@ using UnityEngine.U2D.Animation;
 
 public class FontCharacter : MonoBehaviour {
   const string DefaultFontLibraryName = "UI/Fonts";
+  const string DamageTierLibraryName = EndlessNumberSuffixMap.SpriteLibraryName;
+  const string DamageTierCategory = EndlessNumberSuffixMap.SpriteCategory;
 
   struct GlyphRendererState {
     public bool enabled;
@@ -111,6 +113,10 @@ public class FontCharacter : MonoBehaviour {
   }
 
   bool TryGetGlyphLabel(out string label) {
+    if (EndlessNumberSuffixMap.TryGetSpriteToken(character, out var spriteToken)) {
+      label = IntegerTextCache.Get(spriteToken);
+      return true;
+    }
     if (cacheBank.TryGetValue(character, out label)) return true;
     label = null;
     Debug.LogWarning($"[FontCharacter] Missing glyph mapping for '{character}' on {gameObject.name}");
@@ -165,14 +171,17 @@ public class FontCharacter : MonoBehaviour {
   void ApplySpriteWithNormals(string label) {
     if (spriteWithNormals == null) return;
 
+    var isDamageTierGlyph = EndlessNumberSuffixMap.TryGetSpriteToken(character, out _);
+    var targetLibraryName = isDamageTierGlyph ? DamageTierLibraryName : DefaultFontLibraryName;
+    var targetCategory = isDamageTierGlyph ? DamageTierCategory : font;
     var needsRefresh = false;
-    if (string.IsNullOrWhiteSpace(spriteWithNormals.libraryName)) {
-      spriteWithNormals.SetLibraryName(DefaultFontLibraryName);
+    if (!string.Equals(spriteWithNormals.libraryName, targetLibraryName, System.StringComparison.Ordinal)) {
+      spriteWithNormals.SetLibraryName(targetLibraryName);
       needsRefresh = true;
     }
 
-    if (!string.Equals(spriteWithNormals.category, font, System.StringComparison.Ordinal)) {
-      spriteWithNormals.SetAnimation(font);
+    if (!string.Equals(spriteWithNormals.category, targetCategory, System.StringComparison.Ordinal)) {
+      spriteWithNormals.SetAnimation(targetCategory);
       needsRefresh = true;
     }
 
@@ -198,6 +207,7 @@ public class FontCharacter : MonoBehaviour {
 
   void ApplySpriteResolver(string label) {
     if (spriteResolver == null) return;
+    if (EndlessNumberSuffixMap.TryGetSpriteToken(character, out _)) return;
     spriteResolver.SetCategoryAndLabel(font, label);
   }
 

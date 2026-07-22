@@ -20,10 +20,10 @@ public static partial class ContentPackPipeline {
     if (roots == null) return result;
 
     foreach (var root in roots) {
-      var normalizedRoot = NormalizeAssetPath(root);
+      var normalizedRoot = ResolveExistingSpriteLibraryAssetPath(root);
       if (string.IsNullOrWhiteSpace(normalizedRoot)) continue;
 
-      var fullPath = Path.GetFullPath(normalizedRoot);
+      var fullPath = GetPhysicalPath(normalizedRoot);
       if (File.Exists(fullPath)) {
         AddUniquePath(result, normalizedRoot);
         continue;
@@ -214,7 +214,7 @@ public static partial class ContentPackPipeline {
   }
 
   static bool TryAddExportableDependency(List<string> result, string assetPath, List<string> errors) {
-    var dependency = NormalizeAssetPath(assetPath);
+    var dependency = ResolveExistingSpriteLibraryAssetPath(assetPath);
     if (string.IsNullOrWhiteSpace(dependency)) return false;
     if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)) return false;
     if (AssetDatabase.IsValidFolder(dependency)) return false;

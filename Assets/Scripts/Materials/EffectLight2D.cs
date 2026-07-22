@@ -11,6 +11,7 @@ public sealed class EffectLight2D : MonoBehaviour {
   [SerializeField, Range(0f, 1f)] float intensityFlicker = 0.55f;
   [SerializeField, Min(0f)] float flickerFrequency = 22f;
   [SerializeField, Range(0f, 0.5f)] float radiusFlicker = 0.12f;
+  [SerializeField, Min(0f)] float radiusPulseFrequency = 3f;
   [SerializeField, Min(0f)] float innerRadius = 0.08f;
   [SerializeField, Min(0.01f)] float outerRadius = 0.65f;
   [SerializeField, Range(0f, 1f)] float falloffIntensity = 0.8f;
@@ -33,6 +34,7 @@ public sealed class EffectLight2D : MonoBehaviour {
   }
 
   void OnValidate() {
+    radiusPulseFrequency = Mathf.Max(0f, radiusPulseFrequency);
     outerRadius = Mathf.Max(0.01f, outerRadius);
     innerRadius = Mathf.Clamp(innerRadius, 0f, outerRadius);
     CacheLight();
@@ -47,13 +49,13 @@ public sealed class EffectLight2D : MonoBehaviour {
   void LateUpdate() {
     if (effectLight == null) return;
 
-    var flicker = GetFlicker(Time.time);
+    var now = TimeScale.GetNow(this);
+    var flicker = GetFlicker(now);
     var minimumIntensity = baseIntensity * (1f - intensityFlicker);
     var maximumIntensity = baseIntensity * (1f + intensityFlicker);
     effectLight.intensity = Mathf.Lerp(minimumIntensity, maximumIntensity, flicker);
 
-    var radiusScale = Mathf.Lerp(1f - radiusFlicker, 1f + radiusFlicker, flicker);
-    ApplyWorldRadii(radiusScale);
+    ApplyWorldRadii(GetRadiusScale(now));
   }
 
   void CacheLight() {
@@ -76,20 +78,21 @@ public sealed class EffectLight2D : MonoBehaviour {
     ApplyWorldRadii(1f);
   }
 
-  void ApplyWorldRadii(float radiusScale) {
+  void ApplyWorldRadii(float outerRadiusScale) {
     if (effectLight == null) return;
 
-    var transformScale = GetMaximumWorldScale();
-    effectLight.pointLightInnerRadius = (innerRadius * radiusScale) / transformScale;
-    effectLight.pointLightOuterRadius = (outerRadius * radiusScale) / transformScale;
+    // URP Spot/Point light radii are already world-space values and ignore
+    // Transform scale. Compensating for scale makes scaled effects too small.
+    effectLight.pointLightInnerRadius = innerRadius;
+    effectLight.pointLightOuterRadius = outerRadius * outerRadiusScale;
   }
 
-  float GetMaximumWorldScale() {
-    var worldScale = transform.lossyScale;
-    var horizontalScale = Mathf.Abs(worldScale.x);
-    var verticalScale = Mathf.Abs(worldScale.y);
-    var maximumScale = Mathf.Max(horizontalScale, verticalScale);
-    return Mathf.Max(0.0001f, maximumScale);
+  float GetRadiusScale(float timeValue) {
+    if (radiusFlicker <= 0f || radiusPulseFrequency <= 0f) return 1f;
+
+    var phase = (timeValue * radiusPulseFrequency + flickerSeed) * Mathf.PI * 2f;
+    var pulse = (Mathf.Sin(phase) + 1f) * 0.5f;
+    return Mathf.Lerp(1f - radiusFlicker, 1f + radiusFlicker, pulse);
   }
 
   float GetFlicker(float timeValue) {

@@ -2048,6 +2048,7 @@ namespace CustomInspector.Documentation
                 [StaticsDrawer(StaticMembersSearchType.FlattenHierarchy)]
                 public StaticsDrawer inheritedDrawer = new();
             }
+            [Serializable]
             class A
             {
                 private static int a1 = 4;

@@ -195,6 +195,8 @@ public partial class SingleSceneManager {
       return;
     }
 
+    // This owner begins as the pre-unlock warm set, then remains pinned for the
+    // active zone. It is only released when that zone is replaced or abandoned.
     TextureResidencyCache.UpdateOwnerPins(
       PreUnlockResidentPinOwnerId,
       TextureResidencyCache.PinClass.WarmGate,
@@ -240,11 +242,14 @@ public partial class SingleSceneManager {
 
   IEnumerator WaitForStreamingIdleBeforeUnlock(
     bool prefetchVisibleSprites = false,
-    bool warmAnimationsBeforeUnlock = false
+    bool warmAnimationsBeforeUnlock = false,
+    bool replaceZoneResidentPins = true
   ) {
     if (!Application.isPlaying) yield break;
     var preUnlockStartedAt = Time.realtimeSinceStartup;
-    ResetPreUnlockResidentPins();
+    if (replaceZoneResidentPins) {
+      ResetPreUnlockResidentPins();
+    }
     if (ShouldLogLoadFlowWarnings()) {
       RuntimeLog.Log("[SingleSceneManager][PreUnlock] Starting WaitForStreamingIdleBeforeUnlock...");
       RuntimeLog.Log(TextureResidencyCache.GetQueueSourceBreakdown());

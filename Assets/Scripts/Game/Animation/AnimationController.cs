@@ -38,6 +38,7 @@ public partial class AnimationController {
   public bool playOnStart;
   public bool SlowDown { get; set; }
   public bool ForceLoop { get; set; }
+  public float AttackSpeedSeconds { get; set; }
 
   public string CurrentAnimation => currentAnimation;
   public bool IsPlaying =>
@@ -123,6 +124,7 @@ public partial class AnimationController {
   private int externalAppearanceContentVersion = -1;
   private readonly List<string> appearancePinAddressBuffer = new(512);
   private readonly HashSet<string> appearancePinAddressSet = new(StringComparer.OrdinalIgnoreCase);
+  private readonly HashSet<string> appliedAppearancePinAddressSet = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> warmPlaybackAnimationScratch = new(16);
   private readonly HashSet<string> warmPlaybackAnimationSeenScratch = new(StringComparer.Ordinal);
   private readonly List<string> warmPlaybackAddressScratch = new(512);
@@ -176,6 +178,7 @@ public partial class AnimationController {
     this.appearancePinClass = appearancePinClass;
     appearancePinAddressBuffer.Clear();
     appearancePinAddressSet.Clear();
+    appliedAppearancePinAddressSet.Clear();
     activeSpriteCategory = null;
     lastAppliedSpriteContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
     InvalidateSpriteFrameCache();
@@ -392,9 +395,15 @@ public partial class AnimationController {
       StreamingWarmOrchestrator.IsWarmGateRunning;
     var gateMs = loadingOverlayWarmGateActive ? Math.Max(runtimeSwitchGateMs, 0) : 0;
     var shouldHoldInitialPlayerStartFrame = ShouldHoldInitialPlayerStartFrame(enabledTargetCount, category);
+    var shouldHoldRuntimePlayerStartFrame = ShouldHoldRuntimePlayerStartFrame(
+      enabledTargetCount,
+      category,
+      anim
+    );
     var shouldHoldEffectStartFrame = ShouldHoldEffectStartFrame(enabledTargetCount, category, anim);
     var shouldHoldStartFrame =
       shouldHoldInitialPlayerStartFrame ||
+      shouldHoldRuntimePlayerStartFrame ||
       shouldHoldEffectStartFrame;
 
     if (gateMs <= 0) {

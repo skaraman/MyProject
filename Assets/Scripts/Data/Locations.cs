@@ -205,26 +205,17 @@ public class LocationPrefabData {
 public class LocationInfo {
   public string id;
   public string name;
-  public List<string> enemies;
-  public int maxEnemies;
-  public float spawnInterval;
   public List<LocationObjective> objectives;
   public LocationPrefabData locationPrefabData;
 
   public LocationInfo(
     string id,
     string name,
-    List<string> enemies,
-    int maxEnemies,
-    float spawnInterval,
     List<LocationObjective> objectives = null,
     LocationPrefabData locationPrefabData = null
   ) {
     this.id = NormalizeId(id);
     this.name = string.IsNullOrWhiteSpace(name) ? this.id : name.Trim();
-    this.enemies = enemies != null ? new List<string>(enemies) : new List<string>();
-    this.maxEnemies = Mathf.Max(0, maxEnemies);
-    this.spawnInterval = Mathf.Max(0f, spawnInterval);
     this.objectives = objectives != null ? new List<LocationObjective>(objectives) : new List<LocationObjective>();
     this.locationPrefabData = locationPrefabData ?? new LocationPrefabData();
   }
@@ -246,9 +237,6 @@ public static class LocationEnemyData {
       new LocationInfo(
         id: MainMenuLocationId,
         name: "Main Menu",
-        enemies: new List<string>(),
-        maxEnemies: 0,
-        spawnInterval: 0f,
         objectives: new List<LocationObjective>(),
         locationPrefabData: new LocationPrefabData()
       )
@@ -258,9 +246,6 @@ public static class LocationEnemyData {
       new LocationInfo(
         id: DomeCityLocationId,
         name: "Dome City",
-        enemies: new List<string> { "Imp" },
-        maxEnemies: 1,
-        spawnInterval: 2.0f,
         objectives: new List<LocationObjective> {
           LocationObjective.FinalKillCount(3, "Defeat 3 enemies"),
           LocationObjective.SurvivalTime(60f, "Survive for 60 seconds")

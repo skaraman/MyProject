@@ -290,9 +290,6 @@ public static partial class ContentPackPipeline {
     locationInfo = new LocationInfo(
       id: json.locationId,
       name: json.name,
-      enemies: json.enemies != null ? new List<string>(json.enemies) : new List<string>(),
-      maxEnemies: json.maxEnemies,
-      spawnInterval: json.spawnInterval,
       objectives: objectives,
       locationPrefabData: new LocationPrefabData(
         prefab: null,

@@ -3,4 +3,6 @@ public static class GameplayCoreAssetPaths {
   public const string EsperanzaGearMaterialAssetPath = "Assets/Materials/Gameplay/EsperanzaGear.mat";
   public const string EsperanzaHairMaterialAssetPath = "Assets/Materials/Gameplay/EsperanzaHair.mat";
   public const string EsperanzaBodyMaterialAssetPath = "Assets/Materials/Gameplay/EsperanzaBody.mat";
+  public const string DamageNumbersSpriteLibraryAssetPath =
+    "Assets/Sprites/SpriteLibraries/UI/DamageNumbers.spriteSheetLib";
 }

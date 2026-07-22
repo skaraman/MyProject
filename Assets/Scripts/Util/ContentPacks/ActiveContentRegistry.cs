@@ -212,9 +212,6 @@ public sealed class ActiveContentRegistry : ScriptableObject {
     return new LocationInfo(
       id: NormalizeToken(source.id),
       name: source.name ?? "",
-      enemies: CloneStringList(source.enemies),
-      maxEnemies: source.maxEnemies,
-      spawnInterval: source.spawnInterval,
       objectives: CloneObjectives(source.objectives),
       locationPrefabData: ClonePrefabData(source.locationPrefabData)
     );

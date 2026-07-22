@@ -104,6 +104,56 @@ public static partial class ContentPackPipeline {
     return normalized.Trim('/');
   }
 
+  static string ResolveExistingSpriteLibraryAssetPath(string value) {
+    var normalized = NormalizeAssetPath(value);
+    if (string.IsNullOrWhiteSpace(normalized)) return "";
+    var physicalPath = GetPhysicalPath(normalized);
+    if (File.Exists(physicalPath) || Directory.Exists(physicalPath)) return normalized;
+
+    var extension = Path.GetExtension(normalized);
+    if (string.Equals(
+      extension,
+      SpriteStreamingConfig.LegacySpriteLibraryExtension,
+      StringComparison.OrdinalIgnoreCase
+    )) {
+      var convertedPath = NormalizeAssetPath(
+        Path.ChangeExtension(normalized, SpriteStreamingConfig.CustomSpriteLibraryExtension)
+      );
+      return File.Exists(GetPhysicalPath(convertedPath)) ? convertedPath : normalized;
+    }
+
+    if (string.Equals(
+      extension,
+      SpriteStreamingConfig.CustomSpriteLibraryExtension,
+      StringComparison.OrdinalIgnoreCase
+    )) {
+      var legacyPath = NormalizeAssetPath(
+        Path.ChangeExtension(normalized, SpriteStreamingConfig.LegacySpriteLibraryExtension)
+      );
+      return File.Exists(GetPhysicalPath(legacyPath)) ? legacyPath : normalized;
+    }
+
+    if (!string.IsNullOrWhiteSpace(extension)) return normalized;
+
+    var customPath = normalized + SpriteStreamingConfig.CustomSpriteLibraryExtension;
+    if (File.Exists(GetPhysicalPath(customPath))) return customPath;
+
+    var fallbackPath = normalized + SpriteStreamingConfig.LegacySpriteLibraryExtension;
+    return File.Exists(GetPhysicalPath(fallbackPath)) ? fallbackPath : normalized;
+  }
+
+  static void ResolveExistingSpriteLibraryAssetPathsInPlace(List<string> paths) {
+    if (paths == null || paths.Count <= 0) return;
+
+    var resolvedPaths = new List<string>(paths.Count);
+    for (var index = 0; index < paths.Count; index++) {
+      AddUniquePath(resolvedPaths, ResolveExistingSpriteLibraryAssetPath(paths[index]));
+    }
+
+    paths.Clear();
+    paths.AddRange(resolvedPaths);
+  }
+
   static void AddUniquePath(List<string> paths, string value) {
     TryAddUniquePath(paths, value);
   }

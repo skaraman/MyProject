@@ -25,6 +25,7 @@ public static partial class SpriteRuntimeResolver {
       var parsedShard = shardParseTask.Result;
       loadedShards[namepart] = new ShardData {
         rows = parsedShard?.rows ?? new Dictionary<string, SpriteAddressPair>(StringComparer.Ordinal),
+        lookupRows = parsedShard?.lookupRows ?? new Dictionary<RowLookupKey, SpriteAddressPair>(),
         addressesByAtlasPath = parsedShard?.addressesByAtlasPath,
         atlasLookupBuilt = parsedShard?.addressesByAtlasPath != null,
         lastAccessTime = Time.realtimeSinceStartup
@@ -232,6 +233,7 @@ public static partial class SpriteRuntimeResolver {
   static ParsedShardData ParseShardRows(string text, bool allowUnityLogging = true) {
     var parsedShard = new ParsedShardData {
       rows = new Dictionary<string, SpriteAddressPair>(StringComparer.Ordinal),
+      lookupRows = new Dictionary<RowLookupKey, SpriteAddressPair>(),
       addressesByAtlasPath = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
     };
     if (string.IsNullOrWhiteSpace(text)) return parsedShard;
@@ -259,7 +261,9 @@ public static partial class SpriteRuntimeResolver {
         NormalizeTokenUncached(Unescape(cols[3])),
         NormalizeTokenUncached(Unescape(cols[4]))
       );
+      var lookupKey = new RowLookupKey(form, animation, frame);
       parsedShard.rows[key] = spritePair;
+      parsedShard.lookupRows[lookupKey] = spritePair;
     }
 
     parsedShard.addressesByAtlasPath = BuildAtlasAddressLookup(parsedShard.rows);

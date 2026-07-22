@@ -19,15 +19,66 @@ public readonly struct MessageTopic<T> {
   }
 }
 
+public readonly struct XpProgressGain {
+  public string ProgressionId { get; }
+  public int PreviousLevel { get; }
+  public int PreviousCurrentXp { get; }
+  public int PreviousNextLevelXp { get; }
+  public int CurrentLevel { get; }
+  public int CurrentXp { get; }
+  public int NextLevelXp { get; }
+
+  public XpProgressGain(
+    string progressionId,
+    int previousLevel,
+    int previousCurrentXp,
+    int previousNextLevelXp,
+    int currentLevel,
+    int currentXp,
+    int nextLevelXp
+  ) {
+    ProgressionId = progressionId;
+    PreviousLevel = previousLevel;
+    PreviousCurrentXp = previousCurrentXp;
+    PreviousNextLevelXp = previousNextLevelXp;
+    CurrentLevel = currentLevel;
+    CurrentXp = currentXp;
+    NextLevelXp = nextLevelXp;
+  }
+}
+
+public readonly struct CharacterDamageEvent {
+  public EndlessNumber Amount { get; }
+  public EndlessNumber CurrentHealth { get; }
+  public EndlessNumber MaximumHealth { get; }
+  public string HitId { get; }
+
+  public CharacterDamageEvent(
+    EndlessNumber amount,
+    EndlessNumber currentHealth,
+    EndlessNumber maximumHealth,
+    string hitId
+  ) {
+    Amount = (amount ?? new EndlessNumber()).Copy();
+    CurrentHealth = (currentHealth ?? new EndlessNumber()).Copy();
+    MaximumHealth = (maximumHealth ?? new EndlessNumber()).Copy();
+    HitId = hitId ?? "";
+  }
+}
+
 public static class CharacterMessageTopics {
   public static readonly MessageTopic LoadGame = new("loadGame");
   public static readonly MessageTopic<string> DialogStateReady = new("dialogStateReady");
   public static readonly MessageTopic<string> FormChanged = new("formChanged");
   public static readonly MessageTopic<string> GearReady = new("gearReady");
   public static readonly MessageTopic<string> FormProgressChanged = new("formProgressChanged");
+  public static readonly MessageTopic<XpProgressGain> FormXpGained = new("formXpGained");
   public static readonly MessageTopic<string> FormStatsChanged = new("formStatsChanged");
   public static readonly MessageTopic<string> AbilityProgressChanged = new("abilityProgressChanged");
+  public static readonly MessageTopic<XpProgressGain> AbilityXpGained = new("abilityXpGained");
   public static readonly MessageTopic<string> AbilityLoadoutChanged = new("abilityLoadoutChanged");
+  public static readonly MessageTopic<CharacterDamageEvent> HitReceived = new("characterHitReceived");
+  public static readonly MessageTopic<CharacterDamageEvent> Damaged = new("characterDamaged");
 }
 
 public static class MessageBus {

@@ -12,6 +12,7 @@ public class PauseMenuInput : MonoBehaviour {
   private bool lastFormsListVisible;
   private bool sceneLightsWereActiveBeforePause;
   private bool pauseMenuManagedSceneLights;
+  private bool topMenuFocused = true;
   private CharacterState characterState;
 
   public MenuButtons menuButtons;
@@ -33,9 +34,13 @@ public class PauseMenuInput : MonoBehaviour {
   public List<GameObject> primaryUIText = new();
   public List<GameObject> secondaryUIText = new();
 
-  void Awake() { }
+  void Awake() {
+    EnsureCharacterButtonNavigation();
+  }
 
   void OnEnable() {
+    topMenuFocused = true;
+    EnsureCharacterButtonNavigation();
     EnsureSectionsInitialized();
     SyncSelectedMenuWithVisibleSection();
     ResolveFormsListReference();
@@ -58,17 +63,21 @@ public class PauseMenuInput : MonoBehaviour {
     RefreshCurrentFormUi(logSelection: true, source: "start");
 
     if (actions.Count > 0) return;
-    actions.Add(MessageBus.On("pauseMenu.LeftTab", o => menuLeft()));
-    actions.Add(MessageBus.On("pauseMenu.RightTab", o => menuRight()));
-    actions.Add(MessageBus.On("pauseMenu.select", o => select()));
+    actions.Add(MessageBus.On("pauseMenu.LeftTab", o => { if (InputMessageValue.IsPressed(o)) menuLeft(); }));
+    actions.Add(MessageBus.On("pauseMenu.RightTab", o => { if (InputMessageValue.IsPressed(o)) menuRight(); }));
+    actions.Add(MessageBus.On("pauseMenu.select", o => { if (InputMessageValue.IsPressed(o)) select(); }));
     actions.Add(MessageBus.On("pauseMenu.hover", o => hover(o)));
     actions.Add(MessageBus.On("pauseMenu.unhover", o => unhover()));
     actions.Add(MessageBus.On("pauseMenu.click", o => click(o)));
-    actions.Add(MessageBus.On("pauseMenu.cancel", o => cancel()));
-    actions.Add(MessageBus.On("pauseMenu.left", o => left()));
-    actions.Add(MessageBus.On("pauseMenu.right", o => right()));
-    actions.Add(MessageBus.On("pauseMenu.up", o => up()));
-    actions.Add(MessageBus.On("pauseMenu.down", o => down()));
+    actions.Add(MessageBus.On("pauseMenu.cancel", o => { if (InputMessageValue.IsPressed(o)) cancel(); }));
+    actions.Add(MessageBus.On("pauseMenu.left", o => { if (InputMessageValue.IsPressed(o)) left(); }));
+    actions.Add(MessageBus.On("pauseMenu.right", o => { if (InputMessageValue.IsPressed(o)) right(); }));
+    actions.Add(MessageBus.On("pauseMenu.up", o => { if (InputMessageValue.IsPressed(o)) up(); }));
+    actions.Add(MessageBus.On("pauseMenu.down", o => { if (InputMessageValue.IsPressed(o)) down(); }));
+    actions.Add(MessageBus.On(
+      PauseMenuCharacterButtonsInput.TopMenuFocusChangedMessage,
+      OnCharacterTopMenuFocusChanged
+    ));
     actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, form => OnFormChanged(form)));
   }
 
@@ -85,6 +94,16 @@ public class PauseMenuInput : MonoBehaviour {
     sections.Clear();
     sections.AddRange(new GameObject[] { MapMenu, CharacterMenu, AbilityMenu, InventoryMenu, OptionsMenu });
     sectionsInitialized = true;
+  }
+
+  void EnsureCharacterButtonNavigation() {
+    if (CharacterMenu == null) {
+      return;
+    }
+
+    if (CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>() == null) {
+      CharacterMenu.AddComponent<PauseMenuCharacterButtonsInput>();
+    }
   }
 
   void SyncSelectedMenuWithVisibleSection() {
@@ -207,24 +226,65 @@ public class PauseMenuInput : MonoBehaviour {
   }
 
   void menuLeft() {
-    if (menuButtons == null || menuButtons.buttons.Count < 2) return;
-    activeSelectedIndex -= 1;
-    if (activeSelectedIndex < 1) {
-      activeSelectedIndex = menuButtons.buttons.Count - 2;
-    }
-    menuButtons.SetActiveIndex(activeSelectedIndex);
+    FocusTopMenu();
+    MoveTopMenuSelection(-1);
   }
 
   void menuRight() {
-    if (menuButtons == null || menuButtons.buttons.Count < 2) return;
-    activeSelectedIndex += 1;
-    if (activeSelectedIndex >= menuButtons.buttons.Count - 1) {
-      activeSelectedIndex = 1;
+    FocusTopMenu();
+    MoveTopMenuSelection(1);
+  }
+
+  void FocusTopMenu() {
+    topMenuFocused = true;
+    if (CharacterMenu == null) {
+      return;
     }
-    menuButtons.SetActiveIndex(activeSelectedIndex);
+
+    CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopMenu();
+  }
+
+  void OnCharacterTopMenuFocusChanged(object payload) {
+    if (payload is bool isFocused) {
+      topMenuFocused = isFocused;
+    }
+  }
+
+  void MoveTopMenuSelection(int direction) {
+    EnsureSectionsInitialized();
+    if (menuButtons == null) return;
+
+    // TopMenu reserves index 0 and its last index for the left/right arrow buttons.
+    var tabCount = Mathf.Min(sections.Count, Mathf.Max(0, menuButtons.buttons.Count - 2));
+    if (tabCount <= 0) return;
+
+    var currentIndex = activeSelectedIndex;
+    if (currentIndex < 1 || currentIndex > tabCount) {
+      currentIndex = menuButtons.activeIndex;
+    }
+    if (currentIndex < 1 || currentIndex > tabCount) {
+      currentIndex = 1;
+    }
+
+    var nextIndex = currentIndex + (direction < 0 ? -1 : 1);
+    if (nextIndex < 1) {
+      nextIndex = tabCount;
+    }
+    else if (nextIndex > tabCount) {
+      nextIndex = 1;
+    }
+
+    SelectMenuIndex(nextIndex);
   }
 
   void select() {
+    if (CharacterMenu != null && CharacterMenu.activeSelf) {
+      var characterButtonsInput = CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>();
+      if (characterButtonsInput != null && characterButtonsInput.HasFocusedButton) {
+        return;
+      }
+    }
+
     if (activeHoverIndex != -1) {
       SelectMenuIndex(activeHoverIndex);
       return;
@@ -283,7 +343,7 @@ public class PauseMenuInput : MonoBehaviour {
 
     activeHoverIndex = ResolveButtonIndex(menuButtons, targetObject);
     if (activeHoverIndex >= 0) {
-      select();
+      SelectMenuIndex(activeHoverIndex);
       return;
     }
 
@@ -312,6 +372,7 @@ public class PauseMenuInput : MonoBehaviour {
       menuButtons.SetActiveIndex(activeSelectedIndex);
     }
     SetVisibleSection(activeSelectedIndex);
+    FocusTopMenu();
     RefreshFormsListVisibility(logVisibilityChange: true);
     RefreshCurrentFormUi(source: "menu_select");
   }
@@ -428,7 +489,7 @@ public class PauseMenuInput : MonoBehaviour {
   }
 
   string ApplyTextColorGroup(List<GameObject> targets, string formName, string groupName) {
-    if (!TryGetFormColor(formName, groupName, out var color, out var colorName)) {
+    if (!ShaderColors.TryGetFormColor(formName, groupName, out var color, out var colorName)) {
       return null;
     }
 
@@ -437,26 +498,6 @@ public class PauseMenuInput : MonoBehaviour {
     }
 
     return colorName;
-  }
-
-  bool TryGetFormColor(string formName, string groupName, out Color color, out string colorName) {
-    color = Color.white;
-    colorName = null;
-
-    if (!ShaderColors.pairs.TryGetValue(formName, out var formGroups)) {
-      return false;
-    }
-    if (!formGroups.TryGetValue(groupName, out var groupValues)) {
-      return false;
-    }
-    if (!groupValues.TryGetValue("color", out colorName) || string.IsNullOrWhiteSpace(colorName)) {
-      return false;
-    }
-    if (!ShaderColors.myColors.TryGetValue(colorName, out color)) {
-      return false;
-    }
-
-    return true;
   }
 
   void ApplyAnimatorColor(GameObject target, Color color) {
@@ -496,12 +537,26 @@ public class PauseMenuInput : MonoBehaviour {
     MessageBus.Send("closePauseMenu", null);
   }
 
-  void left() { }
+  void left() {
+    if (topMenuFocused) {
+      MoveTopMenuSelection(-1);
+    }
+  }
 
-  void right() { }
+  void right() {
+    if (topMenuFocused) {
+      MoveTopMenuSelection(1);
+    }
+  }
 
   void up() { }
 
-  void down() { }
+  void down() {
+    if (!topMenuFocused || CharacterMenu == null || !CharacterMenu.activeSelf) {
+      return;
+    }
+
+    CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopmostButton();
+  }
 
 }

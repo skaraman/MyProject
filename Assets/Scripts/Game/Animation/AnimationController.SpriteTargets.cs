@@ -1,7 +1,22 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public partial class AnimationController {
+  public void CopySpriteTargetsTo(List<SpriteWithNormals> destination) {
+    if (destination == null) {
+      return;
+    }
+
+    destination.Clear();
+    for (var i = 0; i < spriteTargets.Count; i++) {
+      var target = spriteTargets[i];
+      if (target != null) {
+        destination.Add(target);
+      }
+    }
+  }
+
   private void CacheSpriteTargets() {
     spriteTargets.Clear();
     criticalSpriteTargets.Clear();

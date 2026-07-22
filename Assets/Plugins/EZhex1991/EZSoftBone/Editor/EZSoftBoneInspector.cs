@@ -10,6 +10,7 @@ using static EZhex1991.EZSoftBone.EZSoftBone;
 
 namespace EZhex1991.EZSoftBone
 {
+    [CanEditMultipleObjects]
     [CustomEditor(typeof(EZSoftBone))]
     public class EZSoftBoneInspector : Editor
     {
@@ -96,6 +97,12 @@ namespace EZhex1991.EZSoftBone
             serializedObject.Update();
             bool initRequired = false;
 
+            if (GUILayout.Button("Sync SpriteSkin Bones"))
+            {
+                SyncSpriteSkinBones(targets);
+                serializedObject.Update();
+            }
+
             EditorGUI.BeginChangeCheck();
             {
                 EditorGUILayout.PropertyField(m_RootBones, true);
@@ -179,6 +186,57 @@ namespace EZhex1991.EZSoftBone
                     softBone.InitStructures();
                 }
             }
+        }
+
+        [MenuItem("GameObject/EZSoftBone/Sync SpriteSkin Bones In Children", false, 49)]
+        private static void SyncSpriteSkinBonesInChildren()
+        {
+            var selectedObjects = Selection.gameObjects;
+            for (int i = 0; i < selectedObjects.Length; i++)
+            {
+                GameObject selectedObject = selectedObjects[i];
+                if (selectedObject == null) continue;
+
+                Undo.RegisterFullObjectHierarchyUndo(selectedObject, "Sync SpriteSkin Bones");
+                SyncSpriteSkinBones(selectedObject.GetComponentsInChildren<EZSoftBone>(true));
+            }
+        }
+
+        [MenuItem("GameObject/EZSoftBone/Sync SpriteSkin Bones In Children", true)]
+        private static bool CanSyncSpriteSkinBonesInChildren()
+        {
+            return Selection.gameObjects != null && Selection.gameObjects.Length > 0;
+        }
+
+        private static void SyncSpriteSkinBones(Object[] objects)
+        {
+            for (int i = 0; i < objects.Length; i++)
+            {
+                if (objects[i] is EZSoftBone selectedSoftBone)
+                {
+                    SyncSpriteSkinBone(selectedSoftBone);
+                }
+            }
+        }
+
+        private static void SyncSpriteSkinBones(EZSoftBone[] softBones)
+        {
+            for (int i = 0; i < softBones.Length; i++)
+            {
+                SyncSpriteSkinBone(softBones[i]);
+            }
+        }
+
+        private static void SyncSpriteSkinBone(EZSoftBone selectedSoftBone)
+        {
+            if (selectedSoftBone == null) return;
+
+            Undo.RegisterFullObjectHierarchyUndo(selectedSoftBone.gameObject, "Sync SpriteSkin Bones");
+            if (!selectedSoftBone.SyncSpriteSkinBones(force: true)) return;
+
+            EditorUtility.SetDirty(selectedSoftBone);
+            EditorUtility.SetDirty(selectedSoftBone.gameObject);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(selectedSoftBone);
         }
     }
 }

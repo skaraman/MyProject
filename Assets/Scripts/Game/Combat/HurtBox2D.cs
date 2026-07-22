@@ -20,9 +20,17 @@ public class HurtBox2D : MonoBehaviour {
   [Tooltip("If true, calls DestructionManager.LaunchRandom after hit logic.")]
   public bool launchRandomOnHit = true;
 
+  public HitBox2D LastHitBox { get; private set; }
+  public int LastHitFrame { get; private set; } = -1;
+
   void Reset() {
     var collider = GetComponent<Collider2D>();
     if (collider != null) collider.isTrigger = true;
+  }
+
+  void OnDisable() {
+    LastHitBox = null;
+    LastHitFrame = -1;
   }
 
   public static bool TryResolve(Collider2D collider, out HurtBox2D hurtBox) {
@@ -52,6 +60,8 @@ public class HurtBox2D : MonoBehaviour {
     if (ignoreEnemyHitBoxes && hitBox.IsEnemyOwned) return false;
 
     // Hit is validated as true - invoke event with context
+    LastHitBox = hitBox;
+    LastHitFrame = Time.frameCount;
     OnHit?.Invoke(hitBox);
 
     if (launchRandomOnHit) {

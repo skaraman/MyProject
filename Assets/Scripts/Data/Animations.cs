@@ -17,16 +17,6 @@ public class AnimData {
 }
 
 public static class Animations {
-
-  public static Dictionary<string, AnimData> Imp { get; } = new Dictionary<string, AnimData> {
-    { "Idle", new AnimData { start = 1, end = 46, duration = 1200, isLocomotion = true, loop = true } },
-    { "Run", new AnimData { start = 1, end = 46, duration = 1000, isLocomotion = true, loop = true } },
-    { "Attack", new AnimData { start = 1, end = 32, duration = 600 } },
-    { "Jump", new AnimData { start = 2, end = 196, duration = 1750 } },
-    { "Hurt", new AnimData { start = 1, end = 60, duration = 175 } },
-    { "BaseDeath1", new AnimData { start = 1, end = 74, duration = 1500, category = "DeathOne" } }
-  };
-
   public static Dictionary<string, AnimData> LesserDevil { get; } = new Dictionary<string, AnimData> {
     { "Idle", new AnimData { start = 1, end = 40, duration = 1200, isLocomotion = true, loop = true } },
     { "Run", new AnimData { start = 1, end = 30, duration = 850, isLocomotion = true, loop = true } },
@@ -38,7 +28,7 @@ public static class Animations {
 
 
   public static Dictionary<string, Dictionary<string, AnimData>> Enemies { get; } = new Dictionary<string, Dictionary<string, AnimData>> {
-    { "Imp", Imp },
+    { ImpData.EnemyType, ImpData.Animations },
     { "LesserDevil", LesserDevil }
   };
 
@@ -50,6 +40,7 @@ public static class Animations {
     { "Dance", new AnimData { start = 1, end = 480, duration = 6000, loop = true } },
     { "Block", new AnimData { start = 1, end = 42, duration = 500 } },
     { "Dodge", new AnimData { start = 1, end = 58, duration = 250 } },
+    { "Hurt", new AnimData { start = 1, end = 17, duration = 400 } },
     { "Stance", new AnimData { start = 1, end = 59, duration = 1000, isLocomotion = true, pingPong = true } },
 
 

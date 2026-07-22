@@ -59,8 +59,67 @@ public static partial class SpriteRuntimeResolver {
     }
   }
 
+  readonly struct RowLookupKey : IEquatable<RowLookupKey> {
+    public readonly string labelPrefix;
+    public readonly string category;
+    public readonly int frame;
+
+    public RowLookupKey(string labelPrefix, string category, int frame) {
+      this.labelPrefix = labelPrefix ?? "";
+      this.category = category ?? "";
+      this.frame = frame;
+    }
+
+    public bool Equals(RowLookupKey other) {
+      return frame == other.frame &&
+             string.Equals(labelPrefix, other.labelPrefix, StringComparison.Ordinal) &&
+             string.Equals(category, other.category, StringComparison.Ordinal);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is RowLookupKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = StringComparer.Ordinal.GetHashCode(labelPrefix ?? "");
+        hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(category ?? "");
+        hash = (hash * 397) ^ frame;
+        return hash;
+      }
+    }
+  }
+
+  readonly struct GearSplitLookupKey : IEquatable<GearSplitLookupKey> {
+    public readonly string namepart;
+    public readonly string labelPrefix;
+
+    public GearSplitLookupKey(string namepart, string labelPrefix) {
+      this.namepart = namepart ?? "";
+      this.labelPrefix = labelPrefix ?? "";
+    }
+
+    public bool Equals(GearSplitLookupKey other) {
+      return string.Equals(namepart, other.namepart, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(labelPrefix, other.labelPrefix, StringComparison.Ordinal);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is GearSplitLookupKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(namepart ?? "");
+        hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(labelPrefix ?? "");
+        return hash;
+      }
+    }
+  }
+
   sealed class ShardData {
     public Dictionary<string, SpriteAddressPair> rows;
+    public Dictionary<RowLookupKey, SpriteAddressPair> lookupRows;
     public Dictionary<string, List<string>> addressesByAtlasPath;
     public bool atlasLookupBuilt;
     // switched to realtime seconds to avoid heavy DateTime calls
@@ -69,6 +128,7 @@ public static partial class SpriteRuntimeResolver {
 
   sealed class ParsedShardData {
     public Dictionary<string, SpriteAddressPair> rows;
+    public Dictionary<RowLookupKey, SpriteAddressPair> lookupRows;
     public Dictionary<string, List<string>> addressesByAtlasPath;
   }
 
@@ -86,6 +146,7 @@ public static partial class SpriteRuntimeResolver {
   static readonly Dictionary<string, float> logCooldown = new(StringComparer.OrdinalIgnoreCase);
   static readonly Dictionary<LookupCacheKey, SpriteAddressPair> lookupHitCache = new();
   static readonly HashSet<LookupCacheKey> lookupMissCache = new();
+  static readonly Dictionary<GearSplitLookupKey, string> gearSplitNamepartCache = new();
   // caches for expensive normalization routines
   static readonly Dictionary<string, string> tokenNormCache = new(StringComparer.Ordinal);
   static readonly Dictionary<string, string> namepartNormCache = new(StringComparer.OrdinalIgnoreCase);
@@ -109,6 +170,7 @@ public static partial class SpriteRuntimeResolver {
   static ResolverSettings settings;
   static bool settingsLoaded;
   const int MaxLookupCacheEntries = 32768;
+  const int MaxGearSplitCacheEntries = 4096;
   const float SlowShardLoadThresholdMs = 80f;
   const float ShardLoadEwmaBlend = 0.35f;
   const float SlowShardWarmupBonusMs = 40f;
@@ -139,6 +201,7 @@ public static partial class SpriteRuntimeResolver {
     logCooldown.Clear();
     lookupHitCache.Clear();
     lookupMissCache.Clear();
+    gearSplitNamepartCache.Clear();
     tokenNormCache.Clear();
     namepartNormCache.Clear();
     atlasSiblingSeenScratch.Clear();

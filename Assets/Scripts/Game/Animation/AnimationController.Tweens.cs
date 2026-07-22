@@ -58,7 +58,7 @@ public partial class AnimationController {
       }
 
       var slowDown = owner.SlowDown ? 20f : 1f;
-      var duration = frame.duration * slowDown;
+      var duration = frame.duration * owner.ResolveCurrentAnimationDurationScale() * slowDown;
       var targetPosition = new Vector3(
         frame.x,
         frame.y,
@@ -221,7 +221,9 @@ public partial class AnimationController {
       }
 
       var slowDown = owner.SlowDown ? 20f : 1f;
-      var duration = (targetPath.d > 0f ? targetPath.d : 0.2f) * slowDown;
+      var duration = (targetPath.d > 0f ? targetPath.d : 0.2f) *
+                     owner.ResolveCurrentAnimationDurationScale() *
+                     slowDown;
       var descr = owner.TrackTween(
         LeanTween.value(target, 0f, 1f, duration).setEase(LeanTweenType.linear),
         duration

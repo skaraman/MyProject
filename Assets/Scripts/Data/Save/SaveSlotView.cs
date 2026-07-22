@@ -96,6 +96,7 @@ public class SaveSlotView : MonoBehaviour {
       var slotIndex = slotNumber - 1;
       slotDirectories.TryGetValue(slotNumber, out var directory);
       var go = Instantiate(saveSlotPrefab, saveSlotWrap.transform);
+      go.SetActive(false);
       var transformRef = go.transform;
       transformRef.localScale = new Vector3(SlotScale, SlotScale, SlotScale);
       transformRef.localPosition = ResolveParkedSlotLocalPosition(slotIndex);
@@ -292,12 +293,17 @@ public class SaveSlotView : MonoBehaviour {
       if (item == null) continue;
 
       var position = ResolveSlotLocalPosition(i);
-      if (hasViewport && !IsSlotNearViewport(position.y, minY, maxY)) {
+      var isNearViewport = !hasViewport || IsSlotNearViewport(position.y, minY, maxY);
+      if (!isNearViewport) {
+        // Parking alone leaves every streamed sprite active and eligible for UI pinning.
         position = parkedPosition;
         position.z = SlotZStep * i;
       }
 
       item.transform.localPosition = position;
+      if (item.activeSelf != isNearViewport) {
+        item.SetActive(isNearViewport);
+      }
     }
   }
 

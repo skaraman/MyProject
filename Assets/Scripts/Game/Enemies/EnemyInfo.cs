@@ -6,15 +6,15 @@ public class EnemyInfo : MonoBehaviour {
   public string enemyType;
   public int level = 1;
 
-  [NonSerialized] public float currentHp;
+  [NonSerialized] public EndlessNumber currentHp = new();
   [NonSerialized] public Spawner ownerSpawner;
 
-  readonly Dictionary<string, float> resolvedStats = new(16, StringComparer.OrdinalIgnoreCase);
+  readonly Dictionary<string, StatValue> resolvedStats = new(16, StringComparer.OrdinalIgnoreCase);
   readonly List<DemonStatModifier> runtimeStatBonuses = new(4);
   readonly List<string> resolvedStatKeyScratch = new(16);
 
   public int SpawnContextVersion { get; private set; }
-  public IReadOnlyDictionary<string, float> ResolvedStats => resolvedStats;
+  public IReadOnlyDictionary<string, StatValue> ResolvedStats => resolvedStats;
   public IReadOnlyList<DemonStatModifier> StatBonuses => runtimeStatBonuses;
 
   static bool ShouldLogSpawnDebug() {
@@ -49,20 +49,35 @@ public class EnemyInfo : MonoBehaviour {
     }
   }
 
-  public float GetResolvedStat(string statName, float fallback = 0f) {
+  // Physics/timing APIs still require floats. Combat and HP must use ResolvedStats/endless accessors.
+  public float GetResolvedEngineStat(string statName, float fallback = 0f) {
     if (string.IsNullOrWhiteSpace(statName)) {
       return fallback;
     }
 
-    return resolvedStats.TryGetValue(statName, out var value) ? value : fallback;
+    return resolvedStats.TryGetValue(statName, out var value) && value != null
+      ? value.ToSingleClamped()
+      : fallback;
   }
 
-  public float ResolveMaxHp() {
-    return Mathf.Max(GetResolvedStat("HP", 0f), 1f);
+  public EndlessNumber GetResolvedEndlessStat(string statName) {
+    if (string.IsNullOrWhiteSpace(statName) ||
+        !resolvedStats.TryGetValue(statName, out var value) ||
+        value == null ||
+        value.IsPercentage ||
+        value.EndlessValue == null) {
+      return new EndlessNumber();
+    }
+
+    return value.EndlessValue.Copy();
+  }
+
+  public EndlessNumber ResolveMaxHp() {
+    return EndlessNumber.Max(GetResolvedEndlessStat("HP"), new EndlessNumber(1d));
   }
 
   public void ResetHealthFromResolvedStats() {
-    currentHp = ResolveMaxHp();
+    (currentHp ??= new EndlessNumber()).Set(ResolveMaxHp());
   }
 
   void CopyStatBonuses(IList<DemonStatModifier> statBonuses) {
@@ -102,7 +117,7 @@ public class EnemyInfo : MonoBehaviour {
     var parts = new List<string>(keys.Count);
     for (var i = 0; i < keys.Count; i++) {
       var key = keys[i];
-      parts.Add(key + "=" + resolvedStats[key].ToString("0.###"));
+      parts.Add(key + "=" + resolvedStats[key]);
     }
 
     return string.Join(", ", parts);

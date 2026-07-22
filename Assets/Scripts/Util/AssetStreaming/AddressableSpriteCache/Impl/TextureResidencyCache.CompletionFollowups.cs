@@ -213,11 +213,18 @@ public static partial class TextureResidencyCache {
         );
         return null;
       }
+      entry.groupedPayloadsByName = BuildSpritePayloadLookup(
+        entry.parsedGroupedMetadata.sprites
+      );
 
       GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload primaryPayload = null;
       if (!string.IsNullOrWhiteSpace(entry.requestedSpriteNameHint)) {
         var hintName = entry.requestedSpriteNameHint.Trim();
-        primaryPayload = entry.parsedGroupedMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), hintName, StringComparison.Ordinal));
+        primaryPayload = FindSpritePayloadByName(
+          entry.groupedPayloadsByName,
+          entry.parsedGroupedMetadata.sprites,
+          hintName
+        );
       }
       if (primaryPayload == null && entry.parsedGroupedMetadata.sprites.Count > 0) {
         primaryPayload = entry.parsedGroupedMetadata.sprites[0];
@@ -291,11 +298,18 @@ public static partial class TextureResidencyCache {
         );
         return null;
       }
+      entry.metadataPayloadsByName = BuildSpritePayloadLookup(
+        entry.parsedMetadataAtlasMetadata.sprites
+      );
 
       GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload primaryPayload = null;
       if (!string.IsNullOrWhiteSpace(entry.requestedSpriteNameHint)) {
         var hintName = entry.requestedSpriteNameHint.Trim();
-        primaryPayload = entry.parsedMetadataAtlasMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), hintName, StringComparison.Ordinal));
+        primaryPayload = FindSpritePayloadByName(
+          entry.metadataPayloadsByName,
+          entry.parsedMetadataAtlasMetadata.sprites,
+          hintName
+        );
       }
       if (primaryPayload == null && entry.parsedMetadataAtlasMetadata.sprites.Count > 0) {
         primaryPayload = entry.parsedMetadataAtlasMetadata.sprites[0];

@@ -10,7 +10,7 @@ public class GameplayDialogController : MonoBehaviour {
   const string AutoDialogTrigger = "auto";
   const string DialogEsperPortraitLibrary = "Dialog/DialogEsper";
   const string DefaultPortraitLabelPrefix = "Base";
-  const string PlayerNameColorGroup = "secondary";
+  const string PlayerNameColorGroup = ShaderColors.SecondaryGroup;
   const string AllyColorName = "Green";
   const string EnemyColorName = "Red";
 
@@ -1167,12 +1167,14 @@ public class GameplayDialogController : MonoBehaviour {
   }
 
   Color ResolvePlayerNameColor(string formName) {
-    return TryGetFormColor(formName, PlayerNameColorGroup, out var color, out _) ? color : Color.white;
+    return ShaderColors.TryGetFormColor(formName, PlayerNameColorGroup, out var color, out _)
+      ? color
+      : Color.white;
   }
 
   Color ResolveOtherNameColor(GameplayDialogNode node) {
     var requestedColorName = ResolveDialogOtherType(node) == DialogOtherType.Ally ? AllyColorName : EnemyColorName;
-    return TryGetNamedColor(requestedColorName, out var color) ? color : Color.white;
+    return ShaderColors.TryGetNamedColor(requestedColorName, out var color) ? color : Color.white;
   }
 
   DialogOtherType ResolveDialogOtherType(GameplayDialogNode node) {
@@ -1245,35 +1247,6 @@ public class GameplayDialogController : MonoBehaviour {
     return string.Equals(libraryName, DialogEsperPortraitLibrary, StringComparison.OrdinalIgnoreCase)
       ? formName
       : DefaultPortraitLabelPrefix;
-  }
-
-  bool TryGetFormColor(string formName, string groupName, out Color color, out string colorName) {
-    color = Color.white;
-    colorName = null;
-    if (string.IsNullOrWhiteSpace(formName) || string.IsNullOrWhiteSpace(groupName)) {
-      return false;
-    }
-
-    if (!ShaderColors.pairs.TryGetValue(formName, out var formGroups) || formGroups == null) {
-      return false;
-    }
-    if (!formGroups.TryGetValue(groupName, out var groupValues) || groupValues == null) {
-      return false;
-    }
-    if (!groupValues.TryGetValue("color", out colorName) || string.IsNullOrWhiteSpace(colorName)) {
-      return false;
-    }
-
-    return TryGetNamedColor(colorName, out color);
-  }
-
-  bool TryGetNamedColor(string colorName, out Color color) {
-    color = Color.white;
-    if (string.IsNullOrWhiteSpace(colorName)) {
-      return false;
-    }
-
-    return ShaderColors.myColors.TryGetValue(colorName.Trim(), out color);
   }
 
   void ApplySpeakerNameColor(SpeakerWidgets widgets, GameplayDialogNode node, string formName) {

@@ -18,6 +18,25 @@ from typing import Any, Iterable
 PACKAGE_NAME = "com.skaraman.myprojectcontent"
 DEFAULT_EXTERNAL_ROOT_NAME = "MyProjectContent"
 INTERFACE_INFO_CSV_NAME = "ContentPackIterationUI_interface_info.csv"
+INTERFACE_INFO_CSV_FIELDS = (
+    "pack_type",
+    "kind",
+    "pack_id",
+    "selected",
+    "mapped",
+    "status",
+    "source_assets",
+    "target_root",
+    "unity_asset_root",
+    "source_revision",
+    "authoring_sources",
+    "authoring_sources_json",
+    "manifest_definition_json",
+    "details",
+)
+GENERATED_MANIFEST_FIELDS = {
+    "exportedAddresses",
+}
 CUSTOM_LIBRARY_EXTENSION = ".spriteSheetLib"
 LEGACY_LIBRARY_EXTENSION = ".spriteLib"
 UNITY_LOCK_EXIT_CODE = 3
@@ -83,35 +102,12 @@ SOURCE_LABEL_TO_TYPE = {label: key for key, label in SOURCE_TYPE_LABELS.items()}
 
 MAPPED_STATUS = "Mapped"
 NOT_MAPPED_STATUS = "Not mapped"
+MISSING_STATUS = "Missing"
+MISSING_MANIFEST_STATUS = "Missing manifest"
 PLANNED_MISSING_STATUS = "Planned missing"
 FOLDER_ONLY_STATUS = "Folder only"
 SLICE_PACK_TYPE = "Slice"
 EPISODE_PACK_TYPE = "Episode"
-
-FORM_CHARACTER_SOURCE_FOLDERS = (
-    "Blast",
-    "Block",
-    "Breathe",
-    "Dance",
-    "Dodge",
-    "Effects",
-    "Expressions",
-    "Hurt",
-    "Jump",
-    "JumpDouble",
-    "JumpFalling",
-    "JumpLanding",
-    "KickLeft",
-    "KickRight",
-    "PunchLeft",
-    "PunchRight",
-    "Run",
-    "Sprint",
-    "Stance",
-    "To",
-    "Walk",
-    "_Bounces",
-)
 
 @dataclass
 class SourceAssetSpec:
@@ -150,8 +146,13 @@ class SourceAssetSpec:
 class PackOption:
     pack_type: str
     pack_id: str
+    pack_kind: str = ""
+    selected: bool = False
+    mapped: bool = False
     source_assets: list[str] = field(default_factory=list)
     authoring_sources: list[SourceAssetSpec] = field(default_factory=list)
+    csv_authoring_sources: list[str] = field(default_factory=list)
+    manifest_definition: dict[str, Any] = field(default_factory=dict)
     target_root: str = ""
     unity_asset_root: str = ""
     status: str = ""
@@ -161,6 +162,7 @@ class PackOption:
     def haystack(self) -> str:
         values = [
             self.pack_type,
+            self.pack_kind,
             self.pack_id,
             self.target_root,
             self.unity_asset_root,
@@ -168,6 +170,7 @@ class PackOption:
             self.source_revision,
             *self.source_assets,
             *(source.source_label() for source in self.authoring_sources),
+            *self.csv_authoring_sources,
             *self.details,
         ]
         return "\n".join(value for value in values if value).lower()
@@ -186,6 +189,7 @@ class PackOption:
             f"Pack type: {self.pack_type}",
             f"Target id: {self.pack_id}",
             f"Status: {self.status or '(unknown)'}",
+            f"Directly selected: {'Yes' if self.selected else 'No'}",
             f"Target root: {self.target_root or '(none)'}",
             f"Unity asset root: {self.unity_asset_root or '(none)'}",
         ]
@@ -199,10 +203,12 @@ class PackOption:
                 f"{source.source_label()} -> {source.target_folder or '(target folder not set)'}"
                 for source in self.authoring_sources
             )
+        elif self.csv_authoring_sources:
+            lines.extend(f"- CSV snapshot: {source}" for source in self.csv_authoring_sources)
         else:
             lines.append("- (none declared in manifest)")
         lines.append("")
-        lines.append("Inferred source assets:")
+        lines.append("Saved root source assets:")
         if self.source_assets:
             lines.extend(f"- {path}" for path in self.source_assets)
         else:
@@ -241,6 +247,26 @@ class ManifestEpisodeSpec:
 
 
 @dataclass
+class PackResetResult:
+    manifest_paths: list[Path] = field(default_factory=list)
+    unresolved_pack_ids: list[str] = field(default_factory=list)
+    selected_ids: list[str] = field(default_factory=list)
+    slice_count: int = 0
+    episode_count: int = 0
+    csv_path: Path | None = None
+
+
+@dataclass
+class PackManifestRecoveryResult:
+    package_manifest_path: Path | None = None
+    package_manifest_written: bool = False
+    manifest_paths: list[Path] = field(default_factory=list)
+    unresolved_pack_ids: list[str] = field(default_factory=list)
+    csv_path: Path | None = None
+    csv_found: bool = False
+
+
+@dataclass
 class ManifestIdSuggestion:
     manifest_id: str
     suggestion_type: str
@@ -261,6 +287,16 @@ def main() -> int:
     parser.add_argument("--search", default="", help="Search filter for --list.")
     parser.add_argument("--set-mapped", default="", help="Comma-separated pack ids to map in ContentPackSelection.asset.")
     parser.add_argument("--set-active", default="", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--export-interface-info-csv",
+        action="store_true",
+        help="Write the current content-pack setup to the recovery CSV and exit.",
+    )
+    parser.add_argument(
+        "--recover-build-clean",
+        action="store_true",
+        help="Recreate the package shell and restore missing or incomplete pack manifests from the recovery CSV, then exit.",
+    )
     parser.add_argument("--build-smart", action="store_true", help="Run Unity Smart content-pack build from this Python tool.")
     parser.add_argument("--unity-exe", default="", help="Override Unity.exe path for --build-smart.")
     parser.add_argument("--manifest-list", action="store_true", help="Print ContentManifest slices.")
@@ -279,6 +315,25 @@ def main() -> int:
 
     project_root = Path(args.project_root).resolve()
     external_root = Path(args.external_root).resolve() if args.external_root else resolve_external_root(project_root)
+    if args.recover_build_clean:
+        result = recover_missing_pack_manifests_from_interface_info_csv(project_root, external_root)
+        package_status = "written" if result.package_manifest_written else "ready"
+        print(f"package_manifest_{package_status}={result.package_manifest_path}")
+        print(f"recovered_pack_manifests={len(result.manifest_paths)}")
+        if not result.csv_found:
+            print(f"recovery_csv_missing={result.csv_path}")
+        if result.unresolved_pack_ids:
+            print(
+                "unresolved_pack_ids=" + ",".join(result.unresolved_pack_ids),
+                file=sys.stderr,
+            )
+            return 2
+        return 0
+    if args.export_interface_info_csv:
+        csv_path = export_interface_info_csv(project_root, external_root)
+        print(f"wrote_interface_info_csv={csv_path}")
+        return 0
+
     mapped_arg = args.set_mapped or args.set_active
     manifest_command = update_content_manifest_from_args(project_root, args)
     if args.manifest_list or manifest_command:
@@ -353,6 +408,7 @@ def build_pack_options(project_root: Path, external_root: Path) -> list[PackOpti
     selected_pack_ids = read_active_pack_ids(project_root)
     slices = read_content_manifest_slices(project_root)
     episodes = read_content_manifest_episodes(project_root)
+    csv_inventory = read_interface_info_csv(project_root)
 
     manifest_by_pack = read_external_pack_manifests(external_root)
     referenced_pack_ids = read_content_manifest_pack_ids(project_root)
@@ -363,11 +419,33 @@ def build_pack_options(project_root: Path, external_root: Path) -> list[PackOpti
         for pack_id in selected_pack_ids
         if pack_id.lower() not in manifest_flow_ids
     ]
-    all_ids = sorted(set(selected_concrete_pack_ids) | set(referenced_pack_ids) | set(manifest_by_pack), key=pack_sort_key)
+    csv_pack_ids = [option.pack_id for option in csv_inventory.values()]
+    all_ids_by_key: dict[str, str] = {}
+    for pack_ids in (
+        manifest_by_pack.keys(),
+        referenced_pack_ids,
+        selected_concrete_pack_ids,
+        csv_pack_ids,
+    ):
+        for pack_id in pack_ids:
+            normalized_pack_id = sanitize_identifier(pack_id)
+            if normalized_pack_id:
+                all_ids_by_key.setdefault(normalized_pack_id.lower(), normalized_pack_id)
+    all_ids = sorted(all_ids_by_key.values(), key=pack_sort_key)
+    manifest_by_key = {pack_id.lower(): manifest for pack_id, manifest in manifest_by_pack.items()}
     active_ids = resolve_active_manifest_ids(selected_pack_ids, all_ids, slices, episodes)
+    selected_id_keys = {pack_id.lower() for pack_id in selected_pack_ids}
 
     options = [
-        build_pack_option(project_root, external_root, pack_id, manifest_by_pack.get(pack_id), active_ids)
+        build_pack_option(
+            project_root,
+            external_root,
+            pack_id,
+            manifest_by_key.get(pack_id.lower()),
+            active_ids,
+            selected_id_keys,
+            csv_inventory.get(pack_id.lower()),
+        )
         for pack_id in all_ids
     ]
     options.extend(build_manifest_flow_options(project_root, slices, episodes, selected_pack_ids))
@@ -375,24 +453,138 @@ def build_pack_options(project_root: Path, external_root: Path) -> list[PackOpti
     return [option for option in options if option is not None]
 
 
+def interface_info_csv_path(project_root: Path) -> Path:
+    return project_root / "Tools" / INTERFACE_INFO_CSV_NAME
+
+
+def read_interface_info_csv_rows(project_root: Path) -> tuple[list[dict[str, str]], list[str]]:
+    path = interface_info_csv_path(project_root)
+    try:
+        with path.open("r", newline="", encoding="utf-8-sig") as handle:
+            reader = csv.DictReader(handle)
+            field_names = list(reader.fieldnames or [])
+            return [dict(row) for row in reader], field_names
+    except (FileNotFoundError, OSError, csv.Error):
+        return [], []
+
+
+def read_interface_info_csv(project_root: Path) -> dict[str, PackOption]:
+    result: dict[str, PackOption] = {}
+    rows, _field_names = read_interface_info_csv_rows(project_root)
+    for row in rows:
+        pack_id = sanitize_identifier(str(row.get("pack_id") or ""))
+        pack_type = str(row.get("pack_type") or "").strip()
+        if not pack_id or is_manifest_flow_pack_type(pack_type):
+            continue
+
+        pack_kind = normalize_pack_kind(str(row.get("kind") or ""))
+        if not pack_kind:
+            pack_kind = PACK_LABEL_TO_KIND.get(pack_type, infer_kind(pack_id))
+
+        authoring_sources: list[SourceAssetSpec] = []
+        raw_authoring_json = str(row.get("authoring_sources_json") or "").strip()
+        if raw_authoring_json:
+            try:
+                raw_sources = json.loads(raw_authoring_json)
+                if isinstance(raw_sources, list):
+                    authoring_sources = parse_authoring_sources({"authoringSources": raw_sources})
+            except json.JSONDecodeError:
+                authoring_sources = []
+        if not authoring_sources:
+            authoring_sources = parse_csv_authoring_sources(row.get("authoring_sources"))
+
+        manifest_definition: dict[str, Any] = {}
+        raw_manifest_json = str(row.get("manifest_definition_json") or "").strip()
+        if raw_manifest_json:
+            try:
+                parsed_manifest = json.loads(raw_manifest_json)
+                if isinstance(parsed_manifest, dict):
+                    manifest_definition = parsed_manifest
+            except json.JSONDecodeError:
+                manifest_definition = {}
+        if not authoring_sources and manifest_definition:
+            authoring_sources = parse_authoring_sources(manifest_definition)
+
+        result[pack_id.lower()] = PackOption(
+            pack_type=pack_type or PACK_TYPE_LABELS.get(pack_kind, pack_kind.title()),
+            pack_id=pack_id,
+            pack_kind=pack_kind,
+            selected=parse_csv_bool(row.get("selected")),
+            mapped=parse_csv_bool(row.get("mapped")) or str(row.get("status") or "") == MAPPED_STATUS,
+            source_assets=parse_csv_lines(row.get("source_assets")),
+            authoring_sources=authoring_sources,
+            csv_authoring_sources=parse_csv_lines(row.get("authoring_sources")),
+            manifest_definition=manifest_definition,
+            target_root=str(row.get("target_root") or ""),
+            unity_asset_root=str(row.get("unity_asset_root") or ""),
+            status=str(row.get("status") or ""),
+            details=parse_csv_lines(row.get("details")),
+            source_revision=str(row.get("source_revision") or ""),
+        )
+    return result
+
+
+def parse_csv_lines(value: Any) -> list[str]:
+    if not isinstance(value, str):
+        return []
+    return [line.strip() for line in value.splitlines() if line.strip()]
+
+
+def parse_csv_authoring_sources(value: Any) -> list[SourceAssetSpec]:
+    result: list[SourceAssetSpec] = []
+    for line in parse_csv_lines(value):
+        match = re.match(r"^([^:]+):\s*(.*?)\s*->\s*(.*)$", line)
+        if not match:
+            continue
+        source_type = normalize_source_type(match.group(1))
+        source_label = normalize_slashes(match.group(2))
+        target_folder = normalize_slashes(match.group(3))
+        if not source_type or not source_label:
+            continue
+
+        asset_path = source_label
+        label = ""
+        label_prefix = ""
+        if source_label.endswith("]") and "[" in source_label:
+            asset_path, saved_label = source_label.rsplit("[", 1)
+            saved_label = saved_label[:-1]
+            if source_type == "sprite_slice":
+                label = saved_label
+            elif source_type == "sprite_sheet":
+                label_prefix = saved_label
+
+        result.append(SourceAssetSpec(
+            source_type=source_type,
+            asset_path=asset_path,
+            target_folder=target_folder,
+            label=label,
+            label_prefix=label_prefix,
+        ))
+    return result
+
+
+def parse_csv_bool(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
+
+
+def build_manifest_definition(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    if not manifest:
+        return {}
+    return {
+        key: value
+        for key, value in manifest.items()
+        if key not in GENERATED_MANIFEST_FIELDS
+    }
+
+
 def export_interface_info_csv(project_root: Path, external_root: Path) -> Path:
-    output_path = project_root / "Tools" / INTERFACE_INFO_CSV_NAME
+    output_path = interface_info_csv_path(project_root)
+    temporary_path = output_path.with_name(output_path.name + ".tmp")
     options = build_pack_options(project_root, external_root)
-    field_names = [
-        "pack_type",
-        "pack_id",
-        "status",
-        "source_assets",
-        "target_root",
-        "unity_asset_root",
-        "source_revision",
-        "authoring_sources",
-        "details",
-    ]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=field_names)
+    with temporary_path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=INTERFACE_INFO_CSV_FIELDS)
         writer.writeheader()
         for option in options:
             source_assets = "\n".join(option.source_assets)
@@ -401,20 +593,372 @@ def export_interface_info_csv(project_root: Path, external_root: Path) -> Path:
                 authoring_sources.append(
                     f"{source.source_type}: {source.source_label()} -> {source.target_folder}"
                 )
+            if not authoring_sources:
+                authoring_sources.extend(option.csv_authoring_sources)
 
             writer.writerow({
                 "pack_type": option.pack_type,
+                "kind": option.pack_kind,
                 "pack_id": option.pack_id,
+                "selected": "true" if option.selected else "false",
+                "mapped": "true" if option.mapped else "false",
                 "status": option.status,
                 "source_assets": source_assets,
                 "target_root": option.target_root,
                 "unity_asset_root": option.unity_asset_root,
                 "source_revision": option.source_revision,
                 "authoring_sources": "\n".join(authoring_sources),
+                "authoring_sources_json": json.dumps(
+                    [serialize_authoring_source(source) for source in option.authoring_sources],
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ),
+                "manifest_definition_json": json.dumps(
+                    option.manifest_definition,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ),
                 "details": "\n".join(option.details),
             })
 
+    temporary_path.replace(output_path)
     return output_path
+
+
+def retire_pack_from_interface_info_csv(project_root: Path, pack_id: str) -> None:
+    normalized_pack_id = sanitize_identifier(pack_id).lower()
+    path = interface_info_csv_path(project_root)
+    if not normalized_pack_id or not path.exists():
+        return
+
+    try:
+        with path.open("r", newline="", encoding="utf-8-sig") as handle:
+            reader = csv.DictReader(handle)
+            field_names = reader.fieldnames or list(INTERFACE_INFO_CSV_FIELDS)
+            rows = [
+                row for row in reader
+                if sanitize_identifier(str(row.get("pack_id") or "")).lower() != normalized_pack_id
+            ]
+    except (OSError, csv.Error):
+        return
+
+    temporary_path = path.with_name(path.name + ".tmp")
+    with temporary_path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=field_names)
+        writer.writeheader()
+        writer.writerows(rows)
+    temporary_path.replace(path)
+
+
+def reset_packs_from_interface_info_csv(
+    project_root: Path,
+    external_root: Path,
+) -> PackResetResult:
+    rows, field_names = read_interface_info_csv_rows(project_root)
+    csv_path = interface_info_csv_path(project_root)
+    if not rows:
+        raise SystemExit(f"Saved pack truth is missing or empty: {csv_path}")
+
+    recovery = recover_missing_pack_manifests_from_interface_info_csv(
+        project_root,
+        external_root,
+        overwrite_existing=True,
+        require_csv=True,
+    )
+    inventory = read_interface_info_csv(project_root)
+    saved_slices = normalize_manifest_slices([
+        {
+            "id": row.get("pack_id"),
+            "ids": parse_csv_lines(row.get("source_assets")),
+        }
+        for row in rows
+        if str(row.get("pack_type") or "").strip() == SLICE_PACK_TYPE
+    ])
+    saved_episodes = normalize_manifest_episodes([
+        {
+            "id": row.get("pack_id"),
+            "slices": parse_csv_lines(row.get("source_assets")),
+        }
+        for row in rows
+        if str(row.get("pack_type") or "").strip() == EPISODE_PACK_TYPE
+    ])
+    has_saved_slices = any(
+        str(row.get("pack_type") or "").strip() == SLICE_PACK_TYPE
+        for row in rows
+    )
+    has_saved_episodes = any(
+        str(row.get("pack_type") or "").strip() == EPISODE_PACK_TYPE
+        for row in rows
+    )
+
+    slices = saved_slices if has_saved_slices else read_content_manifest_slices(project_root)
+    episodes = saved_episodes if has_saved_episodes else read_content_manifest_episodes(project_root)
+    selected_ids = build_saved_selected_ids(rows, field_names, inventory, slices, episodes)
+
+    result = PackResetResult(
+        manifest_paths=list(recovery.manifest_paths),
+        unresolved_pack_ids=list(recovery.unresolved_pack_ids),
+        selected_ids=selected_ids,
+        slice_count=len(slices),
+        episode_count=len(episodes),
+        csv_path=csv_path,
+    )
+    write_content_manifest_flow(project_root, slices, episodes, export_csv=False)
+    write_content_pack_selection(
+        project_root,
+        external_root,
+        selected_ids,
+        export_csv=False,
+    )
+    return result
+
+
+def recover_missing_pack_manifests_from_interface_info_csv(
+    project_root: Path,
+    external_root: Path,
+    *,
+    overwrite_existing: bool = False,
+    require_csv: bool = False,
+) -> PackManifestRecoveryResult:
+    package_manifest_path, package_manifest_written = ensure_content_package_manifest(external_root)
+    rows, _field_names = read_interface_info_csv_rows(project_root)
+    csv_path = interface_info_csv_path(project_root)
+    if not rows:
+        if require_csv:
+            raise SystemExit(f"Saved pack truth is missing or empty: {csv_path}")
+        return PackManifestRecoveryResult(
+            package_manifest_path=package_manifest_path,
+            package_manifest_written=package_manifest_written,
+            csv_path=csv_path,
+        )
+
+    result = PackManifestRecoveryResult(
+        package_manifest_path=package_manifest_path,
+        package_manifest_written=package_manifest_written,
+        csv_path=csv_path,
+        csv_found=True,
+    )
+    inventory = read_interface_info_csv(project_root)
+    for option in inventory.values():
+        pack_id = sanitize_identifier(option.pack_id)
+        kind = normalize_pack_kind(option.pack_kind) or infer_kind(pack_id)
+        if not pack_id or not kind:
+            continue
+
+        manifest_path = external_pack_root(external_root, kind, pack_id) / "ContentPackManifest.json"
+        current_manifest = read_json(manifest_path)
+        manifest_definition = dict(option.manifest_definition)
+        if not manifest_definition and option.authoring_sources:
+            manifest_definition = build_inventory_manifest_definition(
+                project_root,
+                pack_id,
+                kind,
+                option,
+            )
+        if option.authoring_sources:
+            manifest_definition["authoringSources"] = [
+                serialize_authoring_source(source)
+                for source in option.authoring_sources
+            ]
+            manifest_definition["ownedRoots"] = build_owned_roots(option.authoring_sources)
+
+        if (
+            not overwrite_existing
+            and manifest_covers_saved_pack_ownership(current_manifest, manifest_definition)
+        ):
+            continue
+
+        if not manifest_definition:
+            result.unresolved_pack_ids.append(pack_id)
+            continue
+
+        restored_manifest = dict(manifest_definition)
+        for field_name in GENERATED_MANIFEST_FIELDS:
+            if field_name in current_manifest:
+                restored_manifest[field_name] = current_manifest[field_name]
+        restored_manifest["packId"] = pack_id
+        restored_manifest["kind"] = kind
+        restored_manifest["type"] = kind
+
+        if not manifest_covers_saved_pack_ownership(restored_manifest, manifest_definition):
+            result.unresolved_pack_ids.append(pack_id)
+            continue
+
+        if restored_manifest == current_manifest:
+            continue
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(manifest_path, restored_manifest)
+        result.manifest_paths.append(manifest_path)
+
+    return result
+
+
+def manifest_has_declared_owned_roots(manifest: dict[str, Any] | None) -> bool:
+    if not manifest:
+        return False
+    owned_roots = manifest.get("ownedRoots")
+    if not isinstance(owned_roots, list):
+        return False
+    return any(str(root or "").strip() for root in owned_roots)
+
+
+def manifest_covers_saved_pack_ownership(
+    current_manifest: dict[str, Any] | None,
+    saved_manifest: dict[str, Any] | None,
+) -> bool:
+    if not manifest_has_declared_owned_roots(current_manifest):
+        return False
+
+    current_roots = manifest_owned_root_keys(current_manifest)
+    saved_roots = manifest_owned_root_keys(saved_manifest)
+    if saved_roots and not saved_roots.issubset(current_roots):
+        return False
+
+    current_sources = manifest_authoring_source_keys(current_manifest)
+    saved_sources = manifest_authoring_source_keys(saved_manifest)
+    return not saved_sources or saved_sources.issubset(current_sources)
+
+
+def manifest_owned_root_keys(manifest: dict[str, Any] | None) -> set[str]:
+    if not manifest:
+        return set()
+    owned_roots = manifest.get("ownedRoots")
+    if not isinstance(owned_roots, list):
+        return set()
+    return {
+        normalize_slashes(str(root or "")).strip().lower()
+        for root in owned_roots
+        if str(root or "").strip()
+    }
+
+
+def manifest_authoring_source_keys(manifest: dict[str, Any] | None) -> set[tuple[str, ...]]:
+    if not manifest:
+        return set()
+    raw_sources = manifest.get("authoringSources")
+    if not isinstance(raw_sources, list):
+        return set()
+
+    result: set[tuple[str, ...]] = set()
+    for source in raw_sources:
+        if not isinstance(source, dict):
+            continue
+        result.add((
+            str(source.get("sourceType") or "").strip().lower(),
+            normalize_slashes(str(source.get("assetPath") or "")).strip().lower(),
+            str(source.get("label") or "").strip(),
+            normalize_slashes(str(source.get("targetFolder") or "")).strip().lower(),
+            normalize_slashes(str(source.get("libraryName") or "")).strip().lower(),
+            str(source.get("category") or "").strip(),
+            str(source.get("labelPrefix") or "").strip(),
+            normalize_slashes(str(source.get("normalAssetPath") or "")).strip().lower(),
+        ))
+    return result
+
+
+def ensure_content_package_manifest(external_root: Path) -> tuple[Path, bool]:
+    external_root.mkdir(parents=True, exist_ok=True)
+    manifest_path = external_root / "package.json"
+    current_manifest = read_json(manifest_path)
+    package_manifest = dict(current_manifest)
+    package_manifest["name"] = PACKAGE_NAME
+    package_manifest.setdefault("version", "1.0.0")
+    package_manifest.setdefault("displayName", "My Project Content")
+    package_manifest.setdefault(
+        "description",
+        "External content package containing sprites, prefabs, slices, etc.",
+    )
+    package_manifest.setdefault("unity", "6000.4")
+
+    if package_manifest == current_manifest:
+        return manifest_path, False
+
+    write_json_atomic(manifest_path, package_manifest)
+    return manifest_path, True
+
+
+def build_saved_selected_ids(
+    rows: list[dict[str, str]],
+    field_names: list[str],
+    inventory: dict[str, PackOption],
+    slices: list[ManifestSliceSpec],
+    episodes: list[ManifestEpisodeSpec],
+) -> list[str]:
+    if "selected" in field_names:
+        selected_ids: list[str] = []
+        for row in rows:
+            if not parse_csv_bool(row.get("selected")):
+                continue
+            add_unique(
+                selected_ids,
+                sanitize_identifier(str(row.get("pack_id") or "")),
+            )
+        return selected_ids
+
+    mapped_flow_ids = [
+        pack_id
+        for row in rows
+        if is_manifest_flow_pack_type(str(row.get("pack_type") or "").strip())
+        and str(row.get("status") or "").strip() == MAPPED_STATUS
+        for pack_id in [sanitize_identifier(str(row.get("pack_id") or ""))]
+        if pack_id
+    ]
+    concrete_ids = [option.pack_id for option in inventory.values()]
+    resolved_by_flows = {
+        pack_id.lower()
+        for pack_id in resolve_active_manifest_ids(
+            mapped_flow_ids,
+            concrete_ids,
+            slices,
+            episodes,
+        )
+    }
+
+    selected_ids = list(mapped_flow_ids)
+    for row in rows:
+        pack_type = str(row.get("pack_type") or "").strip()
+        pack_id = sanitize_identifier(str(row.get("pack_id") or ""))
+        if (
+            not pack_id
+            or is_manifest_flow_pack_type(pack_type)
+            or str(row.get("status") or "").strip() != MAPPED_STATUS
+            or pack_id.lower() in resolved_by_flows
+        ):
+            continue
+        add_unique(selected_ids, pack_id)
+    return selected_ids
+
+
+def build_inventory_manifest_definition(
+    project_root: Path,
+    pack_id: str,
+    kind: str,
+    option: PackOption,
+) -> dict[str, Any]:
+    return {
+        "packId": pack_id,
+        "kind": kind,
+        "type": kind,
+        "dependencies": [],
+        "ownedRoots": build_owned_roots(option.authoring_sources),
+        "ownedLocations": [],
+        "ownedEnemyTypes": [],
+        "dialogIds": [],
+        "authoringSources": [
+            serialize_authoring_source(source)
+            for source in option.authoring_sources
+        ],
+        "exportedFromProject": project_root.name,
+        "sourceRevision": option.source_revision or (
+            "reset:" + datetime.now(timezone.utc).isoformat(timespec="seconds")
+        ),
+    }
+
+
+def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
+    temporary_path = path.with_name(path.name + ".tmp")
+    temporary_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    temporary_path.replace(path)
 
 
 def build_manifest_flow_options(
@@ -435,6 +979,8 @@ def build_manifest_flow_options(
         options.append(PackOption(
             pack_type=EPISODE_PACK_TYPE,
             pack_id=episode.episode_id,
+            selected=episode.episode_id.lower() in selected,
+            mapped=episode.episode_id.lower() in selected,
             source_assets=list(episode.slices),
             target_root="",
             unity_asset_root="",
@@ -451,6 +997,8 @@ def build_manifest_flow_options(
         options.append(PackOption(
             pack_type=SLICE_PACK_TYPE,
             pack_id=slice_spec.slice_id,
+            selected=slice_spec.slice_id.lower() in selected,
+            mapped=slice_spec.slice_id.lower() in selected,
             source_assets=list(slice_spec.ids),
             target_root="",
             unity_asset_root="",
@@ -467,81 +1015,71 @@ def build_pack_option(
     pack_id: str,
     manifest: dict[str, Any] | None,
     active_ids: set[str],
+    selected_id_keys: set[str],
+    csv_inventory: PackOption | None = None,
 ) -> PackOption | None:
     kind = infer_kind(pack_id, manifest)
+    inventory_kind = csv_inventory.pack_kind if csv_inventory else ""
+    if inventory_kind:
+        candidate_root = external_pack_root(external_root, inventory_kind, pack_id)
+        if not (candidate_root / "ContentPackManifest.json").is_file():
+            kind = inventory_kind
     if not kind:
         return None
 
     pack_type = PACK_TYPE_LABELS.get(kind, kind.title())
     target_root_path = external_pack_root(external_root, kind, pack_id)
+    manifest_exists = (target_root_path / "ContentPackManifest.json").is_file()
     unity_asset_root = unity_pack_root(kind, pack_id)
     owned_roots = list(manifest.get("ownedRoots") or []) if manifest else []
     authoring_sources = parse_authoring_sources(manifest)
+    csv_authoring_sources: list[str] = []
+    source_revision = str(manifest.get("sourceRevision") or "") if manifest else ""
+    if csv_inventory is not None:
+        if not authoring_sources and csv_inventory.authoring_sources:
+            authoring_sources = list(csv_inventory.authoring_sources)
+        csv_authoring_sources = list(csv_inventory.csv_authoring_sources)
+        if not source_revision:
+            source_revision = csv_inventory.source_revision
+
     source_assets = [source.source_label() for source in authoring_sources]
-    if not source_assets:
-        source_assets = build_source_assets(project_root, external_root, pack_id, kind, owned_roots)
+    if not source_assets and owned_roots:
+        source_assets = list(owned_roots)
+    if not source_assets and csv_inventory is not None:
+        source_assets = list(csv_inventory.source_assets)
+
     details = build_details(project_root, external_root, pack_id, kind, manifest, owned_roots, source_assets)
-    status = build_status(pack_id, kind, target_root_path, manifest, active_ids)
+    if csv_inventory is not None and not manifest_exists:
+        details.append(f"Inventory recovered from: {interface_info_csv_path(project_root)}")
+    active_id_keys = {active_id.lower() for active_id in active_ids}
+    mapped = pack_id.lower() in active_id_keys
+    status = build_status(target_root_path, mapped)
+    manifest_definition = build_manifest_definition(manifest) if manifest_exists else {}
+    if not manifest_definition and csv_inventory is not None:
+        manifest_definition = dict(csv_inventory.manifest_definition)
+    if authoring_sources:
+        manifest_definition["authoringSources"] = [
+            serialize_authoring_source(source)
+            for source in authoring_sources
+        ]
+        manifest_definition["ownedRoots"] = build_owned_roots(authoring_sources)
 
     return PackOption(
         pack_type=pack_type,
         pack_id=pack_id,
+        pack_kind=kind,
+        selected=pack_id.lower() in selected_id_keys,
+        mapped=mapped,
         source_assets=source_assets,
         authoring_sources=authoring_sources,
+        csv_authoring_sources=csv_authoring_sources,
+        manifest_definition=manifest_definition,
         target_root=display_path(target_root_path),
         unity_asset_root=unity_asset_root,
         status=status,
         details=details,
-        source_revision=str(manifest.get("sourceRevision") or "") if manifest else "",
+        source_revision=source_revision,
     )
-
-
-def build_source_assets(
-    project_root: Path,
-    external_root: Path,
-    pack_id: str,
-    kind: str,
-    owned_roots: Iterable[str],
-) -> list[str]:
-    sources: list[str] = []
-
-    if kind == "gear":
-        gear = parse_gear_pack_id(pack_id)
-        if gear:
-            form, code, leaf = gear
-            add_unique(sources, f"Assets/Sprites/Characters/Esperanza/GroupedGearAtlases/{form}/{code}/{leaf}")
-
-    for root in owned_roots:
-        add_unique(sources, root)
-        mapped = package_asset_to_external_path(external_root, root)
-        if mapped:
-            add_unique(sources, display_path(mapped))
-
-    if kind == "core":
-        add_unique(sources, "Assets/Sprites")
-        add_unique(sources, display_path(external_root / "Core"))
-
-    return sources
-
-
-def add_form_source_assets(project_root: Path, sources: list[str], form_name: str) -> None:
-    form_name = sanitize_identifier(form_name)
-    if not form_name:
-        return
-
-    character_root = "Assets/Sprites/Characters/Esperanza"
-    for folder in FORM_CHARACTER_SOURCE_FOLDERS:
-        candidate = f"{character_root}/{folder}/{form_name}"
-        if (project_root / candidate.replace("/", os.sep)).exists():
-            add_unique(sources, candidate)
-
-    add_unique(sources, f"Assets/Sprites/Items/Gear/{form_name}")
-    add_unique(sources, f"Assets/Materials/SelectMenu/Forms/{form_name}.mat")
-    add_unique(sources, "Assets/Prefabs/UI/Ability.prefab")
-    add_unique(sources, "Assets/Prefabs/UI/InventoryItem.prefab")
-
-    if form_name == "Base":
-        add_unique(sources, "Assets/Prefabs/Projectiles/BlastBall.prefab")
 
 
 def parse_authoring_sources(manifest: dict[str, Any] | None) -> list[SourceAssetSpec]:
@@ -651,17 +1189,18 @@ def build_details(
 ) -> list[str]:
     details: list[str] = []
     target_root = external_pack_root(external_root, kind, pack_id)
+    manifest_exists = (target_root / "ContentPackManifest.json").is_file()
     details.append(f"External pack exists: {target_root.exists()}")
     details.append(f"Unity package asset root: {unity_pack_root(kind, pack_id)}")
     group_name = "SpriteTextures" if kind == "core" else f"SpriteTextures__{pack_id}"
     details.append(f"Addressable group: {group_name}")
 
-    if manifest:
+    if manifest_exists:
         details.append("Manifest found: ContentPackManifest.json")
-        if manifest.get("exportedFromProject"):
+        if manifest and manifest.get("exportedFromProject"):
             details.append(f"Exported from: {manifest.get('exportedFromProject')}")
     else:
-        details.append("Manifest missing; row is inferred from the pipeline plan or content manifest")
+        details.append("Manifest missing; row is preserved by the CSV inventory")
 
     if owned_roots:
         details.append("Owned roots: " + str(len(owned_roots)))
@@ -684,18 +1223,15 @@ def build_details(
 
 
 def build_status(
-    pack_id: str,
-    kind: str,
     target_root: Path,
-    manifest: dict[str, Any] | None,
-    active_ids: set[str],
+    mapped: bool,
 ) -> str:
-    if pack_id in active_ids:
-        return MAPPED_STATUS
     if not target_root.exists():
-        return PLANNED_MISSING_STATUS
-    if not manifest:
-        return FOLDER_ONLY_STATUS
+        return MISSING_STATUS
+    if not (target_root / "ContentPackManifest.json").is_file():
+        return MISSING_MANIFEST_STATUS
+    if mapped:
+        return MAPPED_STATUS
     return NOT_MAPPED_STATUS
 
 
@@ -849,7 +1385,11 @@ def normalize_manifest_episodes(raw_episodes: Any) -> list[ManifestEpisodeSpec]:
     return result
 
 
-def write_content_manifest_slices(project_root: Path, slices: list[ManifestSliceSpec]) -> Path:
+def write_content_manifest_slices(
+    project_root: Path,
+    slices: list[ManifestSliceSpec],
+    export_csv: bool = True,
+) -> Path:
     manifest = read_content_manifest(project_root)
     manifest["slices"] = [serialize_manifest_slice(slice_spec) for slice_spec in normalize_manifest_slices([
         {"id": slice_spec.slice_id, "ids": slice_spec.ids}
@@ -857,13 +1397,14 @@ def write_content_manifest_slices(project_root: Path, slices: list[ManifestSlice
     ])]
     if not isinstance(manifest.get("episodes"), list):
         manifest["episodes"] = []
-    return write_content_manifest(project_root, manifest)
+    return write_content_manifest(project_root, manifest, export_csv)
 
 
 def write_content_manifest_flow(
     project_root: Path,
     slices: list[ManifestSliceSpec],
     episodes: list[ManifestEpisodeSpec],
+    export_csv: bool = True,
 ) -> Path:
     manifest = read_content_manifest(project_root)
     manifest["slices"] = [serialize_manifest_slice(slice_spec) for slice_spec in normalize_manifest_slices([
@@ -874,13 +1415,19 @@ def write_content_manifest_flow(
         {"id": episode_spec.episode_id, "slices": episode_spec.slices}
         for episode_spec in episodes
     ])]
-    return write_content_manifest(project_root, manifest)
+    return write_content_manifest(project_root, manifest, export_csv)
 
 
-def write_content_manifest(project_root: Path, manifest: dict[str, Any]) -> Path:
+def write_content_manifest(
+    project_root: Path,
+    manifest: dict[str, Any],
+    export_csv: bool = True,
+) -> Path:
     path = content_manifest_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    if export_csv:
+        export_interface_info_csv(project_root, resolve_external_root(project_root))
     return path
 
 
@@ -974,6 +1521,33 @@ def remove_pack_from_all_content_manifest_slices(project_root: Path, pack_id: st
     return write_content_manifest_slices(project_root, slices)
 
 
+def set_pack_content_manifest_slices(
+    project_root: Path,
+    pack_id: str,
+    slice_ids: Iterable[str],
+) -> Path:
+    normalized_pack_id = sanitize_identifier(pack_id)
+    if not normalized_pack_id:
+        raise SystemExit("Pack id is required.")
+
+    normalized_slice_ids = parse_manifest_ids(list(slice_ids))
+    slices = read_content_manifest_slices(project_root)
+    for slice_spec in slices:
+        slice_spec.ids = [
+            value for value in slice_spec.ids
+            if value.lower() != normalized_pack_id.lower()
+        ]
+
+    for slice_id in normalized_slice_ids:
+        index = find_manifest_slice_index(slices, slice_id)
+        if index < 0:
+            slices.append(ManifestSliceSpec(slice_id, [normalized_pack_id]))
+            continue
+        add_unique(slices[index].ids, normalized_pack_id)
+
+    return write_content_manifest_slices(project_root, slices)
+
+
 def remove_pack_from_active_selection(project_root: Path, external_root: Path, pack_id: str) -> Path | None:
     normalized_pack_id = sanitize_identifier(pack_id)
     if not normalized_pack_id:
@@ -1002,14 +1576,16 @@ def find_manifest_episode_index(episodes: list[ManifestEpisodeSpec], episode_id:
     return -1
 
 
-def find_first_manifest_slice_for_pack(project_root: Path, pack_id: str) -> str:
+def find_manifest_slices_for_pack(project_root: Path, pack_id: str) -> list[str]:
     normalized_pack_id = sanitize_identifier(pack_id)
     if not normalized_pack_id:
-        return ""
+        return []
+
+    result: list[str] = []
     for slice_spec in read_content_manifest_slices(project_root):
         if any(value.lower() == normalized_pack_id.lower() for value in slice_spec.ids):
-            return slice_spec.slice_id
-    return ""
+            add_unique(result, slice_spec.slice_id)
+    return result
 
 
 def parse_manifest_ids(value: Any) -> list[str]:
@@ -1240,7 +1816,7 @@ def infer_kind(pack_id: str, manifest: dict[str, Any] | None = None) -> str:
         return "gear"
     if pack_id.startswith("Enemy"):
         return "enemy"
-    if pack_id.startswith("Environment"):
+    if pack_id.startswith("Environment") or pack_id.startswith("Env"):
         return "environment"
     if pack_id.startswith("Destructible"):
         return "destructible"
@@ -1292,6 +1868,7 @@ def delete_content_pack(project_root: Path, external_root: Path, pack_id: str) -
 
     remove_pack_from_all_content_manifest_slices(project_root, normalized_pack_id)
     remove_pack_from_active_selection(project_root, external_root, normalized_pack_id)
+    retire_pack_from_interface_info_csv(project_root, normalized_pack_id)
     return deleted_paths
 
 
@@ -1368,7 +1945,12 @@ def read_active_pack_ids(project_root: Path) -> list[str]:
     return [line.strip()[2:].strip() for line in match.group(1).splitlines() if line.strip().startswith("- ")]
 
 
-def write_content_pack_selection(project_root: Path, external_root: Path, active_pack_ids: Iterable[str]) -> Path:
+def write_content_pack_selection(
+    project_root: Path,
+    external_root: Path,
+    active_pack_ids: Iterable[str],
+    export_csv: bool = True,
+) -> Path:
     selection_path = project_root / "Assets" / "Editor" / "ContentPackSelection.asset"
     selection_path.parent.mkdir(parents=True, exist_ok=True)
     script_guid = read_meta_guid(project_root / "Assets" / "Editor" / "ContentPackSelection.cs.meta")
@@ -1421,7 +2003,8 @@ def write_content_pack_selection(project_root: Path, external_root: Path, active
             encoding="utf-8",
         )
 
-    export_interface_info_csv(project_root, external_root)
+    if export_csv:
+        export_interface_info_csv(project_root, external_root)
     return selection_path
 
 
@@ -1520,7 +2103,7 @@ def verify_runtime_pack_outputs(project_root: Path, external_root: Path) -> list
     errors: list[str] = []
     options = build_pack_options(project_root, external_root)
     for option in options:
-        if option.status != MAPPED_STATUS:
+        if not option.mapped:
             continue
         if is_manifest_flow_pack_type(option.pack_type):
             continue
@@ -2042,7 +2625,7 @@ def verify_pack_option(project_root: Path, external_root: Path, option: PackOpti
 def verify_mapped_pack_paths(project_root: Path, external_root: Path, options: Iterable[PackOption]) -> list[str]:
     errors: list[str] = []
     for option in options:
-        if option.status != MAPPED_STATUS:
+        if not option.mapped:
             continue
 
         if is_manifest_flow_pack_type(option.pack_type):
@@ -2216,6 +2799,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             search_entry.bind("<KeyRelease>", lambda _event: self.apply_filter())
 
             ttk.Button(toolbar, text="Verify", command=self.verify_pack).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(toolbar, text="Reset", command=self.reset_packs).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="New Pack", command=self.new_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Edit Pack", command=self.edit_pack).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(toolbar, text="Delete Pack", command=self.delete_pack).pack(side=tk.LEFT, padx=(0, 8))
@@ -2260,7 +2844,13 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self.tree.bind("<<TreeviewSelect>>", lambda _event: self.update_details())
             self.tree.bind("<Double-1>", lambda _event: self.edit_pack())
             self.tree.tag_configure(MAPPED_STATUS, foreground="#22c55e")
-            self.tree.tag_configure(PLANNED_MISSING_STATUS, foreground="#fca5a5")
+            for missing_status in (
+                MISSING_STATUS,
+                MISSING_MANIFEST_STATUS,
+                PLANNED_MISSING_STATUS,
+                FOLDER_ONLY_STATUS,
+            ):
+                self.tree.tag_configure(missing_status, foreground="#ffffff", background="#991b1b")
 
             detail_frame = ttk.Frame(body, padding=(12, 0, 0, 0))
             detail_frame.grid(row=0, column=1, rowspan=2, sticky="nsew")
@@ -2294,7 +2884,14 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self.tree.delete(*self.tree.get_children())
             for index, option in enumerate(self.filtered):
                 self.tree.insert("", tk.END, iid=str(index), values=option.row_values(), tags=(option.status,))
-            self.status_text.set(f"{len(self.filtered)} rows | external root: {external_root}")
+            missing_count = sum(
+                1
+                for option in self.filtered
+                if option.status in {MISSING_STATUS, MISSING_MANIFEST_STATUS}
+            )
+            self.status_text.set(
+                f"{len(self.filtered)} rows | missing: {missing_count} | external root: {external_root}"
+            )
             if self.filtered:
                 self.tree.selection_set("0")
                 self.tree.focus("0")
@@ -2474,7 +3071,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 self.refresh()
 
         def can_edit_mapped_pack(self, option: PackOption, title: str) -> bool:
-            if option.status != MAPPED_STATUS:
+            if not option.mapped or option.status in {MISSING_STATUS, MISSING_MANIFEST_STATUS}:
                 return True
             messagebox.showerror(
                 title,
@@ -2535,7 +3132,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             mapped_count = sum(
                 1
                 for option in self.options
-                if option.status == MAPPED_STATUS and not is_manifest_flow_pack_type(option.pack_type)
+                if option.mapped and not is_manifest_flow_pack_type(option.pack_type)
             )
             if not errors:
                 self.status_text.set(f"Verified mapped packs: {mapped_count}")
@@ -2548,6 +3145,47 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
 
             self.status_text.set(f"Mapped verify failed: {len(errors)} error(s)")
             messagebox.showerror("Verify Mapped", "\n".join(errors), parent=self)
+
+        def reset_packs(self) -> None:
+            csv_path = interface_info_csv_path(project_root)
+            confirmed = messagebox.askyesno(
+                "Reset Packs",
+                "\n".join([
+                    "Reset pack state from the saved CSV truth?",
+                    "",
+                    str(csv_path),
+                    "",
+                    "This restores pack manifest definitions, slices, episodes, and mapped selection.",
+                    "The CSV truth, pack payload files, and extra pack folders are not modified.",
+                ]),
+                parent=self,
+            )
+            if not confirmed:
+                return
+
+            try:
+                result = reset_packs_from_interface_info_csv(project_root, external_root)
+            except (OSError, RuntimeError, SystemExit) as ex:
+                messagebox.showerror("Reset Packs", str(ex), parent=self)
+                return
+
+            self.refresh()
+            summary = (
+                f"Reset {len(result.selected_ids)} selected id(s), "
+                f"{result.slice_count} slice(s), {result.episode_count} episode(s), "
+                f"and {len(result.manifest_paths)} pack manifest(s)."
+            )
+            self.status_text.set(summary)
+            if result.unresolved_pack_ids:
+                messagebox.showwarning(
+                    "Reset Packs",
+                    summary
+                    + "\n\nThese missing packs have no saved manifest definition and remain red:\n"
+                    + "\n".join(result.unresolved_pack_ids),
+                    parent=self,
+                )
+                return
+            messagebox.showinfo("Reset Packs", summary, parent=self)
 
         def build_smart(self) -> None:
             lock_message = get_unity_project_lock_message(project_root)
@@ -3261,7 +3899,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             initial_kind = PACK_LABEL_TO_KIND.get(option.pack_type, infer_kind(option.pack_id)) if option else "objective"
             self.kind_label = tk.StringVar(value=PACK_TYPE_LABELS.get(initial_kind, "Objective"))
             self.name_text = tk.StringVar(value=option.pack_id if option else "")
-            self.slice_text = tk.StringVar(value=find_first_manifest_slice_for_pack(project_root, option.pack_id) if option else "")
+            initial_slices = find_manifest_slices_for_pack(project_root, option.pack_id) if option else []
+            self.slices_text = tk.StringVar(value=", ".join(initial_slices))
             self.target_text = tk.StringVar()
             self.status_text = tk.StringVar()
 
@@ -3294,8 +3933,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Label(root, text="Target Root").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
             ttk.Label(root, textvariable=self.target_text).grid(row=2, column=1, sticky="ew", pady=(0, 8))
 
-            ttk.Label(root, text="Manifest Slice").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
-            ttk.Entry(root, textvariable=self.slice_text).grid(row=3, column=1, sticky="ew", pady=(0, 8))
+            ttk.Label(root, text="Manifest Slices (comma-separated)").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.slices_text).grid(row=3, column=1, sticky="ew", pady=(0, 8))
 
             source_toolbar = ttk.Frame(root)
             source_toolbar.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 8))
@@ -3478,9 +4117,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 messagebox.showerror("Pack Editor", str(ex), parent=self)
                 return
 
-            slice_id = sanitize_identifier(self.slice_text.get())
-            if slice_id:
-                add_id_to_content_manifest_slice(self.project_root, slice_id, pack_id)
+            slice_ids = parse_manifest_ids(self.slices_text.get())
+            set_pack_content_manifest_slices(self.project_root, pack_id, slice_ids)
             self.saved = True
             self.status_text.set(f"Saved {manifest_path}")
             self.destroy()

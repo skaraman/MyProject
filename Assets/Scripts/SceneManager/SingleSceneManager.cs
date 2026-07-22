@@ -179,6 +179,8 @@ public partial class SingleSceneManager : MonoBehaviour {
   public static string ActiveGameplayLoadFlowKind => instance != null ? instance.activeGameplayLoadFlowKind : "";
   public static string ActiveGameplayLoadFlowTargetLocation => instance != null ? instance.activeGameplayLoadFlowTargetLocation : "";
   public static bool HasActiveGameplayLoadFlow => instance != null && instance.activeGameplayLoadFlowId > 0;
+  public static bool IsGameplayActive => instance != null && instance.currentSection == Section.Gameplay;
+  public static bool IsPauseMenuActive => instance != null && instance.currentSection == Section.Pause;
   public static string ActiveInputMap => instance != null ? instance.activeInputMap : "";
   public static float GameplayRevealInputTraceAgeSeconds {
     get {
@@ -293,9 +295,12 @@ public partial class SingleSceneManager : MonoBehaviour {
   const bool enablePreUnlockVisibleSpritePrefetch = true;
   const int preUnlockPrefetchAnimationFrames = 3;
   const int preUnlockPrefetchLookAheadFrames = 3;
-  const int preUnlockPrefetchMaxAddresses = 768;
-  const int preUnlockPrefetchMinAddresses = 128;
-  const int preUnlockPrefetchEnqueueBudgetPerFrame = 64;
+  // Zones are loaded behind the blackscreen and then played without further content
+  // loads.  Keep a complete, bounded resident set instead of optimizing this path for
+  // a short first-frame prefix.
+  const int preUnlockPrefetchMaxAddresses = 4096;
+  const int preUnlockPrefetchMinAddresses = 512;
+  const int preUnlockPrefetchEnqueueBudgetPerFrame = 128;
   const int preUnlockPrefetchFrameJumpClamp = 4;
   const float preUnlockTargetCacheRefreshSeconds = 0.5f;
   const bool preUnlockPrefetchExpandAtlasSiblings = true;
@@ -309,19 +314,16 @@ public partial class SingleSceneManager : MonoBehaviour {
   const int preUnlockAnimationFramePreloadPasses = 1;
   const bool preUnlockReprefetchVisibleSpritesAfterAnimationWarmup = false;
   const float preUnlockWarmupQueueSettleTimeoutSeconds = 0.5f;
-  const float preUnlockBlockingBudgetSeconds = 1.25f;
+  const float preUnlockBlockingBudgetSeconds = 12f;
   static readonly bool enablePreUnlockResidentPinning = true;
-  const int preUnlockResidentPinMaxAddresses = 768;
+  const int preUnlockResidentPinMaxAddresses = 4096;
   const bool preUnlockWarmEnemyAnimationPlayback = true;
-  const int preUnlockAnimationWarmupControllersPerFrame = 1;
+  const int preUnlockAnimationWarmupControllersPerFrame = 2;
   static readonly int preUnlockAnimationWarmupMaxEnemyControllers = 0;
-  const float preUnlockAnimationWarmupEnemyDistance = 25f;
+  const float preUnlockAnimationWarmupEnemyDistance = 0f;
   const float startupFadeWatchdogSeconds = 1.0f;
   const bool enableLoadingStallEmergencyUnlock = true;
   const float loadingStallEmergencyUnlockSeconds = 12.0f;
-  const float postUnlockPinReleaseDelaySeconds = 8.0f;
-  const int postUnlockPinReleaseMaxOutstanding = 192;
-  const float postUnlockPinReleaseTimeoutSeconds = 20.0f;
   const int startupLoadMenuPrewarmFrames = 2;
   static readonly WaitForSecondsRealtime FadeToBlackDelay = new(Mathf.Max(fadeToBlackSeconds, 0f));
   static readonly WaitForSecondsRealtime WarmGateLeadDelay = new(Mathf.Max(fadeLeadSeconds, 0f));
@@ -329,7 +331,6 @@ public partial class SingleSceneManager : MonoBehaviour {
   static readonly WaitForSecondsRealtime StartupFadeWatchdogDelay = new(Mathf.Max(startupFadeWatchdogSeconds, 0f));
   static readonly WaitForSecondsRealtime RevealCleanupDelay = new(Mathf.Max(fadeFromBlackSeconds + 0.15f, 0.5f));
   static readonly WaitForSecondsRealtime FadeFromBlackDelay = new(Mathf.Max(fadeFromBlackSeconds, 0f));
-  static readonly WaitForSecondsRealtime PostUnlockPinReleaseDelay = new(Mathf.Max(postUnlockPinReleaseDelaySeconds, 0f));
   static readonly string defaultStartLocation = LocationEnemyData.DomeCityLocationId;
   const string mainMenuFlowLocationId = LocationEnemyData.MainMenuLocationId;
   const string gameplayFlowFallbackLocationId = LocationEnemyData.DomeCityLocationId;
@@ -441,7 +442,7 @@ public partial class SingleSceneManager : MonoBehaviour {
   const string CurrentEnvironmentPinOwnerId = "single_scene_manager.environment_hot.current";
   const string PreviousEnvironmentPinOwnerId = "single_scene_manager.environment_hot.previous";
   const int EnvironmentHotCacheSlotCount = 2;
-  const int PreUnlockResidentPinHardCapDesktop = 2048;
+  const int PreUnlockResidentPinHardCapDesktop = 8192;
   const int PreUnlockResidentPinHardCapMobile = 1024;
   static string[] CorePlayerWarmAnimationKeys => GearController.CorePlayerWarmAnimationKeys;
   static readonly string[] PersistentFontAtlasNames = { "Hand", "Plate", "Walkway", "Vamp" };
@@ -615,7 +616,7 @@ public partial class SingleSceneManager : MonoBehaviour {
     actions.Add(MessageBus.On("settingsMenu.hover", o => OnSettingsMenuHover(o)));
     actions.Add(MessageBus.On("settingsMenu.unhover", o => OnSettingsMenuUnhover()));
     actions.Add(MessageBus.On("settingsMenu.select", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuSelect(); }));
-    actions.Add(MessageBus.On("settingsMenu.cancel", o => { if (InputMessageValue.IsPressed(o)) CloseSettingsMenu(); }));
+    actions.Add(MessageBus.On("settingsMenu.cancel", o => { if (InputMessageValue.IsPressed(o)) OnSettingsMenuCancel(); }));
 
     actions.Add(MessageBus.On("closePauseMenu", o => ClosePauseMenu()));
     actions.Add(MessageBus.On("openPauseMenu", o => OpenPauseMenu()));

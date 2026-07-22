@@ -18,7 +18,20 @@ public partial class GearController : MonoBehaviour {
   const string EsperanzaHairMaterialName = "EsperanzaHair";
   const string EsperanzaBodyMaterialName = "EsperanzaBody";
   const string EsperanzaGearShaderName = "AllIn1SpriteShader/AllIn1Urp2dRenderer";
-  static readonly string[] corePlayerWarmAnimationKeys = { "Blast", "Breathe", "Stance", "Walk" };
+  const float CharacterFormGlowStrength = 6f;
+  static readonly string[] corePlayerWarmAnimationKeys = {
+    "Blast",
+    "Breathe",
+    "Hurt",
+    "Stance",
+    "Walk",
+    "StanceToJump",
+    "Jump",
+    "JumpToJumpFalling",
+    "JumpFalling",
+    "JumpFallingToJumpLanding",
+    "JumpLanding"
+  };
   static readonly string[] DefaultCharacterAnimationKeys = {
     "Walk",
     "Run",
@@ -31,15 +44,19 @@ public partial class GearController : MonoBehaviour {
     "JumpFalling",
     "Dance",
     "Block",
-    "Dodge"
+    "Dodge",
+    "Hurt"
   };
   static readonly string[] CoreCombatWarmAnimationKeys = { "Blast" };
   public static string[] CorePlayerWarmAnimationKeys => corePlayerWarmAnimationKeys;
 
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
-  [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)] public bool _bool;
-  public string defaultAnimation = "Breathe";
+  [Button(nameof(LoadGear), label = "LoadGear", size = Size.small)]
+  [ShowMethod(nameof(GetCurrentAnimationForInspector), label = "Current Animation")]
+  [HideField]
+  public bool _bool;
+  [HideInInspector] public string defaultAnimation = "Breathe";
   public float timer;
   public float pseudoTimer;
   [Button(nameof(ResetPseudoTimer), label = "Reset", size = Size.small)][HideField] public bool resetPseudoTimerButton;
@@ -56,6 +73,7 @@ public partial class GearController : MonoBehaviour {
   public Transform projectileSpawn;
   public bool useFacingDirection = true;
   public Vector2 projectileDirection = Vector2.right;
+  public GameObject EyesSkin;
   public GameObject HairSkin;
   [SerializeField] Material esperanzaGearMaterial;
   [SerializeField] Material esperanzaHairMaterial;
@@ -120,6 +138,7 @@ public partial class GearController : MonoBehaviour {
 
   void OnEnable() {
     EnsureRuntimeInitialized("enable");
+    ResetHairAnimationGustTracking();
     TryStartPendingEquipWarmup("enable");
   }
 
@@ -147,6 +166,7 @@ public partial class GearController : MonoBehaviour {
     coreEffectWarmOwnerId = "player_core_effects:" + ObjectEntityId.GetString(gameObject);
     startupAppearanceWarmOwnerId = "player_startup:" + ObjectEntityId.GetString(gameObject);
     combinedBounces = CombineGameObjectArrays(HairObjects, OtherBounceGearObjects);
+    ConfigureBounceDynamics();
     NormalizeSkinSpriteDefaultsForRuntime();
     ResolveProjectileManagerReference(source);
     PrimeSpriteStreamingWarmup();
@@ -180,12 +200,15 @@ public partial class GearController : MonoBehaviour {
 
   void Update() {
     if (animationController == null) return;
+    RefreshAttackSpeedTiming();
     ApplyPlaybackDebugFlags();
     QueuePendingFlipIfNeeded();
 
     var deltaTime = TimeScale.GetDeltaTime(this);
     var timerBeforeTick = animationController.animationTimer;
     TickControllers(deltaTime);
+    UpdateHairAnimationGust(deltaTime);
+    UpdateLocomotionSound();
     RefreshInspectorTimers(timerBeforeTick, deltaTime);
   }
 
@@ -209,6 +232,11 @@ public partial class GearController : MonoBehaviour {
     if (!effectControllerInitialized) return;
     effectAnimationController.SlowDown = slowDown;
     effectAnimationController.ForceLoop = forceLoop;
+  }
+
+  void RefreshAttackSpeedTiming() {
+    if (animationController == null) return;
+    animationController.AttackSpeedSeconds = AttackSpeedTiming.ResolveStatSeconds(AllStatValues.Esperanza);
   }
 
   void QueuePendingFlipIfNeeded() {
@@ -278,6 +306,12 @@ public partial class GearController : MonoBehaviour {
       appearanceOwnerId,
       TextureResidencyCache.PinClass.Player
     );
+    RefreshAttackSpeedTiming();
+    ProjectedSpriteShadowCaster2D.Ensure(
+      gameObject,
+      animationController,
+      combinedBounces
+    );
   }
 
   static GameObject[] CombineGameObjectArrays(GameObject[] first, GameObject[] second) {
@@ -324,6 +358,10 @@ public partial class GearController : MonoBehaviour {
 
   public string CurrentAnimation => animationController != null ? animationController.CurrentAnimation : null;
 
+  string GetCurrentAnimationForInspector() {
+    return CurrentAnimation ?? "";
+  }
+
   public AnimationController Controller => animationController;
 
   void OnDestroy() {
@@ -334,6 +372,7 @@ public partial class GearController : MonoBehaviour {
 #endif
     StopStartupAppearanceWarmup();
     StopEquipWarmupQueue();
+    DisposeBounceDynamics();
     offAbilityLoadoutChanged?.Invoke();
     offAbilityLoadoutChanged = null;
     ReleaseCoreCombatEffectWarmupPins();
@@ -345,6 +384,8 @@ public partial class GearController : MonoBehaviour {
   }
 
   void OnDisable() {
+    ResetHairAnimationGustTracking();
+    StopLocomotionSound();
     StopStartupAppearanceWarmup();
     StopEquipWarmupQueue();
     effectResetToEmptyPending = false;

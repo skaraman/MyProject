@@ -169,9 +169,17 @@ public static partial class TextureResidencyCache {
         }
       }
 
+      var pinnedAddressCountForClass = classBudget == int.MaxValue
+        ? 0
+        : CountPinnedAddressesForClass(pinClass);
       foreach (var desiredAddress in desiredOwnerAddressScratch) {
         if (state.leases.ContainsKey(desiredAddress)) continue;
-        if (!EnsurePinClassBudgetCapacity(pinClass, normalizedOwnerId, classBudget)) {
+        if (!EnsurePinClassBudgetCapacity(
+              pinClass,
+              normalizedOwnerId,
+              classBudget,
+              ref pinnedAddressCountForClass
+            )) {
           classBudgetHit = true;
           classBudgetDropped++;
           continue;
@@ -190,6 +198,7 @@ public static partial class TextureResidencyCache {
         );
         if (lease == null) continue;
         state.leases[desiredAddress] = lease;
+        pinnedAddressCountForClass++;
       }
 
       if (state.leases.Count == 0) {
@@ -239,6 +248,17 @@ public static partial class TextureResidencyCache {
     if (string.IsNullOrWhiteSpace(normalizedOwnerId)) return 0;
     if (!ownerPins.TryGetValue(normalizedOwnerId, out var state) || state == null) return 0;
     return Math.Max(state.leases.Count, 0);
+  }
+
+  public static bool TryRefreshOwnerPins(string ownerId, PinClass pinClass) {
+    var normalizedOwnerId = NormalizeOwnerId(ownerId);
+    if (string.IsNullOrWhiteSpace(normalizedOwnerId)) return false;
+    if (!ownerPins.TryGetValue(normalizedOwnerId, out var state) || state == null) return false;
+    if (state.leases == null || state.leases.Count <= 0) return false;
+
+    state.pinClass = pinClass;
+    state.lastRefreshTicks = DateTime.UtcNow.Ticks;
+    return true;
   }
 
   public static PinSnapshot GetPinSnapshot() {

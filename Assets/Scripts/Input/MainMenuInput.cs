@@ -4,7 +4,6 @@ using UnityEngine;
 
 public class MainMenuInput : ButtonGroup {
   private const int LoadButtonInsertIndex = 1;
-  private const string MenuMoveSoundId = "menu.move";
 
   private int activeIndexMainMenu = -1;
   private readonly List<Action> actions = new();
@@ -94,16 +93,19 @@ public class MainMenuInput : ButtonGroup {
     if (selectedButton == newGameButton || selectedButton.name.Equals("New Game", StringComparison.OrdinalIgnoreCase)) {
       var newSlot = SaveSlotManager.ResolveNextAvailableSlot();
       SaveSlotManager.SetSlot(newSlot);
+      MessageBus.Send(MainMenuTitleFlyOff.PlayMessage);
       MessageBus.Send("startGame");
       return;
     }
 
     if (selectedButton == loadGameButton || selectedButton.name.Equals("Load Game", StringComparison.OrdinalIgnoreCase)) {
+      MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
       MessageBus.Send("openLoadMenu");
       return;
     }
 
     if (selectedButton == settingsButton || selectedButton.name.Equals("Settings", StringComparison.OrdinalIgnoreCase)) {
+      MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
       MessageBus.Send("openSettingsMenu");
     }
   }
@@ -164,16 +166,6 @@ public class MainMenuInput : ButtonGroup {
       activeIndexMainMenu = buttons.Count - 1;
       SetActiveIndex(activeIndexMainMenu);
     }
-  }
-
-  void SetActiveIndexWithSound(int index) {
-    var previousIndex = activeIndex;
-    SetActiveIndex(index);
-    if (activeIndex == previousIndex) {
-      return;
-    }
-
-    MessageBus.Send(SoundEffectPlayer.PlayMessage, MenuMoveSoundId);
   }
 
   protected override void HandleActiveState(GameObject button) {

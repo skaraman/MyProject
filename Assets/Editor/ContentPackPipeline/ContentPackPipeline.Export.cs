@@ -29,6 +29,12 @@ public static partial class ContentPackPipeline {
     var projectLibraries = DiscoverProjectLibraryPaths();
     var errors = new List<string>();
 
+    ValidatePackDefinitionsForExport(packDefinitions, errors);
+    if (errors.Count > 0) {
+      LogErrors("export_preflight", errors);
+      return false;
+    }
+
     for (var i = 0; i < packDefinitions.Count; i++) {
       PreparePackDependencies(packDefinitions[i], projectLibraries, errors);
     }
@@ -90,6 +96,34 @@ public static partial class ContentPackPipeline {
     catch (Exception ex) {
       Debug.LogError("[ContentPackPipeline] Export failed.\n" + ex);
       return false;
+    }
+  }
+
+  static void ValidatePackDefinitionsForExport(List<PackDefinition> packDefinitions, List<string> errors) {
+    if (errors == null) return;
+    if (packDefinitions == null || packDefinitions.Count <= 0) {
+      errors.Add("No content pack definitions were found for export.");
+      return;
+    }
+
+    for (var i = 0; i < packDefinitions.Count; i++) {
+      var pack = packDefinitions[i];
+      if (pack == null) {
+        errors.Add("A null content pack definition was found during export preflight.");
+        continue;
+      }
+
+      var hasOwnedRoot = pack.ownedRoots != null &&
+        pack.ownedRoots.Any(root => !string.IsNullOrWhiteSpace(root));
+      if (hasOwnedRoot) continue;
+
+      errors.Add(
+        "Refusing to export a content pack with no declared owned roots." +
+        " pack_id='" + pack.packId + "'" +
+        " manifest_loaded=" + pack.loadedManifest +
+        " external_root='" + pack.externalRootPath + "'" +
+        " Restore the pack manifest mapping before exporting."
+      );
     }
   }
 

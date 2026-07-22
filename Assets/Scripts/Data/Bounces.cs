@@ -187,15 +187,7 @@ public static class BounceAdjustments {
 
   };
 
-  public static Dictionary<string, Dictionary<string, List<BounceFrame>>> Esperanza { get; } = new Dictionary<string, Dictionary<string, List<BounceFrame>>> {
-    ["HairRight"] = EsperHair,
-    ["Hair"] = EsperHair,
-    ["HairBack"] = EsperHair,
-    ["HairLeft"] = EsperHair,
-    ["BeltFlap"] = EsperHair,
-    ["FlapFront"] = EsperHair,
-    ["FlapRight"] = EsperHair,
-    ["FlapLeft"] = EsperHair,
-    ["Cape"] = EsperHair
-  };
+  // ESPER bounce groups inherit their matching animated Skin transforms;
+  // EZSoftBone supplies the secondary motion without manual transform sequences.
+  public static Dictionary<string, Dictionary<string, List<BounceFrame>>> Esperanza { get; } = new();
 }

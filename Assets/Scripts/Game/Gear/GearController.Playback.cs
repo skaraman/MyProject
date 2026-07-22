@@ -20,8 +20,22 @@ public partial class GearController {
   }
 
   public void PlayAnimation(string anim, bool forceRestart = false, bool resolveInterrupts = true) {
-    if (string.IsNullOrEmpty(anim)) return;
-    animationController?.PlayAnimation(anim, forceRestart, resolveInterrupts);
+    TryPlayAnimation(anim, forceRestart, resolveInterrupts);
+  }
+
+  public bool TryPlayAnimation(string anim, bool forceRestart = false, bool resolveInterrupts = true) {
+    if (string.IsNullOrEmpty(anim) || animationController == null) return false;
+    var hurtWasAlreadyPlaying =
+      !forceRestart &&
+      HurtBloodSplatter.IsHurtAnimation(anim) &&
+      animationController.IsPlaying &&
+      string.Equals(animationController.CurrentAnimation, anim, StringComparison.OrdinalIgnoreCase);
+    RefreshAttackSpeedTiming();
+    var played = animationController.PlayAnimation(anim, forceRestart, resolveInterrupts);
+    if (played && !hurtWasAlreadyPlaying && HurtBloodSplatter.IsHurtAnimation(anim)) {
+      HurtBloodSplatter.Play(transform, IsFacingRight);
+    }
+    return played;
   }
 
   public void SetSceneAppearanceAtlasPinsManaged(

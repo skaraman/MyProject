@@ -6,6 +6,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.U2D;
+using UnityEngine.U2D.Animation;
 
 namespace EZhex1991.EZSoftBone
 {
@@ -347,14 +349,22 @@ namespace EZhex1991.EZSoftBone
         private Renderer[] m_CachedRenderers = new Renderer[0];
         private bool m_ShouldSimulate = true;
         private bool m_WasSimulatingLastFrame = true;
+        private SpriteRenderer m_SpriteRenderer;
+        private SpriteSkin m_SpriteSkin;
+        private Sprite m_SyncedSprite;
+        private bool m_SpriteSkinLookupComplete;
 
         private void Awake()
         {
             CacheRenderers();
-            InitStructures();
+            if (!SyncSpriteSkinBones())
+            {
+                InitStructures();
+            }
         }
         private void OnEnable()
         {
+            SyncSpriteSkinBones();
             CacheRenderers();
             m_ShouldSimulate = true;
             m_WasSimulatingLastFrame = true;
@@ -377,6 +387,7 @@ namespace EZhex1991.EZSoftBone
         }
         private void LateUpdate()
         {
+            SyncSpriteSkinBones();
             if (!m_ShouldSimulate) return;
             switch (deltaTimeMode)
             {
@@ -487,11 +498,269 @@ namespace EZhex1991.EZSoftBone
             SetTreeLength();
             RefreshRadius();
         }
+
+        /// <summary>
+        /// Creates or reuses the bone hierarchy authored on the attached Sprite,
+        /// binds it to SpriteSkin, and uses its roots and leaves for EZSoftBone.
+        /// </summary>
+        public bool SyncSpriteSkinBones(bool force = false)
+        {
+            if (!m_SpriteSkinLookupComplete)
+            {
+                m_SpriteRenderer = GetComponent<SpriteRenderer>();
+                m_SpriteSkin = GetComponent<SpriteSkin>();
+                m_SpriteSkinLookupComplete = true;
+            }
+            if (m_SpriteRenderer == null || m_SpriteSkin == null) return false;
+
+            Sprite sprite = m_SpriteRenderer.sprite;
+            if (sprite == null) return false;
+            bool spriteChanged = !ReferenceEquals(m_SyncedSprite, sprite);
+            if (!force && !spriteChanged) return false;
+
+            SpriteBone[] spriteBones = sprite.GetBones();
+            if (spriteBones == null || spriteBones.Length == 0) return false;
+
+            Transform[] previousTransforms = m_SpriteSkin.boneTransforms;
+            if ((!spriteChanged || m_SyncedSprite == null) &&
+                HasMatchingSpriteSkinHierarchy(spriteBones, previousTransforms))
+            {
+                m_SyncedSprite = sprite;
+                return false;
+            }
+
+            RevertTransforms(startDepth);
+
+            Transform[] transforms = new Transform[spriteBones.Length];
+            HashSet<Transform> usedTransforms = new HashSet<Transform>();
+            byte[] syncStates = new byte[spriteBones.Length];
+            for (int i = 0; i < spriteBones.Length; i++)
+            {
+                if (!TrySyncSpriteBone(
+                    i,
+                    spriteBones,
+                    previousTransforms,
+                    transforms,
+                    usedTransforms,
+                    syncStates))
+                {
+                    Debug.LogWarning(
+                        "[EZSoftBone] Could not create SpriteSkin bone hierarchy for '" + name +
+                        "' sprite='" + sprite.name + "'."
+                    );
+                    return false;
+                }
+            }
+
+            ReleaseUnusedSpriteSkinBones(previousTransforms, usedTransforms);
+
+            Transform firstRoot = null;
+            bool[] hasChildren = new bool[spriteBones.Length];
+            m_RootBones ??= new List<Transform>();
+            m_EndBones ??= new List<Transform>();
+            m_RootBones.Clear();
+            m_EndBones.Clear();
+
+            for (int i = 0; i < spriteBones.Length; i++)
+            {
+                int parentId = spriteBones[i].parentId;
+                if (parentId >= 0)
+                {
+                    hasChildren[parentId] = true;
+                    continue;
+                }
+
+                firstRoot ??= transforms[i];
+                m_RootBones.Add(transforms[i]);
+            }
+
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                if (!hasChildren[i]) m_EndBones.Add(transforms[i]);
+            }
+
+            m_SpriteSkin.SetRootBone(firstRoot);
+            m_SpriteSkin.SetBoneTransforms(transforms);
+            m_SyncedSprite = sprite;
+            CacheRenderers();
+            InitStructures();
+            SetRestState();
+            return true;
+        }
+
+        private bool HasMatchingSpriteSkinHierarchy(SpriteBone[] spriteBones, Transform[] transforms)
+        {
+            if (transforms == null || transforms.Length != spriteBones.Length) return false;
+            if (m_SpriteSkin.rootBone == null) return false;
+
+            List<Transform> expectedRoots = new List<Transform>();
+            List<Transform> expectedLeaves = new List<Transform>();
+            bool[] hasChildren = new bool[spriteBones.Length];
+            for (int i = 0; i < spriteBones.Length; i++)
+            {
+                Transform boneTransform = transforms[i];
+                if (boneTransform == null) return false;
+
+                int parentId = spriteBones[i].parentId;
+                Transform expectedParent;
+                if (parentId < 0)
+                {
+                    expectedRoots.Add(boneTransform);
+                    expectedParent = transform;
+                }
+                else
+                {
+                    if (parentId >= transforms.Length || transforms[parentId] == null) return false;
+                    expectedParent = transforms[parentId];
+                    hasChildren[parentId] = true;
+                }
+
+                if (boneTransform.parent != expectedParent) return false;
+            }
+
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                if (!hasChildren[i]) expectedLeaves.Add(transforms[i]);
+            }
+
+            if (expectedRoots.Count == 0 || m_SpriteSkin.rootBone != expectedRoots[0]) return false;
+            if (!ListsMatch(rootBones, expectedRoots)) return false;
+            if (!ListsMatch(endBones, expectedLeaves)) return false;
+            return true;
+        }
+
+        private static bool ListsMatch(List<Transform> actual, List<Transform> expected)
+        {
+            if (actual == null || actual.Count != expected.Count) return false;
+            for (int i = 0; i < expected.Count; i++)
+            {
+                if (actual[i] != expected[i]) return false;
+            }
+            return true;
+        }
+
+        private bool TrySyncSpriteBone(
+            int index,
+            SpriteBone[] spriteBones,
+            Transform[] previousTransforms,
+            Transform[] transforms,
+            HashSet<Transform> usedTransforms,
+            byte[] syncStates)
+        {
+            if (index < 0 || index >= spriteBones.Length) return false;
+            if (syncStates[index] == 2) return true;
+            if (syncStates[index] == 1) return false;
+            syncStates[index] = 1;
+
+            SpriteBone spriteBone = spriteBones[index];
+            Transform parent = transform;
+            if (spriteBone.parentId >= 0)
+            {
+                if (spriteBone.parentId >= spriteBones.Length ||
+                    !TrySyncSpriteBone(
+                        spriteBone.parentId,
+                        spriteBones,
+                        previousTransforms,
+                        transforms,
+                        usedTransforms,
+                        syncStates))
+                {
+                    return false;
+                }
+                parent = transforms[spriteBone.parentId];
+            }
+
+            Transform boneTransform = null;
+            if (previousTransforms != null && index < previousTransforms.Length)
+            {
+                Transform previousTransform = previousTransforms[index];
+                if (previousTransform != null && !usedTransforms.Contains(previousTransform))
+                {
+                    boneTransform = previousTransform;
+                }
+            }
+            if (boneTransform == null)
+            {
+                boneTransform = FindUnusedChild(parent, spriteBone.name, usedTransforms);
+            }
+            if (boneTransform == null)
+            {
+                boneTransform = new GameObject(spriteBone.name).transform;
+            }
+
+            boneTransform.name = spriteBone.name;
+            boneTransform.SetParent(parent, false);
+            boneTransform.localPosition = spriteBone.position;
+            boneTransform.localRotation = spriteBone.rotation;
+            boneTransform.localScale = Vector3.one;
+            transforms[index] = boneTransform;
+            usedTransforms.Add(boneTransform);
+            syncStates[index] = 2;
+            return true;
+        }
+
+        private static Transform FindUnusedChild(
+            Transform parent,
+            string childName,
+            HashSet<Transform> usedTransforms)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (usedTransforms.Contains(child)) continue;
+                if (child.name == childName) return child;
+            }
+            return null;
+        }
+
+        private static void ReleaseUnusedSpriteSkinBones(
+            Transform[] previousTransforms,
+            HashSet<Transform> usedTransforms)
+        {
+            if (previousTransforms == null) return;
+
+            for (int i = 0; i < previousTransforms.Length; i++)
+            {
+                Transform previousTransform = previousTransforms[i];
+                if (previousTransform == null || usedTransforms.Contains(previousTransform)) continue;
+
+                previousTransform.SetParent(null, false);
+                if (Application.isPlaying)
+                    Destroy(previousTransform.gameObject);
+                else
+                    DestroyImmediate(previousTransform.gameObject);
+            }
+        }
+
         public void SetRestState()
         {
             for (int i = 0; i < m_Structures.Count; i++)
             {
                 m_Structures[i].SetRestState();
+            }
+        }
+
+        /// <summary>
+        /// Adds an instantaneous world-space velocity to the simulated bones.
+        /// The impulse grows toward each chain tip so roots remain anchored.
+        /// </summary>
+        public void AddImpulse(Vector3 worldVelocity)
+        {
+            for (int i = 0; i < m_Structures.Count; i++)
+            {
+                AddImpulse(m_Structures[i], worldVelocity);
+            }
+        }
+
+        private void AddImpulse(Bone bone, Vector3 worldVelocity)
+        {
+            if (bone.depth > startDepth)
+            {
+                bone.speed += worldVelocity * Mathf.Clamp01(bone.normalizedLength);
+            }
+            for (int i = 0; i < bone.childBones.Count; i++)
+            {
+                AddImpulse(bone.childBones[i], worldVelocity);
             }
         }
 

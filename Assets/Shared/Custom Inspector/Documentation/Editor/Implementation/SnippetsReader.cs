@@ -37,7 +37,7 @@ namespace CustomInspector.Documentation
         [SerializeField, Dictionary, HideInInspector]
         SerializableSortedDictionary<NewPropertyD, StartEnd> snippetPositions;
 
-        [SerializeField, HideInInspector]
+        [NonSerialized]
         SerializedObject serializedObject = null;
 
         [Button(nameof(CreatePreviewObj), label = "recreate preview-object", tooltip = "Resets all changes and executes all start functions", size = Size.small)]

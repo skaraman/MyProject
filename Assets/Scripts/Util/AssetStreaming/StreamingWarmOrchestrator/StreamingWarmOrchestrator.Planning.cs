@@ -827,7 +827,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
     if (anim == null) return animationName ?? "";
     if (anim.To == 1) return "To";
     if (anim.To == 2) return "To2";
-    return animationName ?? "";
+    return string.IsNullOrWhiteSpace(anim.category) ? animationName ?? "" : anim.category.Trim();
   }
 
   static Dictionary<string, EffectData> ResolveEnemyEffectAnimations(string enemyType) {

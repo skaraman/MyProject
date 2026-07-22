@@ -1732,8 +1732,8 @@ MonoBehaviour:
   - {fileID: 131972747}
   - {fileID: 1906252483}
   - {fileID: 1364197218}
-  healthText: {fileID: 1803794154}
-  nrgText: {fileID: 84493666}
+  healthText: {fileID: 1421750932}
+  nrgText: {fileID: 2056564638}
 --- !u!1 &414472902
 GameObject:
   m_ObjectHideFlags: 0
@@ -1743,6 +1743,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 414472903}
+  - component: {fileID: 414472904}
   m_Layer: 6
   m_Name: LIGHTS
   m_TagString: Untagged
@@ -1768,6 +1769,31 @@ Transform:
   - {fileID: 835998867}
   m_Father: {fileID: 1661627307}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &414472904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 414472902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c4a3f10a5d6e4d30a96217b7f23ed901, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Project.Internal::SceneLighting2D
+  ambientLight: {fileID: 2079573733}
+  sunLight: {fileID: 825027689}
+  nightAmbientColor: {r: 0.18, g: 0.25, b: 0.45, a: 1}
+  nightAmbientIntensityMultiplier: 0.22
+  nightSunColor: {r: 0.28, g: 0.38, b: 0.65, a: 1}
+  nightSunIntensityMultiplier: 0
+  nightAmount: 0
+  shadowSortingLayer: GameMG
+  shadowSortingOrder: 1000
+  sunShadowDirection: {x: 0.45, y: -1}
+  sunShadowOpacity: 0.28
+  localShadowOpacity: 0.24
+  localLightSwitchHysteresis: 0.15
 --- !u!1 &421031839
 GameObject:
   m_ObjectHideFlags: 0
@@ -2630,6 +2656,7 @@ GameObject:
   m_Component:
   - component: {fileID: 825027688}
   - component: {fileID: 825027689}
+  - component: {fileID: 825027690}
   m_Layer: 6
   m_Name: Sun?
   m_TagString: Untagged
@@ -2704,6 +2731,26 @@ MonoBehaviour:
   - {x: 0.5, y: -0.5, z: 0}
   - {x: 0.5, y: 0.5, z: 0}
   - {x: -0.5, y: 0.5, z: 0}
+--- !u!114 &825027690
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 825027687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e5f2c61d7b34a55a8c9ef10b4d26a73, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Project.Internal::ProjectedShadowLight2D
+  sourceLight: {fileID: 825027689}
+  lightRole: 0
+  castsCharacterShadows: 1
+  rangeOverride: 0
+  shadowStrength: 1
+  projectionLength: 0.75
+  useDirectionOverride: 0
+  directionOverride: {x: 0.45, y: -1}
 --- !u!1 &835998866
 GameObject:
   m_ObjectHideFlags: 0
@@ -2714,6 +2761,7 @@ GameObject:
   m_Component:
   - component: {fileID: 835998867}
   - component: {fileID: 835998868}
+  - component: {fileID: 835998869}
   m_Layer: 6
   m_Name: Point Light 2D
   m_TagString: Untagged
@@ -2788,6 +2836,26 @@ MonoBehaviour:
   - {x: 0.5, y: -0.5, z: 0}
   - {x: 0.5, y: 0.5, z: 0}
   - {x: -0.5, y: 0.5, z: 0}
+--- !u!114 &835998869
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 835998866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e5f2c61d7b34a55a8c9ef10b4d26a73, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Project.Internal::ProjectedShadowLight2D
+  sourceLight: {fileID: 835998868}
+  lightRole: 1
+  castsCharacterShadows: 1
+  rangeOverride: 0
+  shadowStrength: 1
+  projectionLength: 0.8
+  useDirectionOverride: 0
+  directionOverride: {x: 0.45, y: -1}
 --- !u!1001 &977234618
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6269,7 +6337,7 @@ MonoBehaviour:
   sprintMultiplier: 2
   sprintSustainSeconds: 2
   sprintResumeWindowSeconds: 2
-  stanceDurationSeconds: 2
+  stanceDurationSeconds: 0.5
   stanceMoveMultiplier: 0.15
   jumpHeight: 7
   jumpDuration: 2

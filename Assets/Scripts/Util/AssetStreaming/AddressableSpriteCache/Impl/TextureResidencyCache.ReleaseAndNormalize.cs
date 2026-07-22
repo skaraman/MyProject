@@ -150,6 +150,8 @@ public static partial class TextureResidencyCache {
     entry.requestedSpriteNameConflict = false;
     entry.parsedGroupedMetadata = null;
     entry.parsedMetadataAtlasMetadata = null;
+    entry.groupedPayloadsByName = null;
+    entry.metadataPayloadsByName = null;
     ClearPendingLoadFinalize(entry);
     ClearQueuedFlag(entry);
   }
@@ -294,7 +296,11 @@ public static partial class TextureResidencyCache {
     if (entry.parsedGroupedMetadata != null && entry.groupedAtlasTextureHandle.IsValid()) {
       var texture = entry.groupedAtlasTextureHandle.Result;
       if (texture == null) return false;
-      var payload = entry.parsedGroupedMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), normalizedName, StringComparison.Ordinal));
+      var payload = FindSpritePayloadByName(
+        entry.groupedPayloadsByName,
+        entry.parsedGroupedMetadata.sprites,
+        normalizedName
+      );
       if (payload != null) {
         var pixelsPerUnit = entry.parsedGroupedMetadata.spritePixelsPerUnit > 0f ? entry.parsedGroupedMetadata.spritePixelsPerUnit : 100f;
         var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedGroupedMetadata.spriteMeshType, SpriteMeshType.FullRect);
@@ -310,7 +316,11 @@ public static partial class TextureResidencyCache {
     if (entry.parsedMetadataAtlasMetadata != null && entry.metadataAtlasTextureHandle.IsValid()) {
       var texture = entry.metadataAtlasTextureHandle.Result;
       if (texture == null) return false;
-      var payload = entry.parsedMetadataAtlasMetadata.sprites.Find(s => s != null && string.Equals((s.name ?? "").Trim(), normalizedName, StringComparison.Ordinal));
+      var payload = FindSpritePayloadByName(
+        entry.metadataPayloadsByName,
+        entry.parsedMetadataAtlasMetadata.sprites,
+        normalizedName
+      );
       if (payload != null) {
         var pixelsPerUnit = entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit > 0f ? entry.parsedMetadataAtlasMetadata.spritePixelsPerUnit : 100f;
         var meshType = GeneratedAtlasSpriteSynthesisUtility.ResolveMeshType(entry.parsedMetadataAtlasMetadata.spriteMeshType, SpriteMeshType.FullRect);
@@ -324,6 +334,49 @@ public static partial class TextureResidencyCache {
     }
 
     return false;
+  }
+
+  static GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload FindSpritePayloadByName(
+    Dictionary<string, GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload> payloadsByName,
+    List<GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload> sprites,
+    string normalizedName
+  ) {
+    if (string.IsNullOrWhiteSpace(normalizedName)) return null;
+    if (payloadsByName != null && payloadsByName.TryGetValue(normalizedName, out var payload)) {
+      return payload;
+    }
+    if (sprites == null) return null;
+
+    for (var i = 0; i < sprites.Count; i++) {
+      var candidate = sprites[i];
+      if (candidate == null) continue;
+      var candidateName = candidate.name ?? "";
+      if (!string.Equals(candidateName.Trim(), normalizedName, StringComparison.Ordinal)) continue;
+      return candidate;
+    }
+
+    return null;
+  }
+
+  static Dictionary<string, GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload> BuildSpritePayloadLookup(
+    List<GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload> sprites
+  ) {
+    var capacity = sprites != null ? sprites.Count : 0;
+    var payloadsByName = new Dictionary<string, GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload>(
+      capacity,
+      StringComparer.Ordinal
+    );
+    if (sprites == null) return payloadsByName;
+
+    for (var i = 0; i < sprites.Count; i++) {
+      var payload = sprites[i];
+      if (payload == null || string.IsNullOrWhiteSpace(payload.name)) continue;
+      var normalizedName = payload.name.Trim();
+      if (payloadsByName.ContainsKey(normalizedName)) continue;
+      payloadsByName[normalizedName] = payload;
+    }
+
+    return payloadsByName;
   }
 
   static bool TryCreateSpriteByNumericLabelLazily(CacheEntry entry, string numericLabelValue, out Sprite sprite) {
@@ -536,11 +589,15 @@ public static partial class TextureResidencyCache {
     return count;
   }
 
-  static bool EnsurePinClassBudgetCapacity(PinClass pinClass, string protectedOwnerId, int classBudget) {
-    if (classBudget <= 0) return true;
+  static bool EnsurePinClassBudgetCapacity(
+    PinClass pinClass,
+    string protectedOwnerId,
+    int classBudget,
+    ref int used
+  ) {
+    if (classBudget <= 0 || classBudget == int.MaxValue) return true;
     var normalizedProtectedOwner = NormalizeOwnerId(protectedOwnerId);
 
-    var used = CountPinnedAddressesForClass(pinClass);
     if (used < classBudget) return true;
 
     while (used >= classBudget) {

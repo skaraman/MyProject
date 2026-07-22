@@ -99,6 +99,8 @@ namespace CustomInspector.Extensions
                     return (ushort)property.intValue;
                 else if (type == typeof(byte))
                     return (byte)property.intValue;
+                else if (type == typeof(sbyte))
+                    return (sbyte)property.intValue;
                 else
                 {
                     Debug.LogError($"Unimplemented int type: {type}");

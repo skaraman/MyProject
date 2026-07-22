@@ -1,17 +1,137 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
+
+[Serializable]
+public sealed class StatValue {
+  [SerializeField] bool isPercentage;
+  [SerializeField] float percentageValue;
+  [SerializeField] EndlessNumber endlessValue = new();
+
+  public bool IsPercentage => isPercentage;
+  public float PercentageValue => isPercentage ? percentageValue : 0f;
+  public EndlessNumber EndlessValue => isPercentage ? null : endlessValue;
+  public bool IsZero => isPercentage
+    ? Math.Abs(percentageValue) <= 0.0001f
+    : endlessValue == null || endlessValue.IsZero;
+
+  public StatValue(string statName, double value = 0d) {
+    // A stat has one numeric kind globally. Any sub-1 coefficient keeps it percentage-based.
+    isPercentage = FormStatIncreases.IsPercentageStat(statName);
+    Set(value);
+  }
+
+  StatValue(bool percentage) {
+    isPercentage = percentage;
+  }
+
+  public StatValue Copy() {
+    var copy = new StatValue(isPercentage);
+    if (isPercentage) {
+      copy.percentageValue = percentageValue;
+    } else {
+      copy.endlessValue = (endlessValue ?? new EndlessNumber()).Copy();
+    }
+    return copy;
+  }
+
+  public StatValue Reset() {
+    percentageValue = 0f;
+    (endlessValue ??= new EndlessNumber()).Set(0d);
+    return this;
+  }
+
+  public StatValue Set(double value) {
+    if (double.IsNaN(value) || double.IsInfinity(value)) {
+      throw new ArgumentOutOfRangeException(nameof(value), "Stat values must be finite.");
+    }
+
+    if (isPercentage) {
+      percentageValue = ClampToFiniteFloat(value);
+    } else {
+      (endlessValue ??= new EndlessNumber()).Set(value);
+    }
+    return this;
+  }
+
+  public StatValue AddInPlace(double value) {
+    if (double.IsNaN(value) || double.IsInfinity(value)) {
+      throw new ArgumentOutOfRangeException(nameof(value), "Stat values must be finite.");
+    }
+
+    if (isPercentage) {
+      percentageValue = ClampToFiniteFloat((double)percentageValue + value);
+    } else {
+      (endlessValue ??= new EndlessNumber()).AddInPlace(value);
+    }
+    return this;
+  }
+
+  public StatValue AddInPlace(EndlessNumber value) {
+    if (value == null) {
+      throw new ArgumentNullException(nameof(value));
+    }
+
+    if (isPercentage) {
+      percentageValue = ClampToFiniteFloat((double)percentageValue + value.ToSingleClamped());
+    } else {
+      (endlessValue ??= new EndlessNumber()).AddInPlace(value);
+    }
+    return this;
+  }
+
+  public StatValue MultiplyInPlace(EndlessNumber multiplier) {
+    if (multiplier == null) {
+      throw new ArgumentNullException(nameof(multiplier));
+    }
+
+    if (isPercentage) {
+      percentageValue = ClampToFiniteFloat((double)percentageValue * multiplier.ToSingleClamped());
+    } else {
+      (endlessValue ??= new EndlessNumber()).MultiplyInPlace(multiplier);
+    }
+    return this;
+  }
+
+  public float ToSingleClamped() {
+    return isPercentage
+      ? percentageValue
+      : (endlessValue ?? new EndlessNumber()).ToSingleClamped();
+  }
+
+  public override string ToString() {
+    return isPercentage
+      ? percentageValue.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+      : (endlessValue ?? new EndlessNumber()).ToDisplayString();
+  }
+
+  static float ClampToFiniteFloat(double value) {
+    if (value >= float.MaxValue) {
+      return float.MaxValue;
+    }
+    if (value <= -float.MaxValue) {
+      return -float.MaxValue;
+    }
+    return (float)value;
+  }
+}
 
 public static class FormStatIncreases {
+  // MVSP is stored in percentage points: 0.1 means +0.1%, so ten
+  // increases produce +1%. Its gameplay effect is capped at +400%.
+  public const float MovementSpeedIncreasePercentPerPoint = 0.1f;
+  public const float MaximumMovementSpeedBonusPercent = 400f;
+
   public static Dictionary<string, Dictionary<string, Dictionary<string, float>>> increases { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, float>>> {
     ["Base"] = new Dictionary<string, Dictionary<string, float>> {
-      ["STR"] = new Dictionary<string, float> { ["HP"] = 1000, ["DMG"] = 1, ["DCHC"] = 0.1f },
+      ["STR"] = new Dictionary<string, float> { ["HP"] = 100, ["DMG"] = 1, ["DCHC"] = 0.1f },
       ["DEX"] = new Dictionary<string, float> { ["AKSP"] = 0.01f, ["NRGRG"] = 0.01f, ["CDMG"] = 1 },
       ["END"] = new Dictionary<string, float> { ["NRG"] = 10, ["HPRG"] = 0.01f, ["ARM"] = 1 },
       ["INT"] = new Dictionary<string, float> { ["HEAL"] = 1, ["CCHC"] = 0.1f, ["LDMG"] = 1 },
       ["LCK"] = new Dictionary<string, float> { ["LCHC"] = 0.1f, ["DDMG"] = 1, ["BONUS"] = 1 }
     },
     ["Bolt"] = new Dictionary<string, Dictionary<string, float>> {
-      ["DEX"] = new Dictionary<string, float> { ["DMG"] = 1, ["MVSP"] = 0.1f, ["AKSP"] = 0.01f },
+      ["DEX"] = new Dictionary<string, float> { ["DMG"] = 1, ["MVSP"] = MovementSpeedIncreasePercentPerPoint, ["AKSP"] = 0.01f },
       ["END"] = new Dictionary<string, float> { ["NRG"] = 1, ["NRGRG"] = 0.01f, ["HP"] = 10 },
       ["AMP"] = new Dictionary<string, float> { ["CDST"] = 1, ["HPRG"] = 0.01f, ["ARM"] = 1 },
       ["VLT"] = new Dictionary<string, float> { ["LDSC"] = 1, ["CCHC"] = 0.1f, ["HEAL"] = 1 },
@@ -59,9 +179,8 @@ public static class FormStatIncreases {
             continue;
           }
 
-          var roundedIncrease = Math.Round(minorStat.Value);
-          var fractionalAmount = Math.Abs(minorStat.Value - roundedIncrease);
-          if (fractionalAmount > 0.0001d) {
+          var increaseMagnitude = Math.Abs(minorStat.Value);
+          if (increaseMagnitude > 0.0001d && increaseMagnitude < 1d) {
             return true;
           }
         }
@@ -71,11 +190,12 @@ public static class FormStatIncreases {
     return false;
   }
 
-  public static void ApplyBonusToFlatStats(IDictionary<string, float> stats) {
-    if (stats == null || !stats.TryGetValue("BONUS", out var bonus)) {
-      return;
-    }
-    if (Math.Abs(bonus) <= 0.0001f) {
+  public static void ApplyBonusToFlatStats(IDictionary<string, StatValue> stats) {
+    if (stats == null ||
+        !stats.TryGetValue("BONUS", out var bonus) ||
+        bonus == null ||
+        bonus.IsPercentage ||
+        bonus.IsZero) {
       return;
     }
 
@@ -89,20 +209,22 @@ public static class FormStatIncreases {
         continue;
       }
 
-      stats[statName] += bonus;
+      if (stats.TryGetValue(statName, out var statValue) && statValue != null) {
+        statValue.AddInPlace(bonus.EndlessValue);
+      }
     }
   }
 
   public static void ApplyBonusToFlatStats(
-    Dictionary<string, float> stats,
+    Dictionary<string, StatValue> stats,
     List<string> statNameScratch
   ) {
     if (stats == null ||
         statNameScratch == null ||
-        !stats.TryGetValue("BONUS", out var bonus)) {
-      return;
-    }
-    if (Math.Abs(bonus) <= 0.0001f) {
+        !stats.TryGetValue("BONUS", out var bonus) ||
+        bonus == null ||
+        bonus.IsPercentage ||
+        bonus.IsZero) {
       return;
     }
 
@@ -118,7 +240,9 @@ public static class FormStatIncreases {
       if (IsPercentageStat(statName)) {
         continue;
       }
-      stats[statName] += bonus;
+      if (stats.TryGetValue(statName, out var statValue) && statValue != null) {
+        statValue.AddInPlace(bonus.EndlessValue);
+      }
     }
     statNameScratch.Clear();
   }
@@ -279,9 +403,49 @@ public static class FormStatsValues {
 }
 
 public static class AllStatValues {
-  public static Dictionary<string, float> Esperanza { set; get; } = new Dictionary<string, float> {
-    { "DMG", 0 }, { "DCHC", 0 }, { "HP", 0 }, { "NRGRG", 0 }, { "CDMG", 0 }, { "NRG", 0 }, { "HPRG", 0 }, { "ARM", 0 }, { "HEAL", 0 },
-    { "CCHC", 0 }, { "LDMG", 0 }, { "LCHC", 0 }, { "DDMG", 0 }, { "BONUS", 0 }, { "MVSP", 0 }, { "AKSP", 0 }, { "CDST", 0 }, { "LDSC", 0 }, { "FDMG", 0 },
-    { "AREA", 0 }, { "DUR", 0 }, { "AFT", 0 }, { "EVD", 0 }, { "CLN", 0 }, { "FEAR", 0 }, { "SPEC", 0 }, { "PEN", 0 }
+  public static Dictionary<string, StatValue> Esperanza { set; get; } = new Dictionary<string, StatValue>(StringComparer.OrdinalIgnoreCase) {
+    { "DMG", new StatValue("DMG") }, { "DCHC", new StatValue("DCHC") }, { "HP", new StatValue("HP") }, { "NRGRG", new StatValue("NRGRG") },
+    { "CDMG", new StatValue("CDMG") }, { "NRG", new StatValue("NRG") }, { "HPRG", new StatValue("HPRG") }, { "ARM", new StatValue("ARM") },
+    { "HEAL", new StatValue("HEAL") }, { "CCHC", new StatValue("CCHC") }, { "LDMG", new StatValue("LDMG") }, { "LCHC", new StatValue("LCHC") },
+    { "DDMG", new StatValue("DDMG") }, { "BONUS", new StatValue("BONUS") }, { "MVSP", new StatValue("MVSP") }, { "AKSP", new StatValue("AKSP") },
+    { "CDST", new StatValue("CDST") }, { "LDSC", new StatValue("LDSC") }, { "FDMG", new StatValue("FDMG") }, { "AREA", new StatValue("AREA") },
+    { "DUR", new StatValue("DUR") }, { "AFT", new StatValue("AFT") }, { "EVD", new StatValue("EVD") }, { "CLN", new StatValue("CLN") },
+    { "FEAR", new StatValue("FEAR") }, { "SPEC", new StatValue("SPEC") }, { "PEN", new StatValue("PEN") }
   };
+}
+
+public static class AttackSpeedTiming {
+  public const float DefaultAttackIntervalSeconds = 2f;
+  public const float MinimumMoveDurationSeconds = 0.1f;
+
+  public static float ResolveStatSeconds(IReadOnlyDictionary<string, StatValue> stats) {
+    if (stats == null ||
+        !stats.TryGetValue("AKSP", out var attackSpeed) ||
+        attackSpeed == null) {
+      return 0f;
+    }
+
+    // AKSP is authored in seconds (0.01 means 0.01 second), even though
+    // sub-one stat values use StatValue's percentage storage.
+    return Mathf.Max(attackSpeed.ToSingleClamped(), 0f);
+  }
+
+  public static float ResolveAttackIntervalSeconds(float attackSpeedSeconds) {
+    return Mathf.Max(DefaultAttackIntervalSeconds - Mathf.Max(attackSpeedSeconds, 0f), 0f);
+  }
+
+  public static float ResolveMoveDurationSeconds(
+    float baseDurationSeconds,
+    float attackSpeedSeconds
+  ) {
+    if (baseDurationSeconds <= 0f) return 0f;
+
+    // The first two AKSP seconds remove the attack interval. Only the
+    // remainder accelerates move execution.
+    var overflowSeconds = Mathf.Max(
+      Mathf.Max(attackSpeedSeconds, 0f) - DefaultAttackIntervalSeconds,
+      0f
+    );
+    return Mathf.Max(baseDurationSeconds - overflowSeconds, MinimumMoveDurationSeconds);
+  }
 }

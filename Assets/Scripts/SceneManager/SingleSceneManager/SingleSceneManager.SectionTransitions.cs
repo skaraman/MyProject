@@ -6,6 +6,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public partial class SingleSceneManager {
+  const string PlayGameSoundId = "menu.playGame";
+  const float MainMenuMusicFadeSeconds = 1f;
+
   void LateUpdate() {
     if (!holdBlackscreenOpaqueDuringLoad) return;
     ForceBlackscreenVisible(true);
@@ -16,6 +19,8 @@ public partial class SingleSceneManager {
   }
 
   void StartGame() {
+    MessageBus.Send(SoundEffectPlayer.PlayMessage, PlayGameSoundId);
+    MessageBus.Send(MusicPlayer.FadeOutMessage, MainMenuMusicFadeSeconds);
     ClearPauseDialogResumeState("start_game");
     ReleasePreUnlockResidentPins("start_game");
     StopStartupFadeWatchdog();
@@ -75,6 +80,7 @@ public partial class SingleSceneManager {
 
   void CloseSettingsMenu() {
     if (SettingsMenu != null && !SettingsMenu.activeInHierarchy) return;
+    MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
     var targetSection = settingsReturnTarget == Section.Pause ? Section.Pause : Section.MainMenu;
     RuntimeLog.Log(
       "[SingleSceneManager][SettingsMenu] action=close" +
@@ -86,6 +92,8 @@ public partial class SingleSceneManager {
 
   void OnSettingsMenuClick(object payload) {
     var target = payload as GameObject;
+    var audioPageController = ResolveSettingsAudioPageController();
+    if (audioPageController != null && audioPageController.TryHandleClick(target)) return;
     if (!IsSettingsCloseTarget(target)) return;
     CloseSettingsMenu();
   }
@@ -99,8 +107,20 @@ public partial class SingleSceneManager {
   }
 
   void OnSettingsMenuSelect() {
+    var audioPageController = ResolveSettingsAudioPageController();
+    if (audioPageController != null && audioPageController.TryHandleClick(settingsHoveredTarget)) return;
     if (!IsSettingsCloseTarget(settingsHoveredTarget)) return;
     CloseSettingsMenu();
+  }
+
+  void OnSettingsMenuCancel() {
+    var audioPageController = ResolveSettingsAudioPageController();
+    if (audioPageController != null && audioPageController.TryReturnToButtons()) return;
+    CloseSettingsMenu();
+  }
+
+  SettingsAudioPageController ResolveSettingsAudioPageController() {
+    return SettingsMenu != null ? SettingsMenu.GetComponent<SettingsAudioPageController>() : null;
   }
 
   bool IsSettingsCloseTarget(GameObject target) {
@@ -239,8 +259,17 @@ public partial class SingleSceneManager {
   }
 
   void ApplySectionActivation(Section section) {
+    var pauseMenuWasActive = currentSection == Section.Pause;
+    var pauseMenuIsActive = section == Section.Pause;
     currentSection = section;
     pendingRevealSection = Section.None;
+    if (pauseMenuWasActive != pauseMenuIsActive) {
+      MessageBus.Send(
+        pauseMenuIsActive
+          ? AudioPlaybackMessages.PauseMenuOpened
+          : AudioPlaybackMessages.PauseMenuClosed
+      );
+    }
     ApplySceneTimeForSection(section, "apply_section_activation");
     HideAllSectionsForTransition(section);
     if (ShouldSectionKeepSceneActive(section)) {
@@ -472,7 +501,6 @@ public partial class SingleSceneManager {
   }
 
   void OpenGameplay() {
-    ReleasePreUnlockResidentPins("open_gameplay");
     StopStartupFadeWatchdog();
     StopStartupGameplayFlow();
     StopSectionTransition(clearLoadingOverlay: true, restoreVisibleState: true);
@@ -501,7 +529,6 @@ public partial class SingleSceneManager {
   void OpenMainMenu() {
     ClearPauseDialogResumeState("open_main_menu");
     ReleasePreUnlockResidentPins("open_main_menu");
-    RuntimeAssetCache.ClearSessionScope("open_main_menu");
     QueueMenuRuntimeAssetWarmup("open_main_menu", includeLocationProfile: false);
     StartSectionTransition(new SectionTransitionRequest(
       Section.MainMenu,
@@ -591,6 +618,7 @@ public partial class SingleSceneManager {
 
   void StopSectionTransition(bool clearLoadingOverlay = true, bool restoreVisibleState = true) {
     if (runtimeLocationTransitionRoutine != null) {
+      var locationTransitionCommitted = runtimeLocationTransitionCommitApplied;
       StopCoroutine(runtimeLocationTransitionRoutine);
       runtimeLocationTransitionRoutine = null;
       runtimeLocationTransitionInProgress = false;
@@ -598,7 +626,9 @@ public partial class SingleSceneManager {
       queuedRuntimeLocationId = "";
       pendingGameplayLocationId = "";
       ResumePlayerAnimationAfterLoadingOverlay("location_transition_cancelled");
-      ReleasePreUnlockResidentPins("location_transition_cancelled");
+      if (locationTransitionCommitted) {
+        ReleasePreUnlockResidentPins("location_transition_cancelled_after_commit");
+      }
       EndGameplayLoadFlowTrace(activeGameplayLoadFlowId, "location_transition_cancelled");
     }
     if (sectionTransitionRoutine != null) {
@@ -690,6 +720,10 @@ public partial class SingleSceneManager {
     yield return FadeToBlackBeforeLoadRoutine();
 
     HideAllSectionsForTransition(request.targetSection);
+    if (request.targetSection == Section.MainMenu) {
+      yield return null;
+      RuntimeAssetCache.ClearSessionScope("main_menu_scene_inactive");
+    }
     LogSectionTransitionState("opaque_previous_hidden", previousSection, request.targetSection, overlayTag, request.showProgressUi);
 
     SetLoadingLightActive(request.showLoadingLight);

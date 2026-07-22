@@ -407,6 +407,9 @@ public static partial class ContentPackPipeline {
     var rawAssetPath = NormalizeAssetPath(source.assetPath);
     var assetPath = StripAuthoringSliceSuffix(rawAssetPath);
     var sourceType = NormalizeToken(source.sourceType).ToLowerInvariant();
+    if (string.Equals(sourceType, "sprite_library", StringComparison.OrdinalIgnoreCase)) {
+      assetPath = ResolveExistingSpriteLibraryAssetPath(assetPath);
+    }
     var targetFolder = NormalizePackTargetFolder(source.targetFolder);
     if (string.IsNullOrWhiteSpace(sourceType) ||
         string.IsNullOrWhiteSpace(assetPath) ||
@@ -533,6 +536,15 @@ public static partial class ContentPackPipeline {
   static void AddCoreUiOwnedRoots(List<string> output) {
     if (output == null) return;
 
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/UI/Fonts.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/UI/MapMenus.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/UI/Saves.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/UI/SelectMenus.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/MainMenu/MainMenu.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/Items/Items.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/HealthBar/HealthBarUI.spriteSheetLib");
+    AddUniquePath(output, "Assets/Sprites/SpriteLibraries/UI/Core.spriteSheetLib");
+    AddUniquePath(output, GameplayCoreAssetPaths.DamageNumbersSpriteLibraryAssetPath);
     AddUniquePath(output, "Assets/Sprites/Fonts");
     AddUniquePath(output, "Assets/Sprites/GameInterface");
   }
@@ -835,6 +847,19 @@ public static partial class ContentPackPipeline {
   ) {
     if (pack == null) return;
 
+    ResolveExistingSpriteLibraryAssetPathsInPlace(pack.seedRoots);
+    ResolveExistingSpriteLibraryAssetPathsInPlace(pack.ownedRoots);
+    if (pack.authoringSources != null) {
+      for (var index = 0; index < pack.authoringSources.Count; index++) {
+        var source = pack.authoringSources[index];
+        if (source == null ||
+            !string.Equals(source.sourceType, "sprite_library", StringComparison.OrdinalIgnoreCase)) {
+          continue;
+        }
+        source.assetPath = ResolveExistingSpriteLibraryAssetPath(source.assetPath);
+      }
+    }
+
     if (pack.authoringSources != null && pack.authoringSources.Count > 0) {
       PrepareAuthoringSourceDependencies(pack, errors);
       AddSeedRootDependencies(pack, projectLibraries, errors);
@@ -942,8 +967,11 @@ public static partial class ContentPackPipeline {
 
   static bool ValidateAuthoringSource(ContentPackAuthoringSourceJson source, List<string> errors) {
     if (source == null) return false;
-    var assetPath = NormalizeAssetPath(source.assetPath);
     var sourceType = NormalizeToken(source.sourceType);
+    var assetPath = string.Equals(sourceType, "sprite_library", StringComparison.OrdinalIgnoreCase)
+      ? ResolveExistingSpriteLibraryAssetPath(source.assetPath)
+      : NormalizeAssetPath(source.assetPath);
+    source.assetPath = assetPath;
     if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(sourceType)) return false;
     if (!File.Exists(Path.GetFullPath(assetPath))) {
       errors?.Add("Missing authoring source asset '" + assetPath + "'.");

@@ -26,22 +26,21 @@ public partial class SingleSceneManager {
     );
 
     if (preUnlockAddressScratch.Count > 0) {
-      var blockingPrefixCount = ResolvePreUnlockBlockingPrefixCount(preUnlockAddressScratch);
       var preloadPasses = Mathf.Max(preUnlockAnimationFramePreloadPasses, 1);
-      if (blockingPrefixCount > 0) {
-        for (var pass = 0; pass < preloadPasses; pass++) {
-          yield return PreloadAnimationAddressBatch(
-            preUnlockAddressScratch,
-            0,
-            blockingPrefixCount,
-            resetLoadingProgress: pass == 0,
-            trackResidentPins: true,
-            settleAfterEnqueue: false
-          );
-          yield return WaitForPreUnlockWarmupQueueSettle();
-          if (pass + 1 < preloadPasses) {
-            yield return null;
-          }
+      // The gameplay phase is intentionally cache-only. Load the complete current
+      // zone controller snapshot here rather than leaving its long tail for play.
+      for (var pass = 0; pass < preloadPasses; pass++) {
+        yield return PreloadAnimationAddressBatch(
+          preUnlockAddressScratch,
+          0,
+          preUnlockAddressScratch.Count,
+          resetLoadingProgress: pass == 0,
+          trackResidentPins: true,
+          settleAfterEnqueue: false
+        );
+        yield return WaitForPreUnlockWarmupQueueSettle();
+        if (pass + 1 < preloadPasses) {
+          yield return null;
         }
       }
     }
@@ -401,34 +400,27 @@ public partial class SingleSceneManager {
     var seenAddresses = preUnlockSeenAddressScratch;
     outAddresses.Clear();
     seenAddresses.Clear();
-    var animationFrames = Mathf.Max(preUnlockPrefetchAnimationFrames, 1);
 
     var playerGear = ResolvePlayerGearController();
     var playerAtlasesManaged = playerGear != null && playerGear.SceneAppearanceAtlasPinsManaged;
     if (playerController != null && !playerAtlasesManaged) {
-      playerController.CollectAnimationStartAddresses(
+      playerController.CollectAllAnimationFrameAddresses(
         outAddresses,
         seenAddresses,
-        framesPerAnimation: animationFrames,
-        maxAnimations: Mathf.Max(preUnlockPlayerAnimationStarts, 1),
         maxAddresses: maxAddresses
       );
     }
     preUnlockLastPlayerAddressCount = outAddresses.Count;
 
     if (outAddresses.Count < maxAddresses) {
-      var enemyMaxAnimations = Mathf.Max(preUnlockEnemyAnimationStartsPerController, 0);
-      if (enemyMaxAnimations <= 0) return;
       if (enemyControllers != null) {
         for (var i = 0; i < enemyControllers.Count; i++) {
           if (outAddresses.Count >= maxAddresses) break;
           var controller = enemyControllers[i];
           if (controller == null) continue;
-          controller.CollectAnimationStartAddresses(
+          controller.CollectAllAnimationFrameAddresses(
             outAddresses,
             seenAddresses,
-            framesPerAnimation: animationFrames,
-            maxAnimations: enemyMaxAnimations,
             maxAddresses: maxAddresses
           );
         }
@@ -439,11 +431,9 @@ public partial class SingleSceneManager {
           if (outAddresses.Count >= maxAddresses) break;
           var enemy = activeEnemies[i];
           if (enemy == null || enemy.Controller == null) continue;
-          enemy.Controller.CollectAnimationStartAddresses(
+          enemy.Controller.CollectAllAnimationFrameAddresses(
             outAddresses,
             seenAddresses,
-            framesPerAnimation: animationFrames,
-            maxAnimations: enemyMaxAnimations,
             maxAddresses: maxAddresses
           );
         }
@@ -567,10 +557,6 @@ public partial class SingleSceneManager {
     else if (SystemInfo.systemMemorySize <= 12288) {
       scale = 0.65f;
     }
-    else if (SystemInfo.systemMemorySize <= 16384) {
-      scale = 0.8f;
-    }
-
     if (pressure == PreUnlockQueuePressure.Critical) {
       scale *= 0.5f;
     }
@@ -609,6 +595,10 @@ public partial class SingleSceneManager {
     if (availableCount <= 0) return 0;
     if (preUnlockAnimationWarmupMaxEnemyControllers > 0) {
       return Mathf.Min(preUnlockAnimationWarmupMaxEnemyControllers, availableCount);
+    }
+
+    if (SystemInfo.systemMemorySize >= 12288) {
+      return availableCount;
     }
 
     var autoCap = 6;

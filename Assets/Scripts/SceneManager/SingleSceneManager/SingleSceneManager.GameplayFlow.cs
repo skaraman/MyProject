@@ -228,7 +228,11 @@ public partial class SingleSceneManager {
       HoldPlayerAnimationForLoadingOverlay("wait_for_streaming_idle");
     }
 
-    yield return WaitForStreamingIdleBeforeUnlock(prefetchVisibleSprites: true, warmAnimationsBeforeUnlock: true);
+    yield return WaitForStreamingIdleBeforeUnlock(
+      prefetchVisibleSprites: true,
+      warmAnimationsBeforeUnlock: true,
+      replaceZoneResidentPins: warmContext != WarmGateMode.GearApplyReturn
+    );
     var revealHandoffStartedAtAfterIdle = Time.realtimeSinceStartup;
     LogRevealHandoff("streaming_idle_complete", revealHandoffStartedAtAfterIdle);
     yield return UnlockGameplayFromBlackRoutine(overlayTag, revealHandoffStartedAtAfterIdle);

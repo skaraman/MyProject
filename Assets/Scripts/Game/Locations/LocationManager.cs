@@ -237,8 +237,6 @@ public partial class LocationManager : MonoBehaviour {
       RuntimeLog.Log(
         "[LocationManager] Loaded location id='" + resolvedId +
         "' name='" + activeLocation.name +
-        "' enemies=" + activeLocation.enemies.Count +
-        " maxEnemies=" + activeLocation.maxEnemies +
         " objectives=" + (activeLocation.objectives != null ? activeLocation.objectives.Count : 0)
       );
     }

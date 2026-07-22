@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class GearButtons : ButtonGroup {
+  const string BackingSiblingName = "backing";
+  const string OutlineKeyword = "OUTBASE_ON";
+
   readonly List<Action> actions = new();
 
   static bool ShouldLogRuntimeUiDebug() {
@@ -36,15 +39,28 @@ public class GearButtons : ButtonGroup {
   }
 
   protected override void HandleActiveState(GameObject button) {
-    // Swap sprite to "active" variant
-    button.GetComponent<ReferenceListGameObject>().Get(0).SetActive(true);
-    button.GetComponent<ReferenceListGameObject>().Get(1).SetActive(false);
+    SetButtonVisualState(button, isActive: true);
   }
 
   protected override void HandleInactiveState(GameObject button) {
-    // Swap sprite to "idle" variant
-    button.GetComponent<ReferenceListGameObject>().Get(0).SetActive(false);
-    button.GetComponent<ReferenceListGameObject>().Get(1).SetActive(true);
+    SetButtonVisualState(button, isActive: false);
+  }
+
+  static void SetButtonVisualState(GameObject button, bool isActive) {
+    if (button == null) {
+      return;
+    }
+
+    var parent = button.transform.parent;
+    var backing = parent != null ? parent.Find(BackingSiblingName) : null;
+    if (backing == null) {
+      return;
+    }
+
+    var backingAnimator = backing.GetComponent<AllIn1AnimatorInspector>();
+    if (backingAnimator != null) {
+      backingAnimator.SetKeyword(OutlineKeyword, isActive);
+    }
   }
 
   public void OnGearReady(string form = null) {
@@ -131,7 +147,18 @@ public class GearButtons : ButtonGroup {
     }
 
     var spriteRenderer = button.GetComponent<SpriteRenderer>();
-    var newColor = ShaderColors.myColors[gearItem.gearColor];
+    if (!ShaderColors.TryGetFormColor(
+          formName,
+          ShaderColors.PrimaryGroup,
+          out var newColor,
+          out var colorName
+        )) {
+      Debug.LogWarning(
+        "[GearButtons] Unable to resolve active form color" +
+        " form='" + (formName ?? "") + "'"
+      );
+      return;
+    }
     if (shaderAnimator != null) {
       shaderAnimator.ResetActive();
       shaderAnimator.Reset();
@@ -151,7 +178,7 @@ public class GearButtons : ButtonGroup {
         " form='" + formName + "'" +
         " slot='" + button.name + "'" +
         " gear='" + (gearItem.gearId ?? "") + "'" +
-        " color='" + (gearItem.gearColor ?? "") + "'"
+        " color='" + (colorName ?? "") + "'"
       );
     }
   }

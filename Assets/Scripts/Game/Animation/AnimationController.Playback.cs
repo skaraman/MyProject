@@ -49,9 +49,22 @@ public partial class AnimationController {
 
   public float GetAnimationDurationSeconds(string animationName) {
     if (animationData != null && animationData.TryGetValue(animationName, out var anim) && anim.duration > 0) {
-      return anim.duration / 1000f;
+      return ResolveAnimationDurationMilliseconds(anim) / 1000f;
     }
     return 0f;
+  }
+
+  public bool HasReachedAnimationNormalizedTime(
+    string animationName,
+    float normalizedTime
+  ) {
+    if (!TryGetAnimationKey(animationName, out var resolvedAnimation)) return false;
+    if (!string.Equals(currentAnimation, resolvedAnimation, StringComparison.Ordinal)) return false;
+    if (!animationData.TryGetValue(resolvedAnimation, out var animation)) return false;
+    if (animation == null || animation.duration <= 0) return false;
+
+    var threshold = ResolveAnimationDurationMilliseconds(animation) * Mathf.Clamp01(normalizedTime);
+    return animationTimer >= threshold;
   }
 
   public void QueueFlip() {
@@ -112,7 +125,7 @@ public partial class AnimationController {
 
     float slowFactor = SlowDown ? 20f : 1f;
     animationTimer += (deltaTime * 1000f) / slowFactor;
-    float normalTime = animationTimer / Mathf.Max(1f, anim.duration);
+    float normalTime = animationTimer / Mathf.Max(1f, ResolveAnimationDurationMilliseconds(anim));
     bool cycleReset = false;
 
     if (!pingPong) {
@@ -186,6 +199,28 @@ public partial class AnimationController {
     if (!isPlaying && !anim.loop && !anim.pingPong && currentFrame >= anim.end) {
       EndActivePunchTrace("completed", currentFrame);
     }
+  }
+
+  float ResolveAnimationDurationMilliseconds(AnimData animation) {
+    if (animation == null || animation.duration <= 0f) return 0f;
+    if (animation.isLocomotion) return animation.duration;
+
+    return AttackSpeedTiming.ResolveMoveDurationSeconds(
+      animation.duration / 1000f,
+      AttackSpeedSeconds
+    ) * 1000f;
+  }
+
+  float ResolveCurrentAnimationDurationScale() {
+    if (string.IsNullOrEmpty(currentAnimation) ||
+        animationData == null ||
+        !animationData.TryGetValue(currentAnimation, out var animation) ||
+        animation == null ||
+        animation.duration <= 0f) {
+      return 1f;
+    }
+
+    return ResolveAnimationDurationMilliseconds(animation) / animation.duration;
   }
 
   private bool TryResolveInterrupt(string requestedAnimation, out string resolvedAnimation, out string queued) {
@@ -306,7 +341,10 @@ public partial class AnimationController {
   }
 
   static string ResolveAnimationCategory(string animationName, AnimData anim) {
-    return anim.To == 1 ? "To" : anim.To == 2 ? "To2" : animationName;
+    if (anim == null) return animationName ?? "";
+    if (anim.To == 1) return "To";
+    if (anim.To == 2) return "To2";
+    return string.IsNullOrWhiteSpace(anim.category) ? animationName ?? "" : anim.category.Trim();
   }
 
   bool HasSeenAnimationCategory(string category) {

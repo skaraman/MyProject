@@ -420,10 +420,7 @@ public partial class SingleSceneManager {
   }
 
   static bool ShouldExpectEnemyWarmStageForCurrentLocation() {
-    return LocationEnemyData.TryGetLocation(LocationManager.currentLocation, out var locationInfo) &&
-           locationInfo != null &&
-           locationInfo.enemies != null &&
-           locationInfo.enemies.Count > 0;
+    return ContentEpisodeProgression.HasCurrentEpisodeSpawnRules();
   }
 
   int ResolveCurrentLocationLoadingArchetypeCount() {
@@ -645,13 +642,6 @@ public partial class SingleSceneManager {
 
     var shouldExpectEnemyWarmStage = ShouldExpectEnemyWarmStageForCurrentLocation();
     var archetypeCount = shouldExpectEnemyWarmStage ? ResolveCurrentLocationLoadingArchetypeCount() : 0;
-    var locationEnemyDefinitionCount = 0;
-    if (LocationEnemyData.TryGetLocation(LocationManager.currentLocation, out var locationInfo) &&
-        locationInfo != null &&
-        locationInfo.enemies != null) {
-      locationEnemyDefinitionCount = locationInfo.enemies.Count;
-    }
-
     var registry = ActiveContentRegistryRuntime.Registry;
     var activePackCount = registry != null && registry.ActivePackIds != null ? registry.ActivePackIds.Count : 0;
     AppendLoadFlowBool(builder, "pipeline_player_ready", IsGameplayPlayerBootstrapReady());
@@ -663,7 +653,6 @@ public partial class SingleSceneManager {
     AppendLoadFlowField(builder, "pipeline_dialog_blocker", ResolveLoadFlowValue(GetGameplayDialogReadyBlockerSummary()));
     AppendLoadFlowBool(builder, "pipeline_expect_enemy_stage", shouldExpectEnemyWarmStage);
     AppendLoadFlowInt(builder, "pipeline_enemy_archetypes", archetypeCount);
-    AppendLoadFlowInt(builder, "pipeline_location_enemy_defs", locationEnemyDefinitionCount);
     AppendLoadFlowField(builder, "pipeline_stage", gameplayLoadingStageForLoad.ToString());
     AppendLoadFlowBool(builder, "content_external_active", ActiveContentRegistryRuntime.HasActiveExternalContent());
     AppendLoadFlowInt(builder, "content_active_pack_count", activePackCount);

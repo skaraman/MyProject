@@ -223,6 +223,7 @@ public class LoadMenuInput : ButtonGroup {
 
   void BackOut() {
     if (slotSelectionLocked) return;
+    MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
     MessageBus.Send("closeLoadMenu");
   }
 
@@ -240,7 +241,7 @@ public class LoadMenuInput : ButtonGroup {
       var resolvedIndex = ResolveButtonIndex(go);
       if (resolvedIndex >= 0 && resolvedIndex != activeIndexLoadMenu) {
         activeIndexLoadMenu = resolvedIndex;
-        SetActiveIndex(activeIndexLoadMenu);
+        SetActiveIndexWithSound(activeIndexLoadMenu);
       }
     }
   }
@@ -262,7 +263,7 @@ public class LoadMenuInput : ButtonGroup {
     if (activeIndexLoadMenu < 0) activeIndexLoadMenu = 0;
     else activeIndexLoadMenu = (activeIndexLoadMenu + 1) % buttons.Count;
 
-    SetActiveIndex(activeIndexLoadMenu);
+    SetActiveIndexWithSound(activeIndexLoadMenu);
     ScrollActiveSlotIntoView();
   }
 
@@ -273,7 +274,7 @@ public class LoadMenuInput : ButtonGroup {
     if (activeIndexLoadMenu < 0) activeIndexLoadMenu = buttons.Count - 1;
     else activeIndexLoadMenu = (activeIndexLoadMenu - 1 + buttons.Count) % buttons.Count;
 
-    SetActiveIndex(activeIndexLoadMenu);
+    SetActiveIndexWithSound(activeIndexLoadMenu);
     ScrollActiveSlotIntoView();
   }
 

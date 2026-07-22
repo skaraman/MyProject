@@ -21,6 +21,9 @@ public static class IntegerTextCache {
   }
 
   public static string Get(int value) {
+    if (value <= -10000 || value >= 10000) {
+      return EndlessNumber.FormatGlyphs(value);
+    }
     if (value < 0 || value > CachedValueLimit) {
       return value.ToString();
     }
@@ -36,6 +39,9 @@ public static class IntegerTextCache {
   }
 
   public static string GetSlashPrefixed(int value) {
+    if (value <= -10000 || value >= 10000) {
+      return "/" + EndlessNumber.FormatGlyphs(value);
+    }
     if (value < 0 || value > CachedValueLimit) {
       return "/" + value;
     }

@@ -254,13 +254,8 @@ public partial class SingleSceneManager {
       }
     }
 
-    if (enemyTypes.Count <= 0 &&
-        LocationEnemyData.TryGetLocation(LocationManager.currentLocation, out var locationInfo) &&
-        locationInfo != null &&
-        locationInfo.enemies != null) {
-      for (var i = 0; i < locationInfo.enemies.Count; i++) {
-        AddUniqueCombatPopulationType(enemyTypes, locationInfo.enemies[i]);
-      }
+    if (enemyTypes.Count <= 0) {
+      ContentEpisodeProgression.CollectCurrentEpisodeSpawnEnemyTypes(enemyTypes);
     }
 
     return enemyTypes;

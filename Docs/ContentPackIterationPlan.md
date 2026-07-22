@@ -46,7 +46,7 @@ Pack creation fields:
 
 Source asset types:
 
-- `Sprite Library`: `.spriteLib` plus category and label
+- `Sprite Library`: `.spriteSheetLib` (or legacy `.spriteLib`) plus category and label
 - `Sprite Slice`: direct `.png` pointer plus slice label
 
 The tool saves external `ContentPackManifest.json` files and stores source rows as `authoringSources`.

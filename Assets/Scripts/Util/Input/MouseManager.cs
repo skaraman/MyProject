@@ -176,6 +176,12 @@ public class MouseManager : MonoBehaviour {
       priority += 10000;
     }
 
+    // SlotsWrap needs a collider for viewport sizing, but it spans the save list.
+    // Prefer an actual save-slot hit so that collider cannot swallow its hover events.
+    if (currentMap == "loadMenu" && target.GetComponentInParent<SaveSlot>() != null) {
+      priority += 2000;
+    }
+
     if (target.layer == 6) {
       priority += 100;
     }

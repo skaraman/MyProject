@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class ButtonGroup : MonoBehaviour {
+  protected const string MenuMoveSoundId = "menu.move";
+
   public List<GameObject> buttons = new();
   public int activeIndex = -1;
   public int hoverIndex = -1;
@@ -72,6 +74,16 @@ public class ButtonGroup : MonoBehaviour {
     }
     activeIndex = index;
     SetActiveButton(buttons[index]);
+  }
+
+  public void SetActiveIndexWithSound(int index) {
+    var previousIndex = activeIndex;
+    SetActiveIndex(index);
+    if (activeIndex == previousIndex) {
+      return;
+    }
+
+    MessageBus.Send(SoundEffectPlayer.PlayMessage, MenuMoveSoundId);
   }
 
   public GameObject GetActiveButton() {

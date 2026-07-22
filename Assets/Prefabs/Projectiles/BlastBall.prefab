@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 5139290945509360972}
   - component: {fileID: 6057113811267714201}
   - component: {fileID: 5118274592461130558}
+  - component: {fileID: 7000000000000000001}
   m_Layer: 0
   m_Name: BlastBall
   m_TagString: Untagged
@@ -92,9 +93,11 @@ MonoBehaviour:
   ignoreSameRoot: 1
   spriteTarget: {fileID: 8598433957345011264}
   hitboxCollider: {fileID: 6728226864856090488}
+  runtimeSpawnOffsetX: 0
+  runtimeSpawnOffsetY: 0
 --- !u!212 &6349500182128385827
 SpriteRenderer:
-  serializedVersion: 2
+  serializedVersion: 3
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -151,6 +154,7 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+  m_BlendShapeWeights: []
 --- !u!210 &5139290945509360972
 SortingGroup:
   m_ObjectHideFlags: 0
@@ -174,8 +178,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_ComponentVersion: 4
   m_LightType: 3
   m_BlendStyleIndex: 0
@@ -183,19 +187,19 @@ MonoBehaviour:
     rid: -2
   m_SelectionSources:
     rid: 6221682371487910144
-  m_FalloffIntensity: 0.8
+  m_FalloffIntensity: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 1.15
   m_LightVolumeIntensity: 1
   m_LightVolumeEnabled: 0
-  m_ApplyToSortingLayers: 0fd32e51d92f446ecbb7f124
+  m_ApplyToSortingLayers: d92f446ecbb7f124
   m_LightCookieSprite: {fileID: 0}
   m_DeprecatedPointLightCookieSprite: {fileID: 0}
   m_LightOrder: 0
   m_AlphaBlendOnOverlap: 0
   m_OverlapOperation: 0
   m_NormalMapDistance: 0.4
-  m_NormalMapQuality: 1
+  m_NormalMapQuality: 0
   m_UseNormalMap: 1
   m_ShadowsEnabled: 0
   m_ShadowIntensity: 0.75
@@ -204,12 +208,12 @@ MonoBehaviour:
   m_ShadowVolumeIntensityEnabled: 0
   m_ShadowVolumeIntensity: 0.75
   m_LocalBounds:
-    m_Center: {x: 0, y: 0, z: 0}
-    m_Extent: {x: 0.17, y: 0.17, z: 0}
+    m_Center: {x: 0, y: -0.00000011920929, z: 0}
+    m_Extent: {x: 0.9985302, y: 0.99853027, z: 0}
   m_PointLightInnerAngle: 360
   m_PointLightOuterAngle: 360
-  m_PointLightInnerRadius: 0.021
-  m_PointLightOuterRadius: 0.17
+  m_PointLightInnerRadius: 0
+  m_PointLightOuterRadius: 1
   m_ShapeLightParametricSides: 5
   m_ShapeLightParametricAngleOffset: 0
   m_ShapeLightParametricRadius: 1
@@ -232,7 +236,11 @@ MonoBehaviour:
         m_SelectedSource:
           rid: -2
         m_Provider2DCache:
-          rid: -2
+          rid: 8997990224969597022
+    - rid: 8997990224969597022
+      type: {class: 'Provider2DCache`1[[UnityEngine.Rendering.Universal.Light2DProvider, Unity.RenderPipelines.Universal.2D.Runtime]]', ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.2D.Runtime}
+      data:
+        m_Cache: []
 --- !u!114 &5118274592461130558
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -243,22 +251,42 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 451e21dbf9d749278a78c6a658f722d9, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Project.Internal::EffectLight2D
   effectLight: {fileID: 6057113811267714201}
   lightColor: {r: 1, g: 1, b: 1, a: 1}
   baseIntensity: 1.15
-  intensityFlicker: 0.55
-  flickerFrequency: 22
-  radiusFlicker: 0.12
-  innerRadius: 0.08
-  outerRadius: 0.65
-  falloffIntensity: 0.8
+  intensityFlicker: 1
+  flickerFrequency: 2.6
+  radiusFlicker: 0.5
+  radiusPulseFrequency: 2.6
+  innerRadius: 0
+  outerRadius: 1
+  falloffIntensity: 1
   flickerSeed: 0.37
   targetSortingLayers:
-  - GameBG
   - GameMG
   - GameFG
+--- !u!114 &7000000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7967227520933354192}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e5f2c61d7b34a55a8c9ef10b4d26a73, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::ProjectedShadowLight2D
+  sourceLight: {fileID: 6057113811267714201}
+  lightRole: 1
+  castsCharacterShadows: 1
+  rangeOverride: 0
+  shadowStrength: 2
+  projectionLength: 0.65
+  useDirectionOverride: 0
+  directionOverride: {x: 0.45, y: -1}
 --- !u!1 &8321494052513208523
 GameObject:
   m_ObjectHideFlags: 0

@@ -241,6 +241,7 @@ public static partial class ContentPackPipeline {
     ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaGearMaterialAssetPath, "player_gear_material", activePackIds, errors);
     ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaHairMaterialAssetPath, "player_hair_material", activePackIds, errors);
     ValidateActivePackAssetExists(GameplayCoreAssetPaths.EsperanzaBodyMaterialAssetPath, "player_body_material", activePackIds, errors);
+    ValidateDamageNumberTierLibrary(errors);
 
     foreach (var projectile in Projectiles.EnumerateAll()) {
       var projectileAssetPath = NormalizeAssetPath(projectile.Value?.prefabAddress);
@@ -255,6 +256,106 @@ public static partial class ContentPackPipeline {
     ValidateGameplayPlayerMaterialReferences(activePackIds, errors);
 
     return errors;
+  }
+
+  static void ValidateDamageNumberTierLibrary(List<string> errors) {
+    if (errors == null) return;
+
+    var assetPath = ResolveExistingSpriteLibraryAssetPath(
+      GameplayCoreAssetPaths.DamageNumbersSpriteLibraryAssetPath
+    );
+    var fullPath = GetPhysicalPath(assetPath);
+    if (!File.Exists(fullPath)) {
+      errors.Add("Core damage-number tier library is missing at '" + assetPath + "'.");
+      return;
+    }
+
+    string sourceText;
+    try {
+      sourceText = File.ReadAllText(fullPath);
+    }
+    catch (Exception exception) {
+      errors.Add(
+        "Core damage-number tier library could not be read at '" + assetPath +
+        "': " + exception.Message
+      );
+      return;
+    }
+
+    var categoryPattern =
+      @"(?ms)^  - m_Name: " + Regex.Escape(EndlessNumberSuffixMap.SpriteCategory) +
+      @"\r?\n(?<body>.*?)(?=^  - m_Name: |\z)";
+    var categoryMatch = Regex.Match(sourceText, categoryPattern);
+    if (!categoryMatch.Success) {
+      errors.Add(
+        "Core damage-number tier library is missing category '" +
+        EndlessNumberSuffixMap.SpriteCategory + "' at '" + assetPath + "'."
+      );
+      return;
+    }
+
+    var entryMatches = Regex.Matches(
+      categoryMatch.Groups["body"].Value,
+      @"(?ms)^    - m_Name: (?<label>[^\r\n]+)\r?\n(?<body>.*?)(?=^    - m_Name: |\z)"
+    );
+    var labels = new HashSet<string>(StringComparer.Ordinal);
+    var mappedSprites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var spriteReferencePattern =
+      @"(?m)^      m_SpriteOverride: \{fileID: (?<fileId>-?\d+), " +
+      @"guid: (?<guid>[0-9a-fA-F]{32}), type: \d+\}";
+
+    for (var index = 0; index < entryMatches.Count; index++) {
+      var entryMatch = entryMatches[index];
+      var label = entryMatch.Groups["label"].Value.Trim();
+      if (!labels.Add(label)) {
+        errors.Add(
+          "Core damage-number tier library contains duplicate sprite token '" +
+          label + "' in category '" + EndlessNumberSuffixMap.SpriteCategory + "'."
+        );
+      }
+
+      var spriteMatch = Regex.Match(entryMatch.Groups["body"].Value, spriteReferencePattern);
+      if (!spriteMatch.Success ||
+          string.Equals(spriteMatch.Groups["fileId"].Value, "0", StringComparison.Ordinal) ||
+          string.Equals(
+            spriteMatch.Groups["guid"].Value,
+            "00000000000000000000000000000000",
+            StringComparison.Ordinal
+          )) {
+        errors.Add(
+          "Core damage-number tier library is missing sprite token '" + label +
+          "' in category '" + EndlessNumberSuffixMap.SpriteCategory + "'."
+        );
+        continue;
+      }
+
+      var spriteReference =
+        spriteMatch.Groups["guid"].Value + ":" + spriteMatch.Groups["fileId"].Value;
+      if (!mappedSprites.Add(spriteReference)) {
+        errors.Add(
+          "Core damage-number tier library sprite token '" + label +
+          "' reuses an image already assigned to another tier token."
+        );
+      }
+    }
+
+    if (labels.Count != EndlessNumberSuffixMap.TokenRadix) {
+      errors.Add(
+        "Core damage-number tier library category '" + EndlessNumberSuffixMap.SpriteCategory +
+        "' must contain exactly " + EndlessNumberSuffixMap.TokenRadix +
+        " labels but contains " + labels.Count + "."
+      );
+    }
+
+    for (var token = 1; token <= EndlessNumberSuffixMap.TokenRadix; token++) {
+      var label = token.ToString(CultureInfo.InvariantCulture);
+      if (!labels.Contains(label)) {
+        errors.Add(
+          "Core damage-number tier library is missing sprite token '" + label +
+          "' in category '" + EndlessNumberSuffixMap.SpriteCategory + "'."
+        );
+      }
+    }
   }
 
   static List<string> CollectActivePackPolicyValidationErrors(
@@ -336,14 +437,6 @@ public static partial class ContentPackPipeline {
           }
         }
 
-        if ((locationSnapshot.enemies == null || locationSnapshot.enemies.Count <= 0) &&
-            (pack.ownedEnemyTypes == null || pack.ownedEnemyTypes.Count <= 0)) {
-          errors.Add(
-            "Location snapshot is missing enemy ownership." +
-            " pack_id='" + pack.packId + "'" +
-            " location_id='" + (string.IsNullOrWhiteSpace(snapshotLocationId) ? "-" : snapshotLocationId) + "'"
-          );
-        }
       }
 
       if (pack.dialogIds != null && pack.dialogIds.Count > 0 && !hasDialogSnapshot) {

@@ -150,23 +150,33 @@ public static partial class SpriteRuntimeResolver {
 
     if (!TryGetShard(shardKey, shardEntry, out var shard)) return false;
 
-    var exactKey = BuildRowKey(key.labelPrefix, key.category, key.frame);
-    if (shard.rows.TryGetValue(exactKey, out pair)) {
+    var normalizedLabelPrefix = NormalizeToken(key.labelPrefix);
+    var normalizedCategory = NormalizeToken(key.category);
+    var exactKey = new RowLookupKey(
+      normalizedLabelPrefix,
+      normalizedCategory,
+      key.frame
+    );
+    if (shard.lookupRows.TryGetValue(exactKey, out pair)) {
       shard.lastAccessTime = Time.realtimeSinceStartup;
       CacheLookupHit(cacheKey, pair);
       return true;
     }
 
     if (key.frame != 0) {
-      var frameZeroKey = BuildRowKey(key.labelPrefix, key.category, 0);
-      if (shard.rows.TryGetValue(frameZeroKey, out pair)) {
+      var frameZeroKey = new RowLookupKey(
+        normalizedLabelPrefix,
+        normalizedCategory,
+        0
+      );
+      if (shard.lookupRows.TryGetValue(frameZeroKey, out pair)) {
         shard.lastAccessTime = Time.realtimeSinceStartup;
         CacheLookupHit(cacheKey, pair);
         return true;
       }
     }
 
-    if (TryResolveNumericFormFallback(shard.rows, key, out pair)) {
+    if (TryResolveNumericFormFallback(shard.lookupRows, key, out pair)) {
       shard.lastAccessTime = Time.realtimeSinceStartup;
       CacheLookupHit(cacheKey, pair);
       return true;

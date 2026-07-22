@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public partial class GearController {
-  public void LoadGear(bool publishReady = true) {
+  public void LoadGear() {
+    LoadGear(publishReady: true);
+  }
+
+  public void LoadGear(bool publishReady) {
     EnsureRuntimeInitialized("load_gear");
-    EquippedItems.EnsureKnownForms();
     GetSavedGearState();
     RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("load_gear");
     RefreshGear();
@@ -18,7 +21,7 @@ public partial class GearController {
   }
 
   public void GetSavedGearState() {
-    EquippedItems.EnsureKnownForms();
+    EquippedItems.ResetToDefaults();
     var loaded = SaveSlotManager.Load(SaveKeys.EquippedGear);
     if (loaded == null || !loaded.HasPrefix(SaveKeys.AllGear)) return;
 
@@ -83,6 +86,7 @@ public partial class GearController {
   public void EquipGear() {
     var activeForm = EsperanzaForms.GetActive();
     EquippedItems.EnsureForm(activeForm);
+    ApplyActiveFormSkinColor();
     var equippedItems = EquippedItems.AllGearForms;
     equipPartPrefixScratch.Clear();
     foreach (KeyValuePair<string, GearItem> equip in equippedItems[activeForm]) {
@@ -115,11 +119,12 @@ public partial class GearController {
               if (shaderAnimator != null && equip.Value != null) {
                 shaderAnimator.ResetActive();
                 shaderAnimator.Reset();
-                var newColor = ShaderColors.myColors[equip.Value.gearColor];
-                shaderAnimator.SetKeyword("GLOW_ON", true);
-                shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f, replaceExisting: true);
-                shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
-                shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f, replaceExisting: true);
+                if (TryResolveActiveFormColor(activeForm, out var newColor)) {
+                  shaderAnimator.SetKeyword("GLOW_ON", true);
+                  shaderAnimator.AddFloatSequence("_Glow", 4f, 4f, 1f, replaceExisting: true);
+                  shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
+                  shaderAnimator.AddColorSequence("_Color", newColor, newColor, 1f, replaceExisting: true);
+                }
               }
               else if (shaderAnimator == null) {
                 Debug.LogWarning($"GameObject {go.name} does not have a AllIn1AnimatorInspector component attached.");
@@ -137,17 +142,11 @@ public partial class GearController {
               var spriteRenderer = child.gameObject.GetComponent<SpriteRenderer>();
               var shaderAnimator = child.gameObject.GetComponent<AllIn1AnimatorInspector>();
               if (shaderAnimator != null && (equip.Value != null || gearId == activeForm + "_no_Head")) {
-                var gearColor = "";
                 shaderAnimator.ResetActive();
                 shaderAnimator.Reset();
-                if (gearId == activeForm + "_no_Head") {
-                  gearColor = ShaderColors.pairs[activeForm]["primary"]["color"];
-                  HairSkin.GetComponent<SpriteRenderer>().color = ShaderColors.myColors[gearColor];
+                if (!TryResolveActiveFormColor(activeForm, out var newColor)) {
+                  continue;
                 }
-                else {
-                  gearColor = equip.Value.gearColor;
-                }
-                var newColor = ShaderColors.myColors[gearColor];
                 shaderAnimator.SetKeyword("GLOW_ON", true);
                 shaderAnimator.AddFloatSequence("_Glow", 6f, 6f, 1f, replaceExisting: true);
                 shaderAnimator.AddColorSequence("_GlowColor", newColor, newColor, 1f, replaceExisting: true);
@@ -165,6 +164,69 @@ public partial class GearController {
       effectAnimationController?.InvalidateSpriteFrameCache();
     }
     QueueWarmupForEquippedCharacter(new Dictionary<string, string>(equipPartPrefixScratch, StringComparer.OrdinalIgnoreCase));
+  }
+
+  void ApplyActiveFormSkinColor() {
+    var activeForm = EsperanzaForms.GetActive();
+    if (!ShaderColors.TryGetActiveFormColor(
+          ShaderColors.PrimaryGroup,
+          out var formColor,
+          out var colorName
+        )) {
+      Debug.LogWarning(
+        "[GearController] Active form color is not configured" +
+        " form='" + (activeForm ?? "") + "'" +
+        " group='" + ShaderColors.PrimaryGroup + "'"
+      );
+      return;
+    }
+
+    ApplyFormSkinColor(EyesSkin, formColor, activeForm, colorName);
+    ApplyFormSkinColor(HairSkin, formColor, activeForm, colorName);
+  }
+
+  void ApplyFormSkinColor(GameObject target, Color color, string activeForm, string colorName) {
+    if (target == null) {
+      Debug.LogWarning(
+        "[GearController] Active form skin target is not assigned" +
+        " form='" + (activeForm ?? "") + "'" +
+        " color='" + (colorName ?? "") + "'"
+      );
+      return;
+    }
+
+    var spriteRenderer = target.GetComponent<SpriteRenderer>();
+    if (spriteRenderer == null) {
+      Debug.LogWarning("[GearController] Active form skin target has no SpriteRenderer object='" + target.name + "'");
+      return;
+    }
+
+    spriteRenderer.color = color;
+    var shaderAnimator = target.GetComponent<AllIn1AnimatorInspector>();
+    if (shaderAnimator == null) {
+      Debug.LogWarning("[GearController] Active form skin target has no shader animator object='" + target.name + "'");
+      return;
+    }
+
+    shaderAnimator.SetKeyword("GLOW_ON", true);
+    shaderAnimator.AddFloatSequence(
+      "_Glow",
+      CharacterFormGlowStrength,
+      CharacterFormGlowStrength,
+      1f,
+      replaceExisting: true
+    );
+    shaderAnimator.AddColorSequence("_GlowColor", color, color, 1f, replaceExisting: true);
+    shaderAnimator.ApplyAllProperties(true);
+  }
+
+  static bool TryResolveActiveFormColor(string activeForm, out Color color) {
+    return ShaderColors.TryGetFormColor(
+      activeForm,
+      ShaderColors.PrimaryGroup,
+      out color,
+      out _
+    );
   }
 
   private void NormalizeSkinSpriteDefaultsForRuntime() {

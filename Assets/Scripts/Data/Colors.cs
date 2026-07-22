@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public static class ShaderColors {
+  public const string PrimaryGroup = "primary";
+  public const string SecondaryGroup = "secondary";
+  public const string StrokeValue = "stroke";
+  public const string ColorValue = "color";
 
   public static Dictionary<string, Color> myColors { get; } = new Dictionary<string, Color> {
     ["Yellow"] = new Vector4(1f, .95f, 0f, 1f),
@@ -20,30 +24,73 @@ public static class ShaderColors {
 
   public static Dictionary<string, Dictionary<string, Dictionary<string, string>>> pairs { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, string>>> {
     ["Base"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Yellow" }, { "color", "Brown" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "Brown" }, { "color", "Yellow" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Yellow" }, { ColorValue, "Brown" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "Brown" }, { ColorValue, "Yellow" } }
     },
     ["Bolt"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Green" }, { "color", "Grey" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "Grey" }, { "color", "Green" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Green" }, { ColorValue, "Grey" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "Grey" }, { ColorValue, "Green" } }
     },
     ["Fire"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Red" }, { "color", "Yellow" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "Yellow" }, { "color", "Red" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Red" }, { ColorValue, "Yellow" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "Yellow" }, { ColorValue, "Red" } }
     },
     ["Cold"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Blue" }, { "color", "DarkBlue" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "DarkBlue" }, { "color", "Blue" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Blue" }, { ColorValue, "DarkBlue" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "DarkBlue" }, { ColorValue, "Blue" } }
     },
     ["Aqua"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "ShineBlue" }, { "color", "LightBlue" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "LightBlue" }, { "color", "ShineBlue" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "ShineBlue" }, { ColorValue, "LightBlue" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "LightBlue" }, { ColorValue, "ShineBlue" } }
     },
     ["Dark"] = new Dictionary<string, Dictionary<string, string>> {
-      ["primary"] = new Dictionary<string, string> { { "stroke", "Purple" }, { "color", "DarkPurple" } },
-      ["secondary"] = new Dictionary<string, string> { { "stroke", "DarkPurple" }, { "color", "Purple" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Purple" }, { ColorValue, "DarkPurple" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "DarkPurple" }, { ColorValue, "Purple" } }
     },
   };
+
+  public static bool TryGetNamedColor(string colorName, out Color color) {
+    color = Color.white;
+    if (string.IsNullOrWhiteSpace(colorName)) {
+      return false;
+    }
+
+    return myColors.TryGetValue(colorName.Trim(), out color);
+  }
+
+  public static bool TryGetFormColor(
+    string formName,
+    string groupName,
+    out Color color,
+    out string colorName
+  ) {
+    color = Color.white;
+    colorName = null;
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) || string.IsNullOrWhiteSpace(groupName)) {
+      return false;
+    }
+
+    if (!pairs.TryGetValue(resolvedForm, out var formGroups) || formGroups == null) {
+      return false;
+    }
+    if (!formGroups.TryGetValue(groupName.Trim(), out var groupValues) || groupValues == null) {
+      return false;
+    }
+    if (!groupValues.TryGetValue(ColorValue, out colorName) || string.IsNullOrWhiteSpace(colorName)) {
+      return false;
+    }
+
+    return TryGetNamedColor(colorName, out color);
+  }
+
+  public static bool TryGetActiveFormColor(
+    string groupName,
+    out Color color,
+    out string colorName
+  ) {
+    return TryGetFormColor(EsperanzaForms.GetActive(), groupName, out color, out colorName);
+  }
 }
 
 // public class Gold : MonoBehaviour

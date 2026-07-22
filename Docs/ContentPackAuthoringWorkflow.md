@@ -2,7 +2,7 @@
 
 1. Create or update images under `Assets/Sprites`.
 2. If the image needs trimmed offsets, run the whitespace removal or trim/offset authoring tool before packing.
-3. If the image belongs to a Sprite Library, update the `.spriteLib` category and label.
+3. If the image belongs to a Sprite Library, update the `.spriteSheetLib` category and label (`.spriteLib` remains supported during migration).
 4. If categories or labels need to move between Sprite Libraries, open `Tools\SpriteLibraryMultiEditor.py`.
 5. If the image is a direct sliced `.png`, confirm the Unity sprite slice label is stable.
 6. Open `Tools\ContentPackIterationUI.py`.
@@ -39,7 +39,7 @@ Rules:
 Sprite Library source:
 
 - source type: `Sprite Library`
-- asset path: `Assets/Sprites/SpriteLibraries/UI/Fonts.spriteLib`
+- asset path: `Assets/Sprites/SpriteLibraries/UI/Fonts.spriteSheetLib`
 - category: `Plate`
 - label: `A`
 - target folder: `Core/Sprites/SpriteLibraries/UI`
@@ -59,9 +59,9 @@ Run:
 python .\Tools\SpriteLibraryMultiEditor.py Assets\Sprites\SpriteLibraries
 ```
 
-Use this when rebuilding form libraries or moving labels between existing `.spriteLib` files:
+Use this when rebuilding form libraries or moving labels between existing `.spriteSheetLib` or legacy `.spriteLib` files:
 
-- open multiple `.spriteLib` files or folders at once
+- open multiple `.spriteSheetLib`/`.spriteLib` files or folders at once
 - drag a category onto a library to copy or merge that category
 - drag a category onto another category to copy or merge labels
 - drag a label onto a category to copy that label and sprite reference

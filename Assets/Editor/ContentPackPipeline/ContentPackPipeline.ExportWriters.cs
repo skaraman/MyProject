@@ -37,6 +37,15 @@ public static partial class ContentPackPipeline {
           continue;
         }
 
+        if (!File.Exists(GetPhysicalPath(assetPath))) {
+          errors.Add(
+            "Asset does not exist and cannot be exported." +
+            " pack_id='" + pack.packId + "'" +
+            " asset='" + assetPath + "'"
+          );
+          continue;
+        }
+
         var originalGuid = AssetDatabase.AssetPathToGUID(assetPath);
         if (string.IsNullOrWhiteSpace(originalGuid)) {
           errors.Add(
@@ -447,9 +456,6 @@ public static partial class ContentPackPipeline {
     var locationSnapshot = new ExportedLocationJson {
       locationId = LocationEnemyData.NormalizeLocationId(locationInfo.id),
       name = locationInfo.name ?? "",
-      enemies = locationInfo.enemies != null ? new List<string>(locationInfo.enemies) : new List<string>(),
-      maxEnemies = locationInfo.maxEnemies,
-      spawnInterval = locationInfo.spawnInterval,
       prefabAssetPath = BuildStageAssetPath(pack, "Assets/Prefabs/Locations/DomeCity.prefab"),
       localPosition = locationInfo.locationPrefabData != null ? locationInfo.locationPrefabData.localPosition : Vector3.zero,
       localEulerAngles = locationInfo.locationPrefabData != null ? locationInfo.locationPrefabData.localEulerAngles : Vector3.zero,

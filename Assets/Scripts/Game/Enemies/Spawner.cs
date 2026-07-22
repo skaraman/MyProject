@@ -5,6 +5,9 @@ using UnityEngine;
 
 public class Spawner : MonoBehaviour {
   const string AutoDialogTrigger = "auto";
+  const string ImpSpawnSoundId = "enemy.imp.spawn";
+  const float EnemySpawnSoundCooldownSeconds = 4f;
+  const float InitialWaveSameSideSpacing = 2f;
 
   sealed class SpawnRuleState {
     public string enemyType;
@@ -26,7 +29,6 @@ public class Spawner : MonoBehaviour {
 
   private Camera mainCamera;
   private float offset = 5f;
-  private float timer = 0f;
   private bool canSpawn = false;
   private bool spawnGateOpen = false;
   private bool spawnReadinessReceived = false;
@@ -36,8 +38,11 @@ public class Spawner : MonoBehaviour {
   readonly Dictionary<GameObject, Pool> activeInstancePools = new();
   readonly List<SpawnRuleState> activeSpawnRules = new();
   readonly List<SpawnRuleState> spawnCandidateScratch = new();
+  readonly List<string> episodeEnemyTypeScratch = new(8);
   readonly List<HurtBox2D> hurtBoxScratch = new();
   readonly List<GameObject> activeEnemyScratch = new(32);
+  readonly HashSet<string> pendingEnemySpawnSoundTypes = new(StringComparer.OrdinalIgnoreCase);
+  readonly Dictionary<string, float> enemySpawnSoundCooldownUntil = new(StringComparer.OrdinalIgnoreCase);
 
   private List<Action> actions = new();
   string pendingSpawnLocationId = "";
@@ -47,6 +52,7 @@ public class Spawner : MonoBehaviour {
   int initializedEpisodeRevision = -1;
   int initializedRegistryVersion = -1;
   int spawnWarmupGeneration;
+  bool spawningInitialWave;
 
   void Start() {
     actions.Add(MessageBus.On("ReadyForSpawns", o => OnReadyForSpawns()));
@@ -55,6 +61,10 @@ public class Spawner : MonoBehaviour {
     actions.Add(MessageBus.On("dialog.finished", o => OnDialogFinished(o)));
     actions.Add(MessageBus.On(CharacterMessageTopics.DialogStateReady, o => OnDialogStateReady()));
     actions.Add(MessageBus.On(ContentEpisodeProgression.ObjectivesCompletedTopic, o => OnEpisodeObjectivesCompleted()));
+    actions.Add(MessageBus.On(
+      SingleSceneManager.BlackscreenFullyTransparentTopic,
+      () => TryPlayPendingEnemySpawnSounds()
+    ));
   }
 
   void OnDestroy() {
@@ -130,7 +140,6 @@ public class Spawner : MonoBehaviour {
     waitingForEpisodeDialog = false;
     spawnGateOpen = false;
     canSpawn = false;
-    timer = 0f;
     ReturnActiveEnemiesToPools();
   }
 
@@ -155,7 +164,6 @@ public class Spawner : MonoBehaviour {
     waitingForEpisodeDialog = false;
     spawnGateOpen = false;
     canSpawn = false;
-    timer = 0f;
     ReturnActiveEnemiesToPools();
     activeSpawnRules.Clear();
     LocationData = null;
@@ -213,7 +221,6 @@ public class Spawner : MonoBehaviour {
     }
 
     if (ShouldDeferEnemyWaveWarmupToActiveLoadingOverlay()) {
-      timer = 0f;
       lastDeferredInitState = "";
       canSpawn = true;
       SpawnInitialWave();
@@ -282,7 +289,6 @@ public class Spawner : MonoBehaviour {
         return;
       }
 
-      timer = 0f;
       lastDeferredInitState = "";
       canSpawn = true;
       SpawnInitialWave();
@@ -317,14 +323,13 @@ public class Spawner : MonoBehaviour {
     }
     if (!TryBuildActiveSpawnRules()) {
       Debug.LogWarning(
-        "[Spawner] Location '" + LocationData.id + "' has no prefab-based spawn rules on the active location instance. Spawning disabled."
+        "[Spawner] Location '" + LocationData.id + "' has no spawn rules in the current episode objectives. Spawning disabled."
       );
       canSpawn = false;
       return false;
     }
 
     canSpawn = false;
-    timer = 0f;
     ReturnActiveEnemiesToPools();
     if (!TryInitializeEnemyPools()) {
       canSpawn = false;
@@ -349,15 +354,10 @@ public class Spawner : MonoBehaviour {
 
   void Update() {
     if (!canSpawn) return;
-    if (LocationData == null || LocationData.spawnInterval <= 0f) return;
 
     var deltaTime = TimeScale.GetDeltaTime(this);
     UpdateRespawnTimers(deltaTime);
-    timer += deltaTime;
-    if (timer >= LocationData.spawnInterval) {
-      SpawnEnemy();
-      timer = 0f;
-    }
+    SpawnEnemy();
   }
 
   void SpawnInitialWave() {
@@ -371,10 +371,21 @@ public class Spawner : MonoBehaviour {
     }
 
     var spawnedCount = 0;
-    for (var i = 0; i < initialSpawnCount; i++) {
-      if (!SpawnEnemy()) break;
-      spawnedCount += 1;
+    var firstSpawnUsesRightSide = UnityEngine.Random.value > 0.5f;
+    spawningInitialWave = true;
+    try {
+      for (var i = 0; i < initialSpawnCount; i++) {
+        var rightSide = (i & 1) == 0
+          ? firstSpawnUsesRightSide
+          : !firstSpawnUsesRightSide;
+        if (!SpawnEnemy(rightSide, i / 2)) break;
+        spawnedCount += 1;
+      }
     }
+    finally {
+      spawningInitialWave = false;
+    }
+    TryPlayPendingEnemySpawnSounds();
 
     RuntimeLog.Log(
       "[Spawner] Initial episode wave spawned" +
@@ -384,14 +395,14 @@ public class Spawner : MonoBehaviour {
     );
   }
 
-  private bool SpawnEnemy() {
+  private bool SpawnEnemy(bool? requestedRightSide = null, int sameSideSlot = 0) {
     if (!TryPickSpawnRule(out var spawnRule)) {
       return false;
     }
     var selectedEnemyType = spawnRule.enemyType;
 
-    bool chooseA = UnityEngine.Random.value > 0.5f;
-    Vector3 spawnPosition = GetSpawnPosition(chooseA);
+    var rightSide = requestedRightSide ?? (UnityEngine.Random.value > 0.5f);
+    var spawnPosition = GetSpawnPosition(rightSide, sameSideSlot);
     if (!enemyPoolsByPrefab.TryGetValue(spawnRule.prefab, out var pool) || pool == null) {
       Debug.LogError(
         "[Spawner] Missing pool for enemy type '" + selectedEnemyType + "' prefab='" +
@@ -417,16 +428,62 @@ public class Spawner : MonoBehaviour {
     var enemyController = spawned.GetComponent<EnemyController>();
     if (enemyController != null) {
       enemyController.SetEnemyType(selectedEnemyType, playDefaultImmediately: true);
-      pool.Activate(spawned);
+    }
+    else {
+      var enemyInfo = spawned.GetComponent<EnemyInfo>();
+      if (enemyInfo != null) {
+        enemyInfo.enemyType = selectedEnemyType;
+      }
+    }
+
+    pool.Activate(spawned);
+    QueueEnemySpawnSound(selectedEnemyType);
+    return true;
+  }
+
+  void QueueEnemySpawnSound(string enemyType) {
+    if (!TryResolveEnemySpawnSoundId(enemyType, out _)) {
+      return;
+    }
+
+    pendingEnemySpawnSoundTypes.Add(NormalizeEnemyType(enemyType));
+    if (!spawningInitialWave) {
+      TryPlayPendingEnemySpawnSounds();
+    }
+  }
+
+  void TryPlayPendingEnemySpawnSounds() {
+    if (pendingEnemySpawnSoundTypes.Count <= 0 ||
+        !Application.isPlaying ||
+        !SingleSceneManager.IsGameplayActive ||
+        !SingleSceneManager.IsBlackscreenFullyTransparent) {
+      return;
+    }
+
+    var now = Time.unscaledTime;
+    foreach (var enemyType in pendingEnemySpawnSoundTypes) {
+      if (!TryResolveEnemySpawnSoundId(enemyType, out var soundId)) {
+        continue;
+      }
+      if (enemySpawnSoundCooldownUntil.TryGetValue(enemyType, out var cooldownUntil) &&
+          now < cooldownUntil) {
+        continue;
+      }
+
+      SoundEffectPlayer.Play(soundId);
+      enemySpawnSoundCooldownUntil[enemyType] = now + EnemySpawnSoundCooldownSeconds;
+    }
+    pendingEnemySpawnSoundTypes.Clear();
+  }
+
+  static bool TryResolveEnemySpawnSoundId(string enemyType, out string soundId) {
+    if (string.Equals(NormalizeEnemyType(enemyType), "Imp", StringComparison.OrdinalIgnoreCase)) {
+      soundId = ImpSpawnSoundId;
       return true;
     }
 
-    var enemyInfo = spawned.GetComponent<EnemyInfo>();
-    if (enemyInfo != null) {
-      enemyInfo.enemyType = selectedEnemyType;
-    }
-    pool.Activate(spawned);
-    return true;
+    soundId = null;
+    return false;
   }
 
   public void DespawnEnemy(GameObject enemy) {
@@ -449,13 +506,14 @@ public class Spawner : MonoBehaviour {
     spawnRule.pendingRespawnSeconds.Add(spawnRule.respawnDelaySeconds);
   }
 
-  public Vector3 GetSpawnPosition(bool rightSide) {
+  public Vector3 GetSpawnPosition(bool rightSide, int sameSideSlot = 0) {
     if (mainCamera == null) mainCamera = Camera.main;
     var viewZ = Mathf.Abs(mainCamera.transform.position.z - transform.position.z);
     var worldLeft = mainCamera.ViewportToWorldPoint(new Vector3(0, 0.5f, viewZ)).x;
     var worldRight = mainCamera.ViewportToWorldPoint(new Vector3(1, 0.5f, viewZ)).x;
     var y = transform.position.y;
-    var x = rightSide ? worldRight + offset : worldLeft - offset;
+    var sideOffset = offset + Mathf.Max(sameSideSlot, 0) * InitialWaveSameSideSpacing;
+    var x = rightSide ? worldRight + sideOffset : worldLeft - sideOffset;
     var spawnPosition = new Vector3(x, y, transform.position.z);
     if (ShouldLogGameplaySpawnDebug()) {
       RuntimeLog.Log(
@@ -555,28 +613,29 @@ public class Spawner : MonoBehaviour {
 
   bool TryBuildActiveSpawnRules(bool logSummary = true) {
     activeSpawnRules.Clear();
-    return TryBuildSpawnRulesFromActiveLocationPrefab(logSummary);
+    return TryBuildSpawnRulesFromCurrentEpisodeObjectives(logSummary);
   }
 
-  bool TryBuildSpawnRulesFromActiveLocationPrefab(bool logSummary) {
-    var locationInstance = ResolveActiveLocationInstance();
-    var spawnRules = locationInstance != null ? locationInstance.GetComponentInChildren<LocationEnemySpawnRules>(true) : null;
-    if (spawnRules == null || !spawnRules.HasEnemyPrefabRules) {
+  bool TryBuildSpawnRulesFromCurrentEpisodeObjectives(bool logSummary) {
+    if (!ContentEpisodeProgression.HasCurrentObjectives()) {
       return false;
     }
 
-    var rules = spawnRules.EnemyPrefabRules;
-    for (var i = 0; i < rules.Count; i++) {
-      var rule = rules[i];
-      if (rule == null || rule.prefab == null) continue;
-
-      if (!ContentEpisodeProgression.HasCurrentObjectives()) continue;
+    ContentEpisodeProgression.CollectCurrentEpisodeSpawnEnemyTypes(episodeEnemyTypeScratch);
+    for (var i = 0; i < episodeEnemyTypeScratch.Count; i++) {
+      var enemyType = episodeEnemyTypeScratch[i];
+      if (!EnemyPrefabResolver.TryResolve(enemyType, out var enemyPrefab) || enemyPrefab == null) {
+        Debug.LogWarning(
+          "[Spawner] Skipping objective spawn rule because no prefab could be resolved for enemy type '" +
+          enemyType + "'."
+        );
+        continue;
+      }
 
       var maxAlive = 0;
       var respawnDelaySeconds = -1;
-      if (!TryResolveEnemyTypeFromPrefab(rule.prefab, out var enemyType)) continue;
-      if (!ContentEpisodeProgression.TryResolveCurrentSpawnCount(enemyType, out maxAlive)) continue;
-      if (!ContentEpisodeProgression.TryResolveCurrentRespawnSeconds(
+      if (!ContentEpisodeProgression.TryResolveCurrentEpisodeSpawnCount(enemyType, out maxAlive)) continue;
+      if (!ContentEpisodeProgression.TryResolveCurrentEpisodeRespawnSeconds(
         enemyType,
         out respawnDelaySeconds
       )) {
@@ -585,11 +644,12 @@ public class Spawner : MonoBehaviour {
 
       if (maxAlive <= 0) continue;
       TryAddSpawnRule(
-        rule.prefab,
+        enemyType,
+        enemyPrefab,
         maxAlive,
         respawnDelaySeconds,
-        rule.level,
-        rule.statBonuses
+        level: 1,
+        statBonuses: null
       );
     }
 
@@ -599,9 +659,9 @@ public class Spawner : MonoBehaviour {
 
     if (logSummary) {
       RuntimeLog.Log(
-        "[Spawner] Using location prefab spawn rules" +
+        "[Spawner] Using episode objective spawn rules" +
         " location='" + (LocationData != null ? LocationData.id : LocationManager.currentLocation) + "'" +
-        " prefab_root='" + spawnRules.gameObject.name + "'" +
+        " episode='" + ContentEpisodeProgression.ResolveCurrentEpisodeId() + "'" +
         " rules=" + activeSpawnRules.Count
       );
     }
@@ -609,19 +669,16 @@ public class Spawner : MonoBehaviour {
   }
 
   bool TryAddSpawnRule(
+    string enemyType,
     GameObject enemyPrefab,
     int maxAlive,
     int respawnDelaySeconds,
     int level,
     IList<DemonStatModifier> statBonuses
   ) {
-    if (enemyPrefab == null || maxAlive <= 0) return false;
-    if (!TryResolveEnemyTypeFromPrefab(enemyPrefab, out var enemyType)) {
-      Debug.LogWarning("[Spawner] Skipping spawn rule because enemy type could not be resolved from prefab '" + enemyPrefab.name + "'.");
-      return false;
-    }
-
     var normalizedEnemyType = NormalizeEnemyType(enemyType);
+    if (enemyPrefab == null || maxAlive <= 0 || string.IsNullOrWhiteSpace(normalizedEnemyType)) return false;
+
     for (var i = 0; i < activeSpawnRules.Count; i++) {
       var existing = activeSpawnRules[i];
       if (!ReferenceEquals(existing.prefab, enemyPrefab)) continue;
@@ -650,26 +707,6 @@ public class Spawner : MonoBehaviour {
     spawnRule.pendingRespawnSeconds.Capacity = spawnRule.maxAlive;
     activeSpawnRules.Add(spawnRule);
     return true;
-  }
-
-  bool TryResolveEnemyTypeFromPrefab(GameObject enemyPrefab, out string enemyType) {
-    enemyType = "";
-    if (enemyPrefab == null) return false;
-
-    var enemyInfo = enemyPrefab.GetComponent<EnemyInfo>();
-    if (enemyInfo != null && !string.IsNullOrWhiteSpace(enemyInfo.enemyType)) {
-      enemyType = NormalizeEnemyType(enemyInfo.enemyType);
-      return !string.IsNullOrWhiteSpace(enemyType);
-    }
-
-    var enemyController = enemyPrefab.GetComponent<EnemyController>();
-    if (enemyController != null && !string.IsNullOrWhiteSpace(enemyController.enemyType)) {
-      enemyType = NormalizeEnemyType(enemyController.enemyType);
-      return !string.IsNullOrWhiteSpace(enemyType);
-    }
-
-    enemyType = NormalizeEnemyType(enemyPrefab.name);
-    return !string.IsNullOrWhiteSpace(enemyType);
   }
 
   bool TryPickSpawnRule(out SpawnRuleState spawnRule) {
@@ -814,6 +851,8 @@ public class Spawner : MonoBehaviour {
   }
 
   void ReturnActiveEnemiesToPools() {
+    pendingEnemySpawnSoundTypes.Clear();
+    enemySpawnSoundCooldownUntil.Clear();
     activeEnemyScratch.Clear();
     foreach (var pair in activeInstancePools) {
       if (pair.Key != null) {

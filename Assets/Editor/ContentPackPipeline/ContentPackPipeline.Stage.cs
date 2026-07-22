@@ -310,6 +310,10 @@ public static partial class ContentPackPipeline {
           logResult: false,
           saveAndRefresh: false
         );
+        runtimeAddressablesChanged |= EnemyPrefabAddressablesBootstrap.SyncEnemyPrefabAddressables(
+          logResult: false,
+          saveAndRefresh: false
+        );
         runtimeAddressablesChanged |= ProjectileAddressablesBootstrap.SyncProjectileAddressables(
           logResult: false,
           saveAndRefresh: false

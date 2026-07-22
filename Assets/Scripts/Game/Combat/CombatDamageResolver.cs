@@ -10,11 +10,11 @@ public enum CombatDamageKind {
 
 public struct CombatDamageResult {
   public CombatDamageKind kind;
-  public float amount;
-  public float baseDamage;
-  public float armorBeforePenetration;
-  public float armorApplied;
-  public float penetrationApplied;
+  public EndlessNumber amount;
+  public EndlessNumber baseDamage;
+  public EndlessNumber armorBeforePenetration;
+  public EndlessNumber armorApplied;
+  public EndlessNumber penetrationApplied;
   public float evadeChance;
   public float evadeRoll;
   public bool evaded;
@@ -41,42 +41,42 @@ public static class CombatDamageResolver {
   }
 
   readonly struct AttackerCombatStats {
-    public float Damage { get; }
+    public EndlessNumber Damage { get; }
     public float CriticalChance { get; }
-    public float CriticalDamage { get; }
+    public EndlessNumber CriticalDamage { get; }
     public float LuckyChance { get; }
-    public float LuckyDamage { get; }
+    public EndlessNumber LuckyDamage { get; }
     public float DirectChance { get; }
-    public float DirectDamage { get; }
-    public float Penetration { get; }
+    public EndlessNumber DirectDamage { get; }
+    public EndlessNumber Penetration { get; }
 
-    public AttackerCombatStats(IReadOnlyDictionary<string, float> stats) {
-      Damage = GetStat(stats, CombatStatKeys.Damage);
-      CriticalChance = GetStat(stats, CombatStatKeys.CriticalChance);
-      CriticalDamage = GetStat(stats, CombatStatKeys.CriticalDamage);
-      LuckyChance = GetStat(stats, CombatStatKeys.LuckyChance);
-      LuckyDamage = GetStat(stats, CombatStatKeys.LuckyDamage);
-      DirectChance = GetStat(stats, CombatStatKeys.DirectChance);
-      DirectDamage = GetStat(stats, CombatStatKeys.DirectDamage);
-      Penetration = GetStat(stats, CombatStatKeys.Penetration);
+    public AttackerCombatStats(IReadOnlyDictionary<string, StatValue> stats) {
+      Damage = GetEndlessStat(stats, CombatStatKeys.Damage);
+      CriticalChance = GetPercentageStat(stats, CombatStatKeys.CriticalChance);
+      CriticalDamage = GetEndlessStat(stats, CombatStatKeys.CriticalDamage);
+      LuckyChance = GetPercentageStat(stats, CombatStatKeys.LuckyChance);
+      LuckyDamage = GetEndlessStat(stats, CombatStatKeys.LuckyDamage);
+      DirectChance = GetPercentageStat(stats, CombatStatKeys.DirectChance);
+      DirectDamage = GetEndlessStat(stats, CombatStatKeys.DirectDamage);
+      Penetration = GetEndlessStat(stats, CombatStatKeys.Penetration);
     }
   }
 
   public static CombatDamageResult ResolveEsperanzaHit(
-    IReadOnlyDictionary<string, float> attackerStats,
-    IReadOnlyDictionary<string, float> defenderStats,
-    float abilityRawDamage
+    IReadOnlyDictionary<string, StatValue> attackerStats,
+    IReadOnlyDictionary<string, StatValue> defenderStats,
+    int abilityRawDamage
   ) {
     var attacker = new AttackerCombatStats(attackerStats);
-    var armor = GetStat(defenderStats, CombatStatKeys.Armor);
-    var evadeChance = GetStat(defenderStats, CombatStatKeys.Evade);
+    var armor = GetEndlessStat(defenderStats, CombatStatKeys.Armor);
+    var evadeChance = GetPercentageStat(defenderStats, CombatStatKeys.Evade);
 
     var criticalChance = Mathf.Clamp01(attacker.CriticalChance);
     var luckyChance = Mathf.Clamp01(attacker.LuckyChance);
     var directChance = Mathf.Clamp01(attacker.DirectChance);
 
-    var resolvedAbilityDamage = Mathf.Max(abilityRawDamage, 0f);
-    var baseAttackDamage = attacker.Damage + resolvedAbilityDamage;
+    var resolvedAbilityDamage = Mathf.Max(abilityRawDamage, 0);
+    var baseAttackDamage = attacker.Damage.Copy().AddInPlace(resolvedAbilityDamage);
 
     // Special hits use independent rolls with explicit Critical > Lucky > Direct priority.
     var criticalRoll = Random.value;
@@ -146,15 +146,15 @@ public static class CombatDamageResolver {
   }
 
   public static CombatDamageResult ResolveEnemyDamage(
-    IReadOnlyDictionary<string, float> attackerStats,
-    IReadOnlyDictionary<string, float> defenderStats
+    IReadOnlyDictionary<string, StatValue> attackerStats,
+    IReadOnlyDictionary<string, StatValue> defenderStats
   ) {
     return BuildResult(
       kind: CombatDamageKind.Damage,
-      baseDamage: GetStat(attackerStats, CombatStatKeys.Damage),
-      armor: GetStat(defenderStats, CombatStatKeys.Armor),
-      penetration: GetStat(attackerStats, CombatStatKeys.Penetration),
-      evadeChance: GetStat(defenderStats, CombatStatKeys.Evade),
+      baseDamage: GetEndlessStat(attackerStats, CombatStatKeys.Damage),
+      armor: GetEndlessStat(defenderStats, CombatStatKeys.Armor),
+      penetration: GetEndlessStat(attackerStats, CombatStatKeys.Penetration),
+      evadeChance: GetPercentageStat(defenderStats, CombatStatKeys.Evade),
       criticalChance: 0f,
       luckyChance: 0f,
       directChance: 0f,
@@ -166,9 +166,9 @@ public static class CombatDamageResolver {
 
   static CombatDamageResult BuildResult(
     CombatDamageKind kind,
-    float baseDamage,
-    float armor,
-    float penetration,
+    EndlessNumber baseDamage,
+    EndlessNumber armor,
+    EndlessNumber penetration,
     float evadeChance,
     float criticalChance,
     float luckyChance,
@@ -179,10 +179,10 @@ public static class CombatDamageResolver {
   ) {
     var result = new CombatDamageResult {
       kind = kind,
-      baseDamage = Mathf.Max(baseDamage, 0f),
-      armorBeforePenetration = Mathf.Max(armor, 0f),
-      armorApplied = 0f,
-      penetrationApplied = 0f,
+      baseDamage = NonNegative(baseDamage),
+      armorBeforePenetration = NonNegative(armor),
+      armorApplied = new EndlessNumber(),
+      penetrationApplied = new EndlessNumber(),
       evadeChance = Mathf.Clamp01(evadeChance),
       evadeRoll = -1f,
       evaded = false,
@@ -198,8 +198,8 @@ public static class CombatDamageResolver {
     return result;
   }
 
-  static void ResolveDefense(ref CombatDamageResult result, float penetration) {
-    var resolvedPenetration = Mathf.Max(penetration, 0f);
+  static void ResolveDefense(ref CombatDamageResult result, EndlessNumber penetration) {
+    var resolvedPenetration = NonNegative(penetration);
 
     switch (result.kind) {
       case CombatDamageKind.Damage:
@@ -207,7 +207,7 @@ public static class CombatDamageResolver {
         RollEvade(ref result);
         break;
       case CombatDamageKind.Critical:
-        result.armorApplied = result.armorBeforePenetration;
+        result.armorApplied = result.armorBeforePenetration.Copy();
         RollEvade(ref result);
         break;
       case CombatDamageKind.Lucky:
@@ -218,8 +218,8 @@ public static class CombatDamageResolver {
     }
   }
 
-  static void ApplyPenetratedArmor(ref CombatDamageResult result, float penetration) {
-    result.penetrationApplied = Mathf.Min(penetration, result.armorBeforePenetration);
+  static void ApplyPenetratedArmor(ref CombatDamageResult result, EndlessNumber penetration) {
+    result.penetrationApplied = EndlessNumber.Min(penetration, result.armorBeforePenetration);
     result.armorApplied = result.armorBeforePenetration - result.penetrationApplied;
   }
 
@@ -232,28 +232,28 @@ public static class CombatDamageResolver {
     result.evaded = RollSucceeds(result.evadeChance, result.evadeRoll);
   }
 
-  static float ResolveFinalAmount(CombatDamageResult result) {
+  static EndlessNumber ResolveFinalAmount(CombatDamageResult result) {
     if (result.evaded) {
-      return 0f;
+      return new EndlessNumber();
     }
 
-    var finalAmount = result.baseDamage;
+    var finalAmount = result.baseDamage.Copy();
 
     switch (result.kind) {
       case CombatDamageKind.Damage:
-        finalAmount -= result.armorApplied;
+        finalAmount.SubtractInPlace(result.armorApplied);
         break;
       case CombatDamageKind.Direct:
         break;
       case CombatDamageKind.Critical:
-        finalAmount -= result.armorApplied;
+        finalAmount.SubtractInPlace(result.armorApplied);
         break;
       case CombatDamageKind.Lucky:
-        finalAmount -= result.armorApplied;
+        finalAmount.SubtractInPlace(result.armorApplied);
         break;
     }
 
-    return Mathf.Max(finalAmount, 0f);
+    return NonNegative(finalAmount);
   }
 
   static bool RollSucceeds(float chance, float roll) {
@@ -262,11 +262,42 @@ public static class CombatDamageResolver {
     return roll < chance;
   }
 
-  static float GetStat(IReadOnlyDictionary<string, float> stats, string statName) {
+  static EndlessNumber GetEndlessStat(
+    IReadOnlyDictionary<string, StatValue> stats,
+    string statName
+  ) {
+    if (stats == null || string.IsNullOrWhiteSpace(statName)) {
+      return new EndlessNumber();
+    }
+
+    if (!stats.TryGetValue(statName, out var value) ||
+        value == null ||
+        value.IsPercentage ||
+        value.EndlessValue == null) {
+      return new EndlessNumber();
+    }
+
+    return value.EndlessValue.Copy();
+  }
+
+  static float GetPercentageStat(
+    IReadOnlyDictionary<string, StatValue> stats,
+    string statName
+  ) {
     if (stats == null || string.IsNullOrWhiteSpace(statName)) {
       return 0f;
     }
 
-    return stats.TryGetValue(statName, out var value) ? value : 0f;
+    return stats.TryGetValue(statName, out var value) &&
+           value != null &&
+           value.IsPercentage
+      ? value.PercentageValue
+      : 0f;
+  }
+
+  static EndlessNumber NonNegative(EndlessNumber value) {
+    return value != null && value.IsPositive
+      ? value.Copy()
+      : new EndlessNumber();
   }
 }

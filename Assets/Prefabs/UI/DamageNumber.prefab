@@ -103,7 +103,7 @@ SortingGroup:
   m_Enabled: 1
   m_SortingLayerID: 619821003
   m_SortingLayer: 3
-  m_SortingOrder: 17
+  m_SortingOrder: 1000
   m_SortAtRoot: 0
   m_Sort3DAs2D: 0
 --- !u!1 &5737903963291482361
@@ -899,7 +899,7 @@ Transform:
   m_GameObject: {fileID: 7221555521166196700}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.75, y: -0.89, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.1, y: 0.1, z: 0.292}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -936,8 +936,8 @@ MonoBehaviour:
   marginY: 0
   offsetX: 0
   offsetY: 0
-  justifyX: left
-  justifyY: bottom
+  justifyX: center
+  justifyY: center
   lineDirection: auto
 --- !u!114 &8145215457143392674
 MonoBehaviour:

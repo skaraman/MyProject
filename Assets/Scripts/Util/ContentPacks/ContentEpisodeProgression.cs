@@ -45,6 +45,7 @@ public static class ContentEpisodeProgression {
   static bool savePending;
   static readonly List<RuntimeObjective> runtimeObjectives = new(16);
   static readonly List<ContentObjectiveDefinition> runtimeObjectiveDefinitions = new(16);
+  static readonly List<ContentObjectiveDefinition> incompleteRuntimeObjectiveDefinitions = new(16);
   static string runtimeObjectiveEpisodeId = "";
   static int runtimeObjectiveRegistryVersion = -1;
   static bool runtimeObjectiveCountsDirty;
@@ -135,7 +136,8 @@ public static class ContentEpisodeProgression {
 
     var state = ResolveSavedOrInitialState();
     EnsureRuntimeObjectiveCache(state);
-    return runtimeObjectiveDefinitions;
+    RefreshIncompleteRuntimeObjectiveDefinitions();
+    return incompleteRuntimeObjectiveDefinitions;
   }
 
   public static bool HasCurrentObjectives() {
@@ -153,16 +155,66 @@ public static class ContentEpisodeProgression {
     return !AreObjectivesComplete(runtimeObjectives);
   }
 
-  public static bool TryResolveCurrentSpawnCount(string enemyType, out int spawnCount) {
-    return TryResolveCurrentEnemyRule(
+  public static IReadOnlyList<ContentObjectiveDefinition> ResolveCurrentEpisodeObjectives() {
+    return ResolveCurrentEpisodeObjectiveDefinitions();
+  }
+
+  public static bool IsCurrentEpisodeObjectiveComplete(ContentObjectiveDefinition definition) {
+    if (definition == null) return false;
+
+    var definitions = ResolveCurrentEpisodeObjectiveDefinitions();
+    var count = Mathf.Min(definitions.Count, runtimeObjectives.Count);
+    for (var i = 0; i < count; i++) {
+      if (!ReferenceEquals(definitions[i], definition)) continue;
+      return runtimeObjectives[i].currentCount >= runtimeObjectives[i].requiredCount;
+    }
+
+    return false;
+  }
+
+  public static bool HasCurrentEpisodeSpawnRules() {
+    var objectives = ResolveCurrentEpisodeObjectiveDefinitions();
+    for (var objectiveIndex = 0; objectiveIndex < objectives.Count; objectiveIndex++) {
+      var objective = objectives[objectiveIndex];
+      if (objective?.spawns == null) continue;
+
+      for (var ruleIndex = 0; ruleIndex < objective.spawns.Count; ruleIndex++) {
+        if (!TryParseEnemyRule(objective.spawns[ruleIndex], out _, out var spawnCount)) continue;
+        if (spawnCount > 0) return true;
+      }
+    }
+
+    return false;
+  }
+
+  public static int CollectCurrentEpisodeSpawnEnemyTypes(List<string> output) {
+    if (output == null) return 0;
+
+    output.Clear();
+    var objectives = ResolveCurrentEpisodeObjectiveDefinitions();
+    for (var objectiveIndex = 0; objectiveIndex < objectives.Count; objectiveIndex++) {
+      var objective = objectives[objectiveIndex];
+      if (objective?.spawns == null) continue;
+
+      for (var ruleIndex = 0; ruleIndex < objective.spawns.Count; ruleIndex++) {
+        if (!TryParseEnemyRule(objective.spawns[ruleIndex], out var enemyType, out _)) continue;
+        AddUniqueEnemyType(output, enemyType);
+      }
+    }
+
+    return output.Count;
+  }
+
+  public static bool TryResolveCurrentEpisodeSpawnCount(string enemyType, out int spawnCount) {
+    return TryResolveCurrentEpisodeEnemyRule(
       enemyType,
       useRespawnRules: false,
       out spawnCount
     );
   }
 
-  public static bool TryResolveCurrentRespawnSeconds(string enemyType, out int respawnSeconds) {
-    return TryResolveCurrentEnemyRule(
+  public static bool TryResolveCurrentEpisodeRespawnSeconds(string enemyType, out int respawnSeconds) {
+    return TryResolveCurrentEpisodeEnemyRule(
       enemyType,
       useRespawnRules: true,
       out respawnSeconds
@@ -216,6 +268,7 @@ public static class ContentEpisodeProgression {
     QueueRuntimeObjectiveSave();
 
     if (!AreObjectivesComplete(runtimeObjectives)) {
+      MarkEpisodeChanged();
       return false;
     }
 
@@ -330,7 +383,6 @@ public static class ContentEpisodeProgression {
         StringComparison.OrdinalIgnoreCase
       )) continue;
 
-      runtimeObjectiveDefinitions.Add(candidate);
       if (!TryParseObjectiveKey(
             candidate.objective,
             out var action,
@@ -341,6 +393,7 @@ public static class ContentEpisodeProgression {
       }
 
       var countKey = BuildObjectiveCountKey(candidate);
+      runtimeObjectiveDefinitions.Add(candidate);
       runtimeObjectives.Add(new RuntimeObjective {
         action = action,
         subject = subject,
@@ -354,8 +407,24 @@ public static class ContentEpisodeProgression {
   static void ClearRuntimeObjectiveCache() {
     runtimeObjectives.Clear();
     runtimeObjectiveDefinitions.Clear();
+    incompleteRuntimeObjectiveDefinitions.Clear();
     runtimeObjectiveEpisodeId = "";
     runtimeObjectiveRegistryVersion = -1;
+  }
+
+  static void RefreshIncompleteRuntimeObjectiveDefinitions() {
+    incompleteRuntimeObjectiveDefinitions.Clear();
+
+    var count = Mathf.Min(runtimeObjectives.Count, runtimeObjectiveDefinitions.Count);
+    for (var i = 0; i < count; i++) {
+      var objective = runtimeObjectives[i];
+      if (objective.currentCount >= objective.requiredCount) continue;
+
+      var definition = runtimeObjectiveDefinitions[i];
+      if (definition != null) {
+        incompleteRuntimeObjectiveDefinitions.Add(definition);
+      }
+    }
   }
 
   static bool ApplyObjectiveEvent(
@@ -384,7 +453,19 @@ public static class ContentEpisodeProgression {
     return changed;
   }
 
-  static bool TryResolveCurrentEnemyRule(
+  static IReadOnlyList<ContentObjectiveDefinition> ResolveCurrentEpisodeObjectiveDefinitions() {
+    if (!HasRuntimeEpisodes()) {
+      WriteRuntimeObjectiveCountsToData();
+      ClearRuntimeObjectiveCache();
+      return Array.Empty<ContentObjectiveDefinition>();
+    }
+
+    var state = ResolveSavedOrInitialState();
+    EnsureRuntimeObjectiveCache(state);
+    return runtimeObjectiveDefinitions;
+  }
+
+  static bool TryResolveCurrentEpisodeEnemyRule(
     string enemyType,
     bool useRespawnRules,
     out int value
@@ -393,7 +474,7 @@ public static class ContentEpisodeProgression {
     var normalizedEnemyType = NormalizeToken(enemyType);
     if (string.IsNullOrWhiteSpace(normalizedEnemyType)) return false;
 
-    var objectives = ResolveCurrentObjectives();
+    var objectives = ResolveCurrentEpisodeObjectiveDefinitions();
     var found = false;
     for (var objectiveIndex = 0; objectiveIndex < objectives.Count; objectiveIndex++) {
       var objective = objectives[objectiveIndex];
@@ -433,6 +514,21 @@ public static class ContentEpisodeProgression {
     if (string.IsNullOrWhiteSpace(subject)) return false;
     if (!int.TryParse(parts[1], out value)) return false;
     return value >= 0;
+  }
+
+  static void AddUniqueEnemyType(List<string> output, string enemyType) {
+    if (output == null) return;
+
+    var normalizedEnemyType = NormalizeToken(enemyType);
+    if (string.IsNullOrWhiteSpace(normalizedEnemyType)) return;
+
+    for (var i = 0; i < output.Count; i++) {
+      if (string.Equals(output[i], normalizedEnemyType, StringComparison.OrdinalIgnoreCase)) {
+        return;
+      }
+    }
+
+    output.Add(normalizedEnemyType);
   }
 
   static bool AreObjectivesComplete(

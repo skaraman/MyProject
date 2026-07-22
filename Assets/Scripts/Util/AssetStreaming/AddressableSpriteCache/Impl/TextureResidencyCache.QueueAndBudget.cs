@@ -383,7 +383,11 @@ public static partial class TextureResidencyCache {
     if (entry.pinCount > 0) {
       entry.pinCount--;
     }
-    entry.lastAccessTicks = DateTime.UtcNow.Ticks;
+    var accessTicks = frameAccessTicks;
+    if (accessTicks == 0) {
+      accessTicks = DateTime.UtcNow.Ticks;
+    }
+    entry.lastAccessTicks = accessTicks;
   }
 
   static void MaintainBudget() {

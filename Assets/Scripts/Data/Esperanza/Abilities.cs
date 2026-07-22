@@ -131,11 +131,6 @@ public static class EsperanzaAbilities {
     return abilityProgress != null ? abilityProgress.level : 0;
   }
 
-  public static int ResolveNextLevelXp(int level) {
-    var resolvedLevel = Mathf.Max(level, DefaultLevel);
-    return DefaultNextLevelXp * resolvedLevel;
-  }
-
   public static bool TryResolveAbilityAnimation(string value, out string animationName) {
     animationName = null;
     if (string.IsNullOrWhiteSpace(value)) {

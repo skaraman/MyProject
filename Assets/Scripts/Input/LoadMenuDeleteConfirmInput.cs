@@ -7,6 +7,12 @@ using UnityEngine.InputSystem;
 public class LoadMenuDeleteConfirmInput : ButtonGroup {
   const int YesIndex = 0;
   const int NoIndex = 1;
+  const string OutlineColorProperty = "_OutlineColor";
+  const string OutlineKeyword = "OUTBASE_ON";
+  const string OutlineDistortionKeyword = "OUTDIST_ON";
+
+  static readonly int OutlineColorId = Shader.PropertyToID(OutlineColorProperty);
+  static readonly Color HighlightOutlineColor = new(1f, .95f, 0f, 1f);
 
   [SerializeField] GameObject deleteConfirmRoot;
   [SerializeField] GameObject yesButton;
@@ -334,8 +340,31 @@ public class LoadMenuDeleteConfirmInput : ButtonGroup {
   }
 
   static void ApplyHighlight(GameObject button, bool isActive) {
-    ButtonShaderKeywords.ApplyToButton(button, "OUTBASE_ON", isActive);
-    ButtonShaderKeywords.ApplyToButton(button, "SHINE_ON", isActive);
+    if (button == null) return;
+
+    var outlineColor = isActive ? HighlightOutlineColor : Color.black;
+    var propertyBlock = new MaterialPropertyBlock();
+    var textAnimators = button.GetComponentsInChildren<AllIn1AnimatorInspector>(includeInactive: true);
+    for (int i = 0; i < textAnimators.Length; i++) {
+      var animator = textAnimators[i];
+      if (animator == null) continue;
+
+      // FontText renders the visible text as one SpriteRenderer per letter;
+      // the button root only has a disabled placeholder renderer.
+      var letterRenderer = animator.GetComponent<SpriteRenderer>();
+      if (letterRenderer == null || !letterRenderer.enabled) continue;
+
+      ButtonShaderKeywords.ApplyToAnimator(button, animator, OutlineKeyword, isActive);
+      ButtonShaderKeywords.ApplyToAnimator(button, animator, OutlineDistortionKeyword, isActive);
+
+      // Replace the authored black outline animation so it cannot overwrite
+      // the selection color on the next animator update.
+      animator.AddColorSequence(OutlineColorProperty, outlineColor, outlineColor, 1f);
+      propertyBlock.Clear();
+      letterRenderer.GetPropertyBlock(propertyBlock);
+      propertyBlock.SetColor(OutlineColorId, outlineColor);
+      letterRenderer.SetPropertyBlock(propertyBlock);
+    }
   }
 
   void ClearHighlights() {

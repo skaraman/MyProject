@@ -8,15 +8,11 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: nrgFillExtend
-  m_Shader: {fileID: 4800000, guid: 202ffec9202f22e478034613d6beb49c, type: 3}
+  m_Shader: {fileID: 4800000, guid: 8c41af2d91c44f5f8a12932dc8b9540f, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - GLOWLIGHT_ON
-  - GLOW_ON
-  - GRADIENT_ON
-  m_InvalidKeywords:
-  - _GLOWAFFECTLIGHT_ON
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -98,9 +94,10 @@ Material:
     - _Brightness: 0
     - _ChromAberrAlpha: 0.4
     - _ChromAberrAmount: 1
+    - _ClipMode: 0
     - _ClipUvDown: 0
     - _ClipUvLeft: 0
-    - _ClipUvRight: 0
+    - _ClipUvRight: 0.165
     - _ClipUvUp: 0
     - _ColorChangeLuminosity: 0
     - _ColorChangeTolerance: 0.25
@@ -137,8 +134,8 @@ Material:
     - _GlowAffectLight: 1
     - _GlowGlobal: 1
     - _GradBlend: 1
-    - _GradBoostX: 0.29
-    - _GradBoostY: 0.1
+    - _GradBoostX: 0.44
+    - _GradBoostY: 1.55
     - _GradIsRadial: 0
     - _GrassManualAnim: 1
     - _GrassManualToggle: 0
@@ -199,6 +196,9 @@ Material:
     - _PosterizeOutline: 0
     - _RadialClip: 45
     - _RadialClip2: 0
+    - _RadialFillAmount: 1
+    - _RadialInvert: 0
+    - _RadialReverseDirection: 0
     - _RadialStartAngle: 90
     - _RandomSeed: 0
     - _RectSize: 1
@@ -250,9 +250,9 @@ Material:
     - _FadeTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _GlowColor: {r: 1, g: 1, b: 1, a: 1}
     - _GradBotLeftCol: {r: 1, g: 0.7647059, b: 0.12941177, a: 1}
-    - _GradBotRightCol: {r: 0.39607844, g: 1, b: 0, a: 1}
+    - _GradBotRightCol: {r: 0.97466075, g: 1, b: 0.023584902, a: 1}
     - _GradTopLeftCol: {r: 1, g: 0.7647059, b: 0.128, a: 1}
-    - _GradTopRightCol: {r: 0.39245892, g: 1, b: 0, a: 1}
+    - _GradTopRightCol: {r: 1, g: 0.9371726, b: 0, a: 1}
     - _GreyscaleTintColor: {r: 1, g: 1, b: 1, a: 1}
     - _HitEffectColor: {r: 1, g: 1, b: 1, a: 1}
     - _HologramStripeColor: {r: 0, g: 1, b: 1, a: 1}
@@ -263,7 +263,9 @@ Material:
     - _OutlineTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _OverlayColor: {r: 1, g: 1, b: 1, a: 1}
     - _OverlayTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _RadialCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
     - _ShadowColor: {r: 0, g: 0, b: 0, a: 1}
     - _ShineColor: {r: 1, g: 1, b: 1, a: 1}
+    - _SpriteUvRect: {r: 0, g: 0, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

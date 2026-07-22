@@ -197,53 +197,53 @@ public static class EquippedItems {
   static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearForms() {
     return new Dictionary<string, Dictionary<string, GearItem>>(StringComparer.Ordinal) {
       ["Base"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateGearItem("Normal", "Regular Top", "Chest", "Base_aa", "Brown"),
-        ["Legs"] = CreateGearItem("Normal", "Regular Bottoms", "Legs", "Base_aa", "Brown"),
-        ["Feet"] = CreateGearItem("Normal", "Regular Boots", "Feet", "Base_aa", "Brown"),
+        ["Chest"] = CreateFormGearItem("Base", "Normal", "Regular Top", "Chest", "Base_aa"),
+        ["Legs"] = CreateFormGearItem("Base", "Normal", "Regular Bottoms", "Legs", "Base_aa"),
+        ["Feet"] = CreateFormGearItem("Base", "Normal", "Regular Boots", "Feet", "Base_aa"),
         ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Aqua"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateGearItem("Normal", "Wetsuit Top", "Chest", "Aqua_aa", "LightBlue"),
-        ["Legs"] = CreateGearItem("Normal", "Wetsuit Bottoms", "Legs", "Aqua_aa", "LightBlue"),
+        ["Chest"] = CreateFormGearItem("Aqua", "Normal", "Wetsuit Top", "Chest", "Aqua_aa"),
+        ["Legs"] = CreateFormGearItem("Aqua", "Normal", "Wetsuit Bottoms", "Legs", "Aqua_aa"),
         ["Head"] = null, ["Feet"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Bolt"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateGearItem("Normal", "Anti-Static Top", "Chest", "Bolt_aa", "Grey"),
-        ["Legs"] = CreateGearItem("Normal", "Anti-Static Pants", "Legs", "Bolt_aa", "Grey"),
-        ["Feet"] = CreateGearItem("Normal", "Anti-static Boots", "Feet", "Bolt_aa", "Grey"),
+        ["Chest"] = CreateFormGearItem("Bolt", "Normal", "Anti-Static Top", "Chest", "Bolt_aa"),
+        ["Legs"] = CreateFormGearItem("Bolt", "Normal", "Anti-Static Pants", "Legs", "Bolt_aa"),
+        ["Feet"] = CreateFormGearItem("Bolt", "Normal", "Anti-static Boots", "Feet", "Bolt_aa"),
         ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Cold"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateGearItem("Normal", "Warm Top", "Chest", "Cold_aa", "DarkBlue"),
-        ["Legs"] = CreateGearItem("Normal", "Warm Bottoms", "Legs", "Cold_aa", "DarkBlue"),
-        ["Feet"] = CreateGearItem("Normal", "Warm Footies", "Feet", "Cold_aa", "DarkBlue"),
+        ["Chest"] = CreateFormGearItem("Cold", "Normal", "Warm Top", "Chest", "Cold_aa"),
+        ["Legs"] = CreateFormGearItem("Cold", "Normal", "Warm Bottoms", "Legs", "Cold_aa"),
+        ["Feet"] = CreateFormGearItem("Cold", "Normal", "Warm Footies", "Feet", "Cold_aa"),
         ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Fire"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateGearItem("Normal", "Sheer Top", "Chest", "Fire_aa", "Yellow"),
-        ["Legs"] = CreateGearItem("Normal", "Skimmies", "Legs", "Fire_aa", "Yellow"),
+        ["Chest"] = CreateFormGearItem("Fire", "Normal", "Sheer Top", "Chest", "Fire_aa"),
+        ["Legs"] = CreateFormGearItem("Fire", "Normal", "Skimmies", "Legs", "Fire_aa"),
         ["Head"] = null, ["Feet"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Dark"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateGearItem("Normal", "Void Shirt", "Chest", "Dark_aa", "DarkPurple"),
-        ["Legs"] = CreateGearItem("Normal", "Void Pants", "Legs", "Dark_aa", "DarkPurple"),
-        ["Feet"] = CreateGearItem("Normal", "Void Footies", "Feet", "Dark_aa", "DarkPurple"),
-        ["Arms"] = CreateGearItem("Normal", "Void Gloves", "Arms", "Dark_aa", "DarkPurple"),
+        ["Chest"] = CreateFormGearItem("Dark", "Normal", "Void Shirt", "Chest", "Dark_aa"),
+        ["Legs"] = CreateFormGearItem("Dark", "Normal", "Void Pants", "Legs", "Dark_aa"),
+        ["Feet"] = CreateFormGearItem("Dark", "Normal", "Void Footies", "Feet", "Dark_aa"),
+        ["Arms"] = CreateFormGearItem("Dark", "Normal", "Void Gloves", "Arms", "Dark_aa"),
         ["Head"] = null, ["Shoulders"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
@@ -285,5 +285,15 @@ public static class EquippedItems {
       gearColor = gearColor,
       boosts = new List<BoostEntry>()
     };
+  }
+
+  static GearItem CreateFormGearItem(string formName, string type, string name, string slot, string gearId) {
+    ShaderColors.TryGetFormColor(
+      formName,
+      ShaderColors.PrimaryGroup,
+      out _,
+      out var colorName
+    );
+    return CreateGearItem(type, name, slot, gearId, colorName ?? "");
   }
 }

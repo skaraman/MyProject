@@ -14,6 +14,9 @@ public class CharacterState : MonoBehaviour {
   private GearController gearController;
   private bool formsSavePending;
   private int formsSaveSlot = -1;
+  private readonly EndlessNumber currentHealth = new();
+  private readonly EndlessNumber lastKnownMaximumHealth = new();
+  private bool currentHealthInitialized;
 
   // Cache list to avoid allocations
   private readonly List<string> cachedKeys = new();
@@ -29,6 +32,50 @@ public class CharacterState : MonoBehaviour {
     if (gearController == null) {
       gearController = GetComponent<GearController>();
     }
+  }
+
+  public EndlessNumber CurrentHealth {
+    get {
+      if (!currentHealthInitialized) {
+        SynchronizeCurrentHealthToMaximum();
+      }
+      return currentHealth;
+    }
+  }
+
+  public EndlessNumber MaximumHealth => ResolveMaximumHealth();
+
+  public EndlessNumber ApplyDamage(EndlessNumber damage, string hitId = "") {
+    var resolvedDamage = EndlessNumber.Max(damage ?? new EndlessNumber(), new EndlessNumber());
+    if (!resolvedDamage.IsPositive) {
+      return new EndlessNumber();
+    }
+
+    SynchronizeCurrentHealthToMaximum();
+    var healthBefore = currentHealth.Copy();
+    currentHealth.Set(EndlessNumber.Max(healthBefore - resolvedDamage, new EndlessNumber()));
+    var actualDamage = healthBefore - currentHealth;
+    if (!actualDamage.IsPositive) {
+      return actualDamage;
+    }
+
+    MessageBus.Send(
+      CharacterMessageTopics.Damaged,
+      new CharacterDamageEvent(
+        actualDamage,
+        currentHealth,
+        ResolveMaximumHealth(),
+        hitId
+      )
+    );
+    return actualDamage;
+  }
+
+  public void RestoreHealthToMaximum() {
+    var maximumHealth = ResolveMaximumHealth();
+    currentHealth.Set(maximumHealth);
+    lastKnownMaximumHealth.Set(maximumHealth);
+    currentHealthInitialized = true;
   }
 
   void Awake() {
@@ -205,12 +252,30 @@ public class CharacterState : MonoBehaviour {
       var thresholdBeforeLevel = progress.nextLevelXp;
       progress.currentXp -= thresholdBeforeLevel;
       progress.level += 1;
-      progress.nextLevelXp = ResolveNextLevelXp(thresholdBeforeLevel, resolvedForm, progress.level, source);
+      progress.nextLevelXp = ResolveNextLevelXp(
+        thresholdBeforeLevel,
+        "form",
+        resolvedForm,
+        progress.level,
+        source
+      );
     }
 
     var levelsGained = progress.level - previousLevel;
     QueueFormsSave();
     MessageBus.Send(CharacterMessageTopics.FormProgressChanged, resolvedForm);
+    MessageBus.Send(
+      CharacterMessageTopics.FormXpGained,
+      new XpProgressGain(
+        resolvedForm,
+        previousLevel,
+        previousCurrentXp,
+        previousNextLevelXp,
+        progress.level,
+        progress.currentXp,
+        progress.nextLevelXp
+      )
+    );
 
     if (ShouldLogLoadStateDebug()) {
       RuntimeLog.Log(
@@ -266,14 +331,33 @@ public class CharacterState : MonoBehaviour {
 
     progress.currentXp += amount;
     while (progress.currentXp >= progress.nextLevelXp) {
-      progress.currentXp -= progress.nextLevelXp;
+      var thresholdBeforeLevel = progress.nextLevelXp;
+      progress.currentXp -= thresholdBeforeLevel;
       progress.level += 1;
-      progress.nextLevelXp = EsperanzaAbilities.ResolveNextLevelXp(progress.level);
+      progress.nextLevelXp = ResolveNextLevelXp(
+        thresholdBeforeLevel,
+        "ability",
+        animationName,
+        progress.level,
+        source
+      );
     }
 
     var levelsGained = progress.level - previousLevel;
     QueueFormsSave();
     MessageBus.Send(CharacterMessageTopics.AbilityProgressChanged, animationName);
+    MessageBus.Send(
+      CharacterMessageTopics.AbilityXpGained,
+      new XpProgressGain(
+        animationName,
+        previousLevel,
+        previousCurrentXp,
+        previousNextLevelXp,
+        progress.level,
+        progress.currentXp,
+        progress.nextLevelXp
+      )
+    );
 
     if (ShouldLogLoadStateDebug()) {
       RuntimeLog.Log(
@@ -358,16 +442,9 @@ public class CharacterState : MonoBehaviour {
     return true;
   }
 
-  public int GetAvailableStatPoints(string formName) {
-    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
-    if (string.IsNullOrWhiteSpace(resolvedForm)) {
-      return 0;
-    }
-
-    FormStatsValues.EnsureForm(resolvedForm);
-    var progress = EsperanzaForms.EnsureProgress(resolvedForm);
-    var earnedPoints = Mathf.Max(0, (progress != null ? progress.level : EsperanzaForms.DefaultLevel) - EsperanzaForms.DefaultLevel);
-    var spentPoints = GetSpentStatPoints(resolvedForm);
+  public int GetAvailableStatPoints() {
+    var earnedPoints = GetEarnedStatPoints();
+    var spentPoints = GetSpentStatPoints();
     return Mathf.Max(0, earnedPoints - spentPoints);
   }
 
@@ -382,7 +459,7 @@ public class CharacterState : MonoBehaviour {
       return false;
     }
 
-    var availablePoints = GetAvailableStatPoints(resolvedForm);
+    var availablePoints = GetAvailableStatPoints();
     if (availablePoints <= 0) {
       RuntimeLog.Log(
         "[CharacterState][TryAddFormStatPoint] Ignored spend form='" + resolvedForm +
@@ -396,7 +473,7 @@ public class CharacterState : MonoBehaviour {
     var previousValue = FormStatsValues.GetValue(resolvedForm, resolvedStat);
     AddStats(resolvedForm, resolvedStat, 1, source);
     var nextValue = FormStatsValues.GetValue(resolvedForm, resolvedStat);
-    var remainingPoints = GetAvailableStatPoints(resolvedForm);
+    var remainingPoints = GetAvailableStatPoints();
 
     RuntimeLog.Log(
       "[CharacterState][TryAddFormStatPoint] form='" + resolvedForm +
@@ -467,7 +544,12 @@ public class CharacterState : MonoBehaviour {
     cachedKeys.Clear();
     cachedKeys.AddRange(AllStatValues.Esperanza.Keys);
     for (var i = 0; i < cachedKeys.Count; i++) {
-      AllStatValues.Esperanza[cachedKeys[i]] = 0f;
+      var statName = cachedKeys[i];
+      if (AllStatValues.Esperanza.TryGetValue(statName, out var statValue) && statValue != null) {
+        statValue.Reset();
+      } else {
+        AllStatValues.Esperanza[statName] = new StatValue(statName);
+      }
     }
 
     foreach (var form in FormStatIncreases.increases) {
@@ -478,7 +560,14 @@ public class CharacterState : MonoBehaviour {
         }
 
         foreach (var minorStat in majorStat.Value) {
-          AllStatValues.Esperanza[minorStat.Key] += minorStat.Value * FormStatsValues.values[form.Key][majorStat.Key];
+          if (!AllStatValues.Esperanza.TryGetValue(minorStat.Key, out var statValue) || statValue == null) {
+            statValue = new StatValue(minorStat.Key);
+            AllStatValues.Esperanza[minorStat.Key] = statValue;
+          }
+
+          statValue.AddInPlace(
+            (double)minorStat.Value * FormStatsValues.values[form.Key][majorStat.Key]
+          );
         }
       }
     }
@@ -490,15 +579,52 @@ public class CharacterState : MonoBehaviour {
         level += majorStat.Value;
       }
     }
+
+    SynchronizeCurrentHealthToMaximum();
   }
 
   void ResetRuntimeState() {
+    currentHealth.Set(0d);
+    lastKnownMaximumHealth.Set(0d);
+    currentHealthInitialized = false;
     EsperanzaForms.ResetRuntimeState();
     EsperanzaAbilities.ResetRuntimeState();
     EsperanzaAbilityLoadouts.ResetRuntimeState();
     FormStatsValues.ResetToDefaults();
     EquippedItems.ResetToDefaults();
     DialogController.ResetRuntimeState("character_reset");
+  }
+
+  EndlessNumber ResolveMaximumHealth() {
+    if (!AllStatValues.Esperanza.TryGetValue("HP", out var healthStat) ||
+        healthStat == null ||
+        healthStat.IsPercentage ||
+        healthStat.EndlessValue == null) {
+      return new EndlessNumber();
+    }
+
+    return EndlessNumber.Max(healthStat.EndlessValue, new EndlessNumber());
+  }
+
+  void SynchronizeCurrentHealthToMaximum() {
+    var maximumHealth = ResolveMaximumHealth();
+    var shouldRestoreToMaximum = !currentHealthInitialized ||
+                                 (!lastKnownMaximumHealth.IsPositive && maximumHealth.IsPositive);
+
+    if (shouldRestoreToMaximum) {
+      currentHealth.Set(maximumHealth);
+    }
+    else {
+      currentHealth.Set(
+        EndlessNumber.Min(
+          EndlessNumber.Max(currentHealth, new EndlessNumber()),
+          maximumHealth
+        )
+      );
+    }
+
+    lastKnownMaximumHealth.Set(maximumHealth);
+    currentHealthInitialized = true;
   }
 
   void ApplyLoadedFormState(SaveData loadedForms) {
@@ -644,12 +770,19 @@ public class CharacterState : MonoBehaviour {
     MessageBus.Send(CharacterMessageTopics.FormProgressChanged, resolvedForm);
   }
 
-  int ResolveNextLevelXp(int currentThreshold, string formName, int nextLevel, string source) {
+  int ResolveNextLevelXp(
+    int currentThreshold,
+    string progressType,
+    string progressId,
+    int nextLevel,
+    string source
+  ) {
     var useSilverRatio = UnityEngine.Random.value < 0.5f;
     var ratio = useSilverRatio ? EsperanzaForms.SilverRatio : EsperanzaForms.GoldenRatio;
     var nextThreshold = Mathf.CeilToInt((float)(currentThreshold * ratio));
     RuntimeLog.Log(
-      "[CharacterState][LevelCurve] form='" + (formName ?? "") +
+      "[CharacterState][LevelCurve] progress_type='" + (progressType ?? "") +
+      "' progress_id='" + (progressId ?? "") +
       "' next_level=" + nextLevel +
       " source='" + (source ?? "") +
       "' ratio='" + (useSilverRatio ? "silver" : "gold") +
@@ -659,20 +792,31 @@ public class CharacterState : MonoBehaviour {
     return Mathf.Max(nextThreshold, currentThreshold + 1);
   }
 
-  int GetSpentStatPoints(string resolvedForm) {
-    if (string.IsNullOrWhiteSpace(resolvedForm)) {
-      return 0;
+  int GetEarnedStatPoints() {
+    var earnedPoints = 0;
+    foreach (var formName in EsperanzaForms.KnownForms) {
+      var progress = EsperanzaForms.EnsureProgress(formName);
+      earnedPoints += Mathf.Max(
+        0,
+        (progress != null ? progress.level : EsperanzaForms.DefaultLevel) - EsperanzaForms.DefaultLevel
+      );
     }
 
-    FormStatsValues.EnsureForm(resolvedForm);
-    if (!FormStatsValues.values.TryGetValue(resolvedForm, out var stats) || stats == null) {
-      return 0;
-    }
+    return earnedPoints;
+  }
 
+  int GetSpentStatPoints() {
     var spentPoints = 0;
-    foreach (var stat in stats) {
-      var defaultValue = FormStatsValues.GetDefaultValue(resolvedForm, stat.Key);
-      spentPoints += Mathf.Max(0, stat.Value - defaultValue);
+    foreach (var formName in EsperanzaForms.KnownForms) {
+      FormStatsValues.EnsureForm(formName);
+      if (!FormStatsValues.values.TryGetValue(formName, out var stats) || stats == null) {
+        continue;
+      }
+
+      foreach (var stat in stats) {
+        var defaultValue = FormStatsValues.GetDefaultValue(formName, stat.Key);
+        spentPoints += Mathf.Max(0, stat.Value - defaultValue);
+      }
     }
 
     return spentPoints;

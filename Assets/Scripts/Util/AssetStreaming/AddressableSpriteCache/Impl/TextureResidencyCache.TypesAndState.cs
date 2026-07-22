@@ -48,6 +48,8 @@ public static partial class TextureResidencyCache {
     public AsyncOperationHandle<TextAsset> metadataAtlasMetadataHandle;
     public GeneratedAtlasSpriteSynthesisUtility.AtlasImportPayload parsedGroupedMetadata;
     public GeneratedAtlasSpriteSynthesisUtility.AtlasImportPayload parsedMetadataAtlasMetadata;
+    public Dictionary<string, GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload> groupedPayloadsByName;
+    public Dictionary<string, GeneratedAtlasSpriteSynthesisUtility.AtlasSpriteImportPayload> metadataPayloadsByName;
     public List<AsyncOperationHandle<Sprite>> exactSliceSupplementHandles;
     public List<IResourceLocation> pendingAssetLoadLocations;
     public List<IResourceLocation> activeAssetLoadLocations;
