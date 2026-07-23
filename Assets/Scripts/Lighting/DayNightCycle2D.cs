@@ -63,7 +63,6 @@ public class DayNightCycle2D : MonoBehaviour {
   // Time tracking
   int lastNotifiedHour = -1;
   int lastNotifiedMinute = -1;
-  string lastObservedLocationId = "";
   Action unsubscribeLocationUpdates;
 
   [SerializeField, Min(1)] int dayCount = 1;
@@ -155,6 +154,16 @@ public class DayNightCycle2D : MonoBehaviour {
     ApplyLightingForCurrentTime();
   }
 
+  void Start() {
+    if (Application.isPlaying) {
+      var locId = LocationEnemyData.NormalizeLocationId(LocationManager.currentLocation);
+      if (LocationEnemyData.ContainsLocation(locId) &&
+          !string.Equals(locId, LocationEnemyData.MainMenuLocationId, StringComparison.OrdinalIgnoreCase)) {
+        RandomizeTime();
+      }
+    }
+  }
+
   void OnEnable() {
     if (Instance == null) {
       Instance = this;
@@ -240,11 +249,7 @@ public class DayNightCycle2D : MonoBehaviour {
 
   void OnLocationUpdated(object payload) {
     var locationId = LocationEnemyData.NormalizeLocationId(Convert.ToString(payload));
-    if (string.Equals(lastObservedLocationId, locationId, StringComparison.OrdinalIgnoreCase)) {
-      return;
-    }
 
-    lastObservedLocationId = locationId;
     if (!LocationEnemyData.ContainsLocation(locationId) ||
         string.Equals(locationId, LocationEnemyData.MainMenuLocationId, StringComparison.OrdinalIgnoreCase)) {
       return;

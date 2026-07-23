@@ -436,5 +436,10 @@ public partial class AnimationController {
     scale.x = Mathf.Abs(scale.x) * (isFacingRight ? 1f : -1f);
     rootTransform.localScale = scale;
     SetBounces();
+    
+    var softBones = rootTransform.GetComponentsInChildren<EZhex1991.EZSoftBone.EZSoftBone>(true);
+    for (int i = 0; i < softBones.Length; i++) {
+      softBones[i].SetRestState();
+    }
   }
 }

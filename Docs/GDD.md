@@ -33,6 +33,24 @@ Core requirement: no visible freeze/unfreeze or blank sprite frames during anima
 - All outfit parts have corresponding sprite animation data for the animation groups above.
 - Only equipped gear sets need to be actively loaded.
 - Gear changes happen in menu context, not live during core combat loop.
+Esperanza has forms -
+each Form has its own ablities and equipment
+when Esperanza changes forms her abilities and equipment change to that form
+All forms have these default animations -
+Walk
+Run
+Sprint
+Stance
+Breathe
+Jump
+JumpDouble
+JumpLanding
+JumpFalling
+Dance
+Block
+Dodge
+and all the defined x_To_Y for these at Interrupts.cs where X and Y are one of the animations above (eg WalkToRun)
+Forms have 8 unique moves which can vary depending on player choice but they will always only be 8
 
 ### Enemy System
 - Enemies do not change gear.

@@ -8,9 +8,9 @@ public sealed class EffectLight2D : MonoBehaviour {
   [SerializeField] Light2D effectLight;
   [SerializeField] Color lightColor = Color.white;
   [SerializeField, Min(0f)] float baseIntensity = 1.15f;
-  [SerializeField, Range(0f, 1f)] float intensityFlicker = 0.55f;
+  [SerializeField, Range(0f, 1f)] float intensityFlicker = 0.85f;
   [SerializeField, Min(0f)] float flickerFrequency = 22f;
-  [SerializeField, Range(0f, 0.5f)] float radiusFlicker = 0.12f;
+  [SerializeField, Range(0f, 1f)] float radiusFlicker = 0.35f;
   [SerializeField, Min(0f)] float radiusPulseFrequency = 3f;
   [SerializeField, Min(0f)] float innerRadius = 0.08f;
   [SerializeField, Min(0.01f)] float outerRadius = 0.65f;

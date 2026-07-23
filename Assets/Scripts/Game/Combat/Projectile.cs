@@ -76,6 +76,7 @@ public class Projectile : MonoBehaviour {
   private SpriteWithNormals configuredSpriteTarget;
   private PolygonCollider2D configuredHitboxCollider;
   private HitBox2D offensiveHitBox;
+  private ProjectedSpriteShadowCaster2D shadowCaster;
 
   public string PoolKey => poolKey;
 
@@ -86,6 +87,18 @@ public class Projectile : MonoBehaviour {
     rb2d = GetComponent<Rigidbody2D>();
     CaptureAuthoredSettings();
     InitializeAnimationController();
+    EnsureShadowCaster();
+  }
+
+  void EnsureShadowCaster() {
+    shadowCaster = GetComponent<ProjectedSpriteShadowCaster2D>();
+    if (shadowCaster == null) {
+      shadowCaster = gameObject.AddComponent<ProjectedSpriteShadowCaster2D>();
+      shadowCaster.IsGlowMode = true;
+      shadowCaster.CastNearestLocalShadow = false;
+    } else {
+      shadowCaster.IsGlowMode = true;
+    }
   }
 
   void OnEnable() {
@@ -137,6 +150,11 @@ public class Projectile : MonoBehaviour {
     }
     ResetLifetime();
     ConfigureAnimationController(effectKey);
+    
+    if (shadowCaster != null) {
+      shadowCaster.ConfigureSources(animationController);
+    }
+
     animationController.ForceLoop = loopAnimation;
     if (!string.IsNullOrEmpty(effectKey)) {
       animationController.PlayAnimation(effectKey, true, resolveInterrupts: false);

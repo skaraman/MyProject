@@ -26,6 +26,8 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
 
   const string ShadowShaderResourcePath = "Shaders/ProjectedSpriteShadow";
   const string ShadowShaderName = "Esperanza/ProjectedSpriteShadow";
+  const string GlowShaderResourcePath = "Shaders/ProjectedSpriteGlow";
+  const string GlowShaderName = "Esperanza/ProjectedSpriteGlow";
 
   static readonly int GroundPointPropertyId = Shader.PropertyToID("_GroundPoint");
   static readonly int ProjectionLengthPropertyId = Shader.PropertyToID("_ProjectionLength");
@@ -43,6 +45,11 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   [SerializeField] int shadowGroupOrderOffset;
   [SerializeField] int localShadowOrderOffset = 1;
   [SerializeField, Min(0.05f)] float localLightReselectSeconds = 0.12f;
+  [SerializeField] bool isGlowMode = false;
+
+  public bool CastSunShadow { get => castSunShadow; set => castSunShadow = value; }
+  public bool CastNearestLocalShadow { get => castNearestLocalShadow; set => castNearestLocalShadow = value; }
+  public bool IsGlowMode { get => isGlowMode; set => isGlowMode = value; }
 
   readonly List<SpriteWithNormals> configuredSources = new();
   readonly HashSet<SpriteWithNormals> configuredSourceSet = new();
@@ -245,7 +252,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       return;
     }
 
-    ApplyProjection(sunMaterial, groundPosition, projection);
+    ApplyProjection(sunMaterial, groundPosition, projection, ResolveGlowTintColor());
     SyncBindings(
       sunBindings,
       true,
@@ -289,7 +296,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       return;
     }
 
-    ApplyProjection(localMaterial, groundPosition, projection);
+    ApplyProjection(localMaterial, groundPosition, projection, ResolveGlowTintColor());
     SyncBindings(
       localBindings,
       true,
@@ -316,9 +323,12 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       return;
     }
 
-    var shader = Resources.Load<Shader>(ShadowShaderResourcePath);
+    var shaderPath = isGlowMode ? GlowShaderResourcePath : ShadowShaderResourcePath;
+    var shaderName = isGlowMode ? GlowShaderName : ShadowShaderName;
+
+    var shader = Resources.Load<Shader>(shaderPath);
     if (shader == null) {
-      shader = Shader.Find(ShadowShaderName);
+      shader = Shader.Find(shaderName);
     }
     if (shader == null) {
       LogMissingShaderOnce();
@@ -736,16 +746,30 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     return projectedPoint;
   }
 
+  Color ResolveGlowTintColor() {
+    if (!isGlowMode) return shadowColor;
+    if (configuredSources.Count == 0 || configuredSources[0] == null) return shadowColor;
+    var renderer = configuredSources[0].GetComponent<SpriteRenderer>();
+    if (renderer == null) return shadowColor;
+    
+    Color tint = renderer.color;
+    if (renderer.sharedMaterial != null && renderer.sharedMaterial.HasProperty("_Color")) {
+        tint *= renderer.sharedMaterial.GetColor("_Color");
+    }
+    return tint;
+  }
+
   void ApplyProjection(
     Material material,
     Vector2 groundPosition,
-    SceneLighting2D.ShadowProjection projection
+    SceneLighting2D.ShadowProjection projection,
+    Color currentTint
   ) {
     if (material == null) {
       return;
     }
 
-    var resolvedColor = shadowColor;
+    var resolvedColor = isGlowMode ? currentTint : shadowColor;
     resolvedColor.a *= projection.Opacity;
     material.SetColor(ShadowColorPropertyId, resolvedColor);
     material.SetVector(

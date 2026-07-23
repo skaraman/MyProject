@@ -109,6 +109,10 @@ public class EnemyAIController : MonoBehaviour {
       return;
     }
 
+    if (!SingleSceneManager.IsBlackscreenFullyTransparent) {
+      return;
+    }
+
     switch (behaviourState) {
       case BehaviourState.Decide:
         DecideNextBehaviour();
