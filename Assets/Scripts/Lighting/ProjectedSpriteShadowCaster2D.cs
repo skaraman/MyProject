@@ -11,6 +11,17 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     public SpriteRenderer ProxyRenderer;
     public Transform ProxyTransform;
     public MaterialPropertyBlock PropertyBlock;
+
+    public Sprite LastSprite;
+    public Color LastColor;
+    public bool LastFlipX;
+    public bool LastFlipY;
+    public Vector3 LastPosition;
+    public Quaternion LastRotation;
+    public Vector3 LastScale;
+    public Vector2 LastGroundPosition;
+    public float LastVerticalDisplacement;
+    public SceneLighting2D.ShadowProjection LastProjection;
   }
 
   const string ShadowShaderResourcePath = "Shaders/ProjectedSpriteShadow";
@@ -516,10 +527,49 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       return;
     }
 
-    proxyRenderer.sprite = sourceRenderer.sprite;
-    proxyRenderer.color = sourceRenderer.color;
-    proxyRenderer.flipX = sourceRenderer.flipX;
-    proxyRenderer.flipY = sourceRenderer.flipY;
+    proxyRenderer.enabled = true;
+
+    var sourceTransform = sourceRenderer.transform;
+    var currentSprite = sourceRenderer.sprite;
+    var currentColor = sourceRenderer.color;
+    var currentFlipX = sourceRenderer.flipX;
+    var currentFlipY = sourceRenderer.flipY;
+    var currentPosition = sourceTransform.position;
+    var currentRotation = sourceTransform.rotation;
+    var currentScale = sourceTransform.lossyScale;
+
+    bool hasChanged = binding.LastSprite != currentSprite ||
+                      binding.LastColor != currentColor ||
+                      binding.LastFlipX != currentFlipX ||
+                      binding.LastFlipY != currentFlipY ||
+                      binding.LastPosition != currentPosition ||
+                      binding.LastRotation != currentRotation ||
+                      binding.LastScale != currentScale ||
+                      binding.LastGroundPosition != groundPosition ||
+                      binding.LastVerticalDisplacement != verticalDisplacement ||
+                      binding.LastProjection.Length != projection.Length ||
+                      binding.LastProjection.Direction != projection.Direction ||
+                      binding.LastProjection.Opacity != projection.Opacity;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    binding.LastSprite = currentSprite;
+    binding.LastColor = currentColor;
+    binding.LastFlipX = currentFlipX;
+    binding.LastFlipY = currentFlipY;
+    binding.LastPosition = currentPosition;
+    binding.LastRotation = currentRotation;
+    binding.LastScale = currentScale;
+    binding.LastGroundPosition = groundPosition;
+    binding.LastVerticalDisplacement = verticalDisplacement;
+    binding.LastProjection = projection;
+
+    proxyRenderer.sprite = currentSprite;
+    proxyRenderer.color = currentColor;
+    proxyRenderer.flipX = currentFlipX;
+    proxyRenderer.flipY = currentFlipY;
     proxyRenderer.drawMode = sourceRenderer.drawMode;
     proxyRenderer.size = sourceRenderer.size;
     proxyRenderer.tileMode = sourceRenderer.tileMode;
@@ -527,8 +577,8 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     proxyRenderer.sortingLayerID = boundLightingManager.ShadowSortingLayerId;
     proxyRenderer.sortingOrder = sourceRenderer.sortingOrder;
 
-    SyncProxyTransform(binding.ProxyTransform, sourceRenderer.transform);
-    var sourceLocalToWorld = sourceRenderer.transform.localToWorldMatrix;
+    SyncProxyTransform(binding.ProxyTransform, sourceTransform);
+    var sourceLocalToWorld = sourceTransform.localToWorldMatrix;
     sourceLocalToWorld.m13 -= verticalDisplacement;
     binding.PropertyBlock.SetMatrix(
       SourceLocalToWorldPropertyId,
@@ -546,7 +596,6 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       groundPosition,
       projection
     );
-    proxyRenderer.enabled = true;
   }
 
   static void SyncProxyTransform(Transform proxyTransform, Transform sourceTransform) {

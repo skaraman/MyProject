@@ -106,9 +106,11 @@ public class FontText : MonoBehaviour {
   [FixedValues("auto", "up", "down")] public string lineDirection = "auto";
 
   private List<GameObject> activeChars = new();
+  private HashSet<GameObject> activeCharsSet = new();
   private List<SpriteRenderer> activeCharRenderers = new();
   private List<int> activeCharSourceIndices = new();
   private Stack<GameObject> charPool = new();
+  private HashSet<GameObject> charPoolSet = new();
   private List<float> totalWidths = new();
   private List<float> lineHeights = new();
   private List<int> lineCharCounts = new(); // Track chars per line
@@ -146,6 +148,7 @@ public class FontText : MonoBehaviour {
       var characterObject = Instantiate(characterPrefab, transform, false);
       characterObject.SetActive(false);
       charPool.Push(characterObject);
+      charPoolSet.Add(characterObject);
       glyphHierarchyChanged = true;
       currentCapacity += 1;
     }
@@ -259,6 +262,7 @@ public class FontText : MonoBehaviour {
     GameObject obj;
     if (charPool.Count > 0) {
       obj = charPool.Pop();
+      charPoolSet.Remove(obj);
     }
     else {
       obj = Instantiate(characterPrefab);
@@ -267,21 +271,26 @@ public class FontText : MonoBehaviour {
     obj.transform.SetParent(transform, false);
     obj.transform.SetAsLastSibling();
     obj.SetActive(true);
+    activeCharsSet.Add(obj);
     return obj;
   }
 
   void RecycleChar(GameObject obj) {
     if (obj == null) return;
+    activeCharsSet.Remove(obj);
     obj.SetActive(false);
     charPool.Push(obj);
+    charPoolSet.Add(obj);
   }
 
   void Clear() {
     foreach (var obj in activeChars) {
       obj.SetActive(false);
       charPool.Push(obj);
+      charPoolSet.Add(obj);
     }
     activeChars.Clear();
+    activeCharsSet.Clear();
     activeCharRenderers.Clear();
     activeCharSourceIndices.Clear();
     totalWidths.Clear();
@@ -297,7 +306,7 @@ public class FontText : MonoBehaviour {
     for (var i = 0; i < childScratch.Count; i++) {
       var child = childScratch[i];
       var go = child.gameObject;
-      if (!activeChars.Contains(go) && !charPool.Contains(go)) {
+      if (!activeCharsSet.Contains(go) && !charPoolSet.Contains(go)) {
         DestroyImmediate(go);
         glyphHierarchyChanged = true;
       }
@@ -672,18 +681,21 @@ public class FontText : MonoBehaviour {
 
   public void Reset() {
     foreach (var obj in activeChars) DestroyImmediate(obj);
+    foreach (var obj in charPool) DestroyImmediate(obj);
     if (activeChars.Count > 0 || charPool.Count > 0) {
       glyphHierarchyChanged = true;
     }
     activeChars.Clear();
+    activeCharsSet.Clear();
     activeCharRenderers.Clear();
     activeCharSourceIndices.Clear();
     charPool.Clear();
+    charPoolSet.Clear();
 
     gameObjectScratch.Clear();
     for (int i = 0; i < transform.childCount; i++) {
       var t = transform.GetChild(i).gameObject;
-      if (!activeChars.Contains(t) && !charPool.Contains(t)) {
+      if (!activeCharsSet.Contains(t) && !charPoolSet.Contains(t)) {
         gameObjectScratch.Add(t);
         glyphHierarchyChanged = true;
       }

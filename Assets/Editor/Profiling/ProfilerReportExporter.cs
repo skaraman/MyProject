@@ -57,6 +57,23 @@ public static class ProfilerReportExporter {
     ExportFrame(worstFrameIndex);
   }
 
+  [MenuItem("Tools/Diagnostics/Export Set of Profiler Frames for Codex")]
+  static void ExportSetOfProfilerFrames() {
+    var firstFrameIndex = ProfilerDriver.firstFrameIndex;
+    var lastFrameIndex = ProfilerDriver.lastFrameIndex;
+
+    if (firstFrameIndex < 0 || lastFrameIndex < firstFrameIndex) {
+      EditorUtility.DisplayDialog(
+        "Profiler Export",
+        "The Profiler has no readable buffered frames.",
+        "OK"
+      );
+      return;
+    }
+
+    ExportFrameRange(firstFrameIndex, lastFrameIndex);
+  }
+
   static bool TryGetPlayerLoopTimeMs(int frameIndex, out double playerLoopTimeMs) {
     playerLoopTimeMs = 0d;
     using (var frameData = ProfilerDriver.GetHierarchyFrameDataView(
@@ -87,14 +104,18 @@ public static class ProfilerReportExporter {
   }
 
   static void ExportFrame(int frameIndex) {
+    ExportFrameRange(frameIndex, frameIndex);
+  }
+
+  static void ExportFrameRange(int startFrameIndex, int endFrameIndex) {
     var outputPath = GetOutputPath();
     Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
 
-    var exportedThreadCount = WriteFrameReport(frameIndex, outputPath);
+    var exportedThreadCount = WriteFrameReport(startFrameIndex, endFrameIndex, outputPath);
     if (exportedThreadCount <= 0) {
       EditorUtility.DisplayDialog(
         "Profiler Export",
-        "The selected frame has no readable CPU hierarchy data.",
+        "The selected frame range has no readable CPU hierarchy data.",
         "OK"
       );
       return;
@@ -102,33 +123,51 @@ public static class ProfilerReportExporter {
 
     EditorGUIUtility.systemCopyBuffer = outputPath;
     EditorUtility.RevealInFinder(outputPath);
-    Debug.Log(
-      "[ProfilerReportExporter] Exported frame " +
-      (frameIndex + 1) +
-      " to '" +
-      outputPath +
-      "'."
-    );
+
+    var frameCount = endFrameIndex - startFrameIndex + 1;
+    if (frameCount == 1) {
+      Debug.Log(
+        "[ProfilerReportExporter] Exported frame " +
+        (startFrameIndex + 1) +
+        " to '" +
+        outputPath +
+        "'."
+      );
+    } else {
+      Debug.Log(
+        "[ProfilerReportExporter] Exported " +
+        frameCount +
+        " frames (" +
+        (startFrameIndex + 1) +
+        ".." +
+        (endFrameIndex + 1) +
+        ") to '" +
+        outputPath +
+        "'."
+      );
+    }
   }
 
-  static int WriteFrameReport(int frameIndex, string outputPath) {
+  static int WriteFrameReport(int startFrameIndex, int endFrameIndex, string outputPath) {
     var exportedThreadCount = 0;
 
     using (var writer = new StreamWriter(outputPath, false, new UTF8Encoding(false))) {
       WriteHeader(writer);
 
-      for (var threadIndex = 0; ; threadIndex++) {
-        using (var frameData = ProfilerDriver.GetHierarchyFrameDataView(
-          frameIndex,
-          threadIndex,
-          HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName,
-          HierarchyFrameDataView.columnTotalTime,
-          false
-        )) {
-          if (frameData == null || !frameData.valid) break;
+      for (var frameIndex = startFrameIndex; frameIndex <= endFrameIndex; frameIndex++) {
+        for (var threadIndex = 0; ; threadIndex++) {
+          using (var frameData = ProfilerDriver.GetHierarchyFrameDataView(
+            frameIndex,
+            threadIndex,
+            HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName,
+            HierarchyFrameDataView.columnTotalTime,
+            false
+          )) {
+            if (frameData == null || !frameData.valid) break;
 
-          WriteThreadRows(writer, frameData);
-          exportedThreadCount++;
+            WriteThreadRows(writer, frameData);
+            exportedThreadCount++;
+          }
         }
       }
     }

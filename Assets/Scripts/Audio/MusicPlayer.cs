@@ -423,24 +423,26 @@ public sealed class MusicPlayer : MonoBehaviour {
 
     var address = activePlaylist.tracks[trackIndex];
     var requestGeneration = ++loadGeneration;
-    if (AudioClipResolver.TryLoadEditorClip(address, out var editorClip)) {
-      PrepareAudioData(editorClip, requestGeneration, address);
-      return;
-    }
 
     AsyncOperationHandle<AudioClip> handle;
     try {
       handle = Addressables.LoadAssetAsync<AudioClip>(address);
+      activeClipHandle = handle;
+      hasActiveClipHandle = true;
+      handle.Completed += completedHandle => OnTrackLoaded(completedHandle, requestGeneration, address);
+      return;
     }
-    catch (Exception exception) {
+    catch {
+      if (AudioClipResolver.TryLoadEditorClip(address, out var editorClip)) {
+        PrepareAudioData(editorClip, requestGeneration, address);
+        return;
+      }
+
       Debug.LogError(
-        "[MusicPlayer] Failed to request track='" + address +
-        "'. error='" + exception.Message + "'"
+        "[MusicPlayer] Failed to request track='" + address + "'."
       );
       return;
     }
-
-    handle.Completed += completedHandle => OnTrackLoaded(completedHandle, requestGeneration, address);
   }
 
   void OnTrackLoaded(
@@ -450,11 +452,19 @@ public sealed class MusicPlayer : MonoBehaviour {
   ) {
     if (requestGeneration != loadGeneration || !isActiveAndEnabled) {
       Addressables.Release(handle);
+      hasActiveClipHandle = false;
       return;
     }
 
     if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null) {
       Addressables.Release(handle);
+      hasActiveClipHandle = false;
+
+      if (AudioClipResolver.TryLoadEditorClip(address, out var editorClip)) {
+        PrepareAudioData(editorClip, requestGeneration, address);
+        return;
+      }
+
       failedTrackCount++;
       if (failedTrackCount >= activePlaylist.tracks.Length) {
         Debug.LogError("[MusicPlayer] No playable tracks for zone '" + activeZone + "'.");

@@ -14,19 +14,23 @@ public partial class SpriteWithNormals {
     var renderedNormalSprite = ResolveRenderedSprite(normalSprite, useNormalFill: true);
     var normalTexture = renderedNormalSprite != null ? renderedNormalSprite.texture : GetFallbackNormalTexture();
     var normalChanged = !_hasAppliedNormalTexture || !ReferenceEquals(normalTexture, _lastAppliedNormalTexture);
-    var uvRectNeedsApply = spriteChanged || !_hasAppliedSpriteUvRect;
-    if (!uvRectNeedsApply && !normalChanged) {
+
+    var spriteUvRect = GetSpriteUvRect(renderedColorSprite);
+    var spriteEffectActive = GetSpriteEffectActive(colorSprite, colorSliceAddress);
+    var actualUvRectChanged = !_hasAppliedSpriteUvRect || _lastSpriteUvRect != spriteUvRect || _lastSpriteEffectActive != spriteEffectActive;
+
+    if (!actualUvRectChanged && !normalChanged) {
       RenderApplyProfilerMarker.End();
       return;
     }
 
     _mpb ??= new MaterialPropertyBlock();
     _renderer.GetPropertyBlock(_mpb);
-    if (uvRectNeedsApply) {
-      var spriteUvRect = GetSpriteUvRect(renderedColorSprite);
-      var spriteEffectActive = GetSpriteEffectActive(colorSprite, colorSliceAddress);
+    if (actualUvRectChanged) {
       _mpb.SetVector(SpriteUvRectPropertyId, spriteUvRect);
       _mpb.SetFloat(SpriteEffectActivePropertyId, spriteEffectActive);
+      _lastSpriteUvRect = spriteUvRect;
+      _lastSpriteEffectActive = spriteEffectActive;
       _hasAppliedSpriteUvRect = true;
     }
     if (normalChanged && normalTexture != null) {

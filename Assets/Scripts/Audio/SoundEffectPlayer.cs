@@ -503,44 +503,30 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     };
     clipCache.Add(address, entry);
 
-    if (AudioClipResolver.TryLoadEditorClip(address, out var editorClip)) {
-      entry.clip = editorClip;
-      PrepareClipData(address, entry);
-      if (!clipCache.TryGetValue(address, out var preparedEntry)) {
-        return null;
-      }
-
-      if (!ReferenceEquals(preparedEntry, entry)) {
-        return null;
-      }
-
-      return entry;
-    }
-
     AsyncOperationHandle<AudioClip> handle;
     try {
       handle = Addressables.LoadAssetAsync<AudioClip>(address);
+      entry.handle = handle;
+      handle.Completed += completedHandle => OnClipLoaded(address, entry, completedHandle);
+      if (!clipCache.TryGetValue(address, out var activeEntry) || !ReferenceEquals(activeEntry, entry)) {
+        return null;
+      }
+      return entry;
     }
-    catch (Exception exception) {
+    catch {
+      if (AudioClipResolver.TryLoadEditorClip(address, out var editorClip)) {
+        entry.clip = editorClip;
+        PrepareClipData(address, entry);
+        if (!clipCache.TryGetValue(address, out var preparedEntry) || !ReferenceEquals(preparedEntry, entry)) {
+          return null;
+        }
+        return entry;
+      }
+
       clipCache.Remove(address);
-      Debug.LogError(
-        "[SoundEffectPlayer] Failed to request clip='" + address +
-        "'. error='" + exception.Message + "'"
-      );
+      Debug.LogError("[SoundEffectPlayer] Failed to request clip='" + address + "'.");
       return null;
     }
-
-    entry.handle = handle;
-    handle.Completed += completedHandle => OnClipLoaded(address, entry, completedHandle);
-    if (!clipCache.TryGetValue(address, out var activeEntry)) {
-      return null;
-    }
-
-    if (!ReferenceEquals(activeEntry, entry)) {
-      return null;
-    }
-
-    return entry;
   }
 
   void OnClipLoaded(
@@ -555,6 +541,12 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
 
     if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null) {
       Addressables.Release(handle);
+      if (AudioClipResolver.TryLoadEditorClip(address, out var editorClip)) {
+        entry.clip = editorClip;
+        PrepareClipData(address, entry);
+        return;
+      }
+
       entry.pending.Clear();
       entry.pendingLoops.Clear();
       clipCache.Remove(address);

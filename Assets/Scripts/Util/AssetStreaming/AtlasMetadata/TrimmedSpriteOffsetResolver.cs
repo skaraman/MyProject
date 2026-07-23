@@ -476,6 +476,7 @@ public static class TrimmedSpriteOffsetResolver {
       missingAtlasOffsets.Add(atlasAssetPath);
       return;
     }
+    StartResolvedOptionalOffsetRuntimeLoad(atlasAssetPath, metadataAssetPath);
 #else
     var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
     var locationHandle = Addressables.LoadResourceLocationsAsync(metadataAssetPath, typeof(TextAsset));
@@ -488,7 +489,6 @@ public static class TrimmedSpriteOffsetResolver {
     );
     return;
 #endif
-    StartResolvedOptionalOffsetRuntimeLoad(atlasAssetPath, metadataAssetPath);
   }
 
   static void StartResolvedOptionalOffsetRuntimeLoad(string atlasAssetPath, string metadataAssetPath) {

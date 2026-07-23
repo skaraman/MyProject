@@ -44,7 +44,7 @@ public struct SpriteAddressPair {
   }
 }
 
-public readonly struct SpriteLookupKey {
+public readonly struct SpriteLookupKey : System.IEquatable<SpriteLookupKey> {
   public readonly string libraryName;
   public readonly string labelPrefix;
   public readonly string category;
@@ -66,5 +66,26 @@ public readonly struct SpriteLookupKey {
 
   public override string ToString() {
     return "libraryName='" + libraryName + "' labelPrefix='" + labelPrefix + "' category='" + category + "' frame=" + frame;
+  }
+
+  public bool Equals(SpriteLookupKey other) {
+    return frame == other.frame &&
+           string.Equals(libraryName, other.libraryName, System.StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(labelPrefix, other.labelPrefix, System.StringComparison.Ordinal) &&
+           string.Equals(category, other.category, System.StringComparison.Ordinal);
+  }
+
+  public override bool Equals(object obj) {
+    return obj is SpriteLookupKey other && Equals(other);
+  }
+
+  public override int GetHashCode() {
+    unchecked {
+      var hashCode = (libraryName != null ? System.StringComparer.OrdinalIgnoreCase.GetHashCode(libraryName) : 0);
+      hashCode = (hashCode * 397) ^ (labelPrefix != null ? labelPrefix.GetHashCode() : 0);
+      hashCode = (hashCode * 397) ^ (category != null ? category.GetHashCode() : 0);
+      hashCode = (hashCode * 397) ^ frame;
+      return hashCode;
+    }
   }
 }

@@ -33,9 +33,6 @@ public static class CombatDamageResolver {
   public const float MinimumDamageRangeMultiplier = 0.5f;
   public const float MaximumDamageRangeMultiplier = 1.5f;
 
-  // DEBUG START: Temporary combat test override. Remove this flag and its guarded block below.
-  static readonly bool DebugForceEsperLuckyDamage = true;
-  // DEBUG END: Temporary combat test override.
 
   static class CombatStatKeys {
     public const string Armor = "ARM";
@@ -90,25 +87,6 @@ public static class CombatDamageResolver {
     var baseAttackDamage = attacker.Damage.Copy().AddInPlace(resolvedAbilityDamage);
     var damageRangeMultiplier = RollDamageRangeMultiplier();
 
-    // DEBUG START: Force every ESPER hit through the normal Lucky damage/defense path.
-    if (DebugForceEsperLuckyDamage) {
-      return BuildResult(
-        kind: CombatDamageKind.Lucky,
-        flatDamage: baseAttackDamage + attacker.LuckyDamage,
-        abilityDamageMultiplier: abilityDamageMultiplier,
-        damageRangeMultiplier: damageRangeMultiplier,
-        armor: armor,
-        penetration: attacker.Penetration,
-        evadeChance: evadeChance,
-        criticalChance: criticalChance,
-        luckyChance: 1f,
-        directChance: directChance,
-        criticalRoll: -1f,
-        luckyRoll: 0f,
-        directRoll: -1f
-      );
-    }
-    // DEBUG END: Force every ESPER hit through the normal Lucky damage/defense path.
 
     // Special hits use independent rolls with explicit Critical > Lucky > Direct priority.
     var criticalRoll = Random.value;

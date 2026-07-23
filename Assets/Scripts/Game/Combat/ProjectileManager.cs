@@ -20,13 +20,14 @@ public class ProjectileManager : MonoBehaviour {
   private readonly Dictionary<string, Pool> pools = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
   private readonly List<EnemyInfo> enemyInfoCache = new();
+#if UNITY_EDITOR
   private bool hasQueuedEditorPauseAfterFirstProjectileSpawn;
+#endif
   private int enemyInfoCacheFrame = -1;
   private Transform enemyInfoCacheRoot;
 
   void Awake() {
     poolContainer = transform;
-    hasQueuedEditorPauseAfterFirstProjectileSpawn = false;
     BuildEffectAnimations();
     if (prewarmPools) {
       EnsureLoadedPoolsReady();

@@ -361,7 +361,17 @@ public partial class AnimationController {
     if (anim == null) return animationName ?? "";
     if (anim.To == 1) return "To";
     if (anim.To == 2) return "To2";
-    return string.IsNullOrWhiteSpace(anim.category) ? animationName ?? "" : anim.category.Trim();
+    if (string.IsNullOrWhiteSpace(anim.category)) return animationName ?? "";
+    
+    // Avoid allocating strings on every frame with Trim().
+    // Try returning the original string if it doesn't need trimming.
+    bool needsTrim = false;
+    if (anim.category.Length > 0) {
+      if (char.IsWhiteSpace(anim.category[0]) || char.IsWhiteSpace(anim.category[anim.category.Length - 1])) {
+        needsTrim = true;
+      }
+    }
+    return needsTrim ? anim.category.Trim() : anim.category;
   }
 
   bool HasSeenAnimationCategory(string category) {

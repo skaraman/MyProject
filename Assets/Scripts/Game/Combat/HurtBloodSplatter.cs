@@ -571,14 +571,7 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
     out int sortingLayerId,
     out int sortingOrder
   ) {
-    var sortingGroup = actor.GetComponent<SortingGroup>();
-    sortingLayerId = sortingGroup != null
-      ? sortingGroup.sortingLayerID
-      : SortingLayer.NameToID("GameFG");
-
-    var mainCamera = Camera.main;
-    sortingOrder = mainCamera != null
-      ? -(int)mainCamera.WorldToScreenPoint(groundPosition).y
-      : sortingGroup != null ? sortingGroup.sortingOrder : 0;
+    sortingLayerId = SortingLayer.NameToID("GameMG");
+    sortingOrder = 3; // Base order 3, so decal (which uses - 1) gets 2 as requested.
   }
 }

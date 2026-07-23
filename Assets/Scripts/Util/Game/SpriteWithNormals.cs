@@ -119,6 +119,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
   bool _hasAppliedNormalTexture;
   bool _hasAppliedSpriteUvRect;
   string _appliedColorSliceAddress = "";
+  Vector4 _lastSpriteUvRect;
+  float _lastSpriteEffectActive;
   Vector3 _lastAppliedTrimmedOffsetLocalUnits;
   bool _hasAppliedTrimmedOffset;
   Vector3 _trimmedOffsetBaseLocalPosition;

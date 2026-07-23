@@ -79,9 +79,10 @@ public partial class AnimationController {
   }
 
   bool IsSpriteTargetEnabled(SpriteWithNormals target) {
-    if (target == null || !target.isActiveAndEnabled || target.DoNotRender) return false;
-    var renderer = ResolveSpriteTargetRenderer(target);
-    if (renderer == null) return target.gameObject.activeInHierarchy;
-    return renderer.gameObject.activeInHierarchy;
+    if (ReferenceEquals(target, null) || !target.isActiveAndEnabled || target.DoNotRender) return false;
+    if (spriteTargetRenderers.TryGetValue(target, out var renderer) && renderer != null) {
+      return renderer.gameObject.activeInHierarchy;
+    }
+    return target.gameObject.activeInHierarchy;
   }
 }

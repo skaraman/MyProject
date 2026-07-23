@@ -767,7 +767,12 @@ namespace EZhex1991.EZSoftBone
         private void CreateBones()
         {
             m_Structures.Clear();
-            if (rootBones == null || rootBones.Count == 0) return;
+            if (rootBones == null || rootBones.Count == 0 || !rootBones.Any(b => b != null))
+            {
+                Bone bone = new Bone(simulateSpace, transform, endBones, startDepth, 0, 0, 0);
+                m_Structures.Add(bone);
+                return;
+            }
             for (int i = 0; i < rootBones.Count; i++)
             {
                 if (rootBones[i] == null) continue;
