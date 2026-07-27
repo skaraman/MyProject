@@ -2,12 +2,23 @@ using System;
 
 public partial class SpriteWithNormals {
   readonly struct AnimationAtlasCacheKey : IEquatable<AnimationAtlasCacheKey> {
+    public readonly string libraryName;
+    public readonly string labelPrefix;
     public readonly string category;
     public readonly int startFrame;
     public readonly int endFrame;
     public readonly int contentReloadVersion;
 
-    public AnimationAtlasCacheKey(string category, int startFrame, int endFrame, int contentReloadVersion) {
+    public AnimationAtlasCacheKey(
+      string libraryName,
+      string labelPrefix,
+      string category,
+      int startFrame,
+      int endFrame,
+      int contentReloadVersion
+    ) {
+      this.libraryName = libraryName ?? "";
+      this.labelPrefix = labelPrefix ?? "";
       this.category = category ?? "";
       this.startFrame = startFrame;
       this.endFrame = endFrame;
@@ -18,6 +29,8 @@ public partial class SpriteWithNormals {
       return startFrame == other.startFrame &&
              endFrame == other.endFrame &&
              contentReloadVersion == other.contentReloadVersion &&
+             string.Equals(libraryName, other.libraryName, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(labelPrefix, other.labelPrefix, StringComparison.Ordinal) &&
              string.Equals(category, other.category, StringComparison.Ordinal);
     }
 
@@ -27,7 +40,9 @@ public partial class SpriteWithNormals {
 
     public override int GetHashCode() {
       unchecked {
-        var hash = StringComparer.Ordinal.GetHashCode(category ?? "");
+        var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(libraryName ?? "");
+        hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(labelPrefix ?? "");
+        hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(category ?? "");
         hash = (hash * 397) ^ startFrame;
         hash = (hash * 397) ^ endFrame;
         hash = (hash * 397) ^ contentReloadVersion;

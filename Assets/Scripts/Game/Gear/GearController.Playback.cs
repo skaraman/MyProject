@@ -191,8 +191,10 @@ public partial class GearController {
   void MarkAppearanceRevision() {
     if (appearanceRevision == int.MaxValue) {
       appearanceRevision = 1;
+      InvalidatePersistentWarmPlanCache();
       return;
     }
     appearanceRevision++;
+    InvalidatePersistentWarmPlanCache();
   }
 }

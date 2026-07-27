@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -22,6 +23,11 @@ public class HurtBox2D : MonoBehaviour {
 
   public HitBox2D LastHitBox { get; private set; }
   public int LastHitFrame { get; private set; } = -1;
+  private readonly List<Collider2D> registeredColliders = new(4);
+
+  void Awake() {
+    RegisterOwnedColliders();
+  }
 
   void Reset() {
     var collider = GetComponent<Collider2D>();
@@ -29,23 +35,81 @@ public class HurtBox2D : MonoBehaviour {
   }
 
   void OnDisable() {
+    UnregisterOwnedColliders();
     LastHitBox = null;
     LastHitFrame = -1;
+  }
+
+  void OnEnable() {
+    RegisterOwnedColliders();
+  }
+
+  void OnDestroy() {
+    UnregisterOwnedColliders();
+  }
+
+  private static readonly Dictionary<Collider2D, HurtBox2D> hurtBoxCache = new();
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  private static void ResetStatics() {
+    hurtBoxCache.Clear();
   }
 
   public static bool TryResolve(Collider2D collider, out HurtBox2D hurtBox) {
     hurtBox = null;
     if (collider == null) return false;
+    if (hurtBoxCache.TryGetValue(collider, out hurtBox)) {
+      return hurtBox != null;
+    }
 
     if (collider.TryGetComponent(out hurtBox)) {
+      hurtBoxCache[collider] = hurtBox;
       return true;
     }
 
     var parent = collider.transform.parent;
-    if (parent == null) return false;
-
-    hurtBox = parent.GetComponentInParent<HurtBox2D>();
+    if (parent != null) {
+      hurtBox = parent.GetComponentInParent<HurtBox2D>();
+    }
+    hurtBoxCache[collider] = hurtBox;
     return hurtBox != null;
+  }
+
+  public static void ClearHurtBoxCache() {
+    hurtBoxCache.Clear();
+  }
+
+  private void RegisterOwnedColliders() {
+    UnregisterOwnedColliders();
+    GetComponentsInChildren(true, registeredColliders);
+    for (var i = registeredColliders.Count - 1; i >= 0; i--) {
+      var collider = registeredColliders[i];
+      HurtBox2D owner = null;
+      if (!collider.TryGetComponent(out owner)) {
+        var parent = collider.transform.parent;
+        if (parent != null) {
+          owner = parent.GetComponentInParent<HurtBox2D>();
+        }
+      }
+
+      if (!ReferenceEquals(owner, this)) {
+        registeredColliders.RemoveAt(i);
+        continue;
+      }
+
+      hurtBoxCache[collider] = this;
+    }
+  }
+
+  private void UnregisterOwnedColliders() {
+    for (var i = 0; i < registeredColliders.Count; i++) {
+      var collider = registeredColliders[i];
+      if (ReferenceEquals(collider, null)) continue;
+      if (hurtBoxCache.TryGetValue(collider, out var owner) && ReferenceEquals(owner, this)) {
+        hurtBoxCache.Remove(collider);
+      }
+    }
+    registeredColliders.Clear();
   }
 
   /// <summary>

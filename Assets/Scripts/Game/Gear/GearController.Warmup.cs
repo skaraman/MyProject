@@ -51,10 +51,7 @@ public partial class GearController {
       return 0;
     }
 
-    BuildCharacterAnimationWarmPlan(
-      persistentWarmAnimationScratch,
-      persistentWarmAnimationSeenScratch
-    );
+    EnsurePersistentWarmPlanCache();
     var startingCount = outAddresses.Count;
     CollectPersistentStartupAddresses(
       SkinObjects,
@@ -69,8 +66,6 @@ public partial class GearController {
       maxUniqueAddresses
     );
     var collectedCount = Mathf.Max(outAddresses.Count - startingCount, 0);
-    persistentWarmAnimationScratch.Clear();
-    persistentWarmAnimationSeenScratch.Clear();
     return collectedCount;
   }
 
@@ -79,18 +74,13 @@ public partial class GearController {
     HashSet<string> seenAddresses = null,
     int maxUniqueAddresses = int.MaxValue
   ) {
-    BuildCharacterAnimationWarmPlan(
-      persistentWarmAnimationScratch,
-      persistentWarmAnimationSeenScratch
-    );
+    EnsurePersistentWarmPlanCache();
     var collectedCount = CollectPersistentEffectStartupAddresses(
       outAddresses,
       persistentWarmAnimationScratch,
       seenAddresses,
       maxUniqueAddresses
     );
-    persistentWarmAnimationScratch.Clear();
-    persistentWarmAnimationSeenScratch.Clear();
     return collectedCount;
   }
 
@@ -157,10 +147,7 @@ public partial class GearController {
       return 0;
     }
 
-    BuildCharacterAnimationWarmPlan(
-      persistentWarmAnimationScratch,
-      persistentWarmAnimationSeenScratch
-    );
+    EnsurePersistentWarmPlanCache();
     var startingCount = outAddresses.Count;
     CollectPersistentStartupAddresses(
       SkinObjects,
@@ -175,8 +162,6 @@ public partial class GearController {
       maxUniqueAddresses
     );
     var collectedCount = Mathf.Max(outAddresses.Count - startingCount, 0);
-    persistentWarmAnimationScratch.Clear();
-    persistentWarmAnimationSeenScratch.Clear();
     return collectedCount;
   }
 
@@ -404,10 +389,17 @@ public partial class GearController {
       enqueueBudgetPerFrame: enqueueBudget,
       warmGateManaged: overlayWarmGateManaged
     );
-    TrimmedSpriteOffsetResolver.PrimeMetadataBatch(
-      startupAppearanceWarmupAddressScratch,
-      allowImmediateEditorLoad: ShouldAllowImmediateStartupTrimmedMetadataLoad(pauseUntilReady)
-    );
+    if (ShouldAllowImmediateStartupTrimmedMetadataLoad()) {
+      TrimmedSpriteOffsetResolver.PrimeMetadataBatch(
+        startupAppearanceWarmupAddressScratch,
+        allowImmediateEditorLoad: true
+      );
+    }
+    else {
+      TrimmedSpriteOffsetResolver.QueueWarmupAtlasMetadataBatch(
+        startupAppearanceWarmupAddressScratch
+      );
+    }
 
     var readyCount = CountReadyStartupAppearanceSamples(out var totalReadySamples);
     while (readyCount < totalReadySamples &&
@@ -580,14 +572,9 @@ public partial class GearController {
   public int CountPersistentSkinStartupReadySamples(out int totalSampleCount) {
     totalSampleCount = 0;
     var readyCount = 0;
-    BuildCharacterAnimationWarmPlan(
-      persistentWarmAnimationScratch,
-      persistentWarmAnimationSeenScratch
-    );
+    EnsurePersistentWarmPlanCache();
     CountPersistentStartupReadiness(SkinObjects, ref readyCount, ref totalSampleCount);
     CountPersistentStartupReadiness(GearObjects, ref readyCount, ref totalSampleCount);
-    persistentWarmAnimationScratch.Clear();
-    persistentWarmAnimationSeenScratch.Clear();
     return readyCount;
   }
 
@@ -688,10 +675,11 @@ public partial class GearController {
     }
   }
 
-  static bool ShouldAllowImmediateStartupTrimmedMetadataLoad(bool pauseUntilReady) {
+  static bool ShouldAllowImmediateStartupTrimmedMetadataLoad() {
 #if UNITY_EDITOR
     if (!Application.isEditor || !Application.isPlaying) return false;
-    return true;
+    return !SpriteStreamingLoadingState.IsLoadingOverlayActive &&
+           !StreamingWarmOrchestrator.IsWarmGateRunning;
 #else
     return false;
 #endif
@@ -805,6 +793,7 @@ public partial class GearController {
     var activeForm = EsperanzaForms.GetActive();
     if (!string.Equals(formName, activeForm, StringComparison.OrdinalIgnoreCase)) return;
 
+    InvalidatePersistentWarmPlanCache();
     QueueWarmupForEquippedCharacter(
       new Dictionary<string, string>(equipPartPrefixScratch, StringComparer.OrdinalIgnoreCase)
     );
@@ -952,6 +941,32 @@ public partial class GearController {
         }
       }
     }
+  }
+
+  void EnsurePersistentWarmPlanCache() {
+    var activeForm = EsperanzaForms.GetActive() ?? "";
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (persistentWarmPlanAppearanceRevision == appearanceRevision &&
+        persistentWarmPlanContentVersion == contentVersion &&
+        string.Equals(persistentWarmPlanForm, activeForm, StringComparison.OrdinalIgnoreCase)) {
+      return;
+    }
+
+    BuildCharacterAnimationWarmPlan(
+      persistentWarmAnimationScratch,
+      persistentWarmAnimationSeenScratch
+    );
+    persistentWarmPlanAppearanceRevision = appearanceRevision;
+    persistentWarmPlanContentVersion = contentVersion;
+    persistentWarmPlanForm = activeForm;
+  }
+
+  void InvalidatePersistentWarmPlanCache() {
+    persistentWarmPlanAppearanceRevision = -1;
+    persistentWarmPlanContentVersion = -1;
+    persistentWarmPlanForm = "";
+    persistentWarmAnimationScratch.Clear();
+    persistentWarmAnimationSeenScratch.Clear();
   }
 
   bool AddCharacterWarmAnimation(

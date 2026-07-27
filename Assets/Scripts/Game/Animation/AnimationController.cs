@@ -90,6 +90,7 @@ public partial class AnimationController {
   private bool hadEnabledSpriteTargetsLastTick;
   private string activeSpriteCategory;
   private int lastAppliedSpriteFrame = int.MinValue;
+  private float lastSpriteApplyTime = -1f;
   private int lastAppliedSpriteContentVersion = int.MinValue;
   private bool activePunchTrace;
   private string activePunchTraceAnimation;

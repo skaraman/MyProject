@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class DestructionManager : MonoBehaviour {
   [Button(nameof(LaunchRandom), label = "Play", size = Size.small)] public bool what;
+  [Tooltip("Optional prefab containing the PIECES. If assigned, will pool the pieces instead of baking them in.")]
+  public GameObject piecesPrefab; 
   private Transform piecesRoot;
   public Vector2 planarForceMin = new(-1f, 3f);
   public Vector2 planarForceMax = new(1f, 5f);
@@ -14,7 +16,16 @@ public class DestructionManager : MonoBehaviour {
 
   void Awake() {
     piecesRoot = transform.FindDirectChild("PIECES");
-    CollectPiecesFromChildren();
+    if (piecesRoot != null) {
+      CollectPiecesFromChildren();
+    }
+  }
+
+  void Start() {
+    if (piecesPrefab != null) {
+      // Pre-warm the pool during the location loading screen setup phase.
+      Pool.GetShared(piecesPrefab, null, 5);
+    }
   }
 
   void Update() {
@@ -36,6 +47,16 @@ public class DestructionManager : MonoBehaviour {
   }
 
   public void LaunchRandom() {
+    if (piecesPrefab != null) {
+      var pool = Pool.GetShared(piecesPrefab, null, 5);
+      var instance = pool.Spawn(transform.position, transform.rotation);
+      piecesRoot = instance.transform;
+      CollectPiecesFromChildren();
+      
+      // Auto-despawn the container after pieces are done fading
+      pool.DespawnAfter(instance, 10f);
+    }
+
     if (pieces.Count == 0) return;
     if (Time.inFixedTimeStep) {
       // Avoid enabling/launching bodies mid-physics step.
@@ -45,13 +66,18 @@ public class DestructionManager : MonoBehaviour {
     LaunchRandomInternal();
   }
 
+  private static readonly List<Piece> launchScratch = new List<Piece>();
+
   void LaunchRandomInternal() {
     if (pieces.Count == 0) return;
-    var active = new List<Piece>(pieces);
-    Shuffle(active);
-    var count = Random.Range(1, active.Count + 1);
-    for (var i = 0; i < active.Count; i++) {
-      var p = active[i];
+    
+    launchScratch.Clear();
+    launchScratch.AddRange(pieces);
+    Shuffle(launchScratch);
+    
+    var count = Random.Range(1, launchScratch.Count + 1);
+    for (var i = 0; i < launchScratch.Count; i++) {
+      var p = launchScratch[i];
       if (p == null) continue;
       var shouldLaunch = i < count;
       if (shouldLaunch) {

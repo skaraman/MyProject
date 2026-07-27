@@ -5,6 +5,59 @@ public class EnemyAIController : MonoBehaviour {
   const float PlayerTargetRefreshSeconds = 0.5f;
   const float ExactOverlapThreshold = 0.0001f;
   static readonly System.Collections.Generic.List<EnemyAIController> activeEnemies = new();
+  static int lastEnemySortFrame = -1;
+  static bool s_UpdateRegistered;
+  static readonly System.Action s_UpdateCallback = UpdateAll;
+  static readonly System.Comparison<EnemyAIController> s_PositionComparison =
+    CompareCachedPosition;
+
+  static void UpdateAll() {
+    for (var i = activeEnemies.Count - 1; i >= 0; i--) {
+      var target = activeEnemies[i];
+      if (target == null) {
+        activeEnemies.RemoveAt(i);
+        continue;
+      }
+      target.cachedPosition = target.transform.position;
+    }
+    EnsureEnemiesSortedForFrame();
+    var remaining = activeEnemies.Count;
+    var index = 0;
+    while (index < activeEnemies.Count && remaining-- > 0) {
+      var target = activeEnemies[index];
+      target.ManagedUpdate();
+      if (index < activeEnemies.Count && activeEnemies[index] == target) {
+        index++;
+      }
+    }
+  }
+
+  static void EnsureUpdateRegistration() {
+    if (s_UpdateRegistered || !Application.isPlaying) return;
+    s_UpdateRegistered = true;
+    RuntimeUpdateHub.Register(
+      300,
+      "RuntimeUpdateHub.EnemyAI",
+      s_UpdateCallback
+    );
+  }
+
+  static void EnsureEnemiesSortedForFrame() {
+    var frame = Time.frameCount;
+    if (lastEnemySortFrame == frame) return;
+    lastEnemySortFrame = frame;
+    activeEnemies.Sort(s_PositionComparison);
+    for (int i = 0; i < activeEnemies.Count; i++) {
+      activeEnemies[i].sortedIndex = i;
+    }
+  }
+
+  static int CompareCachedPosition(EnemyAIController left, EnemyAIController right) {
+    if (left == null) return right == null ? 0 : 1;
+    if (right == null) return -1;
+    return left.cachedPosition.x.CompareTo(right.cachedPosition.x);
+  }
+
   static readonly EnemyAttackDefinition LegacyAttack = new(
     "Attack",
     minimumDistance: 0f,
@@ -62,6 +115,7 @@ public class EnemyAIController : MonoBehaviour {
   private float recoveryVerticalOffset;
   private float recoveryFacingSign = 1f;
   private float recoveryRepositionTimeRemaining;
+  private int sortedIndex = -1;
 
   static bool ShouldLogSpawnDebug() {
     return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
@@ -71,6 +125,12 @@ public class EnemyAIController : MonoBehaviour {
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetActiveEnemies() {
     activeEnemies.Clear();
+    lastEnemySortFrame = -1;
+    cameraCenter = default;
+    cameraCullingSqrRadius = 0f;
+    lastCameraUpdateFrame = -1;
+    hasCameraBounds = false;
+    s_UpdateRegistered = false;
   }
 
   void Awake() {
@@ -83,10 +143,12 @@ public class EnemyAIController : MonoBehaviour {
   }
 
   void OnEnable() {
+    if (!Application.isPlaying) return;
     cachedPosition = transform.position;
     if (!activeEnemies.Contains(this)) {
       activeEnemies.Add(this);
     }
+    EnsureUpdateRegistration();
     behaviourState = BehaviourState.Decide;
     stateTimeRemaining = 0f;
     nextAttackTime = 0f;
@@ -96,15 +158,43 @@ public class EnemyAIController : MonoBehaviour {
   }
 
   void OnDisable() {
-    activeEnemies.Remove(this);
+    if (Application.isPlaying) {
+      activeEnemies.Remove(this);
+    }
     ClearActiveAttack();
     StopMovement();
   }
 
   private Vector2 cachedPosition;
 
-  void Update() {
-    cachedPosition = transform.position;
+  static Vector2 cameraCenter;
+  static float cameraCullingSqrRadius;
+  static int lastCameraUpdateFrame = -1;
+  static bool hasCameraBounds;
+
+  static void UpdateCameraBounds() {
+    if (lastCameraUpdateFrame == Time.frameCount) return;
+    lastCameraUpdateFrame = Time.frameCount;
+    var cam = Camera.main;
+    if (cam == null) {
+      hasCameraBounds = false;
+      return;
+    }
+    hasCameraBounds = true;
+    cameraCenter = cam.transform.position;
+    var radius = Mathf.Max(cam.orthographicSize * cam.aspect, cam.orthographicSize) + 8f;
+    cameraCullingSqrRadius = radius * radius;
+  }
+
+  internal void ManagedUpdate() {
+    UpdateCameraBounds();
+    var isCulled =
+      hasCameraBounds &&
+      (cachedPosition - cameraCenter).sqrMagnitude > cameraCullingSqrRadius;
+    if (enemyController != null) {
+      enemyController.isCulled = isCulled;
+    }
+
     if (enemyController == null || !TryResolvePlayer()) {
       return;
     }
@@ -408,27 +498,59 @@ public class EnemyAIController : MonoBehaviour {
       return Vector2.zero;
     }
 
+    EnsureEnemiesSortedForFrame();
+
     var position = cachedPosition;
     var spacing = preferredEnemySpacing;
     var spacingSqr = spacing * spacing;
     var combinedDirection = Vector2.zero;
-    for (var i = 0; i < activeEnemies.Count; i++) {
-      var other = activeEnemies[i];
-      if (other == null || other == this || !other.isActiveAndEnabled) {
-        continue;
-      }
 
+    var ownIndex = sortedIndex;
+    if (ownIndex < 0 || ownIndex >= activeEnemies.Count || activeEnemies[ownIndex] != this) return Vector2.zero;
+
+    // Search left
+    for (var i = ownIndex - 1; i >= 0; i--) {
+      var other = activeEnemies[i];
+      if (other == null || !other.isActiveAndEnabled) continue;
       var dx = position.x - other.cachedPosition.x;
+      if (dx >= spacing) break;
+
       var dy = position.y - other.cachedPosition.y;
-      if (Mathf.Abs(dx) >= spacing || Mathf.Abs(dy) >= spacing) {
-        continue;
-      }
+      if (Mathf.Abs(dy) >= spacing) continue;
 
       var awayFromOther = new Vector2(dx, dy);
       var distanceSqr = awayFromOther.sqrMagnitude;
-      if (distanceSqr >= spacingSqr) {
-        continue;
+      if (distanceSqr >= spacingSqr) continue;
+
+      Vector2 direction;
+      float distance;
+      if (distanceSqr <= ExactOverlapThreshold) {
+        direction = ResolveExactOverlapDirection(other);
+        distance = 0f;
       }
+      else {
+        distance = Mathf.Sqrt(distanceSqr);
+        direction = awayFromOther / distance;
+      }
+
+      var neighborPressure = 1f - Mathf.Clamp01(distance / preferredEnemySpacing);
+      combinedDirection += direction * neighborPressure;
+      pressure = Mathf.Max(pressure, neighborPressure);
+    }
+
+    // Search right
+    for (var i = ownIndex + 1; i < activeEnemies.Count; i++) {
+      var other = activeEnemies[i];
+      if (other == null || !other.isActiveAndEnabled) continue;
+      var dx = other.cachedPosition.x - position.x;
+      if (dx >= spacing) break;
+
+      var dy = position.y - other.cachedPosition.y;
+      if (Mathf.Abs(dy) >= spacing) continue;
+
+      var awayFromOther = new Vector2(-dx, dy);
+      var distanceSqr = awayFromOther.sqrMagnitude;
+      if (distanceSqr >= spacingSqr) continue;
 
       Vector2 direction;
       float distance;

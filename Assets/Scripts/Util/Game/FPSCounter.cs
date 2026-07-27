@@ -3,8 +3,12 @@ using UnityEngine;
 [RequireComponent(typeof(FontText))]
 public class FPSCounter : MonoBehaviour
 {
+    private const float DisplayRefreshInterval = 0.25f;
+
     private FontText fontText;
     private float deltaTime = 0.0f;
+    private float nextDisplayRefreshAt;
+    private int displayedFps = -1;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Initialize()
@@ -60,11 +64,18 @@ public class FPSCounter : MonoBehaviour
     void Update()
     {
         deltaTime += (Time.unscaledDeltaTime - deltaTime) * 0.1f;
-        float fps = 1.0f / deltaTime;
-        
-        if (fontText != null)
+        if (fontText == null ||
+            deltaTime <= 0.0f ||
+            Time.unscaledTime < nextDisplayRefreshAt)
         {
-            fontText.content = Mathf.CeilToInt(fps).ToString();
+            return;
         }
+
+        nextDisplayRefreshAt = Time.unscaledTime + DisplayRefreshInterval;
+        int currentFps = Mathf.Max(0, Mathf.CeilToInt(1.0f / deltaTime));
+        if (currentFps == displayedFps) return;
+
+        displayedFps = currentFps;
+        fontText.content = IntegerTextCache.Get(currentFps);
     }
 }

@@ -18,9 +18,13 @@ public class SpriteWrapper : MonoBehaviour {
     }
   }
 
+  private bool searchedSpriteRenderer;
+
   [ForceUpdate]
   void Update() {
     if (spriteRenderer == null) {
+      if (searchedSpriteRenderer) return;
+      searchedSpriteRenderer = true;
       spriteRenderer = GetComponent<SpriteRenderer>();
       if (spriteRenderer == null) return;
       // Initialize current color when component is first found

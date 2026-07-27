@@ -35,6 +35,7 @@ public partial class EnemyController : MonoBehaviour {
   [SerializeField] bool prewarmEnemyAnimationStarts = true;
   [SerializeField, Min(1)] int prewarmFramesPerAnimation = 1;
 
+  private ProjectedSpriteShadowCaster2D shadowCaster;
   private AnimationController animationController = new();
   private AnimationController effectAnimationController = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
@@ -55,8 +56,50 @@ public partial class EnemyController : MonoBehaviour {
   private bool hasPinnedRuntimeResidency;
   static readonly HashSet<string> prewarmedEnemyTypes = new(StringComparer.OrdinalIgnoreCase);
 
+  static readonly List<EnemyController> s_AllActive = new();
+  int _activeListIndex = -1;
+  static bool s_UpdateRegistered;
+  static readonly Action s_UpdateCallback = UpdateAll;
+
+  static void UpdateAll() {
+    var remaining = s_AllActive.Count;
+    var index = 0;
+    while (index < s_AllActive.Count && remaining-- > 0) {
+      var target = s_AllActive[index];
+      target.ManagedUpdate();
+      if (index < s_AllActive.Count && s_AllActive[index] == target) {
+        index++;
+      }
+    }
+  }
+
+  static void EnsureUpdateRegistration() {
+    if (s_UpdateRegistered || !Application.isPlaying) return;
+    s_UpdateRegistered = true;
+    RuntimeUpdateHub.Register(
+      400,
+      "RuntimeUpdateHub.EnemyController",
+      s_UpdateCallback
+    );
+  }
+
+  public bool isCulled { get; set; }
   public string CurrentAnimation => animationController != null ? animationController.CurrentAnimation : null;
   public bool IsFacingRight => animationController != null && animationController.IsFacingRight;
+
+  internal static EnemyController[] CopyActiveSnapshot(EnemyController[] buffer) {
+    var count = s_AllActive.Count;
+    if (count <= 0) {
+      return Array.Empty<EnemyController>();
+    }
+    if (buffer == null || buffer.Length != count) {
+      buffer = new EnemyController[count];
+    }
+    for (var i = 0; i < count; i++) {
+      buffer[i] = s_AllActive[i];
+    }
+    return buffer;
+  }
 
   void Awake() {
     enemyInfo = GetComponent<EnemyInfo>();
@@ -79,8 +122,16 @@ public partial class EnemyController : MonoBehaviour {
   }
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-  static void ResetWarmupCacheOnDomainReload() {
+  static void ResetStatics() {
     prewarmedEnemyTypes.Clear();
+    for (var i = 0; i < s_AllActive.Count; i++) {
+      var target = s_AllActive[i];
+      if (target != null) {
+        target._activeListIndex = -1;
+      }
+    }
+    s_AllActive.Clear();
+    s_UpdateRegistered = false;
   }
 
   void ResetDebugPlaybackFlags() {
@@ -89,8 +140,15 @@ public partial class EnemyController : MonoBehaviour {
     forceLoop = false;
   }
 
-  void Update() {
+  internal void ManagedUpdate() {
+    if (isCulled) {
+      if (shadowCaster != null && shadowCaster.enabled) shadowCaster.enabled = false;
+      return;
+    }
+    if (shadowCaster != null && !shadowCaster.enabled) shadowCaster.enabled = true;
+
     RefreshRuntimeResidency();
+
     animationController.SlowDown = slowDown;
     animationController.ForceLoop = forceLoop;
     var scaledDeltaTime = TimeScale.GetDeltaTime(this);
@@ -104,7 +162,31 @@ public partial class EnemyController : MonoBehaviour {
     UpdateLocomotionSound();
   }
 
+  void OnEnable() {
+    if (Application.isPlaying && _activeListIndex < 0) {
+      _activeListIndex = s_AllActive.Count;
+      s_AllActive.Add(this);
+      EnsureUpdateRegistration();
+    }
+  }
+
   void OnDisable() {
+    if (Application.isPlaying && _activeListIndex >= 0) {
+      var lastIndex = s_AllActive.Count - 1;
+      var removeIndex =
+        _activeListIndex <= lastIndex && s_AllActive[_activeListIndex] == this
+          ? _activeListIndex
+          : s_AllActive.IndexOf(this);
+      if (removeIndex >= 0) {
+        var last = s_AllActive[lastIndex];
+        s_AllActive[removeIndex] = last;
+        if (last != null) {
+          last._activeListIndex = removeIndex;
+        }
+        s_AllActive.RemoveAt(lastIndex);
+      }
+      _activeListIndex = -1;
+    }
     StopLocomotionSound();
     effectResetToEmptyPending = false;
     hasPinnedRuntimeResidency = false;
@@ -207,7 +289,7 @@ public partial class EnemyController : MonoBehaviour {
       "",
       TextureResidencyCache.PinClass.Enemy
     );
-    ProjectedSpriteShadowCaster2D.Ensure(gameObject, animationController);
+    shadowCaster = ProjectedSpriteShadowCaster2D.Ensure(gameObject, animationController);
     RefreshRuntimeResidency(force: true);
   }
 

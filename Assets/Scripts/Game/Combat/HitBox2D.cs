@@ -20,6 +20,7 @@ public class HitBox2D : MonoBehaviour {
   public string hitId;
 
   private readonly HashSet<ulong> hitHurtBoxIds = new();
+  private readonly List<Collider2D> registeredColliders = new(4);
   private float nextHitTime;
   private Transform actorOwner;
   public Transform ActorOwner => actorOwner;
@@ -28,6 +29,30 @@ public class HitBox2D : MonoBehaviour {
   void Awake() {
     actorOwner = ResolveActorOwner(transform, out var isEnemy);
     IsEnemyOwned = isEnemy;
+    RegisterOwnedColliders();
+  }
+
+  private static readonly Dictionary<Collider2D, HitBox2D> hitBoxLookupCache = new();
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  private static void ResetStatics() {
+    hitBoxLookupCache.Clear();
+    ColliderOwnerCache.Clear();
+  }
+
+  public static bool TryGet(Collider2D collider, out HitBox2D hitBox) {
+    hitBox = null;
+    if (collider == null) return false;
+    if (hitBoxLookupCache.TryGetValue(collider, out hitBox)) {
+      return hitBox != null;
+    }
+    hitBox = collider.GetComponent<HitBox2D>() ?? collider.GetComponentInParent<HitBox2D>();
+    hitBoxLookupCache[collider] = hitBox;
+    return hitBox != null;
+  }
+
+  public static void ClearHitBoxCache() {
+    hitBoxLookupCache.Clear();
   }
 
   void Reset() {
@@ -38,6 +63,15 @@ public class HitBox2D : MonoBehaviour {
   void OnEnable() {
     hitHurtBoxIds.Clear();
     nextHitTime = 0f;
+    RegisterOwnedColliders();
+  }
+
+  void OnDisable() {
+    UnregisterOwnedColliders();
+  }
+
+  void OnDestroy() {
+    UnregisterOwnedColliders();
   }
 
   public void ResetHitCache() {
@@ -99,22 +133,42 @@ public class HitBox2D : MonoBehaviour {
     return transform.IsChildOf(other.transform);
   }
 
-  private struct OwnerCacheEntry {
-    public EntityId instanceId;
-    public Transform owner;
+  private static readonly Dictionary<ulong, Transform> ColliderOwnerCache = new();
+
+  private void RegisterOwnedColliders() {
+    UnregisterOwnedColliders();
+    GetComponentsInChildren(true, registeredColliders);
+    for (var i = registeredColliders.Count - 1; i >= 0; i--) {
+      var collider = registeredColliders[i];
+      var owner = collider.GetComponent<HitBox2D>() ?? collider.GetComponentInParent<HitBox2D>();
+      if (!ReferenceEquals(owner, this)) {
+        registeredColliders.RemoveAt(i);
+        continue;
+      }
+
+      hitBoxLookupCache[collider] = this;
+    }
   }
-  private static readonly OwnerCacheEntry[] ColliderOwnerCache = new OwnerCacheEntry[2048];
+
+  private void UnregisterOwnedColliders() {
+    for (var i = 0; i < registeredColliders.Count; i++) {
+      var collider = registeredColliders[i];
+      if (ReferenceEquals(collider, null)) continue;
+      if (hitBoxLookupCache.TryGetValue(collider, out var owner) && ReferenceEquals(owner, this)) {
+        hitBoxLookupCache.Remove(collider);
+      }
+    }
+    registeredColliders.Clear();
+  }
 
   private static Transform ResolveActorOwner(Collider2D source) {
     if (source == null) return null;
-    EntityId instanceId = source.GetEntityId();
-    int cacheIndex = (instanceId.GetHashCode() & 0x7FFFFFFF) % ColliderOwnerCache.Length;
-    var entry = ColliderOwnerCache[cacheIndex];
-    if (entry.instanceId.Equals(instanceId)) {
-      return entry.owner;
+    ulong instanceId = ObjectEntityId.GetRawValue(source);
+    if (ColliderOwnerCache.TryGetValue(instanceId, out var owner)) {
+      return owner;
     }
-    var owner = ResolveActorOwnerUncached(source.transform, out _);
-    ColliderOwnerCache[cacheIndex] = new OwnerCacheEntry { instanceId = instanceId, owner = owner };
+    owner = ResolveActorOwnerUncached(source.transform, out _);
+    ColliderOwnerCache[instanceId] = owner;
     return owner;
   }
 

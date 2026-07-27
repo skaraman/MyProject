@@ -49,6 +49,7 @@ public static class ContentEpisodeProgression {
   static string runtimeObjectiveEpisodeId = "";
   static int runtimeObjectiveRegistryVersion = -1;
   static bool runtimeObjectiveCountsDirty;
+  static bool runtimeObjectiveHasSpawnRules;
 
   public static int EpisodeRevision => episodeRevision;
 
@@ -173,18 +174,8 @@ public static class ContentEpisodeProgression {
   }
 
   public static bool HasCurrentEpisodeSpawnRules() {
-    var objectives = ResolveCurrentEpisodeObjectiveDefinitions();
-    for (var objectiveIndex = 0; objectiveIndex < objectives.Count; objectiveIndex++) {
-      var objective = objectives[objectiveIndex];
-      if (objective?.spawns == null) continue;
-
-      for (var ruleIndex = 0; ruleIndex < objective.spawns.Count; ruleIndex++) {
-        if (!TryParseEnemyRule(objective.spawns[ruleIndex], out _, out var spawnCount)) continue;
-        if (spawnCount > 0) return true;
-      }
-    }
-
-    return false;
+    ResolveCurrentEpisodeObjectiveDefinitions();
+    return runtimeObjectiveHasSpawnRules;
   }
 
   public static int CollectCurrentEpisodeSpawnEnemyTypes(List<string> output) {
@@ -394,6 +385,9 @@ public static class ContentEpisodeProgression {
 
       var countKey = BuildObjectiveCountKey(candidate);
       runtimeObjectiveDefinitions.Add(candidate);
+      if (!runtimeObjectiveHasSpawnRules && HasPositiveSpawnRule(candidate.spawns)) {
+        runtimeObjectiveHasSpawnRules = true;
+      }
       runtimeObjectives.Add(new RuntimeObjective {
         action = action,
         subject = subject,
@@ -410,6 +404,17 @@ public static class ContentEpisodeProgression {
     incompleteRuntimeObjectiveDefinitions.Clear();
     runtimeObjectiveEpisodeId = "";
     runtimeObjectiveRegistryVersion = -1;
+    runtimeObjectiveHasSpawnRules = false;
+  }
+
+  static bool HasPositiveSpawnRule(IReadOnlyList<string> rules) {
+    if (rules == null) return false;
+    for (var i = 0; i < rules.Count; i++) {
+      if (TryParseEnemyRule(rules[i], out _, out var spawnCount) && spawnCount > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static void RefreshIncompleteRuntimeObjectiveDefinitions() {

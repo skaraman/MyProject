@@ -520,14 +520,13 @@ public partial class SingleSceneManager {
       return activeEnemyControllersCache;
     }
 
-    var enemies = FindObjectsByType<EnemyController>(FindObjectsInactive.Exclude);
-    activeEnemyControllersCache = enemies != null && enemies.Length > 0 ? enemies : Array.Empty<EnemyController>();
+    activeEnemyControllersCache =
+      EnemyController.CopyActiveSnapshot(activeEnemyControllersCache);
     activeEnemyControllersCacheRefreshedAt = now;
     return activeEnemyControllersCache;
   }
 
   void InvalidateActiveEnemyControllersCache() {
-    activeEnemyControllersCache = Array.Empty<EnemyController>();
     activeEnemyControllersCacheRefreshedAt = -1f;
   }
 }

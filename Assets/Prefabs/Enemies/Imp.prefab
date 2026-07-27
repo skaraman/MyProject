@@ -781,7 +781,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1242,7 +1242,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1479,7 +1479,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1716,7 +1716,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -1953,7 +1953,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -2190,7 +2190,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -2647,7 +2647,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -3290,7 +3290,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -3591,7 +3591,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -4422,7 +4422,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -5522,6 +5522,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Project.Internal::BurstRigidbodies2D
   what: 0
+  piecesPrefab: {fileID: 0}
   planarForceMin: {x: -6, y: 3}
   planarForceMax: {x: 6, y: 10}
   torqueMin: -25
@@ -5561,6 +5562,7 @@ MonoBehaviour:
   shadowGroupOrderOffset: 0
   localShadowOrderOffset: 1
   localLightReselectSeconds: 0.12
+  isGlowMode: 0
 --- !u!1 &5737903963291482361
 GameObject:
   m_ObjectHideFlags: 0
@@ -5883,7 +5885,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -6520,7 +6522,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -6821,7 +6823,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations:
   - prop: _FadeAmount
     propHash: 443
@@ -7109,9 +7111,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1078097200090305651}
-  - component: {fileID: 2068937860570073162}
-  - component: {fileID: 9130723255934943621}
   - component: {fileID: 1891108856596658921}
+  - component: {fileID: 5548812463142743070}
   m_Layer: 6
   m_Name: hurt
   m_TagString: Untagged
@@ -7134,8 +7135,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 5646103829701755815}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!60 &2068937860570073162
-PolygonCollider2D:
+--- !u!114 &1891108856596658921
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6829933112057221651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7755a165c654144ae71d381c93edaf5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::HurtBox2D
+  ignoreEnemyHitBoxes: 1
+  OnHit:
+    m_PersistentCalls:
+      m_Calls: []
+  launchRandomOnHit: 1
+--- !u!61 &5548812463142743070
+BoxCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -7164,11 +7182,11 @@ PolygonCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
+  m_Offset: {x: -0.06785798, y: -1.0789369}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0, y: 0}
@@ -7178,65 +7196,8 @@ PolygonCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Points:
-    m_Paths:
-    - - {x: -0.30479, y: -0.36479098}
-      - {x: 0.66108704, y: -0.39075255}
-      - {x: 1.1783576, y: -0.38554353}
-      - {x: 1.1710039, y: -0.9929812}
-      - {x: 1.0754604, y: -1.2628131}
-      - {x: 2.231924, y: -1.8255435}
-      - {x: 1.3603345, y: -1.9040375}
-      - {x: 0.6924791, y: -1.5659313}
-      - {x: 0.5028972, y: -2.1994667}
-      - {x: 0.15685147, y: -1.2980452}
-      - {x: -0.49390155, y: -1.3353143}
-      - {x: -0.95860887, y: -2.4667387}
-      - {x: -1.5762961, y: -2.2263184}
-      - {x: -2.1194446, y: -1.3909421}
-      - {x: -1.3507526, y: -1.3058472}
-      - {x: -1.1052927, y: -0.8047073}
-  m_UseDelaunayMesh: 1
---- !u!114 &9130723255934943621
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6829933112057221651}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a95d19f083cf0a148bbc12071090f138, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  cam: {fileID: 0}
-  pathIndex: 0
-  hoverRadius: 0.2
-  guiOffset: {x: 10, y: -20}
-  clickToPin: 1
-  showAllWhenPinned: 0
-  unpinKey: 27
-  clickEvent: PolygonPointClicked
-  hoverEvent: PolygonPointHover
-  lineColor: {r: 0, g: 1, b: 0, a: 1}
-  lineWidth: 2
---- !u!114 &1891108856596658921
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6829933112057221651}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d7755a165c654144ae71d381c93edaf5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Project.Internal::HurtBox2D
-  ignoreEnemyHitBoxes: 1
-  OnHit:
-    m_PersistentCalls:
-      m_Calls: []
-  launchRandomOnHit: 1
+  m_Size: {x: 2.5064406, y: 1.9635789}
+  m_EdgeRadius: 0
 --- !u!1 &6954554934189074802
 GameObject:
   m_ObjectHideFlags: 0
@@ -8006,7 +7967,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -8243,7 +8204,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -8667,7 +8628,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -9091,7 +9052,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -9918,7 +9879,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -10155,7 +10116,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []
@@ -10392,7 +10353,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: FADE_ON
     enabled: 1
-    keywordHash: 1994
+    keywordHash: 1995
   floatAnimations: []
   colorAnimations: []
   vectorAnimations: []

@@ -429,7 +429,6 @@ public partial class SpriteWithNormals {
   void ResetPairLookupCaches() {
     _pairLookupHitCache.Clear();
     _pairLookupMissCache.Clear();
-    _animationAtlasAddressCache.Clear();
   }
 
   void ResetTransientResolveRetryState() {
@@ -463,16 +462,19 @@ public partial class SpriteWithNormals {
     _transientResolveRetryCount++;
     ResetPairLookupCaches();
     SpriteAddressResolver.InvalidateLookup(lookupKey, reloadShard: _transientResolveRetryCount == 1);
+    s_AnimationAtlasAddressCache.Clear();
     _hasLastLookup = false;
     _hasLastResolveError = true;
     _nextInternalRetryFrame = Time.frameCount + InternalRetryFrames;
 
-    Debug.LogWarning(
-      "[SpriteWithNormals] Retrying transient resolve miss on " + gameObject.name +
-      " attempt=" + _transientResolveRetryCount + "/" + ResolveMissRetryLimit +
-      " key=(" + lookupKey + ")" +
-      " reload_shard=" + (_transientResolveRetryCount == 1 ? 1 : 0)
-    );
+    if (ShouldLogFetch) {
+      Debug.LogWarning(
+        "[SpriteWithNormals] Retrying transient resolve miss on " + gameObject.name +
+        " attempt=" + _transientResolveRetryCount + "/" + ResolveMissRetryLimit +
+        " key=(" + lookupKey + ")" +
+        " reload_shard=" + (_transientResolveRetryCount == 1 ? 1 : 0)
+      );
+    }
     return true;
   }
 

@@ -13,7 +13,8 @@ public static class SpriteUiPinService {
   static readonly HashSet<string> addressSetBuffer = new(StringComparer.OrdinalIgnoreCase);
   static readonly List<SpriteWithNormals> refreshTargets = new(128);
   static readonly HashSet<SpriteWithNormals> refreshTargetSet = new();
-  static SpriteUiPinServiceRunner runner;
+  static bool updateRegistered;
+  static readonly Action updateCallback = Tick;
   static float nextRefreshTime;
   static int refreshTargetIndex;
   static int refreshMaxPinAddresses;
@@ -35,7 +36,7 @@ public static class SpriteUiPinService {
     addressSetBuffer.Clear();
     refreshTargets.Clear();
     refreshTargetSet.Clear();
-    runner = null;
+    updateRegistered = false;
     nextRefreshTime = 0f;
     refreshTargetIndex = 0;
     refreshMaxPinAddresses = 0;
@@ -51,7 +52,7 @@ public static class SpriteUiPinService {
         refreshTargets.Add(target);
       }
     }
-    EnsureRunner();
+    EnsureUpdateRegistration();
   }
 
   public static void Unregister(SpriteWithNormals target) {
@@ -65,13 +66,15 @@ public static class SpriteUiPinService {
     ReleaseOwner(ownerId);
   }
 
-  static void EnsureRunner() {
+  static void EnsureUpdateRegistration() {
     if (!Application.isPlaying) return;
-    if (runner != null) return;
-
-    var go = new GameObject("SpriteUiPinServiceRunner") { hideFlags = HideFlags.HideAndDontSave };
-    UnityEngine.Object.DontDestroyOnLoad(go);
-    runner = go.AddComponent<SpriteUiPinServiceRunner>();
+    if (updateRegistered) return;
+    updateRegistered = true;
+    RuntimeUpdateHub.Register(
+      500,
+      "RuntimeUpdateHub.SpriteUiPins",
+      updateCallback
+    );
   }
 
   internal static void Tick() {
@@ -158,7 +161,7 @@ public static class SpriteUiPinService {
     if (target.IsAnimation) {
       var startFrame = Mathf.Max(target.LastRequestedFrame, 1);
       var lookAhead = Mathf.Max(SpriteStreamingRuntimeSettings.PinWindowFrames - 1, 0);
-      target.CollectAnimationAtlasAddresses(
+      target.CollectAnimationAtlasAddressesUncached(
         categoryOverride: null,
         startFrame: startFrame,
         endFrame: startFrame + lookAhead,
@@ -252,10 +255,4 @@ public static class SpriteUiPinService {
     addresses.Add(normalized);
   }
 
-}
-
-sealed class SpriteUiPinServiceRunner : MonoBehaviour {
-  void Update() {
-    SpriteUiPinService.Tick();
-  }
 }

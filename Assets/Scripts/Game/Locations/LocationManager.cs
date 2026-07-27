@@ -182,6 +182,13 @@ public partial class LocationManager : MonoBehaviour {
     var logVerbose = ShouldLogVerboseLoadDebug();
     var pendingBlockingActivation = HasPendingBlockingActivationWork;
     var pendingDeferredActivation = HasPendingDeferredActivationWork;
+    var activeInstanceRequiresReplacement = ActiveLocationInstanceRequiresReplacement(resolvedId);
+    if (!changedLocation &&
+        !pendingBlockingActivation &&
+        !pendingDeferredActivation &&
+        IsActiveLocationSessionCurrent(resolvedId)) {
+      return true;
+    }
     var refreshPendingLocationUnderOverlay = ShouldRefreshPendingLocationUnderOverlay(changedLocation);
     LogLocationLoadTiming(
       "request",
@@ -226,7 +233,11 @@ public partial class LocationManager : MonoBehaviour {
       );
     }
 
-    ApplyLocationPrefab(activeLocation, changedLocation || refreshPendingLocationUnderOverlay, requestStartedAt);
+    ApplyLocationPrefab(
+      activeLocation,
+      changedLocation || refreshPendingLocationUnderOverlay || activeInstanceRequiresReplacement,
+      requestStartedAt
+    );
     MessageBus.Send("LocationLoaded", activeLocation);
 
     // Initialize enemy loading pipeline if assigned
@@ -300,6 +311,7 @@ public partial class LocationManager : MonoBehaviour {
     }
 
     if (!forceRefresh && activeLocationInstance != null) {
+      SetActiveLocationInstance(info.id, prefab, activeLocationInstance);
       LogLocationLoadTiming(
         "reuse_active_instance",
         info.id,
@@ -499,6 +511,24 @@ public partial class LocationManager : MonoBehaviour {
            cached.saveSlot == SaveSlotManager.slot &&
            cached.registryVersion == ActiveContentRegistryRuntime.ReloadVersion &&
            cached.episodeRevision == ContentEpisodeProgression.EpisodeRevision;
+  }
+
+  bool IsActiveLocationSessionCurrent(string locationId) {
+    return activeLocationInstance != null &&
+           string.Equals(activeLocationInstanceId, locationId, StringComparison.OrdinalIgnoreCase) &&
+           activeLocationInstanceSaveSlot == SaveSlotManager.slot &&
+           activeLocationInstanceRegistryVersion == ActiveContentRegistryRuntime.ReloadVersion &&
+           activeLocationInstanceEpisodeRevision == ContentEpisodeProgression.EpisodeRevision;
+  }
+
+  bool ActiveLocationInstanceRequiresReplacement(string locationId) {
+    if (activeLocationInstance == null) {
+      return false;
+    }
+
+    return !string.Equals(activeLocationInstanceId, locationId, StringComparison.OrdinalIgnoreCase) ||
+           activeLocationInstanceSaveSlot != SaveSlotManager.slot ||
+           activeLocationInstanceRegistryVersion != ActiveContentRegistryRuntime.ReloadVersion;
   }
 
   void TrimLocationInstanceCache() {

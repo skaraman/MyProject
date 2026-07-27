@@ -13,7 +13,6 @@ public class ComponentPropagator : MonoBehaviour {
     public bool propagate;
   }
 
-  private bool propagateOn = true;
   private bool hasPropagated;
   [SerializeField] bool verboseLogging;
   [SerializeField] float initialDelaySeconds = .5f;
@@ -30,10 +29,11 @@ public class ComponentPropagator : MonoBehaviour {
   private static readonly Dictionary<Type, MethodInfo> _cachedForceUpdateMethods = new();
   private readonly List<Component> _scratchComponents = new();
   private readonly List<ComponentToggle> _scratchToggles = new();
+  private readonly List<AllIn1AnimatorInspector> _scratchAnimators = new();
+  private readonly List<SpriteRenderer> _scratchSpriteRenderers = new();
 
   void OnEnable() {
     if (propagateOnce && hasPropagated) {
-      propagateOn = false;
       return;
     }
     StartPropagationDelay();
@@ -41,18 +41,13 @@ public class ComponentPropagator : MonoBehaviour {
 
   void StartPropagationDelay() {
     StopAllCoroutines();
-    // If no delay configured, keep current behaviour.
-    if (initialDelaySeconds <= 0f && initialDelayFrames <= 0) {
-      propagateOn = true;
-      return;
-    }
-    propagateOn = false;
-    StartCoroutine(EnablePropagationAfterDelay());
+    StartCoroutine(PropagationRoutine());
   }
 
   private WaitForSeconds _cachedWaitForSeconds;
+  private WaitForFixedUpdate _cachedWaitForFixedUpdate;
 
-  IEnumerator EnablePropagationAfterDelay() {
+  IEnumerator PropagationRoutine() {
     for (int i = 0; i < initialDelayFrames; i++) {
       yield return null; // wait a frame so dynamically-created children appear
     }
@@ -62,16 +57,18 @@ public class ComponentPropagator : MonoBehaviour {
       }
       yield return _cachedWaitForSeconds;
     }
-    propagateOn = true;
-  }
+    if (_cachedWaitForFixedUpdate == null) {
+      _cachedWaitForFixedUpdate = new WaitForFixedUpdate();
+    }
+    yield return _cachedWaitForFixedUpdate;
 
-  void FixedUpdate() {
-    if (propagateOn) {
+    while (isActiveAndEnabled) {
       ForcePropagation();
-      if (propagateOnce) {  
-        propagateOn = false;
+      if (propagateOnce) {
+        yield break;
       }
-    } 
+      yield return _cachedWaitForFixedUpdate;
+    }
   }
 
   public void ForcePropagation() {
@@ -82,7 +79,6 @@ public class ComponentPropagator : MonoBehaviour {
       return;
     }
 
-    propagateOn = false;
     StopAllCoroutines();
   }
 
@@ -92,7 +88,7 @@ public class ComponentPropagator : MonoBehaviour {
     for (int i = 0; i < _scratchComponents.Count; i++) {
       var c = _scratchComponents[i];
       if (c is Transform || c is ComponentPropagator) continue;
-      var existing = components.Find(e => e.component == c);
+      var existing = FindExistingToggle(c);
       if (existing != null) _scratchToggles.Add(existing);
       else _scratchToggles.Add(new ComponentToggle { component = c, propagate = false });
     }
@@ -100,11 +96,36 @@ public class ComponentPropagator : MonoBehaviour {
     components.AddRange(_scratchToggles);
   }
 
+  ComponentToggle FindExistingToggle(Component component) {
+    for (var i = 0; i < components.Count; i++) {
+      var toggle = components[i];
+      if (toggle != null && toggle.component == component) {
+        return toggle;
+      }
+    }
+    return null;
+  }
+
   void ApplyPropagation() {
     _fieldsSkippedCulling = 0;
     _propertiesSkippedCulling = 0;
     foreach (var toggle in components) {
       if (!toggle.propagate || toggle.component == null) continue;
+      if (toggle.component is AllIn1AnimatorInspector sourceAnimator) {
+        _scratchAnimators.Clear();
+        GetComponentsInChildren(true, _scratchAnimators);
+        for (var i = 0; i < _scratchAnimators.Count; i++) {
+          var targetAnimator = _scratchAnimators[i];
+          if (targetAnimator == null || targetAnimator == sourceAnimator) continue;
+          targetAnimator.CopyConfigurationFrom(sourceAnimator);
+        }
+        continue;
+      }
+      if (toggle.component is SpriteRenderer sourceSpriteRenderer) {
+        PropagateSpriteRenderer(sourceSpriteRenderer);
+        continue;
+      }
+
       var type = toggle.component.GetType();
       var children = GetComponentsInChildren(type, true);
       foreach (var target in children) {
@@ -115,12 +136,6 @@ public class ComponentPropagator : MonoBehaviour {
             renderer.bounds = new Bounds(renderer.transform.position, Vector3.one * 100f);
           }
         }
-        if (type.Name.Contains("AllIn1AnimatorInspector")) {
-          CopyAllIn1AnimatorLists(toggle.component, target);
-          InvokeForceUpdate(target);
-          target.GetComponent<AllIn1AnimatorInspector>().Refresh();
-          continue;
-        }
         CopyFields(toggle.component, target);
         CopyProperties(toggle.component, target);
         InvokeForceUpdate(target);
@@ -128,6 +143,34 @@ public class ComponentPropagator : MonoBehaviour {
     }
     if (verboseLogging) {
       RuntimeLog.Log($"[ComponentPropagator] Skips due to culling-related members fields={_fieldsSkippedCulling} properties={_propertiesSkippedCulling}");
+    }
+  }
+
+  void PropagateSpriteRenderer(SpriteRenderer source) {
+    _scratchSpriteRenderers.Clear();
+    GetComponentsInChildren(true, _scratchSpriteRenderers);
+    for (var i = 0; i < _scratchSpriteRenderers.Count; i++) {
+      var target = _scratchSpriteRenderers[i];
+      if (target == null || target == source) continue;
+
+      target.enabled = true;
+      if (target.bounds.size.magnitude < 0.1f) {
+        target.bounds = new Bounds(target.transform.position, Vector3.one * 100f);
+      }
+
+      // Sprite/material identity remains authored per glyph. Only copy the
+      // renderer state the propagator is used to synchronize.
+      target.color = source.color;
+      target.flipX = source.flipX;
+      target.flipY = source.flipY;
+      target.sortingLayerID = source.sortingLayerID;
+      target.sortingOrder = source.sortingOrder;
+      target.maskInteraction = source.maskInteraction;
+      target.drawMode = source.drawMode;
+      target.size = source.size;
+      target.tileMode = source.tileMode;
+      target.adaptiveModeThreshold = source.adaptiveModeThreshold;
+      target.spriteSortPoint = source.spriteSortPoint;
     }
   }
 
@@ -227,70 +270,6 @@ public class ComponentPropagator : MonoBehaviour {
         }
         catch { }
       }
-    }
-  }
-
-  void CopyAllIn1AnimatorLists(object source, object target)  {
-    var s = source as AllIn1AnimatorInspector;
-    var t = target as AllIn1AnimatorInspector;
-    if (s == null || t == null) return;
-    t.keywordToggles = new List<AllIn1AnimatorInspector.KeywordToggle>();
-    foreach (var item in s.keywordToggles)    {
-      var copy = new AllIn1AnimatorInspector.KeywordToggle {
-        keyword = item.keyword,
-        enabled = item.enabled
-      };
-      copy.CacheHash();
-      t.keywordToggles.Add(copy);
-    }
-    t.floatAnimations = new List<AllIn1AnimatorInspector.FloatAnimation>();
-    foreach (var item in s.floatAnimations) {
-      var copy = new AllIn1AnimatorInspector.FloatAnimation {
-        prop = item.prop,
-        loop = item.loop,
-        currentSequenceIndex = 0,
-        timer = 0f,
-        isDone = false
-      };
-      copy.CacheHash();
-      copy.sequences = new List<AllIn1AnimatorInspector.Sequence<float>>(item.sequences);
-      t.floatAnimations.Add(copy);
-    }
-    t.colorAnimations = new List<AllIn1AnimatorInspector.ColorAnimation>();
-    foreach (var item in s.colorAnimations) {
-      var copy = new AllIn1AnimatorInspector.ColorAnimation  {
-        prop = item.prop,
-        loop = item.loop,
-        currentSequenceIndex = 0,
-        timer = 0f,
-        isDone = false
-      };
-      copy.CacheHash();
-      copy.sequences = new List<AllIn1AnimatorInspector.Sequence<Color>>(item.sequences);
-      t.colorAnimations.Add(copy);
-    }
-    t.vectorAnimations = new List<AllIn1AnimatorInspector.VectorAnimation>();
-    foreach (var item in s.vectorAnimations)  {
-      var copy = new AllIn1AnimatorInspector.VectorAnimation {
-        prop = item.prop,
-        loop = item.loop,
-        currentSequenceIndex = 0,
-        timer = 0f,
-        isDone = false
-      };
-      copy.CacheHash();
-      copy.sequences = new List<AllIn1AnimatorInspector.Sequence<Vector4>>(item.sequences);
-      t.vectorAnimations.Add(copy);
-    }
-    t.textureAssignments = new List<AllIn1AnimatorInspector.TextureAssignment>();
-    foreach (var item in s.textureAssignments) {
-      var copy = new AllIn1AnimatorInspector.TextureAssignment  {
-        prop = item.prop,
-        texture = item.texture,
-        isAssigned = item.isAssigned
-      };
-      copy.CacheHash();
-      t.textureAssignments.Add(copy);
     }
   }
 

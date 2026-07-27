@@ -64,6 +64,7 @@ public partial class SingleSceneManager {
   void InitializeLoadingScreenReferences() {
     loadingBlackscreen = null;
     loadingBlackscreenRenderer = null;
+    loadingHeldProgressBlackscreenVisualApplied = false;
     blackscreen = null;
     loadingLightObject = null;
     loadingCircle = null;
@@ -799,7 +800,10 @@ public partial class SingleSceneManager {
   }
 
   void ResetLoadingStageStallState() {
-    loadingStageStallKey = "";
+    loadingStageStallStateInitialized = false;
+    loadingStageStallPercent = -1;
+    loadingStageStallDetail = "";
+    loadingStageStallStage = default;
     loadingStageStallStartedAt = -1f;
     loadingStageStallNextLogAt = -1f;
   }
@@ -1098,11 +1102,16 @@ public partial class SingleSceneManager {
   void MaybeLogLoadingStageStall(int percent, string detail) {
     if (!ShouldLogLoadFlowWarnings()) return;
     var normalizedDetail = string.IsNullOrWhiteSpace(detail) ? "-" : detail.Trim();
-    var stage = gameplayLoadingStageForLoad.ToString();
-    var key = percent + "|" + normalizedDetail + "|" + stage;
+    var stage = gameplayLoadingStageForLoad;
     var now = Time.realtimeSinceStartup;
-    if (!string.Equals(loadingStageStallKey, key, StringComparison.Ordinal)) {
-      loadingStageStallKey = key;
+    if (!loadingStageStallStateInitialized ||
+        loadingStageStallPercent != percent ||
+        loadingStageStallStage != stage ||
+        !string.Equals(loadingStageStallDetail, normalizedDetail, StringComparison.Ordinal)) {
+      loadingStageStallStateInitialized = true;
+      loadingStageStallPercent = percent;
+      loadingStageStallDetail = normalizedDetail;
+      loadingStageStallStage = stage;
       loadingStageStallStartedAt = now;
       loadingStageStallNextLogAt = now + LoadingStageStallDelaySeconds;
       return;
@@ -1133,11 +1142,12 @@ public partial class SingleSceneManager {
       out var blockingHardBypassUsed
     );
     var dialogController = ResolveGameplayDialogController();
+    var stageName = stage.ToString();
     var builder = BeginLoadFlowLog("[SingleSceneManager][LoadingStageStall]");
     AppendLoadFlowFloat(builder, "unchanged_s", now - loadingStageStallStartedAt);
     AppendLoadFlowInt(builder, "percent", percent);
     AppendLoadFlowField(builder, "detail", "'" + ResolveLoadFlowValue(normalizedDetail) + "'");
-    AppendLoadFlowField(builder, "stage", stage);
+    AppendLoadFlowField(builder, "stage", stageName);
     AppendLoadFlowField(builder, "overlay_reason", ResolveLoadFlowValue(SpriteStreamingLoadingState.ActiveReason));
     AppendLoadFlowField(builder, "current_section", ResolveCurrentSection().ToString());
     AppendLoadFlowField(builder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
@@ -1872,8 +1882,14 @@ public partial class SingleSceneManager {
   }
 
   void SetLoadingProgressUiActive(bool active) {
-    if (active) {
+    if (active &&
+        (!holdBlackscreenOpaqueDuringLoad || !loadingHeldProgressBlackscreenVisualApplied)) {
       ApplyLoadingBlackscreenVisual(loadingBlackscreenRenderer, 1f, 1f);
+      loadingHeldProgressBlackscreenVisualApplied =
+        holdBlackscreenOpaqueDuringLoad && loadingBlackscreenRenderer != null;
+    }
+    else if (!active) {
+      loadingHeldProgressBlackscreenVisualApplied = false;
     }
     if (loadingCircle != null && loadingCircle.activeSelf != active) {
       loadingCircle.SetActive(active);

@@ -135,7 +135,10 @@ public partial class SingleSceneManager : MonoBehaviour {
   private float loadingHeartbeatLastLoggedAt = -1f;
   private int loadingHeartbeatCount;
   private float loadingHeartbeatNextLogAt = -1f;
-  private string loadingStageStallKey = "";
+  private bool loadingStageStallStateInitialized;
+  private int loadingStageStallPercent = -1;
+  private string loadingStageStallDetail = "";
+  private OptimalGameplayLoadingStage loadingStageStallStage;
   private float loadingStageStallStartedAt = -1f;
   private float loadingStageStallNextLogAt = -1f;
   private int loadingBlockingReadyCount;
@@ -398,6 +401,8 @@ public partial class SingleSceneManager : MonoBehaviour {
   readonly List<string> persistentPlayerEffectAtlasAddresses = new(256);
   int persistentPlayerAppearanceContentVersion = -1;
   int persistentPlayerEffectContentVersion = -1;
+  bool persistentPlayerAppearancePlanEvaluated;
+  bool persistentPlayerEffectPlanEvaluated;
   readonly List<string> environmentCacheLibraryScratch = new(256);
   readonly List<string> environmentCacheAddressScratch = new(4096);
   readonly List<string> environmentCacheAssetAddressScratch = new(64);
@@ -422,6 +427,7 @@ public partial class SingleSceneManager : MonoBehaviour {
   readonly HashSet<string> playerBootstrapWarmSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly StringBuilder loadFlowLogBuilder = new(1024);
   MaterialPropertyBlock loadingBlackscreenPropertyBlock;
+  bool loadingHeldProgressBlackscreenVisualApplied;
   EnemyController[] activeEnemyControllersCache = Array.Empty<EnemyController>();
   float activeEnemyControllersCacheRefreshedAt = -1f;
   GameplayInput cachedGameplayInput;
@@ -461,6 +467,8 @@ public partial class SingleSceneManager : MonoBehaviour {
     persistentPlayerEffectAtlasAddresses.Clear();
     persistentPlayerAppearanceContentVersion = -1;
     persistentPlayerEffectContentVersion = -1;
+    persistentPlayerAppearancePlanEvaluated = false;
+    persistentPlayerEffectPlanEvaluated = false;
     if (ReferenceEquals(instance, this)) {
       instance = null;
     }

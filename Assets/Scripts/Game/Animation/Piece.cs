@@ -6,7 +6,6 @@ using Random = UnityEngine.Random;
 public class Piece : MonoBehaviour {
   private Rigidbody2D rb;
   private All1AnimatorScript all1;
-  private Coroutine freezeRoutine;
   private Vector3 initialLocalPosition;
   private Quaternion initialLocalRotation;
   private Vector3 initialLocalScale;
@@ -16,6 +15,8 @@ public class Piece : MonoBehaviour {
   private bool hasCrossedZero;
   private bool done;
   private float timer;
+  private float fadeTimer;
+  private bool isFading;
   private Vector2 fakeBounceImpulse; // Smaller impulse for bounce
   private float lifeAfterFakeBounce;
 
@@ -48,14 +49,12 @@ public class Piece : MonoBehaviour {
 
   public void ResetPiece() {
     EnsureAnimations();
-    if (freezeRoutine != null) {
-      StopCoroutine(freezeRoutine);
-      freezeRoutine = null;
-    }
     launched = false;
     hasCrossedZero = false;
     done = false;
     timer = 0f;
+    fadeTimer = 0f;
+    isFading = false;
     fakeBounceImpulse = Vector2.zero;
     lifeAfterFakeBounce = 0f;
     if (!hasCachedTransform) CacheInitialTransform();
@@ -98,26 +97,28 @@ public class Piece : MonoBehaviour {
 
   void Update() {
     if (!launched || done) return;
-    if (hasCrossedZero) {
+    
+    if (hasCrossedZero && !isFading) {
       timer += TimeScale.GetDeltaTime(this);
       if (timer >= lifeAfterFakeBounce) {
-        done = true;
-        freezeRoutine = StartCoroutine(FreezePhysicsAndFade());
+        isFading = true;
+        fadeTimer = 0f;
+        if (rb != null) {
+          rb.linearVelocity = Vector2.zero;
+          rb.angularVelocity = 0f;
+          rb.simulated = false;
+        }
+        if (all1 != null) {
+          all1.Play("fadeOut");
+        }
       }
     }
-  }
-
-  IEnumerator FreezePhysicsAndFade() {
-    if (rb != null) {
-      rb.linearVelocity = Vector2.zero;
-      rb.angularVelocity = 0f;
-      rb.simulated = false;
+    else if (isFading) {
+      fadeTimer += TimeScale.GetDeltaTime(this);
+      if (fadeTimer >= 2f) {
+        done = true;
+        gameObject.SetActive(false);
+      }
     }
-    if (all1 != null) {
-      all1.Play("fadeOut");
-    }
-    yield return TimeScale.WaitForSecondsScaled(2f, this);
-    gameObject.SetActive(false);
-    freezeRoutine = null;
   }
 }

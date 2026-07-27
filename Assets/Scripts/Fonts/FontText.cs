@@ -108,6 +108,7 @@ public class FontText : MonoBehaviour {
   private List<GameObject> activeChars = new();
   private HashSet<GameObject> activeCharsSet = new();
   private List<SpriteRenderer> activeCharRenderers = new();
+  private List<FontCharacter> activeCharCharacters = new();
   private List<int> activeCharSourceIndices = new();
   private Stack<GameObject> charPool = new();
   private HashSet<GameObject> charPoolSet = new();
@@ -116,6 +117,28 @@ public class FontText : MonoBehaviour {
   private List<int> lineCharCounts = new(); // Track chars per line
   private readonly List<Transform> childScratch = new();
   private readonly List<GameObject> gameObjectScratch = new();
+
+  private bool _checkedPrefabHasFontCharacter;
+  private bool _prefabHasFontCharacter;
+  private bool _checkedPrefabHasSpriteWithNormals;
+  private bool _prefabHasSpriteWithNormals;
+
+  bool PrefabHasFontCharacter() {
+    if (!_checkedPrefabHasFontCharacter) {
+      _checkedPrefabHasFontCharacter = true;
+      _prefabHasFontCharacter = characterPrefab != null && characterPrefab.GetComponent<FontCharacter>() != null;
+    }
+    return _prefabHasFontCharacter;
+  }
+
+  bool PrefabHasSpriteWithNormals() {
+    if (!_checkedPrefabHasSpriteWithNormals) {
+      _checkedPrefabHasSpriteWithNormals = true;
+      _prefabHasSpriteWithNormals =
+        characterPrefab != null && characterPrefab.GetComponent<SpriteWithNormals>() != null;
+    }
+    return _prefabHasSpriteWithNormals;
+  }
 
   private int line = 1;
   private float width = 0;
@@ -130,11 +153,52 @@ public class FontText : MonoBehaviour {
   private bool pendingRegenerate;
   private bool isGenerating;
   private bool glyphHierarchyChanged;
+  private bool existingGlyphChildrenAdopted;
 
   void OnEnable() {
     if (characterPrefab == null) return;
+    var adoptedExistingGlyphs = AdoptExistingGlyphChildren();
     EnsureGlyphCapacity(prewarmCharacterCapacity);
+    // Authored glyphs already existed in the hierarchy, so capacity warmup did
+    // not mark them as new. Propagate once after Generate reactivates them.
+    if (adoptedExistingGlyphs) {
+      glyphHierarchyChanged = true;
+    }
     Generate();
+  }
+
+  bool AdoptExistingGlyphChildren() {
+    if (existingGlyphChildrenAdopted) return false;
+    existingGlyphChildrenAdopted = true;
+
+    var adoptedAnyGlyph = false;
+    var requiresFontCharacter = PrefabHasFontCharacter();
+    var requiresSpriteWithNormals = PrefabHasSpriteWithNormals();
+    for (var i = 0; i < transform.childCount; i++) {
+      var child = transform.GetChild(i);
+      if (child == null) continue;
+
+      var childObject = child.gameObject;
+      if (activeCharsSet.Contains(childObject) || charPoolSet.Contains(childObject)) {
+        continue;
+      }
+
+      var isCompatibleGlyph = requiresFontCharacter
+        ? childObject.GetComponent<FontCharacter>() != null
+        : childObject.GetComponent<SpriteRenderer>() != null;
+      if (isCompatibleGlyph &&
+          requiresSpriteWithNormals &&
+          childObject.GetComponent<SpriteWithNormals>() == null) {
+        isCompatibleGlyph = false;
+      }
+      if (!isCompatibleGlyph) continue;
+
+      childObject.SetActive(false);
+      charPool.Push(childObject);
+      charPoolSet.Add(childObject);
+      adoptedAnyGlyph = true;
+    }
+    return adoptedAnyGlyph;
   }
 
   public void EnsureGlyphCapacity(int requiredCapacity) {
@@ -156,6 +220,7 @@ public class FontText : MonoBehaviour {
     if (activeChars.Capacity < requiredCapacity) {
       activeChars.Capacity = requiredCapacity;
       activeCharRenderers.Capacity = requiredCapacity;
+      activeCharCharacters.Capacity = requiredCapacity;
       activeCharSourceIndices.Capacity = requiredCapacity;
     }
     PropagateGlyphHierarchyIfChanged();
@@ -292,6 +357,7 @@ public class FontText : MonoBehaviour {
     activeChars.Clear();
     activeCharsSet.Clear();
     activeCharRenderers.Clear();
+    activeCharCharacters.Clear();
     activeCharSourceIndices.Clear();
     totalWidths.Clear();
     lineHeights.Clear();
@@ -375,7 +441,7 @@ public class FontText : MonoBehaviour {
         if (measureObject == null) {
           measureObject = GetCharFromPool();
           measureObject.SetActive(false);
-          fc = measureObject.GetComponent<FontCharacter>();
+          fc = PrefabHasFontCharacter() ? measureObject.GetComponent<FontCharacter>() : null;
           sr = measureObject.GetComponent<SpriteRenderer>();
           SyncGlyphRendererState(sr);
         }
@@ -408,7 +474,7 @@ public class FontText : MonoBehaviour {
 
   void EmitCharacter(int contentIndex, char c) {
     var obj = GetCharFromPool();
-    var fc = obj.GetComponent<FontCharacter>();
+    var fc = PrefabHasFontCharacter() ? obj.GetComponent<FontCharacter>() : null;
     var sr = obj.GetComponent<SpriteRenderer>();
     SyncGlyphRendererState(sr);
     if (!TryGetCharacterMetrics(fc, sr, c, out var charWidth, out var charHeight)) {
@@ -426,6 +492,7 @@ public class FontText : MonoBehaviour {
 
     activeChars.Add(obj);
     activeCharRenderers.Add(sr);
+    activeCharCharacters.Add(fc);
     activeCharSourceIndices.Add(contentIndex);
     lineCharCounts[line - 1]++;
 
@@ -448,12 +515,17 @@ public class FontText : MonoBehaviour {
     if (actualWidth < width) actualWidth = width;
   }
 
+  private bool searchedHostRenderer;
+  private bool searchedComponentPropagator;
+
   void CacheRuntimeReferences() {
-    if (cachedHostRenderer == null) {
+    if (!searchedHostRenderer) {
+      searchedHostRenderer = true;
       cachedHostRenderer = GetComponent<SpriteRenderer>();
     }
 
-    if (cachedComponentPropagator == null) {
+    if (!searchedComponentPropagator) {
+      searchedComponentPropagator = true;
       cachedComponentPropagator = GetComponent<ComponentPropagator>();
     }
   }
@@ -511,7 +583,7 @@ public class FontText : MonoBehaviour {
     for (var i = 0; i < activeCharRenderers.Count; i++) {
       var glyphRenderer = activeCharRenderers[i];
       if (glyphRenderer == null) continue;
-      var glyphCharacter = glyphRenderer.GetComponent<FontCharacter>();
+      var glyphCharacter = i < activeCharCharacters.Count ? activeCharCharacters[i] : null;
       var canRenderGlyph = glyphCharacter == null || glyphCharacter.CanRenderCurrentGlyph;
       var shouldBeVisible = (revealAll ||
         (i < activeCharSourceIndices.Count && activeCharSourceIndices[i] < visibleContentCharacterCount)) &&
@@ -688,9 +760,11 @@ public class FontText : MonoBehaviour {
     activeChars.Clear();
     activeCharsSet.Clear();
     activeCharRenderers.Clear();
+    activeCharCharacters.Clear();
     activeCharSourceIndices.Clear();
     charPool.Clear();
     charPoolSet.Clear();
+    existingGlyphChildrenAdopted = false;
 
     gameObjectScratch.Clear();
     for (int i = 0; i < transform.childCount; i++) {

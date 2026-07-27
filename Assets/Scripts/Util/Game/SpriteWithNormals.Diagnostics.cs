@@ -57,6 +57,7 @@ public partial class SpriteWithNormals {
     _lastResolveErrorLibraryName = lookupKey.libraryName ?? "";
     _lastResolveErrorLabelPrefix = lookupKey.labelPrefix ?? "";
     _lastResolveErrorCategory = lookupKey.category ?? "";
+    if (!s_ReportedResolveErrorKeys.Add(lookupKey)) return;
     Debug.LogError($"[SpriteWithNormals] No sprite mapping found for {lookupKey} on {gameObject.name}");
   }
 

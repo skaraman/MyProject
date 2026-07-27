@@ -17,6 +17,10 @@ public partial class EnemyController {
   }
 
   string ResolveLocomotionSoundId() {
+    if (!EnemyAudioLimiter.IsEligibleForAudio(this)) {
+      return null;
+    }
+
     if (!SingleSceneManager.IsGameplayActive ||
         !SingleSceneManager.IsBlackscreenFullyTransparent ||
         animationController == null ||

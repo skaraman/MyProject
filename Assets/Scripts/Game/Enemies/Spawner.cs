@@ -8,6 +8,10 @@ public class Spawner : MonoBehaviour {
   const string ImpSpawnSoundId = "enemy.imp.spawn";
   const float EnemySpawnSoundCooldownSeconds = 4f;
   const float InitialWaveSameSideSpacing = 2f;
+  const int LoadingEnemyPoolInstantiatesPerFrameDesktop = 2;
+  const int LoadingEnemyPoolInstantiatesPerFrameMobile = 1;
+  static readonly Action<GameObject> PreparePooledEnemyInstanceCallback =
+    PreparePooledEnemyInstance;
 
   sealed class SpawnRuleState {
     public string enemyType;
@@ -52,6 +56,8 @@ public class Spawner : MonoBehaviour {
   int initializedEpisodeRevision = -1;
   int initializedRegistryVersion = -1;
   int spawnWarmupGeneration;
+  int loadingPoolBuildFrame = -1;
+  int loadingPoolInstancesBuiltThisFrame;
   bool spawningInitialWave;
 
   void Start() {
@@ -314,23 +320,31 @@ public class Spawner : MonoBehaviour {
       canSpawn = false;
       return false;
     }
-    if (ReferenceEquals(initializedLocationInstance, activeLocationInstance) &&
-        string.Equals(initializedLocationId, LocationData.id, StringComparison.OrdinalIgnoreCase) &&
-        initializedEpisodeRevision == ContentEpisodeProgression.EpisodeRevision &&
-        initializedRegistryVersion == ActiveContentRegistryRuntime.ReloadVersion &&
-        enemyPoolsByPrefab.Count > 0) {
+    var samePoolPreparationContext =
+      ReferenceEquals(initializedLocationInstance, activeLocationInstance) &&
+      string.Equals(initializedLocationId, LocationData.id, StringComparison.OrdinalIgnoreCase) &&
+      initializedEpisodeRevision == ContentEpisodeProgression.EpisodeRevision &&
+      initializedRegistryVersion == ActiveContentRegistryRuntime.ReloadVersion;
+    if (samePoolPreparationContext && AreEnemyPoolsReadyForActiveRules()) {
       return true;
     }
-    if (!TryBuildActiveSpawnRules()) {
-      Debug.LogWarning(
-        "[Spawner] Location '" + LocationData.id + "' has no spawn rules in the current episode objectives. Spawning disabled."
-      );
+    if (!samePoolPreparationContext || activeSpawnRules.Count <= 0) {
+      if (!TryBuildActiveSpawnRules()) {
+        Debug.LogWarning(
+          "[Spawner] Location '" + LocationData.id + "' has no spawn rules in the current episode objectives. Spawning disabled."
+        );
+        canSpawn = false;
+        return false;
+      }
+
       canSpawn = false;
-      return false;
+      ReturnActiveEnemiesToPools();
+      initializedLocationInstance = activeLocationInstance;
+      initializedLocationId = LocationData.id;
+      initializedEpisodeRevision = ContentEpisodeProgression.EpisodeRevision;
+      initializedRegistryVersion = ActiveContentRegistryRuntime.ReloadVersion;
     }
 
-    canSpawn = false;
-    ReturnActiveEnemiesToPools();
     if (!TryInitializeEnemyPools()) {
       canSpawn = false;
       return false;
@@ -585,18 +599,60 @@ public class Spawner : MonoBehaviour {
       return false;
     }
 
+    var buildIncrementally = Application.isPlaying && SpriteStreamingLoadingState.IsLoadingOverlayActive;
+    var remainingInstanceBudget = int.MaxValue;
+    if (buildIncrementally) {
+      if (loadingPoolBuildFrame != Time.frameCount) {
+        loadingPoolBuildFrame = Time.frameCount;
+        loadingPoolInstancesBuiltThisFrame = 0;
+      }
+      var frameBudget = Application.isMobilePlatform
+        ? LoadingEnemyPoolInstantiatesPerFrameMobile
+        : LoadingEnemyPoolInstantiatesPerFrameDesktop;
+      remainingInstanceBudget = Mathf.Max(0, frameBudget - loadingPoolInstancesBuiltThisFrame);
+    }
+    var allPoolsReady = true;
+
     for (var i = 0; i < activeSpawnRules.Count; i++) {
       var spawnRule = activeSpawnRules[i];
       if (spawnRule == null || string.IsNullOrWhiteSpace(spawnRule.enemyType) || spawnRule.prefab == null) continue;
       var requiredPoolSize = Mathf.Max(spawnRule.maxAlive, 1);
       if (!enemyPoolsByPrefab.TryGetValue(spawnRule.prefab, out var pool) || pool == null) {
         pool = new Pool();
-        pool.Initialize(spawnRule.prefab, ParentHolder.transform, poolSize: requiredPoolSize);
         enemyPoolsByPrefab[spawnRule.prefab] = pool;
+        if (buildIncrementally) {
+          pool.InitializeEmpty(
+            spawnRule.prefab,
+            ParentHolder.transform,
+            requiredPoolSize,
+            onInstanceCreated: PreparePooledEnemyInstanceCallback
+          );
+        }
+        else {
+          pool.Initialize(
+            spawnRule.prefab,
+            ParentHolder.transform,
+            poolSize: requiredPoolSize,
+            onInstanceCreated: PreparePooledEnemyInstanceCallback
+          );
+        }
       }
-      else {
+      else if (!buildIncrementally) {
         pool.EnsureCapacity(requiredPoolSize);
       }
+
+      if (buildIncrementally && pool.poolSize < requiredPoolSize) {
+        var previousPoolSize = pool.poolSize;
+        var poolReady = pool.EnsureCapacityIncremental(requiredPoolSize, remainingInstanceBudget);
+        var instancesBuilt = pool.poolSize - previousPoolSize;
+        remainingInstanceBudget = Mathf.Max(0, remainingInstanceBudget - instancesBuilt);
+        loadingPoolInstancesBuiltThisFrame += instancesBuilt;
+        if (!poolReady) {
+          allPoolsReady = false;
+          continue;
+        }
+      }
+
       RuntimeLog.Log(
         "[Spawner] Initialized enemy pool" +
         " enemy_type='" + spawnRule.enemyType + "'" +
@@ -606,6 +662,33 @@ public class Spawner : MonoBehaviour {
         " max_alive=" + spawnRule.maxAlive +
         " pool_size=" + requiredPoolSize
       );
+    }
+
+    return allPoolsReady;
+  }
+
+  static void PreparePooledEnemyInstance(GameObject instance) {
+    if (instance == null) {
+      return;
+    }
+
+    var shadowCaster = instance.GetComponent<ProjectedSpriteShadowCaster2D>();
+    shadowCaster?.PrepareProxyHierarchyForActivation();
+  }
+
+  bool AreEnemyPoolsReadyForActiveRules() {
+    if (activeSpawnRules.Count <= 0 || enemyPoolsByPrefab.Count <= 0) {
+      return false;
+    }
+
+    for (var i = 0; i < activeSpawnRules.Count; i++) {
+      var spawnRule = activeSpawnRules[i];
+      if (spawnRule == null || spawnRule.prefab == null) continue;
+      if (!enemyPoolsByPrefab.TryGetValue(spawnRule.prefab, out var pool) ||
+          pool == null ||
+          pool.poolSize < Mathf.Max(spawnRule.maxAlive, 1)) {
+        return false;
+      }
     }
 
     return true;

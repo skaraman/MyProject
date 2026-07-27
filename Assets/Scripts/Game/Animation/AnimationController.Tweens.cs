@@ -6,23 +6,17 @@ public partial class AnimationController {
   sealed class BounceTweenState {
     readonly AnimationController owner;
     readonly GameObject target;
-    readonly Action moveCompleteHandler;
     readonly Action scaleCompleteHandler;
-    readonly Action delayCompleteHandler;
 
     List<BounceFrame> sequence;
     int frameIndex;
-    int moveTweenId = -1;
     int scaleTweenId = -1;
-    int delayTweenId = -1;
     bool active;
 
     public BounceTweenState(AnimationController owner, GameObject target) {
       this.owner = owner;
       this.target = target;
-      moveCompleteHandler = OnMoveComplete;
       scaleCompleteHandler = OnScaleComplete;
-      delayCompleteHandler = OnDelayComplete;
     }
 
     public void Start(List<BounceFrame> frames, int index) {
@@ -35,9 +29,7 @@ public partial class AnimationController {
     public void Stop() {
       active = false;
       sequence = null;
-      moveTweenId = -1;
       scaleTweenId = -1;
-      delayTweenId = -1;
     }
 
     void StartCurrentFrame() {
@@ -59,23 +51,6 @@ public partial class AnimationController {
 
       var slowDown = owner.SlowDown ? 20f : 1f;
       var duration = frame.duration * owner.ResolveCurrentAnimationDurationScale() * slowDown;
-      var targetPosition = new Vector3(
-        frame.x,
-        frame.y,
-        target.transform.localPosition.z
-      );
-
-      var moveDescr = owner.TrackTween(
-        LeanTween.moveLocal(target, targetPosition, duration).setEase(LeanTweenType.linear),
-        duration
-      );
-      if (moveDescr == null) {
-        owner.ClearTweensFor(target);
-        return;
-      }
-      moveTweenId = moveDescr.id;
-      owner.AddTweenId(target, moveTweenId);
-      moveDescr.setOnComplete(moveCompleteHandler);
 
       var scaleDescr = owner.TrackTween(
         LeanTween.scaleX(target, frame.offset, duration).setEase(LeanTweenType.linear),
@@ -88,25 +63,6 @@ public partial class AnimationController {
       scaleTweenId = scaleDescr.id;
       owner.AddTweenId(target, scaleTweenId);
       scaleDescr.setOnComplete(scaleCompleteHandler);
-
-      var delayDescr = owner.TrackTween(
-        LeanTween.delayedCall(target, duration, delayCompleteHandler),
-        duration
-      );
-      if (delayDescr == null) {
-        owner.ClearTweensFor(target);
-        return;
-      }
-      delayTweenId = delayDescr.id;
-      owner.AddTweenId(target, delayTweenId);
-    }
-
-    void OnMoveComplete() {
-      if (!active) {
-        return;
-      }
-      owner.RemoveTweenId(target, moveTweenId);
-      moveTweenId = -1;
     }
 
     void OnScaleComplete() {
@@ -115,14 +71,6 @@ public partial class AnimationController {
       }
       owner.RemoveTweenId(target, scaleTweenId);
       scaleTweenId = -1;
-    }
-
-    void OnDelayComplete() {
-      if (!active) {
-        return;
-      }
-      owner.RemoveTweenId(target, delayTweenId);
-      delayTweenId = -1;
       frameIndex += 1;
       StartCurrentFrame();
     }
@@ -143,6 +91,7 @@ public partial class AnimationController {
     int frameIndex;
     int tweenId = -1;
     bool active;
+    float lastUpdateTime = -1f;
 
     public HBoxTweenState(
       AnimationController owner,
@@ -235,6 +184,7 @@ public partial class AnimationController {
 
       tweenId = descr.id;
       owner.AddTweenId(target, tweenId);
+      lastUpdateTime = -1f;
       descr.setOnUpdate(updateHandler);
       descr.setOnComplete(completeHandler);
     }
@@ -244,9 +194,18 @@ public partial class AnimationController {
         return;
       }
 
+      if (Application.isPlaying) {
+        var now = Time.unscaledTime;
+        if (lastUpdateTime >= 0f && now - lastUpdateTime < 0.016f) {
+          return;
+        }
+        lastUpdateTime = now;
+      }
+
       for (var i = 0; i < lerpedPoints.Count; i++) {
         lerpedPoints[i] = Vector2.Lerp(startPoints[i], endPoints[i], value);
       }
+      owner.MarkPolygonColliderPathModified(collider);
       collider.SetPath(0, lerpedPoints);
     }
 
@@ -255,6 +214,7 @@ public partial class AnimationController {
         return;
       }
 
+      owner.MarkPolygonColliderPathModified(collider);
       collider.SetPath(0, endPoints);
       owner.RemoveTweenId(target, tweenId);
       tweenId = -1;
@@ -279,6 +239,13 @@ public partial class AnimationController {
   }
 
   static readonly Vector2[] NeutralOffensiveHBoxPath = new Vector2[5];
+  readonly HashSet<PolygonCollider2D> neutralPathColliders = new();
+
+  public void MarkPolygonColliderPathModified(PolygonCollider2D poly) {
+    if (poly != null) {
+      neutralPathColliders.Remove(poly);
+    }
+  }
 
   private void SetBounces(bool resetOffensiveHBoxes = false) {
     CancelAllTweens();
@@ -333,11 +300,33 @@ public partial class AnimationController {
     return state;
   }
 
+  static readonly HashSet<GameObject> activeHBoxScratch = new();
+
   private void SetHBoxes(bool resetOffensiveHBoxes) {
-    if (resetOffensiveHBoxes) {
-      ResetOffensiveHBoxes();
+    activeHBoxScratch.Clear();
+    if (hBoxData != null && hBoxObjects.Length > 0 && !string.IsNullOrEmpty(currentAnimation)) {
+      foreach (var kvp in hBoxData) {
+        string partKey = kvp.Key;
+        var animDict = kvp.Value;
+        if (!animDict.ContainsKey(currentAnimation)) continue;
+        var hboxList = animDict[currentAnimation];
+        if (hboxList == null || hboxList.Count == 0) continue;
+        if (hBoxObjectsByName.TryGetValue(partKey, out var partObjects) && partObjects != null) {
+          for (var i = 0; i < partObjects.Count; i++) {
+            if (partObjects[i] != null) {
+              activeHBoxScratch.Add(partObjects[i]);
+            }
+          }
+        }
+      }
     }
+
+    if (resetOffensiveHBoxes) {
+      ResetOffensiveHBoxes(activeHBoxScratch);
+    }
+    
     if (hBoxData == null || hBoxObjects.Length == 0 || string.IsNullOrEmpty(currentAnimation)) return;
+    
     foreach (var kvp in hBoxData) {
       string partKey = kvp.Key;
       var animDict = kvp.Value;
@@ -353,7 +342,9 @@ public partial class AnimationController {
           if (EsperanzaAbilities.TryResolveAbilityAnimation(currentAnimation, out var abilityAnimation)) {
             hitBox.hitId = abilityAnimation;
           }
-          poly.enabled = true;
+          if (!poly.enabled) {
+            poly.enabled = true;
+          }
         }
         LeanTween.cancel(go);
         TimeScale.UnregisterTweens(go);
@@ -362,7 +353,7 @@ public partial class AnimationController {
     }
   }
 
-  private void ResetOffensiveHBoxes() {
+  private void ResetOffensiveHBoxes(HashSet<GameObject> exceptions = null) {
     for (var i = 0; i < hBoxObjects.Length; i++) {
       var go = hBoxObjects[i];
       if (go == null) continue;
@@ -370,9 +361,13 @@ public partial class AnimationController {
       if (!hBoxHitBoxes.TryGetValue(go, out var hitBox) || hitBox == null) continue;
 
       if (hBoxColliders.TryGetValue(go, out var poly) && poly != null) {
-        poly.enabled = false;
-        poly.pathCount = 1;
-        poly.SetPath(0, NeutralOffensiveHBoxPath);
+        if ((exceptions == null || !exceptions.Contains(go)) && poly.enabled) {
+          poly.enabled = false;
+        }
+        if (neutralPathColliders.Add(poly)) {
+          poly.pathCount = 1;
+          poly.SetPath(0, NeutralOffensiveHBoxPath);
+        }
       }
       hitBox.ResetHitCache();
     }

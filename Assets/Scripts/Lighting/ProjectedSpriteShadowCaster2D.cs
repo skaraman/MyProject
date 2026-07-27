@@ -16,6 +16,12 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     public Color LastColor;
     public bool LastFlipX;
     public bool LastFlipY;
+    public SpriteDrawMode LastDrawMode;
+    public Vector2 LastSize;
+    public SpriteTileMode LastTileMode;
+    public SpriteSortPoint LastSpriteSortPoint;
+    public int LastSortingLayerID;
+    public int LastSortingOrder;
     public Vector3 LastPosition;
     public Quaternion LastRotation;
     public Vector3 LastScale;
@@ -100,7 +106,9 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
 
   void Start() {
     started = true;
-    TryRebuildProxies();
+    if (proxiesDirty || shadowRootObject == null) {
+      TryRebuildProxies();
+    }
   }
 
   void OnEnable() {
@@ -138,6 +146,15 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     if (started && isActiveAndEnabled) {
       TryRebuildProxies();
     }
+  }
+
+  public bool PrepareProxyHierarchyForActivation() {
+    if (!Application.isPlaying || isActiveAndEnabled || SceneLighting2D.Current == null) {
+      return false;
+    }
+
+    TryRebuildProxies(allowBeforeStart: true);
+    return !proxiesDirty && shadowRootObject != null;
   }
 
   public void LockGroundY() {
@@ -306,8 +323,8 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     );
   }
 
-  void TryRebuildProxies() {
-    if (!started || !Application.isPlaying) {
+  void TryRebuildProxies(bool allowBeforeStart = false) {
+    if ((!started && !allowBeforeStart) || !Application.isPlaying) {
       return;
     }
 
@@ -366,7 +383,9 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       ));
     }
 
-    AcquireStencilReferences();
+    if (isActiveAndEnabled) {
+      AcquireStencilReferences();
+    }
   }
 
   void CreateShadowRoot(SceneLighting2D lightingManager) {
@@ -533,79 +552,115 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
                        sourceRenderer.sprite != null &&
                        sourceRenderer.gameObject.activeInHierarchy;
     if (!shouldRender) {
-      proxyRenderer.enabled = false;
+      if (proxyRenderer.enabled) {
+        proxyRenderer.enabled = false;
+      }
       return;
     }
 
-    proxyRenderer.enabled = true;
+    if (!proxyRenderer.enabled) {
+      proxyRenderer.enabled = true;
+    }
 
     var sourceTransform = sourceRenderer.transform;
     var currentSprite = sourceRenderer.sprite;
     var currentColor = sourceRenderer.color;
     var currentFlipX = sourceRenderer.flipX;
     var currentFlipY = sourceRenderer.flipY;
+    var currentDrawMode = sourceRenderer.drawMode;
+    var currentSize = sourceRenderer.size;
+    var currentTileMode = sourceRenderer.tileMode;
+    var currentSpriteSortPoint = sourceRenderer.spriteSortPoint;
+    var currentSortingLayerID = boundLightingManager.ShadowSortingLayerId;
+    var currentSortingOrder = sourceRenderer.sortingOrder;
+
     var currentPosition = sourceTransform.position;
     var currentRotation = sourceTransform.rotation;
     var currentScale = sourceTransform.lossyScale;
 
-    bool hasChanged = binding.LastSprite != currentSprite ||
-                      binding.LastColor != currentColor ||
-                      binding.LastFlipX != currentFlipX ||
-                      binding.LastFlipY != currentFlipY ||
-                      binding.LastPosition != currentPosition ||
-                      binding.LastRotation != currentRotation ||
-                      binding.LastScale != currentScale ||
-                      binding.LastGroundPosition != groundPosition ||
-                      binding.LastVerticalDisplacement != verticalDisplacement ||
-                      binding.LastProjection.Length != projection.Length ||
-                      binding.LastProjection.Direction != projection.Direction ||
-                      binding.LastProjection.Opacity != projection.Opacity;
+    bool visualsChanged = binding.LastSprite != currentSprite ||
+                          binding.LastColor != currentColor ||
+                          binding.LastFlipX != currentFlipX ||
+                          binding.LastFlipY != currentFlipY ||
+                          binding.LastDrawMode != currentDrawMode ||
+                          binding.LastSize != currentSize ||
+                          binding.LastTileMode != currentTileMode ||
+                          binding.LastSpriteSortPoint != currentSpriteSortPoint ||
+                          binding.LastSortingLayerID != currentSortingLayerID ||
+                          binding.LastSortingOrder != currentSortingOrder;
 
-    if (!hasChanged) {
+    bool transformChanged = binding.LastPosition != currentPosition ||
+                            binding.LastRotation != currentRotation ||
+                            binding.LastScale != currentScale;
+
+    bool projectionChanged = binding.LastGroundPosition != groundPosition ||
+                             binding.LastVerticalDisplacement != verticalDisplacement ||
+                             binding.LastProjection.Length != projection.Length ||
+                             binding.LastProjection.Direction != projection.Direction ||
+                             binding.LastProjection.Opacity != projection.Opacity;
+
+    if (!visualsChanged && !transformChanged && !projectionChanged) {
       return;
     }
 
-    binding.LastSprite = currentSprite;
-    binding.LastColor = currentColor;
-    binding.LastFlipX = currentFlipX;
-    binding.LastFlipY = currentFlipY;
-    binding.LastPosition = currentPosition;
-    binding.LastRotation = currentRotation;
-    binding.LastScale = currentScale;
-    binding.LastGroundPosition = groundPosition;
-    binding.LastVerticalDisplacement = verticalDisplacement;
-    binding.LastProjection = projection;
+    if (visualsChanged) {
+      binding.LastSprite = currentSprite;
+      binding.LastColor = currentColor;
+      binding.LastFlipX = currentFlipX;
+      binding.LastFlipY = currentFlipY;
+      binding.LastDrawMode = currentDrawMode;
+      binding.LastSize = currentSize;
+      binding.LastTileMode = currentTileMode;
+      binding.LastSpriteSortPoint = currentSpriteSortPoint;
+      binding.LastSortingLayerID = currentSortingLayerID;
+      binding.LastSortingOrder = currentSortingOrder;
 
-    proxyRenderer.sprite = currentSprite;
-    proxyRenderer.color = currentColor;
-    proxyRenderer.flipX = currentFlipX;
-    proxyRenderer.flipY = currentFlipY;
-    proxyRenderer.drawMode = sourceRenderer.drawMode;
-    proxyRenderer.size = sourceRenderer.size;
-    proxyRenderer.tileMode = sourceRenderer.tileMode;
-    proxyRenderer.spriteSortPoint = sourceRenderer.spriteSortPoint;
-    proxyRenderer.sortingLayerID = boundLightingManager.ShadowSortingLayerId;
-    proxyRenderer.sortingOrder = sourceRenderer.sortingOrder;
+      proxyRenderer.sprite = currentSprite;
+      proxyRenderer.color = currentColor;
+      proxyRenderer.flipX = currentFlipX;
+      proxyRenderer.flipY = currentFlipY;
+      proxyRenderer.drawMode = currentDrawMode;
+      proxyRenderer.size = currentSize;
+      proxyRenderer.tileMode = currentTileMode;
+      proxyRenderer.spriteSortPoint = currentSpriteSortPoint;
+      proxyRenderer.sortingLayerID = currentSortingLayerID;
+      proxyRenderer.sortingOrder = currentSortingOrder;
+    }
 
-    SyncProxyTransform(binding.ProxyTransform, sourceTransform);
-    var sourceLocalToWorld = sourceTransform.localToWorldMatrix;
-    sourceLocalToWorld.m13 -= verticalDisplacement;
-    binding.PropertyBlock.SetMatrix(
-      SourceLocalToWorldPropertyId,
-      sourceLocalToWorld
-    );
-    proxyRenderer.SetPropertyBlock(binding.PropertyBlock);
-    var sourceBounds = sourceRenderer.bounds;
-    var sourceBoundsCenter = sourceBounds.center;
-    sourceBoundsCenter.y -= verticalDisplacement;
-    sourceBounds.center = sourceBoundsCenter;
-    SyncProxyBounds(
-      proxyRenderer,
-      binding.ProxyTransform,
-      sourceBounds,
-      groundPosition,
-      projection
-    );
+    if (transformChanged) {
+      binding.LastPosition = currentPosition;
+      binding.LastRotation = currentRotation;
+      binding.LastScale = currentScale;
+      SyncProxyTransform(binding.ProxyTransform, sourceTransform);
+    }
+
+    if (transformChanged || projectionChanged) {
+      binding.LastGroundPosition = groundPosition;
+      binding.LastVerticalDisplacement = verticalDisplacement;
+      binding.LastProjection = projection;
+
+      var sourceLocalToWorld = sourceTransform.localToWorldMatrix;
+      sourceLocalToWorld.m13 -= verticalDisplacement;
+      binding.PropertyBlock.SetMatrix(
+        SourceLocalToWorldPropertyId,
+        sourceLocalToWorld
+      );
+      proxyRenderer.SetPropertyBlock(binding.PropertyBlock);
+    }
+
+    if (visualsChanged || transformChanged || projectionChanged) {
+      var sourceBounds = sourceRenderer.bounds;
+      var sourceBoundsCenter = sourceBounds.center;
+      sourceBoundsCenter.y -= verticalDisplacement;
+      sourceBounds.center = sourceBoundsCenter;
+      SyncProxyBounds(
+        proxyRenderer,
+        binding.ProxyTransform,
+        sourceBounds,
+        groundPosition,
+        projection
+      );
+    }
   }
 
   static void SyncProxyTransform(Transform proxyTransform, Transform sourceTransform) {
@@ -793,10 +848,20 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
 
     var baseOrder = boundLightingManager.ShadowSortingOrder;
     baseOrder += shadowGroupOrderOffset;
-    sunSortingGroup.sortingLayerID = boundLightingManager.ShadowSortingLayerId;
-    localSortingGroup.sortingLayerID = boundLightingManager.ShadowSortingLayerId;
-    sunSortingGroup.sortingOrder = baseOrder;
-    localSortingGroup.sortingOrder = baseOrder + localShadowOrderOffset;
+    var sortingLayerId = boundLightingManager.ShadowSortingLayerId;
+    var localOrder = baseOrder + localShadowOrderOffset;
+    if (sunSortingGroup.sortingLayerID != sortingLayerId) {
+      sunSortingGroup.sortingLayerID = sortingLayerId;
+    }
+    if (localSortingGroup.sortingLayerID != sortingLayerId) {
+      localSortingGroup.sortingLayerID = sortingLayerId;
+    }
+    if (sunSortingGroup.sortingOrder != baseOrder) {
+      sunSortingGroup.sortingOrder = baseOrder;
+    }
+    if (localSortingGroup.sortingOrder != localOrder) {
+      localSortingGroup.sortingOrder = localOrder;
+    }
   }
 
   int ResolveCasterSortingLayerId() {
@@ -846,7 +911,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   static void SetBindingsEnabled(List<ProxyBinding> bindings, bool enabled) {
     for (var i = 0; i < bindings.Count; i++) {
       var renderer = bindings[i].ProxyRenderer;
-      if (renderer != null) {
+      if (renderer != null && renderer.enabled != enabled) {
         renderer.enabled = enabled;
       }
     }

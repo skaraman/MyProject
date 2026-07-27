@@ -154,7 +154,7 @@ public partial class LocationManager {
       var stagePlan = stagePlans[stageIndex];
       if (stagePlan == null || stagePlan.root == null) continue;
       var stageRoot = stagePlan.root;
-      var stageTarget = "stage_root:" + stageRoot.name;
+      var stageTarget = logActivationTrace ? "stage_root:" + stageRoot.name : null;
       var stageStartedAt = Time.realtimeSinceStartup;
       if (stagePlan.BlocksReveal) blockingStages++;
       else deferredStages++;
@@ -174,8 +174,11 @@ public partial class LocationManager {
         );
       }
 
-      yield return WaitForActivationCapacity(activationGeneration, locationId, stageTarget);
-      if (activationGeneration != pendingLocationActivationGeneration) yield break;
+      if (!HasImmediateActivationCapacity()) {
+        stageTarget ??= "stage_root:" + stageRoot.name;
+        yield return WaitForActivationCapacity(activationGeneration, locationId, stageTarget);
+        if (activationGeneration != pendingLocationActivationGeneration) yield break;
+      }
 
       var stepStartedAt = Time.realtimeSinceStartup;
       LogLocationActivationSetActiveBegin(
@@ -200,10 +203,13 @@ public partial class LocationManager {
         if (activationGeneration != pendingLocationActivationGeneration) yield break;
         var node = stagePlan.nodes[nodeIndex];
         if (node == null) continue;
-        var nodePath = BuildRelativeNodePath(stageRoot, node);
+        var nodePath = logActivationTrace ? BuildRelativeNodePath(stageRoot, node) : null;
 
-        yield return WaitForActivationCapacity(activationGeneration, locationId, "node:" + nodePath);
-        if (activationGeneration != pendingLocationActivationGeneration) yield break;
+        if (!HasImmediateActivationCapacity()) {
+          nodePath ??= BuildRelativeNodePath(stageRoot, node);
+          yield return WaitForActivationCapacity(activationGeneration, locationId, "node:" + nodePath);
+          if (activationGeneration != pendingLocationActivationGeneration) yield break;
+        }
 
         stepStartedAt = Time.realtimeSinceStartup;
         LogLocationActivationSetActiveBegin(
@@ -383,6 +389,19 @@ public partial class LocationManager {
       waitedFrames++;
       yield return null;
     }
+  }
+
+  static bool HasImmediateActivationCapacity() {
+    // Yielding the wait iterator always costs a frame before this parent
+    // coroutine resumes, even when the iterator exits without waiting.
+    return HasActivationCapacity(
+      out _,
+      out _,
+      out _,
+      out _,
+      out _,
+      out _
+    );
   }
 
   static bool HasActivationCapacity(

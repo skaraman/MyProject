@@ -1,5 +1,6 @@
 #pragma warning disable CS0162 // Unreachable code detected
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 #if UNITY_EDITOR
@@ -7,6 +8,12 @@ using UnityEditor;
 #endif
 
 public partial class SpriteWithNormals {
+#if UNITY_EDITOR
+  const int ForcedEditorImportRetryFrames = 30;
+  static readonly Dictionary<string, int> editorNextForcedImportFrameByAtlas =
+    new(StringComparer.OrdinalIgnoreCase);
+#endif
+
   Sprite ResolveExpectedSliceSprite(Sprite loadedSprite, string sliceAddress, string channel) {
     if (loadedSprite == null) return null;
     if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out _, out var expectedSpriteName)) return loadedSprite;
@@ -142,6 +149,12 @@ public partial class SpriteWithNormals {
     if (!Application.isEditor || string.IsNullOrWhiteSpace(sliceAddress)) return false;
     if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out var atlasAssetPath, out _)) return false;
     if (string.IsNullOrWhiteSpace(atlasAssetPath)) return false;
+    if (editorNextForcedImportFrameByAtlas.TryGetValue(atlasAssetPath, out var nextFrame) &&
+        Time.frameCount < nextFrame) {
+      return true;
+    }
+    editorNextForcedImportFrameByAtlas[atlasAssetPath] =
+      Time.frameCount + ForcedEditorImportRetryFrames;
 
     AssetDatabase.ImportAsset(
       atlasAssetPath,
@@ -149,12 +162,17 @@ public partial class SpriteWithNormals {
     );
     return true;
   }
+
+  static void ResetEditorFallbackState() {
+    editorNextForcedImportFrameByAtlas.Clear();
+  }
 #endif
 
 #if UNITY_EDITOR
   public static void InvalidateEditorRuntimeAtlasAvailabilityCache() {
     editorRuntimeAtlasAddressIndex.Clear();
     editorRuntimeAtlasAddressIndexBuilt = false;
+    s_AnimationAtlasAddressCache.Clear();
   }
 
   static bool IsEditorRuntimeAtlasAddressAvailable(string runtimeAddress) {

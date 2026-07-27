@@ -42,6 +42,7 @@ public class Pool {
   List<GameObject> active = new List<GameObject>();
   HashSet<GameObject> activeSet = new HashSet<GameObject>();
   Transform container;
+  Action<GameObject> onInstanceCreated;
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetSharedPools() {
@@ -102,36 +103,47 @@ public class Pool {
   }
 
   public void EnsureCapacity(int requiredCapacity) {
+    EnsureCapacityIncremental(requiredCapacity, int.MaxValue);
+  }
+
+  public bool EnsureCapacityIncremental(int requiredCapacity, int maxNewInstances) {
     if (prefab == null) {
-      return;
+      return false;
     }
 
     requiredCapacity = Mathf.Max(requiredCapacity, 0);
     if (requiredCapacity <= poolSize) {
-      return;
+      return true;
     }
     if (active.Capacity < requiredCapacity) {
       active.Capacity = requiredCapacity;
     }
 
-    var additionalCount = requiredCapacity - poolSize;
+    var additionalCount = Mathf.Min(requiredCapacity - poolSize, Mathf.Max(maxNewInstances, 0));
     for (var i = 0; i < additionalCount; i++) {
       var go = GameObject.Instantiate(prefab, container);
       go.SetActive(false);
+      onInstanceCreated?.Invoke(go);
       pool.Enqueue(go);
-      activeSet.Add(go);
-      activeSet.Remove(go);
     }
-    poolSize = requiredCapacity;
+    poolSize += additionalCount;
+    return poolSize >= requiredCapacity;
   }
 
-  public void Initialize(GameObject prefab, Transform container, int poolSize = 10, bool autoResize = true) {
-    if (prefab == null || poolSize <= 0) return;
+  public void InitializeEmpty(
+    GameObject prefab,
+    Transform container,
+    int reservedCapacity,
+    bool autoResize = true,
+    Action<GameObject> onInstanceCreated = null
+  ) {
+    if (prefab == null) return;
 
     this.prefab = prefab;
-    this.poolSize = poolSize;
+    poolSize = 0;
     this.autoResize = autoResize;
     this.container = container;
+    this.onInstanceCreated = onInstanceCreated;
 
     if (Application.isPlaying) {
       PoolDespawnScheduler.Prepare();
@@ -140,18 +152,23 @@ public class Pool {
     pool.Clear();
     active.Clear();
     activeSet.Clear();
-    if (active.Capacity < poolSize) {
-      active.Capacity = poolSize;
+    reservedCapacity = Mathf.Max(reservedCapacity, 0);
+    if (active.Capacity < reservedCapacity) {
+      active.Capacity = reservedCapacity;
     }
+  }
 
-    for (int i = 0; i < poolSize; i++) {
-      var go = GameObject.Instantiate(prefab, container);
-      go.SetActive(false);
-      pool.Enqueue(go);
-      activeSet.Add(go);
-    }
+  public void Initialize(
+    GameObject prefab,
+    Transform container,
+    int poolSize = 10,
+    bool autoResize = true,
+    Action<GameObject> onInstanceCreated = null
+  ) {
+    if (prefab == null || poolSize <= 0) return;
 
-    activeSet.Clear();
+    InitializeEmpty(prefab, container, poolSize, autoResize, onInstanceCreated);
+    EnsureCapacity(poolSize);
   }
 
   public GameObject Spawn(Vector3 position, Quaternion rotation) {
@@ -173,6 +190,8 @@ public class Pool {
 
     if (obj == null && autoResize) {
       obj = GameObject.Instantiate(prefab, container);
+      obj.SetActive(false);
+      onInstanceCreated?.Invoke(obj);
       poolSize += 1;
     }
     else if (obj == null) {

@@ -60,6 +60,22 @@ public class DayNightCycle2D : MonoBehaviour {
   [SerializeField] Vector2 eveningShadowDir = new(-1f, -0.4f);
   [SerializeField] Vector2 nightMoonShadowDir = new(-0.5f, -0.8f);
 
+  [Header("Celestial Movement")]
+  [Tooltip("Enable Sun and Moon moving across the sky based on time.")]
+  [SerializeField] bool enableCelestialMovement = true;
+  [Tooltip("The center point of the arc. Defaults to Main Camera if not set.")]
+  [SerializeField] Transform skyCenter;
+  [Tooltip("Radius of the Sun/Moon arc.")]
+  [SerializeField, Min(0f)] float celestialRadius = 20f;
+  [Tooltip("Start angle of the Sun (Sunrise). 180 is left, 0 is right.")]
+  [SerializeField] float sunRiseAngle = 180f;
+  [Tooltip("End angle of the Sun (Sunset).")]
+  [SerializeField] float sunSetAngle = 0f;
+  [Tooltip("Start angle of the Moon (Dusk).")]
+  [SerializeField] float moonRiseAngle = 180f;
+  [Tooltip("End angle of the Moon (Dawn).")]
+  [SerializeField] float moonSetAngle = 0f;
+
   // Time tracking
   int lastNotifiedHour = -1;
   int lastNotifiedMinute = -1;
@@ -389,6 +405,8 @@ public class DayNightCycle2D : MonoBehaviour {
       sceneLighting.SunShadowDirection = shadowDir;
       sceneLighting.SetNightAmountDirect(nightFactor);
     }
+
+    UpdateCelestialPositions();
   }
 
   Vector2 CalculateSunShadowDirection(float hour) {
@@ -409,6 +427,47 @@ public class DayNightCycle2D : MonoBehaviour {
     } else {
       // Night hours - Moon shadow direction
       return nightMoonShadowDir.normalized;
+    }
+  }
+
+  void UpdateCelestialPositions() {
+    if (!enableCelestialMovement) return;
+
+    Vector3 centerPos = Vector3.zero;
+    if (skyCenter != null) {
+      centerPos = skyCenter.position;
+    } else if (Camera.main != null) {
+      centerPos = Camera.main.transform.position;
+    }
+
+    if (sunGlobalLight != null) {
+      float sunT = 0f;
+      if (currentHour >= 6f && currentHour <= 18f) {
+        sunT = (currentHour - 6f) / 12f;
+      } else if (currentHour > 18f) {
+        sunT = 1f;
+      } else {
+        sunT = 0f;
+      }
+
+      float sunAngle = Mathf.Lerp(sunRiseAngle, sunSetAngle, sunT) * Mathf.Deg2Rad;
+      Vector3 sunOffset = new Vector3(Mathf.Cos(sunAngle), Mathf.Sin(sunAngle), 0f) * celestialRadius;
+      sunGlobalLight.transform.position = centerPos + sunOffset;
+    }
+
+    if (moonGlobalLight != null) {
+      float moonT = 0f;
+      if (currentHour >= 18f) {
+        moonT = (currentHour - 18f) / 12f;
+      } else if (currentHour <= 6f) {
+        moonT = (currentHour + 6f) / 12f;
+      } else {
+        moonT = 1f;
+      }
+
+      float moonAngle = Mathf.Lerp(moonRiseAngle, moonSetAngle, moonT) * Mathf.Deg2Rad;
+      Vector3 moonOffset = new Vector3(Mathf.Cos(moonAngle), Mathf.Sin(moonAngle), 0f) * celestialRadius;
+      moonGlobalLight.transform.position = centerPos + moonOffset;
     }
   }
 

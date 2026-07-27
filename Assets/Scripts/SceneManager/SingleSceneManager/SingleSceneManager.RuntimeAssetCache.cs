@@ -158,9 +158,11 @@ public partial class SingleSceneManager {
       TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
       persistentPlayerAppearanceAtlasAddresses.Clear();
       persistentPlayerAppearanceContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+      persistentPlayerAppearancePlanEvaluated = false;
       return;
     }
 
+    persistentPlayerAppearancePlanEvaluated = false;
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
     var pinBudget = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
@@ -178,6 +180,7 @@ public partial class SingleSceneManager {
       persistentAtlasSeenAddressScratch.Clear();
       return;
     }
+    persistentPlayerAppearancePlanEvaluated = true;
 
     var completePlanFitsPinBudget = persistentAtlasAddressScratch.Count <= pinBudget;
     if (completePlanFitsPinBudget) {
@@ -249,9 +252,11 @@ public partial class SingleSceneManager {
       TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
       persistentPlayerEffectAtlasAddresses.Clear();
       persistentPlayerEffectContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+      persistentPlayerEffectPlanEvaluated = false;
       return;
     }
 
+    persistentPlayerEffectPlanEvaluated = false;
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
     var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetEffectAddresses, 1);
@@ -268,6 +273,7 @@ public partial class SingleSceneManager {
       persistentAtlasSeenAddressScratch.Clear();
       return;
     }
+    persistentPlayerEffectPlanEvaluated = true;
 
     var completePlanFitsPinBudget = persistentAtlasAddressScratch.Count <= maxPinnedAddresses;
     if (completePlanFitsPinBudget) {

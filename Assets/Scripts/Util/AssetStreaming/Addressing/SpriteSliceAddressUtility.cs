@@ -33,18 +33,47 @@ public static class SpriteSliceAddressUtility {
     atlasAssetPath = "";
     spriteName = "";
 
+    if (!TryGetSliceSegmentBounds(
+          address,
+          out var atlasStart,
+          out var atlasLength,
+          out var spriteStart,
+          out var spriteLength
+        )) {
+      return false;
+    }
+
+    atlasAssetPath = address.Substring(atlasStart, atlasLength);
+    spriteName = address.Substring(spriteStart, spriteLength);
+    return true;
+  }
+
+  internal static bool TryGetSliceNameBounds(string address, out int startIndex, out int length) {
+    return TryGetSliceSegmentBounds(address, out _, out _, out startIndex, out length);
+  }
+
+  static bool TryGetSliceSegmentBounds(
+    string address,
+    out int atlasStart,
+    out int atlasLength,
+    out int spriteStart,
+    out int spriteLength
+  ) {
+    atlasStart = 0;
+    atlasLength = 0;
+    spriteStart = 0;
+    spriteLength = 0;
+    if (string.IsNullOrWhiteSpace(address)) return false;
+
     if (!TryGetTrimmedSegmentBounds(address, 0, address.Length - 1, out var startIndex, out var totalLength)) return false;
     var endIndex = startIndex + totalLength - 1;
     if (address[endIndex] != ']') return false;
 
     var openBracket = address.LastIndexOf('[', endIndex - 1);
     if (openBracket <= startIndex || openBracket >= endIndex) return false;
-    if (!TryGetTrimmedSegmentBounds(address, startIndex, openBracket - 1, out var atlasStart, out var atlasLength)) return false;
-    if (!TryGetTrimmedSegmentBounds(address, openBracket + 1, endIndex - 1, out var spriteStart, out var spriteLength)) return false;
+    if (!TryGetTrimmedSegmentBounds(address, startIndex, openBracket - 1, out atlasStart, out atlasLength)) return false;
+    if (!TryGetTrimmedSegmentBounds(address, openBracket + 1, endIndex - 1, out spriteStart, out spriteLength)) return false;
     if (!StartsWithRuntimeAssetPrefix(address, atlasStart, atlasLength)) return false;
-
-    atlasAssetPath = address.Substring(atlasStart, atlasLength);
-    spriteName = address.Substring(spriteStart, spriteLength);
     return true;
   }
 

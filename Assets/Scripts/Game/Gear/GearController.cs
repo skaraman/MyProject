@@ -100,6 +100,9 @@ public partial class GearController : MonoBehaviour {
   private readonly HashSet<string> equipWarmAnimationSeenScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> persistentWarmAnimationScratch = new(64);
   private readonly HashSet<string> persistentWarmAnimationSeenScratch = new(StringComparer.OrdinalIgnoreCase);
+  private int persistentWarmPlanAppearanceRevision = -1;
+  private int persistentWarmPlanContentVersion = -1;
+  private string persistentWarmPlanForm = "";
   private readonly List<string> startupAppearanceWarmupAddressScratch = new();
   private readonly HashSet<string> startupAppearanceWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> coreEffectWarmupAddressScratch = new();

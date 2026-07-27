@@ -122,6 +122,116 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     ApplyAllProperties(true);
   }
 
+  public void CopyConfigurationFrom(AllIn1AnimatorInspector source) {
+    if (source == null || ReferenceEquals(source, this)) return;
+
+    animateWhenNotVisible = source.animateWhenNotVisible;
+    CopyKeywordToggles(source.keywordToggles);
+    CopyFloatAnimations(source.floatAnimations);
+    CopyColorAnimations(source.colorAnimations);
+    CopyVectorAnimations(source.vectorAnimations);
+    CopyTextureAssignments(source.textureAssignments);
+
+    _hasStarted = false;
+    CacheAllHashes();
+    BuildDictionaries();
+    ResetAnimationStates();
+    BuildActiveLists(true);
+    SetUpdateActiveState();
+    ApplyAllProperties(true);
+  }
+
+  void CopyKeywordToggles(List<KeywordToggle> source) {
+    keywordToggles ??= new List<KeywordToggle>(source != null ? source.Count : 0);
+    ResizeConfigurationList(keywordToggles, source != null ? source.Count : 0);
+    if (source == null) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      var sourceItem = source[i];
+      var targetItem = keywordToggles[i];
+      targetItem.keyword = sourceItem.keyword;
+      targetItem.enabled = sourceItem.enabled;
+    }
+  }
+
+  void CopyFloatAnimations(List<FloatAnimation> source) {
+    floatAnimations ??= new List<FloatAnimation>(source != null ? source.Count : 0);
+    ResizeConfigurationList(floatAnimations, source != null ? source.Count : 0);
+    if (source == null) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      var sourceItem = source[i];
+      var targetItem = floatAnimations[i];
+      targetItem.prop = sourceItem.prop;
+      targetItem.loop = sourceItem.loop;
+      targetItem.autoPlay = sourceItem.autoPlay;
+      CopySequences(sourceItem.sequences, ref targetItem.sequences);
+    }
+  }
+
+  void CopyColorAnimations(List<ColorAnimation> source) {
+    colorAnimations ??= new List<ColorAnimation>(source != null ? source.Count : 0);
+    ResizeConfigurationList(colorAnimations, source != null ? source.Count : 0);
+    if (source == null) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      var sourceItem = source[i];
+      var targetItem = colorAnimations[i];
+      targetItem.prop = sourceItem.prop;
+      targetItem.loop = sourceItem.loop;
+      targetItem.autoPlay = sourceItem.autoPlay;
+      CopySequences(sourceItem.sequences, ref targetItem.sequences);
+    }
+  }
+
+  void CopyVectorAnimations(List<VectorAnimation> source) {
+    vectorAnimations ??= new List<VectorAnimation>(source != null ? source.Count : 0);
+    ResizeConfigurationList(vectorAnimations, source != null ? source.Count : 0);
+    if (source == null) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      var sourceItem = source[i];
+      var targetItem = vectorAnimations[i];
+      targetItem.prop = sourceItem.prop;
+      targetItem.loop = sourceItem.loop;
+      targetItem.autoPlay = sourceItem.autoPlay;
+      CopySequences(sourceItem.sequences, ref targetItem.sequences);
+    }
+  }
+
+  void CopyTextureAssignments(List<TextureAssignment> source) {
+    textureAssignments ??= new List<TextureAssignment>(source != null ? source.Count : 0);
+    ResizeConfigurationList(textureAssignments, source != null ? source.Count : 0);
+    if (source == null) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      var sourceItem = source[i];
+      var targetItem = textureAssignments[i];
+      targetItem.prop = sourceItem.prop;
+      targetItem.texture = sourceItem.texture;
+      targetItem.isAssigned = sourceItem.isAssigned;
+    }
+  }
+
+  static void CopySequences<T>(List<Sequence<T>> source, ref List<Sequence<T>> target) {
+    target ??= new List<Sequence<T>>(source != null ? source.Count : 0);
+    target.Clear();
+    if (source == null) return;
+
+    for (var i = 0; i < source.Count; i++) {
+      target.Add(source[i]);
+    }
+  }
+
+  static void ResizeConfigurationList<T>(List<T> target, int requiredCount) where T : class, new() {
+    while (target.Count < requiredCount) {
+      target.Add(new T());
+    }
+    if (target.Count > requiredCount) {
+      target.RemoveRange(requiredCount, target.Count - requiredCount);
+    }
+  }
+
   public void OnValidate() {
     CacheAllHashes();
     BuildDictionaries();
@@ -130,7 +240,6 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   public void Awake() {
     _propBlock = new MaterialPropertyBlock();
     TryResolveRenderer();
-    TryResolveMaterial();
     ResetActive();
     CacheAllHashes();
     BuildDictionaries();
@@ -229,9 +338,27 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
     activeFloatAnimations.Clear();
     activeColorAnimations.Clear();
     activeVectorAnimations.Clear();
-    foreach (var a in floatAnimations) if (!a.isDone && (!autoOnly || a.autoPlay)) activeFloatAnimations.Add(a);
-    foreach (var a in colorAnimations) if (!a.isDone && (!autoOnly || a.autoPlay)) activeColorAnimations.Add(a);
-    foreach (var a in vectorAnimations) if (!a.isDone && (!autoOnly || a.autoPlay)) activeVectorAnimations.Add(a);
+    foreach (var a in floatAnimations) {
+      if (IsRunnable(a) && !a.isDone && (!autoOnly || a.autoPlay)) activeFloatAnimations.Add(a);
+    }
+    foreach (var a in colorAnimations) {
+      if (IsRunnable(a) && !a.isDone && (!autoOnly || a.autoPlay)) activeColorAnimations.Add(a);
+    }
+    foreach (var a in vectorAnimations) {
+      if (IsRunnable(a) && !a.isDone && (!autoOnly || a.autoPlay)) activeVectorAnimations.Add(a);
+    }
+  }
+
+  static bool IsRunnable(FloatAnimation anim) {
+    return anim != null && anim.propHash != 0 && anim.sequences != null && anim.sequences.Count > 0;
+  }
+
+  static bool IsRunnable(ColorAnimation anim) {
+    return anim != null && anim.propHash != 0 && anim.sequences != null && anim.sequences.Count > 0;
+  }
+
+  static bool IsRunnable(VectorAnimation anim) {
+    return anim != null && anim.propHash != 0 && anim.sequences != null && anim.sequences.Count > 0;
   }
 
   public void Update() {
@@ -523,6 +650,7 @@ public class AllIn1AnimatorInspector : MonoBehaviour {
   }
 
   public void ToggleKeywords() {
+    if (keywordToggles == null || keywordToggles.Count == 0) return;
     if (!TryResolveMaterial()) return;
     foreach (var kw in keywordToggles) {
       if (string.IsNullOrEmpty(kw.keyword)) continue;

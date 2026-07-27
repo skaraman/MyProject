@@ -376,14 +376,27 @@ public partial class SingleSceneManager {
     return runtimeRevealSetupPreparedFlowId == activeGameplayLoadFlowId;
   }
 
-  void CollectManagedGarbageUnderLoadingOverlay() {
+  IEnumerator CollectManagedGarbageUnderLoadingOverlay() {
     if (!Application.isPlaying) {
-      return;
+      yield break;
     }
 
     SetLoadingStatusOverride("Finalizing runtime");
-    GC.Collect();
-    ClearLoadingStatusOverride();
+    try {
+      const ulong collectionBudgetNanoseconds = 2_000_000;
+      const int maximumCollectionFrames = 4;
+      for (var frame = 0; frame < maximumCollectionFrames; frame++) {
+        if (!UnityEngine.Scripting.GarbageCollector.CollectIncremental(
+              collectionBudgetNanoseconds
+            )) {
+          break;
+        }
+        yield return null;
+      }
+    }
+    finally {
+      ClearLoadingStatusOverride();
+    }
   }
 
   void MaybeLogGameplayWarmGatePrereqState(

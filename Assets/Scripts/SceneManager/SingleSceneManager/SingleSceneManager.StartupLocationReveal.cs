@@ -57,7 +57,7 @@ public partial class SingleSceneManager {
     PrepareRuntimeRevealUnderLoadingOverlay();
     LogRevealHandoff("gameplay_activation_applied", revealHandoffStartedAt, activationStartedAt);
     yield return WaitForRevealActivationSettle();
-    CollectManagedGarbageUnderLoadingOverlay();
+    yield return CollectManagedGarbageUnderLoadingOverlay();
     RestoreSceneLightingForCurrentActivation();
     LogRevealHandoff("reveal_settle_complete", revealHandoffStartedAt);
     LogSectionTransitionState("ready_to_reveal", previousSection, Section.Gameplay, overlayTag, false);
@@ -66,11 +66,11 @@ public partial class SingleSceneManager {
 
   IEnumerator WaitForPersistentPlayerAppearanceAtlases() {
     var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
-    if (persistentPlayerAppearanceAtlasAddresses.Count <= 0 ||
+    if (!persistentPlayerAppearancePlanEvaluated ||
         persistentPlayerAppearanceContentVersion != contentVersion) {
       RefreshPersistentPlayerSkinAtlasPins("before_gameplay_reveal");
     }
-    if (persistentPlayerEffectAtlasAddresses.Count <= 0 ||
+    if (!persistentPlayerEffectPlanEvaluated ||
         persistentPlayerEffectContentVersion != contentVersion) {
       RefreshPersistentPlayerEffectAtlasPins("before_gameplay_reveal");
     }
@@ -158,6 +158,7 @@ public partial class SingleSceneManager {
     if (!appearanceAtlasPlanReady || !framePlanReady) {
       TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
       persistentPlayerAppearanceAtlasAddresses.Clear();
+      persistentPlayerAppearancePlanEvaluated = false;
       player?.SetSceneAppearanceAtlasPinsManaged(false);
       if (!framePlanReady) {
         Debug.LogWarning(
@@ -172,6 +173,7 @@ public partial class SingleSceneManager {
     if (effectAtlasPlanReady) yield break;
     TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
     persistentPlayerEffectAtlasAddresses.Clear();
+    persistentPlayerEffectPlanEvaluated = false;
   }
 
   void PlayBlackscreen(string animationName) {
@@ -757,6 +759,9 @@ public partial class SingleSceneManager {
   void SetLoadingBlackscreenHold(bool hold) {
     if (holdBlackscreenOpaqueDuringLoad == hold) return;
     holdBlackscreenOpaqueDuringLoad = hold;
+    if (!hold) {
+      loadingHeldProgressBlackscreenVisualApplied = false;
+    }
     if (blackscreen != null) {
       blackscreen.enabled = !hold;
     }

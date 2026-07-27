@@ -73,6 +73,10 @@ public class FontCharacter : MonoBehaviour {
     }
   }
 
+  void Awake() {
+    CacheDependencies();
+  }
+
   void Reset() {
     CacheDependencies();
   }
@@ -140,6 +144,15 @@ public class FontCharacter : MonoBehaviour {
       parentFontText = GetComponentInParent<FontText>();
     }
 
+    // Runtime glyph changes are driven explicitly by FontCharacter. Keep the
+    // resolver callable as an immediate fallback without polling every glyph
+    // from SpriteResolver.LateUpdate.
+    if (Application.isPlaying &&
+        spriteWithNormals != null &&
+        spriteResolver != null &&
+        spriteResolver.enabled) {
+      spriteResolver.enabled = false;
+    }
   }
 
   GlyphRendererState CaptureRendererState() {

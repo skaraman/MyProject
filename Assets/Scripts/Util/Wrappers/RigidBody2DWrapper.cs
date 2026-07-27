@@ -8,17 +8,26 @@ public class Rigidbody2DWrapper : MonoBehaviour {
   private Rigidbody2D rb;
   private Vector2 holder;
 
+  private bool searchedRb;
+
   void Start() {
+    searchedRb = true;
     rb = GetComponent<Rigidbody2D>();
-    linearVelocityX = rb.linearVelocity.x;
-    linearVelocityY = rb.linearVelocity.y;
-    angularVelocity = rb.angularVelocity;
+    if (rb != null) {
+      linearVelocityX = rb.linearVelocity.x;
+      linearVelocityY = rb.linearVelocity.y;
+      angularVelocity = rb.angularVelocity;
+    }
   }
 
   [ForceUpdate]
   void Update() {
-    if (rb == null) rb = GetComponent<Rigidbody2D>();
-    if (rb == null) return;
+    if (rb == null) {
+      if (searchedRb) return;
+      searchedRb = true;
+      rb = GetComponent<Rigidbody2D>();
+      if (rb == null) return;
+    }
 
     var factor = TimeScale.GetEffectiveFactor(this);
     holder.x = linearVelocityX * factor;

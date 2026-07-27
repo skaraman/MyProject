@@ -56,8 +56,18 @@ public partial class SpriteWithNormals {
   float GetSpriteEffectActive(Sprite sprite, string colorSliceAddress) {
     if (sprite == null) return 0f;
 
-    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorSliceAddress, out _, out var addressedSpriteName)) {
-      var isEmptyAddressedSprite = addressedSpriteName.IndexOf("Empty", StringComparison.OrdinalIgnoreCase) >= 0;
+    if (SpriteSliceAddressUtility.TryGetSliceNameBounds(
+          colorSliceAddress,
+          out var spriteNameStart,
+          out var spriteNameLength
+        )) {
+      var isEmptyAddressedSprite =
+        colorSliceAddress.IndexOf(
+          "Empty",
+          spriteNameStart,
+          spriteNameLength,
+          StringComparison.OrdinalIgnoreCase
+        ) >= 0;
       return isEmptyAddressedSprite ? 0f : 1f;
     }
 

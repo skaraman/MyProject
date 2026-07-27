@@ -420,6 +420,15 @@ public partial class AnimationController {
   private void UpdateSprites(int frame) {
     if (frame == int.MinValue) return;
     if (frame == lastAppliedSpriteFrame) return;
+
+    if (Application.isPlaying) {
+      var now = Time.unscaledTime;
+      if (lastSpriteApplyTime >= 0f && now - lastSpriteApplyTime < 0.016f) {
+        return;
+      }
+      lastSpriteApplyTime = now;
+    }
+
     lastAppliedSpriteFrame = frame;
 
     SpriteApplyProfilerMarker.Begin();

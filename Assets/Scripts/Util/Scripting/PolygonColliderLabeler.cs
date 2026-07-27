@@ -13,9 +13,11 @@ public class PolygonPointLabeler : MonoBehaviour {
   public Vector2 guiOffset = new Vector2(10, -20);
   public bool clickToPin = true;
   public bool showAllWhenPinned = false;
-  public KeyCode unpinKey = KeyCode.Escape;
+  public UnityEngine.InputSystem.Key unpinKey = UnityEngine.InputSystem.Key.Escape;
   public string clickEvent = "PolygonPointClicked";
   public string hoverEvent = "PolygonPointHover";
+  [Tooltip("Enable the point-inspection overlay and mouse interaction while the game is running.")]
+  public bool enableRuntimeInteraction;
 
   // new: color & width for the connecting lines
   public Color lineColor = Color.green;
@@ -42,15 +44,17 @@ public class PolygonPointLabeler : MonoBehaviour {
   [ForceUpdate]
   public void LoadPoints() {
     if (poly == null) poly = GetComponent<PolygonCollider2D>();
-    var pCount = poly != null && pathIndex < poly.pathCount ? poly.GetPath(pathIndex).Length : 0;
-    localPoints = poly != null && pathIndex < poly.pathCount ? poly.GetPath(pathIndex) : Array.Empty<Vector2>();
+    localPoints = poly != null && pathIndex >= 0 && pathIndex < poly.pathCount
+      ? poly.GetPath(pathIndex)
+      : Array.Empty<Vector2>();
     worldPoints.Clear();
     for (int i = 0; i < localPoints.Length; i++) worldPoints.Add(transform.TransformPoint(localPoints[i]));
-    //RuntimeLog.Log($"[PolygonPointLabeler] LoadPoints PathIndex={pathIndex} CountLocal={pCount} CountWorld={worldPoints.Count}");
+    //RuntimeLog.Log($"[PolygonPointLabeler] LoadPoints PathIndex={pathIndex} CountLocal={localPoints.Length} CountWorld={worldPoints.Count}");
   }
 
   void Update() {
     if (poly == null) return;
+    if (Application.isPlaying && !enableRuntimeInteraction) return;
 #if UNITY_EDITOR
     if (!Application.isPlaying && !UnityEditorInternal.InternalEditorUtility.isApplicationActive) return;
 #endif
@@ -88,7 +92,7 @@ public class PolygonPointLabeler : MonoBehaviour {
       }
     }
 
-    var mouseScreen = Input.mousePosition;
+    var mouseScreen = UnityEngine.InputSystem.Mouse.current != null ? (Vector3)UnityEngine.InputSystem.Mouse.current.position.ReadValue() : Vector3.zero;
     var mouseWorld = cam != null ? (Vector3)cam.ScreenToWorldPoint(new Vector3(mouseScreen.x, mouseScreen.y, Mathf.Abs(transform.position.z - (cam.orthographic ? cam.transform.position.z : 0f)))) : Vector3.zero;
     lastMouseWorld = mouseWorld;
     lastMouseScreen = mouseScreen;
@@ -104,20 +108,21 @@ public class PolygonPointLabeler : MonoBehaviour {
       //RuntimeLog.Log($"[PolygonPointLabeler] MouseWorld=({mouseWorld.x:F3},{mouseWorld.y:F3}) NearestIndex={nearestIndex} Dist={nearestDist:F3} HoverRadius={hoverRadius}");
       if (nearestIndex >= 0 && d <= hoverRadius) MessageBus.Send(hoverEvent, nearestIndex);
     }
-    if (clickToPin && Input.GetMouseButtonDown(0)) {
+    if (clickToPin && UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame) {
       if (nearestIndex >= 0 && d <= hoverRadius) {
         pinnedIndex = nearestIndex;
         MessageBus.Send(clickEvent, pinnedIndex);
         // RuntimeLog.Log($"[PolygonPointLabeler] PinnedIndex={pinnedIndex}");
       }
     }
-    if (clickToPin && Input.GetKeyDown(unpinKey)) {
+    if (clickToPin && unpinKey != UnityEngine.InputSystem.Key.None && UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current[unpinKey].wasPressedThisFrame) {
       pinnedIndex = -1;
       //RuntimeLog.Log("[PolygonPointLabeler] Unpinned");
     }
   }
 
   void OnGUI() {
+    if (Application.isPlaying && !enableRuntimeInteraction) return;
     if (cam == null || worldPoints.Count == 0) return;
     if (Event.current.type != EventType.Repaint && Event.current.type != EventType.Layout) return;
     if (pinnedIndex >= 0) {

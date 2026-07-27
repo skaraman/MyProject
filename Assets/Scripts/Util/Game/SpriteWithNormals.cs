@@ -56,13 +56,14 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const int PrefetchAheadFrames = 0;
   const int InternalRetryFrames = 2;
   const int MaxPairLookupCacheEntries = 2048;
-  const int MaxAnimationAtlasCacheEntries = 128;
+  const int MaxSharedAnimationAtlasCacheEntries = 2048;
   const bool ForceDisableDebugLogsForPerfPass = true;
   static int WarmupRequestBudgetPerFrame => Application.isMobilePlatform ? 64 : 256;
   const int WarmupQueueThrottleThreshold = 2048;
   const int WarmupInFlightThrottleThreshold = 128;
   const int OverlayEnableRefreshBudgetPerFrame = 8;
   const int GameplayEnableRefreshBudgetPerFrame = 24;
+  const int LoadingManagedUpdateBudgetPerFrame = 256;
   static readonly int NormalMapPropertyId = Shader.PropertyToID("_NormalMap");
   static readonly int SpriteUvRectPropertyId = Shader.PropertyToID("_SpriteUvRect");
   static readonly int SpriteEffectActivePropertyId = Shader.PropertyToID("_SpriteEffectActive");
@@ -113,6 +114,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static Texture2D _fallbackNormalTexture;
   int _nextInternalRetryFrame;
   readonly HashSet<string> _sliceMismatchWarnings = new(StringComparer.OrdinalIgnoreCase);
+  string _lastPendingColorSliceWarningAddress = "";
+  string _lastPendingNormalSliceWarningAddress = "";
   int _pendingRetargetAllowedFrame;
   int _deferredOverwriteAllowedFrame;
   Texture _lastAppliedNormalTexture;
@@ -145,7 +148,6 @@ public partial class SpriteWithNormals : MonoBehaviour {
   readonly Dictionary<PairLookupCacheKey, SpriteAddressPair> _pairLookupHitCache = new();
   readonly HashSet<PairLookupCacheKey> _pairLookupMissCache = new();
   int _pairLookupContentReloadVersion = int.MinValue;
-  readonly Dictionary<AnimationAtlasCacheKey, string[]> _animationAtlasAddressCache = new();
   readonly List<string> _animationAtlasBuildScratch = new(8);
   readonly HashSet<string> _animationAtlasBuildSeenScratch = new(StringComparer.OrdinalIgnoreCase);
   readonly Dictionary<string, Sprite> _localLoadedSpriteByAddress = new(StringComparer.OrdinalIgnoreCase);
@@ -157,6 +159,76 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static bool uiSortingLayerCacheInitialized;
   static int cachedMyUiSortingLayerId = int.MinValue;
   static int cachedMyUi2SortingLayerId = int.MinValue;
+
+  static readonly List<SpriteWithNormals> s_AllActive = new();
+  static readonly HashSet<SpriteLookupKey> s_ReportedResolveErrorKeys = new();
+  static readonly Dictionary<AnimationAtlasCacheKey, string[]> s_AnimationAtlasAddressCache = new();
+  static int s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
+  int _activeListIndex = -1;
+  static int s_ManagedUpdateCursor;
+  static bool s_UpdateRegistered;
+  static readonly Action s_UpdateCallback = UpdateAll;
+
+  static void UpdateAll() {
+    FlushQueuedRuntimeEnableRefreshes();
+    TrimmedSpriteOffsetResolver.PumpDeferredRuntimeLoads();
+
+    var count = s_AllActive.Count;
+    if (count <= 0) {
+      s_ManagedUpdateCursor = 0;
+      return;
+    }
+
+    var budget = IsOverlayWarmGateActive()
+      ? Mathf.Min(count, LoadingManagedUpdateBudgetPerFrame)
+      : count;
+    if (s_ManagedUpdateCursor >= count) {
+      s_ManagedUpdateCursor = 0;
+    }
+
+    for (var i = 0; i < budget; i++) {
+      if (s_AllActive.Count <= 0) {
+        s_ManagedUpdateCursor = 0;
+        break;
+      }
+      if (s_ManagedUpdateCursor >= s_AllActive.Count) {
+        s_ManagedUpdateCursor = 0;
+      }
+      var target = s_AllActive[s_ManagedUpdateCursor++];
+      if (target != null) {
+        target.ManagedUpdate();
+      }
+    }
+  }
+
+  static void EnsureUpdateRegistration() {
+    if (s_UpdateRegistered || !Application.isPlaying) return;
+    s_UpdateRegistered = true;
+    RuntimeUpdateHub.Register(
+      100,
+      "RuntimeUpdateHub.SpriteWithNormals",
+      s_UpdateCallback
+    );
+  }
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetStatics() {
+    for (var i = 0; i < s_AllActive.Count; i++) {
+      var target = s_AllActive[i];
+      if (target != null) {
+        target._activeListIndex = -1;
+      }
+    }
+    s_AllActive.Clear();
+    s_ReportedResolveErrorKeys.Clear();
+    s_AnimationAtlasAddressCache.Clear();
+    s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
+    s_ManagedUpdateCursor = 0;
+    s_UpdateRegistered = false;
+#if UNITY_EDITOR
+    ResetEditorFallbackState();
+#endif
+  }
 
   void Awake() {
     _renderer = GetComponent<SpriteRenderer>();
@@ -190,12 +262,15 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _adaptiveCooldownLastDecayFrame = -1;
     SpriteUiPinService.Register(this);
     QueueAutoRefreshOnEnable();
+
+    if (Application.isPlaying && _activeListIndex < 0) {
+      _activeListIndex = s_AllActive.Count;
+      s_AllActive.Add(this);
+      EnsureUpdateRegistration();
+    }
   }
 
-  void Update() {
-    if (!Application.isPlaying || !enabled || !gameObject.activeInHierarchy) return;
-    FlushQueuedRuntimeEnableRefreshes();
-    TrimmedSpriteOffsetResolver.PumpDeferredRuntimeLoads();
+  internal void ManagedUpdate() {
     if (TryAdvancePendingLoadRequest()) return;
     if (Time.frameCount - _lastExternalRequestFrame <= ExternalDriverHoldFrames) return;
 
@@ -221,6 +296,26 @@ public partial class SpriteWithNormals : MonoBehaviour {
   }
 
   void OnDisable() {
+    if (Application.isPlaying && _activeListIndex >= 0) {
+      var lastIndex = s_AllActive.Count - 1;
+      var removeIndex =
+        _activeListIndex <= lastIndex && s_AllActive[_activeListIndex] == this
+          ? _activeListIndex
+          : s_AllActive.IndexOf(this);
+      if (removeIndex >= 0) {
+        var last = s_AllActive[lastIndex];
+        s_AllActive[removeIndex] = last;
+        if (last != null) {
+          last._activeListIndex = removeIndex;
+        }
+        s_AllActive.RemoveAt(lastIndex);
+        if (removeIndex < s_ManagedUpdateCursor) {
+          s_ManagedUpdateCursor--;
+        }
+      }
+      _activeListIndex = -1;
+    }
+
     DiscardQueuedRuntimeRefresh(this);
     if (Application.isPlaying) {
       SpriteUiPinService.Unregister(this);
@@ -234,6 +329,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     ResetPairLookupCaches();
     _localLoadedSpriteByAddress.Clear();
     _sliceMismatchWarnings.Clear();
+    _lastPendingColorSliceWarningAddress = "";
+    _lastPendingNormalSliceWarningAddress = "";
     _lastAppliedNormalTexture = null;
     _hasAppliedNormalTexture = false;
   }
@@ -251,6 +348,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _localLoadedSpriteByAddress.Clear();
     ClearGeneratedPaddedSprites();
     _sliceMismatchWarnings.Clear();
+    _lastPendingColorSliceWarningAddress = "";
+    _lastPendingNormalSliceWarningAddress = "";
     _lastAppliedNormalTexture = null;
     _hasAppliedNormalTexture = false;
   }
@@ -576,19 +675,55 @@ public partial class SpriteWithNormals : MonoBehaviour {
 
     var minFrame = isAnimation ? Mathf.Max(Mathf.Min(startFrame, endFrame), 1) : 0;
     var maxFrame = isAnimation ? Mathf.Max(Mathf.Max(startFrame, endFrame), minFrame) : 0;
+    var contentReloadVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (s_AnimationAtlasCacheContentReloadVersion != contentReloadVersion) {
+      s_AnimationAtlasAddressCache.Clear();
+      s_AnimationAtlasCacheContentReloadVersion = contentReloadVersion;
+    }
     var cacheKey = new AnimationAtlasCacheKey(
+      libraryName,
+      labelPrefix,
       lookupCategory,
       minFrame,
       maxFrame,
-      ActiveContentRegistryRuntime.ReloadVersion
+      contentReloadVersion
     );
 
-    if (!_animationAtlasAddressCache.TryGetValue(cacheKey, out var atlasAddresses)) {
-      atlasAddresses = BuildAnimationAtlasAddresses(lookupCategory, minFrame, maxFrame);
-      if (_animationAtlasAddressCache.Count >= MaxAnimationAtlasCacheEntries) {
-        _animationAtlasAddressCache.Clear();
+    if (!s_AnimationAtlasAddressCache.TryGetValue(cacheKey, out var atlasAddresses)) {
+      _animationAtlasBuildScratch.Clear();
+      _animationAtlasBuildSeenScratch.Clear();
+      var isComplete = CollectAnimationAtlasAddressRange(
+        lookupCategory,
+        minFrame,
+        maxFrame,
+        _animationAtlasBuildScratch,
+        _animationAtlasBuildSeenScratch,
+        int.MaxValue
+      );
+      if (!isComplete) {
+        for (var i = 0; i < _animationAtlasBuildScratch.Count; i++) {
+          if (outAddresses.Count >= maxAddresses) break;
+          AddUniqueAddress(
+            outAddresses,
+            _animationAtlasBuildScratch[i],
+            seenAddresses,
+            maxAddresses
+          );
+        }
+        _animationAtlasBuildScratch.Clear();
+        _animationAtlasBuildSeenScratch.Clear();
+        return;
       }
-      _animationAtlasAddressCache[cacheKey] = atlasAddresses;
+
+      atlasAddresses = _animationAtlasBuildScratch.ToArray();
+      _animationAtlasBuildScratch.Clear();
+      _animationAtlasBuildSeenScratch.Clear();
+      if (atlasAddresses.Length > 0) {
+        if (s_AnimationAtlasAddressCache.Count >= MaxSharedAnimationAtlasCacheEntries) {
+          s_AnimationAtlasAddressCache.Clear();
+        }
+        s_AnimationAtlasAddressCache[cacheKey] = atlasAddresses;
+      }
     }
 
     for (var i = 0; i < atlasAddresses.Length; i++) {
@@ -626,26 +761,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     );
   }
 
-  string[] BuildAnimationAtlasAddresses(string lookupCategory, int minFrame, int maxFrame) {
-    _animationAtlasBuildScratch.Clear();
-    _animationAtlasBuildSeenScratch.Clear();
-
-    CollectAnimationAtlasAddressRange(
-      lookupCategory,
-      minFrame,
-      maxFrame,
-      _animationAtlasBuildScratch,
-      _animationAtlasBuildSeenScratch,
-      int.MaxValue
-    );
-
-    var result = _animationAtlasBuildScratch.ToArray();
-    _animationAtlasBuildScratch.Clear();
-    _animationAtlasBuildSeenScratch.Clear();
-    return result;
-  }
-
-  void CollectAnimationAtlasAddressRange(
+  bool CollectAnimationAtlasAddressRange(
     string lookupCategory,
     int minFrame,
     int maxFrame,
@@ -653,9 +769,13 @@ public partial class SpriteWithNormals : MonoBehaviour {
     HashSet<string> seenAddresses,
     int maxAddresses
   ) {
+    var isComplete = true;
     for (var frame = minFrame; frame <= maxFrame; frame++) {
-      if (outAddresses.Count >= maxAddresses) return;
-      if (!TryGetFrameAddressPair(frame, out var pair, lookupCategory)) continue;
+      if (outAddresses.Count >= maxAddresses) return isComplete;
+      if (!TryGetFrameAddressPair(frame, out var pair, lookupCategory)) {
+        isComplete = false;
+        continue;
+      }
       AddUniqueAddress(
         outAddresses,
         pair.RuntimeColorAddress,
@@ -669,6 +789,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
         maxAddresses
       );
     }
+    return isComplete;
   }
 
   static string ResolveWarmupAddress(string sliceAddress, string fallbackAtlasAddress) {
@@ -1182,7 +1303,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     if (!Application.isEditor || !Application.isPlaying) return false;
     if (lease == null) return false;
     if (lease != _pendingColorLease && lease != _pendingNormalLease) return false;
-    if (!SpriteSliceAddressUtility.TryParseSliceAddress(sliceAddress, out _, out _)) return false;
+    if (!SpriteSliceAddressUtility.TryGetSliceNameBounds(sliceAddress, out _, out _)) return false;
 
     var startedAt = _pendingSupplementWaitStartedAt;
     if (startedAt < 0f) {
@@ -1199,15 +1320,26 @@ public partial class SpriteWithNormals : MonoBehaviour {
       TryForceImportPendingSliceAsset(sliceAddress);
     }
 
-    var warningKey = "pending_slice_retry|" + channel + "|" + sliceAddress;
-    if (_sliceMismatchWarnings.Add(warningKey)) {
-      Debug.LogWarning(
-        "[SpriteWithNormals] Delaying unresolved slice resolve on " + gameObject.name +
-        " channel=" + (string.IsNullOrWhiteSpace(channel) ? "unknown" : channel) +
-        " address='" + sliceAddress + "'" +
-        " elapsed_ms=" + Mathf.RoundToInt(elapsed * 1000f) +
-        " allow_editor_fallback=" + (allowBlockingEditorSliceFallback ? 1 : 0)
-      );
+    var isNormalChannel = string.Equals(channel, "normal", StringComparison.Ordinal);
+    var lastWarningAddress = isNormalChannel
+      ? _lastPendingNormalSliceWarningAddress
+      : _lastPendingColorSliceWarningAddress;
+    if (!string.Equals(lastWarningAddress, sliceAddress, StringComparison.OrdinalIgnoreCase)) {
+      if (isNormalChannel) {
+        _lastPendingNormalSliceWarningAddress = sliceAddress;
+      }
+      else {
+        _lastPendingColorSliceWarningAddress = sliceAddress;
+      }
+      if (ShouldLogVerboseEditorFallbackDebug()) {
+        Debug.LogWarning(
+          "[SpriteWithNormals] Delaying unresolved slice resolve on " + gameObject.name +
+          " channel=" + (string.IsNullOrWhiteSpace(channel) ? "unknown" : channel) +
+          " address='" + sliceAddress + "'" +
+          " elapsed_ms=" + Mathf.RoundToInt(elapsed * 1000f) +
+          " allow_editor_fallback=" + (allowBlockingEditorSliceFallback ? 1 : 0)
+        );
+      }
     }
 
     return true;
@@ -1241,7 +1373,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     else if (lease.TryGetSpriteByAddress(sliceOrAtlasAddress, out var sprite)) {
       return sprite;
     }
-    if (SpriteSliceAddressUtility.TryParseSliceAddress(sliceOrAtlasAddress, out _, out _)) return null;
+    if (SpriteSliceAddressUtility.TryGetSliceNameBounds(sliceOrAtlasAddress, out _, out _)) return null;
     return lease.Sprite;
   }
 

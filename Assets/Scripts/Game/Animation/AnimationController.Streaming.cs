@@ -73,6 +73,7 @@ public partial class AnimationController {
 
   public void InvalidateSpriteFrameCache() {
     lastAppliedSpriteFrame = int.MinValue;
+    lastSpriteApplyTime = -1f;
   }
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -851,14 +852,19 @@ public partial class AnimationController {
     );
     PinCacheUpdateProfilerMarker.End();
     appliedAppearancePinAddressSet.Clear();
-    appliedAppearancePinAddressSet.UnionWith(appearancePinAddressSet);
+    foreach (var addr in appearancePinAddressSet) {
+      appliedAppearancePinAddressSet.Add(addr);
+    }
     UpdateAppearancePinSnapshot(true);
   }
 
   bool TryRefreshUnchangedAppearancePins() {
     if (pinSnapshotContentReloadVersion != ActiveContentRegistryRuntime.ReloadVersion) return false;
     if (appearancePinAddressSet.Count <= 0) return false;
-    if (!appearancePinAddressSet.SetEquals(appliedAppearancePinAddressSet)) return false;
+    if (appearancePinAddressSet.Count != appliedAppearancePinAddressSet.Count) return false;
+    foreach (var address in appearancePinAddressSet) {
+      if (!appliedAppearancePinAddressSet.Contains(address)) return false;
+    }
     if (TextureResidencyCache.GetOwnerPinCount(appearanceOwnerId) < appearancePinAddressSet.Count) return false;
     return TextureResidencyCache.TryRefreshOwnerPins(appearanceOwnerId, appearancePinClass);
   }
