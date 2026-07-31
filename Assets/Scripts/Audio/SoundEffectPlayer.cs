@@ -90,6 +90,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
   [SerializeField, Range(0f, 1f)] float masterVolume = 1f;
   [SerializeField, Min(0f)] float fadeDuration = 0.1f;
   [SerializeField, Min(1)] int maxVoices = 16;
+  [SerializeField, Min(1)] int maxLoopVoices = 8;
 
   readonly List<Action> subscriptions = new();
   readonly List<Voice> voices = new();
@@ -673,8 +674,10 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     var normalizedPlayChance = Mathf.Clamp01(playChance);
     var normalizedLoopId = loopId.Trim();
     if (!loops.TryGetValue(normalizedLoopId, out var loop)) {
-      loop = CreateLoop();
-      loops.Add(normalizedLoopId, loop);
+      loop = ResolveLoop(normalizedLoopId);
+      if (loop == null) {
+        return false;
+      }
     }
 
     loop.effectVolume = definition.volume;
@@ -904,6 +907,40 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     return new LoopState {
       source = source
     };
+  }
+
+  LoopState ResolveLoop(string loopId) {
+    string reusableLoopId = null;
+    LoopState reusableLoop = null;
+    foreach (var pair in loops) {
+      var candidate = pair.Value;
+      if (candidate == null ||
+          !string.IsNullOrEmpty(candidate.soundId) ||
+          candidate.playbackSuspended ||
+          candidate.source == null ||
+          candidate.source.isPlaying) {
+        continue;
+      }
+
+      reusableLoopId = pair.Key;
+      reusableLoop = candidate;
+      break;
+    }
+
+    if (reusableLoop != null) {
+      reusableLoop.version++;
+      loops.Remove(reusableLoopId);
+      loops.Add(loopId, reusableLoop);
+      return reusableLoop;
+    }
+
+    if (loops.Count >= Mathf.Max(maxLoopVoices, 1)) {
+      return null;
+    }
+
+    var loop = CreateLoop();
+    loops.Add(loopId, loop);
+    return loop;
   }
 
   void StopLoopInternal(string loopId) {

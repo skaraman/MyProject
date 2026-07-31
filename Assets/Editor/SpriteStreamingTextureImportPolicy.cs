@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -11,6 +12,7 @@ public static class SpriteStreamingTextureImportPolicy {
     if (importer == null) return false;
 
     var changed = false;
+    var isPairedNormalAtlas = IsPairedNormalAtlasPath(importer.assetPath);
 
     if (importer.textureType != TextureImporterType.Sprite) {
       importer.textureType = TextureImporterType.Sprite;
@@ -37,6 +39,10 @@ public static class SpriteStreamingTextureImportPolicy {
       changed = true;
     }
 
+    if (isPairedNormalAtlas && ApplyPairedNormalMapDataPolicy(importer)) {
+      changed = true;
+    }
+
     var platformTargets = BuildPlatformTargetList();
     for (var i = 0; i < platformTargets.Count; i++) {
       var platformName = platformTargets[i];
@@ -55,6 +61,11 @@ public static class SpriteStreamingTextureImportPolicy {
         platformChanged = true;
       }
 
+      if (isPairedNormalAtlas && settings.compressionQuality != 100) {
+        settings.compressionQuality = 100;
+        platformChanged = true;
+      }
+
       if (TryResetTransparentSpritePlatformFormat(importer, platformName, settings)) {
         platformChanged = true;
       }
@@ -65,6 +76,41 @@ public static class SpriteStreamingTextureImportPolicy {
     }
 
     return changed;
+  }
+
+  public static bool ApplyPairedNormalMapDataPolicy(TextureImporter importer) {
+    if (importer == null || !IsPairedNormalAtlasPath(importer.assetPath)) return false;
+
+    var changed = false;
+    if (importer.sRGBTexture) {
+      importer.sRGBTexture = false;
+      changed = true;
+    }
+
+    if (importer.textureCompression != TextureImporterCompression.CompressedHQ) {
+      importer.textureCompression = TextureImporterCompression.CompressedHQ;
+      changed = true;
+    }
+
+    if (importer.compressionQuality != 100) {
+      importer.compressionQuality = 100;
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  public static bool IsPairedNormalAtlasPath(string assetPath) {
+    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+
+    var extension = Path.GetExtension(assetPath);
+    if (!string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var pairedColorPath = Path.ChangeExtension(assetPath, ".png");
+    return !string.IsNullOrWhiteSpace(pairedColorPath) && File.Exists(pairedColorPath);
   }
 
   static bool TryResetTransparentSpritePlatformFormat(TextureImporter importer, string platformName, TextureImporterPlatformSettings settings) {

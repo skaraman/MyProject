@@ -8,6 +8,9 @@ CBUFFER_START(UnityPerMaterial)
 	half _Alpha;
 	half _LitAmount;
 	half _NormalStrength;
+	half _NormalMapIsSrgb;
+	half4 _StylizedRimColor;
+	half _StylizedRimIntensity, _StylizedRimPower, _StylizedRimEnvironmentInfluence;
 				
 	half _MinXUV, _MaxXUV, _MinYUV, _MaxYUV;
 			
@@ -40,6 +43,8 @@ CBUFFER_START(UnityPerMaterial)
 	half4 _FadeBurnColor; /*_FadeTex_ST,*/ /*_FadeBurnTex_ST*/
 	float4 _FadeTex_ScaleAndTiling, _FadeBurnTex_ScaleAndTiling;
 	half _FadeAmount, _FadeBurnWidth, _FadeBurnTransition, _FadeBurnGlow;
+	float4 _SpriteUvRect;
+	half _FadeUseSpriteUvRect;
 			
 	half _TextureScrollXSpeed, _TextureScrollYSpeed;
 			
@@ -139,6 +144,9 @@ CBUFFER_START(UnityPerMaterial)
 	float _RandomSeed;
 CBUFFER_END
 
+half4 _EnvironmentKeyLightColor;
+half _EnvironmentKeyLightStrength;
+
 			
 #define CUSTOM_TRANSFORM_TEX(uv, st) uv * st.xy + st.zw
 #define GET_PIXEL(offsetX, offsetY, uv, tex, texelSize) SAMPLE_TEXTURE2D(tex, sampler##tex, uv + half2(offsetX * texelSize.x, offsetY * texelSize.y)).rgb
@@ -150,6 +158,21 @@ CBUFFER_END
 DECLARE_TEX_AND_SAMPLER(_MainTex)
 DECLARE_TEX_AND_SAMPLER(_MaskTex)
 DECLARE_TEX_AND_SAMPLER(_NormalMap)
+
+half3 DecodeAllIn1SpriteNormal(half4 normalSample)
+{
+	#if !defined(UNITY_COLORSPACE_GAMMA)
+	normalSample.rgb = lerp(
+		normalSample.rgb,
+		LinearToSRGB(saturate(normalSample.rgb)),
+		step(0.5, _NormalMapIsSrgb)
+	);
+	#endif
+
+	half3 normalTS = UnpackNormal(normalSample);
+	normalTS.xy *= _NormalStrength;
+	return normalTS;
+}
             
 #if FADE_ON
 		DECLARE_TEX_AND_SAMPLER(_FadeTex)

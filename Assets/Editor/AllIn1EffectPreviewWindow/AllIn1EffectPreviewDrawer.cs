@@ -7,15 +7,16 @@ public sealed class AllIn1EffectPreviewDrawer : IEffectPreviewDrawer {
   [SerializeField] Sprite breakupPatternSprite;
   [SerializeField] Sprite flowPatternSprite;
 
-  [SerializeField] float fireSpeed = 1.0f;
-  [SerializeField] float burnAmount = 0.5f;
-  [SerializeField] float fireSpread = 1.0f;
-  [SerializeField] float distortion = 0.15f;
-  [SerializeField] float fireIntensity = 1.2f;
+  [SerializeField] float flameCoverage = 0.82f;
+  [SerializeField] float flameSize = 0.62f;
+  [SerializeField] float flameMovement = 0.58f;
+  [SerializeField] float flameWildness = 0.54f;
+  [SerializeField] float spriteVisibility = 0.82f;
+  [SerializeField] float flameBrightness = 0.68f;
 
-  [SerializeField] Color coreColor = new Color(1f, 0.95f, 0.6f, 1f);
-  [SerializeField] Color edgeColor = new Color(1f, 0.4f, 0.05f, 1f);
-  [SerializeField] Color smokeColor = new Color(0.1f, 0.02f, 0.01f, 1f);
+  [SerializeField] Color hotColor = new(1f, 0.94f, 0.58f, 1f);
+  [SerializeField] Color flameColor = new(1f, 0.26f, 0.015f, 1f);
+  [SerializeField] bool showAdvancedPatterns;
 
   Texture2D proceduralBreakupTexture;
   Texture2D proceduralFlowTexture;
@@ -23,6 +24,10 @@ public sealed class AllIn1EffectPreviewDrawer : IEffectPreviewDrawer {
   readonly SpriteTextureCache flowTextureCache = new("Flow");
 
   public string DisplayName => "Fire Preview";
+  public string ShaderName => "Hidden/Esperanza/FirePreview";
+  public string Description =>
+    "The source sprite stays intact while a separate transparent layer grows animated flame tongues from its silhouette. Nothing dissolves, darkens, or burns away.";
+  public Vector4 PreviewPadding => new(0.11f, 0.11f, 0.34f, 0.04f);
 
   public void OnEnable(AllIn1EffectPreviewWindow window) {
     if (proceduralBreakupTexture == null) {
@@ -47,21 +52,45 @@ public sealed class AllIn1EffectPreviewDrawer : IEffectPreviewDrawer {
   }
 
   public void DrawControls(AllIn1EffectPreviewWindow window) {
-    EditorGUILayout.LabelField("Fire Properties", EditorStyles.boldLabel);
-    fireSpeed = EditorGUILayout.Slider("Fire Speed", fireSpeed, 0f, 5f);
-    burnAmount = EditorGUILayout.Slider("Burn Amount", burnAmount, 0f, 1f);
-    fireSpread = EditorGUILayout.Slider("Spread Amount", fireSpread, 0f, 5f);
-    distortion = EditorGUILayout.Slider("Distortion", distortion, 0f, 1f);
-    fireIntensity = EditorGUILayout.Slider("Fire Intensity", fireIntensity, 0f, 3f);
-    
-    EditorGUILayout.Space(6f);
-    EditorGUILayout.LabelField("Colors", EditorStyles.boldLabel);
-    coreColor = EditorGUILayout.ColorField("Core Color", coreColor);
-    edgeColor = EditorGUILayout.ColorField("Edge Color", edgeColor);
-    smokeColor = EditorGUILayout.ColorField("Smoke Color", smokeColor);
+    EditorGUILayout.LabelField("Flames On Sprite", EditorStyles.boldLabel);
+    EditorGUILayout.HelpBox(
+      "These controls art-direct the finished look. Each slider coordinates the flame shape, motion, breakup, and layering behind the scenes.",
+      MessageType.None);
+    flameCoverage = DrawFriendlySlider(
+      "Fire Coverage",
+      flameCoverage,
+      "How much of the sprite carries flame: isolated patches to fully engulfed.");
+    flameSize = DrawFriendlySlider(
+      "Flame Size",
+      flameSize,
+      "Changes tongue height, width, and spacing together.");
+    flameMovement = DrawFriendlySlider(
+      "Movement",
+      flameMovement,
+      "Moves from a slow steady rise to fast climbing fire.");
+    flameWildness = DrawFriendlySlider(
+      "Wildness",
+      flameWildness,
+      "Adds irregular tongue lengths, sideways lick, and breakup.");
+    spriteVisibility = DrawFriendlySlider(
+      "Sprite Visibility",
+      spriteVisibility,
+      "Keeps the original sprite readable underneath the flames.");
+    flameBrightness = DrawFriendlySlider(
+      "Brightness",
+      flameBrightness,
+      "Moves from a soft ember glow to a bright hot flame.");
 
     EditorGUILayout.Space(6f);
-    DrawTextureControls(window);
+    EditorGUILayout.LabelField("Flame Colors", EditorStyles.boldLabel);
+    hotColor = EditorGUILayout.ColorField("Hot Center", hotColor);
+    flameColor = EditorGUILayout.ColorField("Outer Flame", flameColor);
+
+    EditorGUILayout.Space(6f);
+    showAdvancedPatterns = EditorGUILayout.Foldout(showAdvancedPatterns, "Advanced Pattern Sources", true);
+    if (showAdvancedPatterns) {
+      DrawTextureControls(window);
+    }
   }
 
   public void ApplyMaterialState(Material previewMaterial) {
@@ -70,15 +99,28 @@ public sealed class AllIn1EffectPreviewDrawer : IEffectPreviewDrawer {
     SetTextureIfPresent(previewMaterial, "_NoiseTex", GetBreakupTexture());
     SetTextureIfPresent(previewMaterial, "_FlowTex", GetFlowTexture());
 
-    SetFloatIfPresent(previewMaterial, "_FireSpeed", fireSpeed);
-    SetFloatIfPresent(previewMaterial, "_BurnAmount", burnAmount);
-    SetFloatIfPresent(previewMaterial, "_FireSpread", fireSpread);
-    SetFloatIfPresent(previewMaterial, "_Distortion", distortion);
-    SetFloatIfPresent(previewMaterial, "_FireIntensity", fireIntensity);
+    var sizeCurve = Mathf.SmoothStep(0f, 1f, flameSize);
+    var movementCurve = Mathf.SmoothStep(0f, 1f, flameMovement);
+    var wildnessCurve = Mathf.SmoothStep(0f, 1f, flameWildness);
+    var brightnessCurve = Mathf.SmoothStep(0f, 1f, flameBrightness);
 
-    SetColorIfPresent(previewMaterial, "_CoreColor", coreColor);
-    SetColorIfPresent(previewMaterial, "_EdgeColor", edgeColor);
-    SetColorIfPresent(previewMaterial, "_SmokeColor", smokeColor);
+    SetFloatIfPresent(previewMaterial, "_FlameCoverage", flameCoverage);
+    SetFloatIfPresent(previewMaterial, "_FlameHeight", Mathf.Lerp(0.055f, 0.31f, sizeCurve));
+    SetFloatIfPresent(previewMaterial, "_TongueWidth", Mathf.Lerp(0.025f, 0.095f, sizeCurve));
+    SetFloatIfPresent(previewMaterial, "_TongueCount", Mathf.Lerp(12f, 5.5f, sizeCurve));
+    SetFloatIfPresent(previewMaterial, "_FlowSpeed", Mathf.Lerp(0.22f, 2.35f, movementCurve));
+    SetFloatIfPresent(
+      previewMaterial,
+      "_Sway",
+      Mathf.Lerp(0.004f, 0.075f, wildnessCurve) * Mathf.Lerp(0.65f, 1.25f, movementCurve));
+    SetFloatIfPresent(previewMaterial, "_Breakup", Mathf.Lerp(0.08f, 0.78f, wildnessCurve));
+    SetFloatIfPresent(previewMaterial, "_NoiseScale", Mathf.Lerp(2.2f, 6.4f, wildnessCurve));
+    SetFloatIfPresent(previewMaterial, "_SurfaceOpacity", Mathf.Lerp(0.62f, 0.16f, spriteVisibility));
+    SetFloatIfPresent(previewMaterial, "_FlameOpacity", Mathf.Lerp(0.66f, 1f, brightnessCurve));
+    SetFloatIfPresent(previewMaterial, "_Brightness", Mathf.Lerp(0.85f, 2.35f, brightnessCurve));
+
+    SetColorIfPresent(previewMaterial, "_HotColor", hotColor);
+    SetColorIfPresent(previewMaterial, "_FlameColor", flameColor);
   }
 
   void SetFloatIfPresent(Material material, string propertyName, float value) {
@@ -100,23 +142,40 @@ public sealed class AllIn1EffectPreviewDrawer : IEffectPreviewDrawer {
   }
 
   public void ResetDefaults() {
-    fireSpeed = 1.0f;
-    burnAmount = 0.5f;
-    fireSpread = 1.0f;
-    distortion = 0.15f;
-    fireIntensity = 1.2f;
-    coreColor = new Color(1f, 0.95f, 0.6f, 1f);
-    edgeColor = new Color(1f, 0.4f, 0.05f, 1f);
-    smokeColor = new Color(0.1f, 0.02f, 0.01f, 1f);
-    Debug.Log($"[{nameof(AllIn1EffectPreviewDrawer)}] Reset fire defaults");
+    flameCoverage = 0.82f;
+    flameSize = 0.62f;
+    flameMovement = 0.58f;
+    flameWildness = 0.54f;
+    spriteVisibility = 0.82f;
+    flameBrightness = 0.68f;
+    hotColor = new Color(1f, 0.94f, 0.58f, 1f);
+    flameColor = new Color(1f, 0.26f, 0.015f, 1f);
+    Debug.Log($"[{nameof(AllIn1EffectPreviewDrawer)}] Reset sprite-flame defaults");
   }
 
   public void NormalizeState() {
-    fireSpeed = Mathf.Clamp(fireSpeed, 0f, 5f);
-    burnAmount = Mathf.Clamp(burnAmount, 0f, 1f);
-    fireSpread = Mathf.Clamp(fireSpread, 0f, 5f);
-    distortion = Mathf.Clamp(distortion, 0f, 1f);
-    fireIntensity = Mathf.Clamp(fireIntensity, 0f, 3f);
+    flameCoverage = Mathf.Clamp01(flameCoverage);
+    flameSize = Mathf.Clamp01(flameSize);
+    flameMovement = Mathf.Clamp01(flameMovement);
+    flameWildness = Mathf.Clamp01(flameWildness);
+    spriteVisibility = Mathf.Clamp01(spriteVisibility);
+    flameBrightness = Mathf.Clamp01(flameBrightness);
+  }
+
+  public void CopySettingsFrom(IEffectPreviewDrawer source) {
+    if (source is not AllIn1EffectPreviewDrawer values) return;
+
+    breakupPatternSprite = values.breakupPatternSprite;
+    flowPatternSprite = values.flowPatternSprite;
+    flameCoverage = values.flameCoverage;
+    flameSize = values.flameSize;
+    flameMovement = values.flameMovement;
+    flameWildness = values.flameWildness;
+    spriteVisibility = values.spriteVisibility;
+    flameBrightness = values.flameBrightness;
+    hotColor = values.hotColor;
+    flameColor = values.flameColor;
+    NormalizeState();
   }
 
   public Sprite GetTextureSlotSprite(string slotName) {
@@ -158,10 +217,14 @@ public sealed class AllIn1EffectPreviewDrawer : IEffectPreviewDrawer {
     return flowTextureCache.GetTexture(flowPatternSprite) ?? proceduralFlowTexture;
   }
 
+  float DrawFriendlySlider(string label, float value, string tooltip) {
+    var content = new GUIContent(label, tooltip);
+    return EditorGUILayout.Slider(content, value, 0f, 1f);
+  }
+
   void DrawTextureControls(AllIn1EffectPreviewWindow window) {
-    EditorGUILayout.LabelField("Texture Layers", EditorStyles.boldLabel);
     EditorGUILayout.HelpBox(
-      "Breakup controls the fire erosion and noise. Flow controls the heat distortion. Leaving either one on Procedural Default uses a generated texture instead of an atlas sprite.",
+      "Optional: replace the generated breakup and flow patterns. Most looks should only need the controls above.",
       MessageType.None);
     breakupPatternSprite = window.DrawAtlasSpritePopup("Breakup Sprite", breakupPatternSprite, true, "Breakup");
     flowPatternSprite = window.DrawAtlasSpritePopup("Flow Sprite", flowPatternSprite, true, "Flow");

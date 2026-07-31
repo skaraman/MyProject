@@ -4,17 +4,29 @@ using UnityEditor;
 using UnityEngine;
 
 public sealed class AllIn1EffectPreviewWindow : EditorWindow {
-  const string WindowTitle = "Fire Preview";
-  const string MenuPath = "Tools/Shader Preview/Fire Effect Preview";
-  const string LegacyMenuPath = "Tools/Shader Preview/AllIn1 Effect Preview";
+  const string WindowTitle = "Form Effect Preview";
+  const string MenuPath = "Tools/Shader Preview/Form Effects/Form Preview";
+  const string FireMenuPath = "Tools/Shader Preview/Form Effects/Fire Preview";
+  const string AquaMenuPath = "Tools/Shader Preview/Form Effects/Aqua Preview";
+  const string BoltMenuPath = "Tools/Shader Preview/Form Effects/Bolt Preview";
+  const string ColdMenuPath = "Tools/Shader Preview/Form Effects/Cold Preview";
+  const string DarkMenuPath = "Tools/Shader Preview/Form Effects/Dark Preview";
   const string PreviewTextureAssetPath = "Packages/com.skaraman.myprojectcontent/Core/Sprites/Core/Empty.png";
   const string TextureAtlasFolderPath = "Packages/com.skaraman.myprojectcontent/Core/Sprites/Core/Textures";
-  const string ShaderName = "Hidden/Esperanza/FirePreview";
+  const string DefaultShaderName = "Hidden/Esperanza/FirePreview";
   const float WindowMinWidth = 760f;
   const float WindowMinHeight = 660f;
   const float SideBySideLayoutWidth = 760f;
   const float PreviewColumnMinWidth = 280f;
   const float PreviewColumnMaxWidth = 360f;
+
+  enum FormEffect {
+    Fire,
+    Aqua,
+    Bolt,
+    Cold,
+    Dark
+  }
 
   enum PreviewSourceMode {
     SolidMask,
@@ -23,13 +35,39 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     AtlasSprite
   }
 
+  static readonly string[] PreviewSourceModeLabels = {
+    "Built-in Solid Sprite",
+    "No Source / Transparent",
+    "Any Project Sprite",
+    "Core Atlas Sprite"
+  };
+
+  static readonly string[] FormEffectLabels = {
+    "Fire",
+    "Aqua",
+    "Bolt",
+    "Cold",
+    "Dark"
+  };
+
+  [SerializeField] FormEffect activeEffect = FormEffect.Fire;
   [SerializeReference] IEffectPreviewDrawer activeDrawer;
+  [SerializeReference] IEffectPreviewDrawer fireDrawer;
+  [SerializeReference] IEffectPreviewDrawer aquaDrawer;
+  [SerializeReference] IEffectPreviewDrawer boltDrawer;
+  [SerializeReference] IEffectPreviewDrawer coldDrawer;
+  [SerializeReference] IEffectPreviewDrawer darkDrawer;
 
   [SerializeField] PreviewSourceMode sourceMode = PreviewSourceMode.SolidMask;
   [SerializeField] bool animatePreview = true;
   [SerializeField] float animationSpeed = 1f;
   [SerializeField] float previewScale = 0.88f;
   [SerializeField] Material previewMaterialAsset;
+  [SerializeField] Material firePreviewMaterialAsset;
+  [SerializeField] Material aquaPreviewMaterialAsset;
+  [SerializeField] Material boltPreviewMaterialAsset;
+  [SerializeField] Material coldPreviewMaterialAsset;
+  [SerializeField] Material darkPreviewMaterialAsset;
   [SerializeField] Sprite mainMaskSprite;
 
   [SerializeField] Color frameColor = new(0.11f, 0.11f, 0.12f, 1f);
@@ -58,22 +96,51 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     OpenWindow();
   }
 
-  [MenuItem(LegacyMenuPath)]
-  static void ShowLegacyWindow() {
-    OpenWindow();
+  [MenuItem(FireMenuPath)]
+  static void ShowFireWindow() {
+    OpenWindow(FormEffect.Fire);
   }
 
-  static void OpenWindow() {
+  [MenuItem(AquaMenuPath)]
+  static void ShowAquaWindow() {
+    OpenWindow(FormEffect.Aqua);
+  }
+
+  [MenuItem(BoltMenuPath)]
+  static void ShowBoltWindow() {
+    OpenWindow(FormEffect.Bolt);
+  }
+
+  [MenuItem(ColdMenuPath)]
+  static void ShowColdWindow() {
+    OpenWindow(FormEffect.Cold);
+  }
+
+  [MenuItem(DarkMenuPath)]
+  static void ShowDarkWindow() {
+    OpenWindow(FormEffect.Dark);
+  }
+
+  static void OpenWindow(FormEffect? requestedEffect = null) {
     var window = GetWindow<AllIn1EffectPreviewWindow>(WindowTitle);
     window.minSize = new Vector2(WindowMinWidth, WindowMinHeight);
+    if (requestedEffect.HasValue) {
+      window.SetActiveEffect(requestedEffect.Value);
+    }
     window.Show();
   }
 
   void OnEnable() {
     titleContent = new GUIContent(WindowTitle);
-    if (activeDrawer == null) {
-      activeDrawer = new AllIn1EffectPreviewDrawer();
-    }
+    CacheDrawer(activeDrawer);
+    EnsureDrawerSlots();
+    FormEffectPreviewDefaults.instance.ApplySavedDefaults(fireDrawer);
+    FormEffectPreviewDefaults.instance.ApplySavedDefaults(aquaDrawer);
+    FormEffectPreviewDefaults.instance.ApplySavedDefaults(boltDrawer);
+    FormEffectPreviewDefaults.instance.ApplySavedDefaults(coldDrawer);
+    FormEffectPreviewDefaults.instance.ApplySavedDefaults(darkDrawer);
+    activeDrawer = GetDrawer(activeEffect);
+    RestoreMaterialOverrideForActiveEffect();
     activeDrawer.OnEnable(this);
     EnsurePreviewAssets();
     ResetEditorClock();
@@ -82,6 +149,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   }
 
   void OnDisable() {
+    CacheMaterialOverrideForActiveEffect();
     if (activeDrawer != null) {
       activeDrawer.OnDisable();
     }
@@ -90,6 +158,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   }
 
   void OnDestroy() {
+    CacheMaterialOverrideForActiveEffect();
     if (activeDrawer != null) {
       activeDrawer.OnDisable();
     }
@@ -106,12 +175,12 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
     scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
+    DrawEffectSelection();
+    EditorGUILayout.Space(6f);
     var drawerDisplayName = activeDrawer != null ? activeDrawer.DisplayName : "Shader Preview";
     EditorGUILayout.LabelField($"Custom {drawerDisplayName}", EditorStyles.boldLabel);
     EditorGUILayout.HelpBox(
-      activeDrawer != null && activeDrawer is AllIn1EffectPreviewDrawer ?
-      "This preview uses the dedicated fire shader with an edge-lit flame body. The main mask defines the silhouette, the breakup texture shapes erosion and sparks, and the flow texture keeps the upward motion and tongue shaping." :
-      "Custom shader preview window.",
+      activeDrawer != null ? activeDrawer.Description : "Custom shader preview window.",
       MessageType.Info);
 
     DrawSelectionAndPreview();
@@ -119,6 +188,134 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     DrawControls();
 
     EditorGUILayout.EndScrollView();
+  }
+
+  void DrawEffectSelection() {
+    using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox)) {
+      EditorGUILayout.LabelField("Form Effect", EditorStyles.boldLabel);
+      var nextEffect = (FormEffect)EditorGUILayout.Popup(
+        "Preview",
+        (int)activeEffect,
+        FormEffectLabels);
+      if (nextEffect != activeEffect) {
+        SetActiveEffect(nextEffect);
+      }
+    }
+  }
+
+  void SetActiveEffect(FormEffect nextEffect) {
+    if (nextEffect == activeEffect && DrawerMatchesEffect(activeDrawer, nextEffect)) {
+      return;
+    }
+
+    if (activeDrawer != null) {
+      activeDrawer.OnDisable();
+      CacheDrawer(activeDrawer);
+    }
+    CacheMaterialOverrideForActiveEffect();
+
+    activeEffect = nextEffect;
+    EnsureDrawerSlots();
+    activeDrawer = GetDrawer(activeEffect);
+    previewMaterialAsset = GetMaterialOverride(activeEffect);
+    activeDrawer.OnEnable(this);
+    activeTextureSlotName = null;
+    loggedMissingAssets = false;
+    DestroyPreviewMaterialInstance();
+    EnsurePreviewMaterial();
+    ResetEditorClock();
+    Repaint();
+  }
+
+  void EnsureDrawerSlots() {
+    fireDrawer ??= new AllIn1EffectPreviewDrawer();
+    aquaDrawer ??= new AquaEffectPreviewDrawer();
+    boltDrawer ??= new BoltEffectPreviewDrawer();
+    coldDrawer ??= new ColdEffectPreviewDrawer();
+    darkDrawer ??= new DarkEffectPreviewDrawer();
+  }
+
+  void CacheDrawer(IEffectPreviewDrawer drawer) {
+    switch (drawer) {
+      case AllIn1EffectPreviewDrawer fire:
+        fireDrawer = fire;
+        break;
+      case AquaEffectPreviewDrawer aqua:
+        aquaDrawer = aqua;
+        break;
+      case BoltEffectPreviewDrawer bolt:
+        boltDrawer = bolt;
+        break;
+      case ColdEffectPreviewDrawer cold:
+        coldDrawer = cold;
+        break;
+      case DarkEffectPreviewDrawer dark:
+        darkDrawer = dark;
+        break;
+    }
+  }
+
+  IEffectPreviewDrawer GetDrawer(FormEffect effect) {
+    return effect switch {
+      FormEffect.Aqua => aquaDrawer,
+      FormEffect.Bolt => boltDrawer,
+      FormEffect.Cold => coldDrawer,
+      FormEffect.Dark => darkDrawer,
+      _ => fireDrawer
+    };
+  }
+
+  bool DrawerMatchesEffect(IEffectPreviewDrawer drawer, FormEffect effect) {
+    return effect switch {
+      FormEffect.Aqua => drawer is AquaEffectPreviewDrawer,
+      FormEffect.Bolt => drawer is BoltEffectPreviewDrawer,
+      FormEffect.Cold => drawer is ColdEffectPreviewDrawer,
+      FormEffect.Dark => drawer is DarkEffectPreviewDrawer,
+      _ => drawer is AllIn1EffectPreviewDrawer
+    };
+  }
+
+  void RestoreMaterialOverrideForActiveEffect() {
+    var storedOverride = GetMaterialOverride(activeEffect);
+    if (storedOverride == null && previewMaterialAsset != null) {
+      SetMaterialOverride(activeEffect, previewMaterialAsset);
+      return;
+    }
+    previewMaterialAsset = storedOverride;
+  }
+
+  void CacheMaterialOverrideForActiveEffect() {
+    SetMaterialOverride(activeEffect, previewMaterialAsset);
+  }
+
+  Material GetMaterialOverride(FormEffect effect) {
+    return effect switch {
+      FormEffect.Aqua => aquaPreviewMaterialAsset,
+      FormEffect.Bolt => boltPreviewMaterialAsset,
+      FormEffect.Cold => coldPreviewMaterialAsset,
+      FormEffect.Dark => darkPreviewMaterialAsset,
+      _ => firePreviewMaterialAsset
+    };
+  }
+
+  void SetMaterialOverride(FormEffect effect, Material material) {
+    switch (effect) {
+      case FormEffect.Aqua:
+        aquaPreviewMaterialAsset = material;
+        break;
+      case FormEffect.Bolt:
+        boltPreviewMaterialAsset = material;
+        break;
+      case FormEffect.Cold:
+        coldPreviewMaterialAsset = material;
+        break;
+      case FormEffect.Dark:
+        darkPreviewMaterialAsset = material;
+        break;
+      default:
+        firePreviewMaterialAsset = material;
+        break;
+    }
   }
 
   void DrawSelectionAndPreview() {
@@ -200,14 +397,17 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
   void DrawSourceControls() {
     EditorGUILayout.LabelField("Preview Source", EditorStyles.boldLabel);
-    sourceMode = (PreviewSourceMode)EditorGUILayout.EnumPopup("Source Mode", sourceMode);
+    sourceMode = (PreviewSourceMode)EditorGUILayout.Popup(
+      "Source",
+      (int)sourceMode,
+      PreviewSourceModeLabels);
 
     if (sourceMode == PreviewSourceMode.AnySprite) {
       mainMaskSprite = (Sprite)EditorGUILayout.ObjectField("Test Sprite", mainMaskSprite, typeof(Sprite), false);
 
       if (mainMaskSprite == null) {
         EditorGUILayout.HelpBox(
-          "Assign any sprite asset here to preview the fire against that exact silhouette.",
+          "Assign any sprite asset here to preview the selected form effect on that exact silhouette.",
           MessageType.Warning);
       }
     }
@@ -216,7 +416,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
       if (mainMaskSprite == null) {
         EditorGUILayout.HelpBox(
-          $"Pick a sprite sub-asset from {TextureAtlasFolderPath} to define the main flame silhouette.",
+          $"Pick a sprite sub-asset from {TextureAtlasFolderPath} to preview the selected form effect on it.",
           MessageType.Warning);
       }
     }
@@ -237,9 +437,19 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
   void DrawActionButtons() {
     using (new EditorGUILayout.HorizontalScope()) {
+      if (GUILayout.Button("Set Default Values")) {
+        if (activeDrawer != null) {
+          activeDrawer.NormalizeState();
+          FormEffectPreviewDefaults.instance.SaveDefaults(activeDrawer);
+          ShowNotification(new GUIContent($"{activeDrawer.DisplayName} defaults saved"));
+        }
+      }
+
       if (GUILayout.Button("Reset Defaults")) {
         if (activeDrawer != null) {
-          activeDrawer.ResetDefaults();
+          if (!FormEffectPreviewDefaults.instance.ApplySavedDefaults(activeDrawer)) {
+            activeDrawer.ResetDefaults();
+          }
         }
         previewScale = 0.88f;
         animationSpeed = 1f;
@@ -266,25 +476,99 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
       }
 
       if (previewMaterial == null) {
-        EditorGUILayout.HelpBox($"Preview material could not be created. Missing shader '{ShaderName}'.", MessageType.Error);
+        EditorGUILayout.HelpBox(
+          $"Preview material could not be created. Missing shader '{GetActiveShaderName()}'.",
+          MessageType.Error);
         return;
       }
 
       var layoutRect = GUILayoutUtility.GetAspectRect(1f, GUILayout.MinHeight(320f), GUILayout.ExpandWidth(true));
-      var previewRect = AllIn1EffectPreviewWindowUtils.GetScaledPreviewRect(layoutRect, previewScale, previewTexture);
-      DrawPreviewFrame(previewRect);
+      var effectCanvasRect = GetPreviewCanvasRect(layoutRect, previewTexture);
+      var sourceRect = GetSourceRectWithinEffectCanvas(effectCanvasRect);
+      var sourceRectInEffectUv = GetSourceRectInEffectUv();
+      DrawPreviewFrame(effectCanvasRect);
 
-      DrawSourcePreview(previewRect, previewTexture);
-      ApplyPreviewMaterialState(previewTexture, previewTime);
+      DrawSourcePreview(sourceRect, previewTexture);
+      ApplyPreviewMaterialState(previewTexture, previewTime, sourceRectInEffectUv);
       
       if (Event.current.type == EventType.Repaint) {
         int pass = previewMaterial.FindPass("Universal Forward");
         if (pass == -1) pass = previewMaterial.FindPass("ForwardBase");
         if (pass == -1) pass = 0;
         
-        Graphics.DrawTexture(previewRect, previewTexture, new Rect(0, 0, 1, 1), 0, 0, 0, 0, Color.white, previewMaterial, pass);
+        Graphics.DrawTexture(effectCanvasRect, previewTexture, new Rect(0, 0, 1, 1), 0, 0, 0, 0, Color.white, previewMaterial, pass);
       }
     }
+  }
+
+  Rect GetPreviewCanvasRect(Rect layoutRect, Texture previewTexture) {
+    if (previewMaterial == null || !previewMaterial.HasProperty("_SourceRectInEffect")) {
+      return AllIn1EffectPreviewWindowUtils.GetScaledPreviewRect(layoutRect, previewScale, previewTexture);
+    }
+
+    var padding = GetPreviewPadding();
+    var totalWidth = 1f + padding.x + padding.y;
+    var totalHeight = 1f + padding.z + padding.w;
+    var sourceAspect = previewTexture != null && previewTexture.height > 0
+      ? previewTexture.width / (float)previewTexture.height
+      : 1f;
+    var canvasAspect = sourceAspect * totalWidth / totalHeight;
+    var maxWidth = layoutRect.width * previewScale;
+    var maxHeight = layoutRect.height * previewScale;
+    var width = maxWidth;
+    var height = width / Mathf.Max(0.01f, canvasAspect);
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * canvasAspect;
+    }
+
+    return new Rect(
+      layoutRect.x + ((layoutRect.width - width) * 0.5f),
+      layoutRect.y + ((layoutRect.height - height) * 0.5f),
+      width,
+      height);
+  }
+
+  Rect GetSourceRectWithinEffectCanvas(Rect effectCanvasRect) {
+    if (previewMaterial == null || !previewMaterial.HasProperty("_SourceRectInEffect")) {
+      return effectCanvasRect;
+    }
+
+    var padding = GetPreviewPadding();
+    var totalWidth = 1f + padding.x + padding.y;
+    var totalHeight = 1f + padding.z + padding.w;
+    var sourceWidth = effectCanvasRect.width / totalWidth;
+    var sourceHeight = effectCanvasRect.height / totalHeight;
+    return new Rect(
+      effectCanvasRect.x + (effectCanvasRect.width * padding.x / totalWidth),
+      effectCanvasRect.y + (effectCanvasRect.height * padding.z / totalHeight),
+      sourceWidth,
+      sourceHeight);
+  }
+
+  Vector4 GetSourceRectInEffectUv() {
+    if (previewMaterial == null || !previewMaterial.HasProperty("_SourceRectInEffect")) {
+      return new Vector4(0f, 0f, 1f, 1f);
+    }
+
+    var padding = GetPreviewPadding();
+    var totalWidth = 1f + padding.x + padding.y;
+    var totalHeight = 1f + padding.z + padding.w;
+    return new Vector4(
+      padding.x / totalWidth,
+      padding.w / totalHeight,
+      1f / totalWidth,
+      1f / totalHeight);
+  }
+
+  Vector4 GetPreviewPadding() {
+    var padding = activeDrawer != null ? activeDrawer.PreviewPadding : Vector4.zero;
+    return new Vector4(
+      Mathf.Max(0f, padding.x),
+      Mathf.Max(0f, padding.y),
+      Mathf.Max(0f, padding.z),
+      Mathf.Max(0f, padding.w));
   }
 
   void DrawPreviewFrame(Rect previewRect) {
@@ -307,14 +591,14 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     if (!ShouldDrawSourcePreview(previewTexture)) return;
 
     var previousColor = GUI.color;
-    GUI.color = new Color(1f, 1f, 1f, 0.9f);
-    EditorGUI.DrawPreviewTexture(previewRect, previewTexture, null, ScaleMode.StretchToFill);
+    GUI.color = Color.white;
+    GUI.DrawTexture(previewRect, previewTexture, ScaleMode.StretchToFill, true);
     GUI.color = previousColor;
   }
 
   bool ShouldDrawSourcePreview(Texture previewTexture) {
     if (previewTexture == null) return false;
-    return sourceMode is PreviewSourceMode.AnySprite or PreviewSourceMode.AtlasSprite;
+    return sourceMode != PreviewSourceMode.EmptySprite;
   }
 
   Texture2D GetPreviewTexture() {
@@ -329,12 +613,15 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     }
   }
 
-  void ApplyPreviewMaterialState(Texture sourceTexture, float timeValue) {
+  void ApplyPreviewMaterialState(Texture sourceTexture, float timeValue, Vector4 sourceRectInEffectUv) {
     EnsurePreviewMaterial();
     if (previewMaterial == null || sourceTexture == null) return;
 
     previewMaterial.mainTexture = sourceTexture;
     SetTextureIfPresent("_MainTex", sourceTexture);
+    SetVectorIfPresent("_SourceRectInEffect", sourceRectInEffectUv);
+    SetVectorIfPresent("_SpriteUvRect", new Vector4(0f, 0f, 1f, 1f));
+    SetFloatIfPresent("_HasNormalMap", 0f);
 
     if (mainMaskSprite != null) {
       string spritePath = AssetDatabase.GetAssetPath(mainMaskSprite);
@@ -354,6 +641,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
             var normalTex = normalMaskTextureCache.GetTexture(normalSprite);
             if (normalTex != null) {
                 SetTextureIfPresent("_NormalMap", normalTex);
+                SetFloatIfPresent("_HasNormalMap", 1f);
             }
         }
       }
@@ -362,9 +650,6 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     if (previewMaterial.HasProperty("_PreviewTime")) {
       previewMaterial.SetFloat("_PreviewTime", timeValue);
     }
-    
-    // Support shaders that rely on standard Unity time
-    previewMaterial.SetVector("_Time", new Vector4(timeValue / 20f, timeValue, timeValue * 2f, timeValue * 3f));
 
     if (activeDrawer != null) {
       activeDrawer.ApplyMaterialState(previewMaterial);
@@ -374,6 +659,16 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   void SetTextureIfPresent(string propertyName, Texture texture) {
     if (previewMaterial == null || !previewMaterial.HasProperty(propertyName) || texture == null) return;
     previewMaterial.SetTexture(propertyName, texture);
+  }
+
+  void SetVectorIfPresent(string propertyName, Vector4 value) {
+    if (previewMaterial == null || !previewMaterial.HasProperty(propertyName)) return;
+    previewMaterial.SetVector(propertyName, value);
+  }
+
+  void SetFloatIfPresent(string propertyName, float value) {
+    if (previewMaterial == null || !previewMaterial.HasProperty(propertyName)) return;
+    previewMaterial.SetFloat(propertyName, value);
   }
 
   void HandleTextureDropdownKeyboard() {
@@ -534,7 +829,9 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
     if (loggedMissingAssets) return;
     if (emptyTexture == null || previewMaterial == null) {
-      Debug.LogWarning($"[{nameof(AllIn1EffectPreviewWindow)}] Preview setup incomplete. source='{PreviewTextureAssetPath}' shader='{ShaderName}'.");
+      Debug.LogWarning(
+        $"[{nameof(AllIn1EffectPreviewWindow)}] Preview setup incomplete. " +
+        $"source='{PreviewTextureAssetPath}' shader='{GetActiveShaderName()}'.");
       loggedMissingAssets = true;
     }
   }
@@ -546,11 +843,17 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
       return;
     }
 
-    var shader = Shader.Find(ShaderName);
+    var shader = Shader.Find(GetActiveShaderName());
     if (shader == null) return;
     if (previewMaterial != null && previewMaterialSourceAsset == null && previewMaterialSourceShader == shader) return;
 
     RebuildPreviewMaterialFromShader(shader);
+  }
+
+  string GetActiveShaderName() {
+    return activeDrawer != null && !string.IsNullOrWhiteSpace(activeDrawer.ShaderName)
+      ? activeDrawer.ShaderName
+      : DefaultShaderName;
   }
 
   void RebuildPreviewMaterialFromAsset(Material sourceMaterial) {
@@ -571,7 +874,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     if (shader == null) return;
 
     previewMaterial = new Material(shader) {
-      name = "FirePreview_Material",
+      name = $"{activeEffect}Preview_Material",
       hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild
     };
     previewMaterialSourceAsset = null;
@@ -656,7 +959,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
   Texture2D BuildSolidPreviewMask() {
     var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false) {
-      name = "FirePreview_Mask",
+      name = "FormEffectPreview_Mask",
       filterMode = FilterMode.Bilinear,
       wrapMode = TextureWrapMode.Clamp,
       hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild
@@ -675,6 +978,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     }
 
     mainMaskTextureCache.Clear();
+    normalMaskTextureCache.Clear();
   }
 }
 #endif

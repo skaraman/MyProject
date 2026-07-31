@@ -58,6 +58,9 @@ public static class IntegerTextCache {
 }
 
 public class FontText : MonoBehaviour {
+  const string MainColorProperty = "_Color";
+  const string OutlineColorProperty = "_OutlineColor";
+
   readonly struct GlyphMetricCacheKey : IEquatable<GlyphMetricCacheKey> {
     public readonly string font;
     public readonly char character;
@@ -117,6 +120,10 @@ public class FontText : MonoBehaviour {
   private List<int> lineCharCounts = new(); // Track chars per line
   private readonly List<Transform> childScratch = new();
   private readonly List<GameObject> gameObjectScratch = new();
+  private readonly List<AllIn1AnimatorInspector> shaderAnimatorScratch = new();
+  private bool hasShaderColors;
+  private Color shaderMainColor = Color.white;
+  private Color shaderOutlineColor = Color.black;
 
   private bool _checkedPrefabHasFontCharacter;
   private bool _prefabHasFontCharacter;
@@ -164,6 +171,7 @@ public class FontText : MonoBehaviour {
     if (adoptedExistingGlyphs) {
       glyphHierarchyChanged = true;
     }
+    ApplyShaderColorsToHierarchy();
     Generate();
   }
 
@@ -336,8 +344,56 @@ public class FontText : MonoBehaviour {
     obj.transform.SetParent(transform, false);
     obj.transform.SetAsLastSibling();
     obj.SetActive(true);
+    ApplyShaderColors(obj.GetComponent<AllIn1AnimatorInspector>());
     activeCharsSet.Add(obj);
     return obj;
+  }
+
+  public void SetShaderColors(Color mainColor, Color outlineColor) {
+    shaderMainColor = mainColor;
+    shaderOutlineColor = outlineColor;
+    hasShaderColors = true;
+
+    if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+      return;
+    }
+
+    ApplyShaderColorsToHierarchy();
+  }
+
+  void ApplyShaderColorsToHierarchy() {
+    if (!hasShaderColors) {
+      return;
+    }
+
+    shaderAnimatorScratch.Clear();
+    GetComponentsInChildren(true, shaderAnimatorScratch);
+    for (var i = 0; i < shaderAnimatorScratch.Count; i++) {
+      ApplyShaderColors(shaderAnimatorScratch[i]);
+    }
+    shaderAnimatorScratch.Clear();
+  }
+
+  void ApplyShaderColors(AllIn1AnimatorInspector animator) {
+    if (!hasShaderColors || animator == null) {
+      return;
+    }
+
+    animator.AddColorSequence(
+      MainColorProperty,
+      shaderMainColor,
+      shaderMainColor,
+      1f,
+      replaceExisting: true
+    );
+    animator.AddColorSequence(
+      OutlineColorProperty,
+      shaderOutlineColor,
+      shaderOutlineColor,
+      1f,
+      replaceExisting: true
+    );
+    animator.Refresh();
   }
 
   void RecycleChar(GameObject obj) {

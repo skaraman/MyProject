@@ -9,6 +9,9 @@ using UnityEngine.Rendering.Universal;
 [ExecuteAlways]
 [DisallowMultipleComponent]
 public class DayNightCycle2D : MonoBehaviour {
+  static readonly int EnvironmentKeyLightColorId = Shader.PropertyToID("_EnvironmentKeyLightColor");
+  static readonly int EnvironmentKeyLightStrengthId = Shader.PropertyToID("_EnvironmentKeyLightStrength");
+
   [Header("Cycle Configuration")]
   [Tooltip("Total real-time minutes for a full 24-hour cycle. 24 minutes = 1 minute per in-game hour.")]
   [SerializeField, Min(0.1f)] float cycleDurationMinutes = 24f;
@@ -32,11 +35,11 @@ public class DayNightCycle2D : MonoBehaviour {
   [Header("Sun & Moon Settings")]
   [Tooltip("Color of the Sun during peak daytime (Noon).")]
   [SerializeField] Color daySunColor = new(1f, 0.96f, 0.88f, 1f);
-  [SerializeField, Min(0f)] float daySunIntensity = 1.2f;
+  [SerializeField, Min(0f)] float daySunIntensity = 1.6f;
 
-  [Tooltip("Color of the Moon / Night celestial light.")]
-  [SerializeField] Color nightMoonColor = new(0.35f, 0.45f, 0.75f, 1f);
-  [SerializeField, Min(0f)] float nightMoonIntensity = 0.3f;
+  [Tooltip("Cool blue moonlight used to keep nighttime readable.")]
+  [SerializeField] Color nightMoonColor = new(0.42f, 0.56f, 0.88f, 1f);
+  [SerializeField, Min(0f)] float nightMoonIntensity = 0.38f;
 
   [Tooltip("Color tint during Dawn (05:00 - 07:00) and Dusk (17:00 - 19:00).")]
   [SerializeField] Color transitionSunColor = new(1f, 0.62f, 0.38f, 1f);
@@ -44,11 +47,11 @@ public class DayNightCycle2D : MonoBehaviour {
   [Header("Ambient Light Settings")]
   [Tooltip("Ambient light color during peak daytime.")]
   [SerializeField] Color dayAmbientColor = new(0.95f, 0.95f, 1f, 1f);
-  [SerializeField, Min(0f)] float dayAmbientIntensity = 1f;
+  [SerializeField, Min(0f)] float dayAmbientIntensity = 0.55f;
 
-  [Tooltip("Dark blue/violet ambient light during nighttime.")]
-  [SerializeField] Color nightAmbientColor = new(0.14f, 0.16f, 0.38f, 1f);
-  [SerializeField, Min(0f)] float nightAmbientIntensity = 0.28f;
+  [Tooltip("Readable blue ambient light during nighttime.")]
+  [SerializeField] Color nightAmbientColor = new(0.24f, 0.34f, 0.58f, 1f);
+  [SerializeField, Min(0f)] float nightAmbientIntensity = 0.42f;
 
   [Tooltip("Ambient tint during Dawn / Dusk.")]
   [SerializeField] Color transitionAmbientColor = new(0.72f, 0.48f, 0.52f, 1f);
@@ -196,6 +199,8 @@ public class DayNightCycle2D : MonoBehaviour {
     unsubscribeLocationUpdates = null;
     if (Instance == this) {
       Instance = null;
+      Shader.SetGlobalColor(EnvironmentKeyLightColorId, Color.white);
+      Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, 0f);
     }
   }
 
@@ -204,6 +209,8 @@ public class DayNightCycle2D : MonoBehaviour {
     unsubscribeLocationUpdates = null;
     if (Instance == this) {
       Instance = null;
+      Shader.SetGlobalColor(EnvironmentKeyLightColorId, Color.white);
+      Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, 0f);
     }
   }
 
@@ -385,10 +392,12 @@ public class DayNightCycle2D : MonoBehaviour {
       sunGlobalLight.intensity = targetSunIntensity;
     }
 
+    var appliedMoonIntensity = nightMoonIntensity * moonIntensityFactor;
+
     // Apply to Moon Global Light (if separate light object exists)
     if (moonGlobalLight != null) {
       moonGlobalLight.color = nightMoonColor;
-      moonGlobalLight.intensity = nightMoonIntensity * moonIntensityFactor;
+      moonGlobalLight.intensity = appliedMoonIntensity;
     }
 
     // Apply to Ambient Global Light
@@ -396,6 +405,13 @@ public class DayNightCycle2D : MonoBehaviour {
       ambientGlobalLight.color = targetAmbientColor;
       ambientGlobalLight.intensity = targetAmbientIntensity;
     }
+
+    var moonIsKeyLight = appliedMoonIntensity > targetSunIntensity;
+    var environmentKeyColor = moonIsKeyLight ? nightMoonColor : targetSunColor;
+    var environmentKeyIntensity = Mathf.Max(targetSunIntensity, appliedMoonIntensity);
+    var normalizedKeyStrength = environmentKeyIntensity / Mathf.Max(daySunIntensity, 0.0001f);
+    Shader.SetGlobalColor(EnvironmentKeyLightColorId, environmentKeyColor);
+    Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, normalizedKeyStrength);
 
     // Dynamic 2D Sun Shadow Vector calculation
     Vector2 shadowDir = CalculateSunShadowDirection(currentHour);

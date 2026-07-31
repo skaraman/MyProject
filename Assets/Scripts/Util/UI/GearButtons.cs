@@ -1,12 +1,17 @@
 using System;
 using System.Collections.Generic;
+using Esperanza.UI;
 using UnityEngine;
 
 public class GearButtons : ButtonGroup {
   const string BackingSiblingName = "backing";
   const string OutlineKeyword = "OUTBASE_ON";
+  const string RingsContainerName = "RINGS";
 
   readonly List<Action> actions = new();
+
+  [Header("Gear Preview")]
+  [SerializeField] ItemCard itemCard;
 
   static bool ShouldLogRuntimeUiDebug() {
     if (!Application.isPlaying) return false;
@@ -20,6 +25,7 @@ public class GearButtons : ButtonGroup {
   }
 
   void OnDisable() {
+    itemCard?.Hide();
     UnregisterHandlers();
   }
 
@@ -40,10 +46,32 @@ public class GearButtons : ButtonGroup {
 
   protected override void HandleActiveState(GameObject button) {
     SetButtonVisualState(button, isActive: true);
+    ShowItemCard(button);
   }
 
   protected override void HandleInactiveState(GameObject button) {
     SetButtonVisualState(button, isActive: false);
+    if (GetActiveButton() == button) {
+      itemCard?.Hide();
+    }
+  }
+
+  void ShowItemCard(GameObject button) {
+    if (itemCard == null || button == null) {
+      return;
+    }
+
+    var formName = EsperanzaForms.GetActive();
+    EquippedItems.EnsureForm(formName);
+    if (!EquippedItems.AllGearForms.TryGetValue(formName, out var slots) ||
+        slots == null ||
+        !slots.TryGetValue(button.name, out var gearItem) ||
+        gearItem == null) {
+      itemCard.Hide();
+      return;
+    }
+
+    itemCard.SetupGear(gearItem, button.GetComponent<SpriteWithNormals>());
   }
 
   static void SetButtonVisualState(GameObject button, bool isActive) {
@@ -52,7 +80,26 @@ public class GearButtons : ButtonGroup {
     }
 
     var parent = button.transform.parent;
-    var backing = parent != null ? parent.Find(BackingSiblingName) : null;
+    var isRingSlot = parent != null &&
+      string.Equals(parent.name, RingsContainerName, StringComparison.Ordinal);
+    if (isRingSlot) {
+      SetBackingOutline(parent.Find(BackingSiblingName), isActive: false);
+    }
+
+    var independentOutline = button.GetComponentInChildren<RingSlotHoverOutline>(includeInactive: true);
+    if (independentOutline != null) {
+      independentOutline.SetHighlighted(isActive);
+      return;
+    }
+
+    if (isRingSlot) {
+      return;
+    }
+
+    SetBackingOutline(parent != null ? parent.Find(BackingSiblingName) : null, isActive);
+  }
+
+  static void SetBackingOutline(Transform backing, bool isActive) {
     if (backing == null) {
       return;
     }

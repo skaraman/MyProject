@@ -163,6 +163,7 @@ public partial class GearController : MonoBehaviour {
       CharacterMessageTopics.AbilityLoadoutChanged,
       HandleAbilityLoadoutChanged
     );
+    InitializeGearDamageLocationReset();
     ResetDebugPlaybackFlags();
     appearanceOwnerId = "player:" + ObjectEntityId.GetString(gameObject);
     effectAppearanceOwnerId = effectNode != null ? "effect:" + ObjectEntityId.GetString(effectNode) : "";
@@ -171,6 +172,7 @@ public partial class GearController : MonoBehaviour {
     combinedBounces = CombineGameObjectArrays(HairObjects, OtherBounceGearObjects);
     ConfigureBounceDynamics();
     NormalizeSkinSpriteDefaultsForRuntime();
+    NormalizeGearDamageDefaultsForRuntime();
     ResolveProjectileManagerReference(source);
     PrimeSpriteStreamingWarmup();
     ConfigureAnimationController();
@@ -210,6 +212,7 @@ public partial class GearController : MonoBehaviour {
     var deltaTime = TimeScale.GetDeltaTime(this);
     var timerBeforeTick = animationController.animationTimer;
     TickControllers(deltaTime);
+    TickGearDamageFade(deltaTime);
     UpdateHairAnimationGust(deltaTime);
     UpdateLocomotionSound();
     RefreshInspectorTimers(timerBeforeTick, deltaTime);
@@ -378,6 +381,7 @@ public partial class GearController : MonoBehaviour {
     DisposeBounceDynamics();
     offAbilityLoadoutChanged?.Invoke();
     offAbilityLoadoutChanged = null;
+    DisposeGearDamageLocationReset();
     ReleaseCoreCombatEffectWarmupPins();
     ReleaseRuntimeGearMaterialHandle();
     animationController?.Cleanup(!Application.isPlaying);

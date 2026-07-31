@@ -5523,10 +5523,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Project.Internal::BurstRigidbodies2D
   what: 0
   piecesPrefab: {fileID: 0}
-  planarForceMin: {x: -6, y: 3}
-  planarForceMax: {x: 6, y: 10}
-  torqueMin: -25
-  torqueMax: 25
+  planarForceMin: {x: -6, y: -1.25}
+  planarForceMax: {x: 6, y: 1.25}
+  torqueMin: -8
+  torqueMax: 8
   pieces: []
 --- !u!114 &1234567890123456789
 MonoBehaviour:

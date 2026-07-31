@@ -15,6 +15,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const float EditorSpriteMapSupplementWaitTimeoutDuringOverlaySeconds = 2.0f;
   const float EditorSliceResolveRetryGraceSeconds = 6.0f;
   const string EmptySpriteAssetPath = "Packages/com.skaraman.myprojectcontent/Core/Sprites/Core/Empty.png";
+  const string CharacterFormUiRoot = "FormUIs/";
+  const string CharacterFormUiSuffix = "UI";
 
   public string libraryName = "";
   public string labelPrefix = "";
@@ -65,6 +67,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const int GameplayEnableRefreshBudgetPerFrame = 24;
   const int LoadingManagedUpdateBudgetPerFrame = 256;
   static readonly int NormalMapPropertyId = Shader.PropertyToID("_NormalMap");
+  static readonly int NormalMapIsSrgbPropertyId = Shader.PropertyToID("_NormalMapIsSrgb");
   static readonly int SpriteUvRectPropertyId = Shader.PropertyToID("_SpriteUvRect");
   static readonly int SpriteEffectActivePropertyId = Shader.PropertyToID("_SpriteEffectActive");
   static readonly Color32 TransparentPaddingColor = new(0, 0, 0, 0);
@@ -168,6 +171,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static int s_ManagedUpdateCursor;
   static bool s_UpdateRegistered;
   static readonly Action s_UpdateCallback = UpdateAll;
+  static Action s_OffFormChanged;
 
   static void UpdateAll() {
     FlushQueuedRuntimeEnableRefreshes();
@@ -202,7 +206,9 @@ public partial class SpriteWithNormals : MonoBehaviour {
   }
 
   static void EnsureUpdateRegistration() {
-    if (s_UpdateRegistered || !Application.isPlaying) return;
+    if (!Application.isPlaying) return;
+    EnsureFormChangeRegistration();
+    if (s_UpdateRegistered) return;
     s_UpdateRegistered = true;
     RuntimeUpdateHub.Register(
       100,
@@ -213,6 +219,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetStatics() {
+    s_OffFormChanged?.Invoke();
+    s_OffFormChanged = null;
     for (var i = 0; i < s_AllActive.Count; i++) {
       var target = s_AllActive[i];
       if (target != null) {
@@ -243,6 +251,9 @@ public partial class SpriteWithNormals : MonoBehaviour {
   void OnEnable() {
     if (useTrimmedAtlasOffset) {
       _trimmedOffsetMetadataReadyCallback ??= OnTrimmedOffsetMetadataReady;
+    }
+    if (Application.isPlaying) {
+      TryApplyCharacterFormUiLibrary(EsperanzaForms.GetActive());
     }
     SyncSerializedTrimmedOffsetState();
     SyncRendererVisibility();
@@ -367,9 +378,77 @@ public partial class SpriteWithNormals : MonoBehaviour {
     category = value;
     _hasLastLookup = false;
   }
-  public void SetLibraryName(string value) { libraryName = value; _hasLastLookup = false; ResetPairLookupCaches(); }
+  public void SetLibraryName(string value) {
+    if (Application.isPlaying &&
+        TryBuildCharacterFormUiLibraryName(value, EsperanzaForms.GetActive(), out var activeFormLibraryName)) {
+      value = activeFormLibraryName;
+    }
+    libraryName = value;
+    _hasLastLookup = false;
+    ResetPairLookupCaches();
+  }
   public void SetLabelPrefix(string value) { labelPrefix = value; _hasLastLookup = false; ResetPairLookupCaches(); }
   public void SetIsAnimation(bool value) { isAnimation = value; _hasLastLookup = false; ResetPairLookupCaches(); }
+
+  static void EnsureFormChangeRegistration() {
+    s_OffFormChanged ??= MessageBus.On(CharacterMessageTopics.FormChanged, OnCharacterFormChanged);
+  }
+
+  static void OnCharacterFormChanged(string formName) {
+    var activeForm = EsperanzaForms.ResolveFormKey(formName) ?? EsperanzaForms.GetActive();
+    if (string.IsNullOrWhiteSpace(activeForm)) {
+      return;
+    }
+
+    for (var i = 0; i < s_AllActive.Count; i++) {
+      var target = s_AllActive[i];
+      if (target != null && target.TryApplyCharacterFormUiLibrary(activeForm)) {
+        target.ForceUpdateSpriteAndNormal();
+      }
+    }
+  }
+
+  bool TryApplyCharacterFormUiLibrary(string formName) {
+    if (!TryBuildCharacterFormUiLibraryName(libraryName, formName, out var nextLibraryName) ||
+        string.Equals(libraryName, nextLibraryName, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    SetLibraryName(nextLibraryName);
+    return true;
+  }
+
+  static bool TryBuildCharacterFormUiLibraryName(
+    string currentLibraryName,
+    string formName,
+    out string libraryName
+  ) {
+    libraryName = "";
+    if (string.IsNullOrWhiteSpace(currentLibraryName)) {
+      return false;
+    }
+
+    var normalized = currentLibraryName.Trim().Replace('\\', '/');
+    if (!normalized.StartsWith(CharacterFormUiRoot, StringComparison.OrdinalIgnoreCase) ||
+        !normalized.EndsWith(CharacterFormUiSuffix, StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var currentFormLength = normalized.Length - CharacterFormUiRoot.Length - CharacterFormUiSuffix.Length;
+    if (currentFormLength <= 0) {
+      return false;
+    }
+
+    var currentForm = normalized.Substring(CharacterFormUiRoot.Length, currentFormLength);
+    var resolvedCurrentForm = EsperanzaForms.ResolveFormKey(currentForm);
+    var resolvedTargetForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedCurrentForm) || string.IsNullOrWhiteSpace(resolvedTargetForm)) {
+      return false;
+    }
+
+    libraryName = CharacterFormUiRoot + resolvedTargetForm + CharacterFormUiSuffix;
+    return true;
+  }
   public void SetUseTrimmedAtlasOffset(bool value) {
     if (useTrimmedAtlasOffset == value) return;
     useTrimmedAtlasOffset = value;

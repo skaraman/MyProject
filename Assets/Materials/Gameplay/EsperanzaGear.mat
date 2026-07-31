@@ -12,6 +12,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - FADE_ON
   - GLOWLIGHT_ON
   - GLOW_ON
   m_InvalidKeywords:
@@ -119,10 +120,10 @@ Material:
     - _DistortTexXSpeed: 5
     - _DistortTexYSpeed: 5
     - _EditorDrawers: 15
-    - _FadeAmount: -0.1
-    - _FadeBurnGlow: 2
-    - _FadeBurnTransition: 0.075
-    - _FadeBurnWidth: 0.025
+    - _FadeAmount: 0
+    - _FadeBurnGlow: 0
+    - _FadeBurnTransition: 0
+    - _FadeBurnWidth: 0
     - _FishEyeUvAmount: 0.35
     - _FlickerAlpha: 0
     - _FlickerFreq: 0.2
@@ -245,8 +246,8 @@ Material:
     - _ColorSwapGreen: {r: 1, g: 1, b: 1, a: 1}
     - _ColorSwapRed: {r: 1, g: 1, b: 1, a: 1}
     - _DistortTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
-    - _FadeBurnColor: {r: 1, g: 1, b: 0, a: 1}
-    - _FadeBurnTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
+    - _FadeBurnColor: {r: 0, g: 0, b: 0, a: 0}
+    - _FadeBurnTex_ScaleAndTiling: {r: 0, g: 0, b: 0, a: 0}
     - _FadeTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _GlowColor: {r: 1, g: 1, b: 1, a: 1}
     - _GradBotLeftCol: {r: 0, g: 0, b: 1, a: 1}

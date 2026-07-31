@@ -133,6 +133,14 @@ public class MouseManager : MonoBehaviour {
     }
   }
 
+  public void RefreshHoverTarget() {
+    if (lastHovered) {
+      MessageBus.Send(exitKey, lastHovered);
+    }
+    lastHovered = null;
+    hasLastScreenPos = false;
+  }
+
   GameObject ResolvePointTarget(Vector3 worldPos) {
     overlapResults.Clear();
     Physics2D.OverlapPoint((Vector2)worldPos, overlapFilter, overlapResults);
@@ -211,6 +219,8 @@ public class MouseManager : MonoBehaviour {
     }
 
     switch (currentMap) {
+      case "gameplay":
+        return HasAncestorNamed(target.transform, "FormsWheel");
       case "mainMenu":
         return HasAncestorNamed(target.transform, "MainMenu");
       case "loadMenu":

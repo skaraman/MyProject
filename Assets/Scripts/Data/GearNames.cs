@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 
 public static class GearNames {
+  const string SuffixKey = "suffix";
+
   public static Dictionary<string, Dictionary<string, List<string>>> names { get; } = new Dictionary<string, Dictionary<string, List<string>>> {
     ["STR"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Durable", "Firm", "Stable", "Tough", },
@@ -58,7 +60,7 @@ public static class GearNames {
       ["prefix"] = new List<string> { "Dark", },
       ["suffix"] = new List<string> { "Umbral", },
     },
-    ["OID"] = new Dictionary<string, List<string>> {
+    ["VOI"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Empty", },
       ["suffix"] = new List<string> { "Void", },
     },
@@ -179,4 +181,49 @@ public static class GearNames {
       ["suffix"] = new List<string> { "Swiftness", },
     }
   };
+
+  public static string Generate(string gearId, string slot, IList<BoostEntry> boosts) {
+    var baseName = ResolveBaseName(gearId, slot);
+    if (boosts == null || boosts.Count == 0 || boosts[0] == null) {
+      return baseName;
+    }
+
+    var statName = Normalize(boosts[0].statName);
+    if (string.IsNullOrEmpty(statName) ||
+        !names.TryGetValue(statName, out var statNames) ||
+        statNames == null ||
+        !statNames.TryGetValue(SuffixKey, out var suffixes) ||
+        suffixes == null ||
+        suffixes.Count == 0 ||
+        string.IsNullOrWhiteSpace(suffixes[0])) {
+      return baseName;
+    }
+
+    return baseName + " of " + suffixes[0].Trim();
+  }
+
+  static string ResolveBaseName(string gearId, string slot) {
+    var normalizedGearId = Normalize(gearId);
+    var normalizedSlot = string.IsNullOrWhiteSpace(slot) ? "" : slot.Trim();
+    var gearPartId = string.IsNullOrEmpty(normalizedSlot)
+      ? normalizedGearId
+      : normalizedGearId + "_" + normalizedSlot;
+
+    if (EsperanzaGearParts.GearNames.TryGetValue(gearPartId, out var authoredName) &&
+        !string.IsNullOrWhiteSpace(authoredName)) {
+      return authoredName.Trim();
+    }
+
+    var separatorIndex = normalizedGearId.IndexOf('_');
+    var formName = separatorIndex > 0
+      ? normalizedGearId.Substring(0, separatorIndex)
+      : normalizedGearId;
+    return (formName + " " + normalizedSlot).Trim();
+  }
+
+  static string Normalize(string value) {
+    return string.IsNullOrWhiteSpace(value)
+      ? ""
+      : value.Trim().ToUpperInvariant();
+  }
 }

@@ -4,6 +4,9 @@ using UnityEngine;
 
 
 public class Avatar : MonoBehaviour {
+  const string DirectFormUiRoot = "FormUIs/";
+  const string DirectFormUiSuffix = "UI";
+
   public SpriteWithNormals spriteWithNormals;
   private List<Action> actions = new();
 
@@ -19,9 +22,27 @@ public class Avatar : MonoBehaviour {
   }
 
   private void UpdateSprite() {
-    // Update the sprite based on the current gear
-    spriteWithNormals.labelPrefix = EsperanzaForms.GetActive();
+    if (spriteWithNormals == null) {
+      return;
+    }
+
+    var activeForm = EsperanzaForms.GetActive();
+    if (IsDirectFormUiLibrary(spriteWithNormals.libraryName) && !string.IsNullOrWhiteSpace(activeForm)) {
+      spriteWithNormals.SetLibraryName(DirectFormUiRoot + activeForm.Trim() + DirectFormUiSuffix);
+    }
+    else {
+      spriteWithNormals.SetLabelPrefix(activeForm);
+    }
     spriteWithNormals.ForceUpdateSpriteAndNormal();
   }
 
+  static bool IsDirectFormUiLibrary(string libraryName) {
+    if (string.IsNullOrWhiteSpace(libraryName)) {
+      return false;
+    }
+
+    var normalized = libraryName.Trim().Replace('\\', '/');
+    return normalized.StartsWith(DirectFormUiRoot, StringComparison.OrdinalIgnoreCase) &&
+           normalized.EndsWith(DirectFormUiSuffix, StringComparison.OrdinalIgnoreCase);
+  }
 }

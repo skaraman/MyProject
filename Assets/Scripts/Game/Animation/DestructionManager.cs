@@ -1,37 +1,98 @@
+using System;
 using System.Collections.Generic;
 using CustomInspector;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class DestructionManager : MonoBehaviour {
+  readonly struct EmbeddedPiecesPoolKey : IEquatable<EmbeddedPiecesPoolKey> {
+    public readonly SceneHandle sceneHandle;
+    readonly string enemyType;
+    readonly int pieceCount;
+
+    public EmbeddedPiecesPoolKey(
+      SceneHandle sceneHandle,
+      string enemyType,
+      int pieceCount
+    ) {
+      this.sceneHandle = sceneHandle;
+      this.enemyType = enemyType;
+      this.pieceCount = pieceCount;
+    }
+
+    public bool Equals(EmbeddedPiecesPoolKey other) {
+      return sceneHandle == other.sceneHandle &&
+             pieceCount == other.pieceCount &&
+             string.Equals(enemyType, other.enemyType, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is EmbeddedPiecesPoolKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = sceneHandle.GetHashCode();
+        hash = (hash * 397) ^ pieceCount;
+        hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(enemyType ?? "");
+        return hash;
+      }
+    }
+  }
+
+  const int PiecesPoolSize = 5;
+  const float PiecesContainerLifetimeSeconds = 10f;
+
+  static readonly Dictionary<EmbeddedPiecesPoolKey, GameObject> embeddedPoolTemplates = new();
+  static readonly List<EmbeddedPiecesPoolKey> embeddedPoolKeyScratch = new();
+
   [Button(nameof(LaunchRandom), label = "Play", size = Size.small)] public bool what;
-  [Tooltip("Optional prefab containing the PIECES. If assigned, will pool the pieces instead of baking them in.")]
-  public GameObject piecesPrefab; 
+  [Tooltip("Optional standalone PIECES prefab. When omitted, the embedded PIECES hierarchy is used as the pooled template.")]
+  public GameObject piecesPrefab;
+  private Transform embeddedPiecesRoot;
   private Transform piecesRoot;
-  public Vector2 planarForceMin = new(-1f, 3f);
-  public Vector2 planarForceMax = new(1f, 5f);
-  public float torqueMin = -1;
-  public float torqueMax = 1;
+  [Tooltip("Ground-plane impulse minimum: X scatters sideways and Y adds slight visual depth.")]
+  public Vector2 planarForceMin = new(-6f, -1.25f);
+  [Tooltip("Ground-plane impulse maximum: X scatters sideways and Y adds slight visual depth.")]
+  public Vector2 planarForceMax = new(6f, 1.25f);
+  public float torqueMin = -8f;
+  public float torqueMax = 8f;
   public List<Piece> pieces = new();
-  private bool launchPending;
+
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetEmbeddedPoolTemplates() {
+    SceneManager.sceneUnloaded -= OnSceneUnloaded;
+    embeddedPoolTemplates.Clear();
+    embeddedPoolKeyScratch.Clear();
+    SceneManager.sceneUnloaded += OnSceneUnloaded;
+  }
+
+  static void OnSceneUnloaded(Scene scene) {
+    embeddedPoolKeyScratch.Clear();
+    foreach (var pair in embeddedPoolTemplates) {
+      if (pair.Key.sceneHandle == scene.handle) {
+        embeddedPoolKeyScratch.Add(pair.Key);
+      }
+    }
+
+    for (var i = 0; i < embeddedPoolKeyScratch.Count; i++) {
+      embeddedPoolTemplates.Remove(embeddedPoolKeyScratch[i]);
+    }
+    embeddedPoolKeyScratch.Clear();
+  }
 
   void Awake() {
-    piecesRoot = transform.FindDirectChild("PIECES");
+    embeddedPiecesRoot = transform.FindDirectChild("PIECES");
+    piecesRoot = embeddedPiecesRoot;
     if (piecesRoot != null) {
       CollectPiecesFromChildren();
     }
   }
 
   void Start() {
-    if (piecesPrefab != null) {
-      // Pre-warm the pool during the location loading screen setup phase.
-      Pool.GetShared(piecesPrefab, null, 5);
-    }
-  }
-
-  void Update() {
-    if (!launchPending) return;
-    launchPending = false;
-    LaunchRandomInternal();
+    // Pre-warm during location setup. Embedded PIECES are also treated as a
+    // shared template so the launched debris survives pooled enemy despawn.
+    ResolvePiecesPool();
   }
 
   public void CollectPiecesFromChildren() {
@@ -47,57 +108,73 @@ public class DestructionManager : MonoBehaviour {
   }
 
   public void LaunchRandom() {
-    if (piecesPrefab != null) {
-      var pool = Pool.GetShared(piecesPrefab, null, 5);
-      var instance = pool.Spawn(transform.position, transform.rotation);
-      piecesRoot = instance.transform;
-      CollectPiecesFromChildren();
-      
-      // Auto-despawn the container after pieces are done fading
-      pool.DespawnAfter(instance, 10f);
-    }
-
-    if (pieces.Count == 0) return;
-    if (Time.inFixedTimeStep) {
-      // Avoid enabling/launching bodies mid-physics step.
-      launchPending = true;
+    var pool = ResolvePiecesPool();
+    if (pool == null) {
       return;
     }
-    LaunchRandomInternal();
+
+    var useEmbeddedRoot = piecesPrefab == null && embeddedPiecesRoot != null;
+    var spawnPosition = useEmbeddedRoot ? embeddedPiecesRoot.position : transform.position;
+    var spawnRotation = useEmbeddedRoot ? embeddedPiecesRoot.rotation : transform.rotation;
+    var spawnScale = useEmbeddedRoot
+      ? embeddedPiecesRoot.lossyScale
+      : Vector3.Scale(piecesPrefab.transform.localScale, transform.lossyScale);
+    var instance = pool.Spawn(spawnPosition, spawnRotation);
+    if (instance == null) {
+      return;
+    }
+    instance.transform.localScale = spawnScale;
+
+    var launcher = instance.GetComponent<PooledPieceScatter>();
+    if (launcher == null) {
+      launcher = instance.AddComponent<PooledPieceScatter>();
+    }
+
+    if (!launcher.Launch(
+          planarForceMin,
+          planarForceMax,
+          torqueMin,
+          torqueMax
+        )) {
+      pool.Despawn(instance);
+      return;
+    }
+
+    pool.DespawnAfter(instance, PiecesContainerLifetimeSeconds);
   }
 
-  private static readonly List<Piece> launchScratch = new List<Piece>();
-
-  void LaunchRandomInternal() {
-    if (pieces.Count == 0) return;
-    
-    launchScratch.Clear();
-    launchScratch.AddRange(pieces);
-    Shuffle(launchScratch);
-    
-    var count = Random.Range(1, launchScratch.Count + 1);
-    for (var i = 0; i < launchScratch.Count; i++) {
-      var p = launchScratch[i];
-      if (p == null) continue;
-      var shouldLaunch = i < count;
-      if (shouldLaunch) {
-        if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
-        p.ResetPiece();
-        var f = new Vector2(Random.Range(planarForceMin.x, planarForceMax.x), Random.Range(planarForceMin.y, planarForceMax.y));
-        var t = Random.Range(torqueMin, torqueMax);
-        p.Launch(f, t);
-      }
-      else if (p.gameObject.activeSelf) {
-        p.gameObject.SetActive(false);
-        p.ResetPiece();
-      }
-    }
+  Pool ResolvePiecesPool() {
+    var poolPrefab = ResolvePiecesPoolPrefab();
+    return poolPrefab != null
+      ? Pool.GetShared(poolPrefab, null, PiecesPoolSize)
+      : null;
   }
 
-  static void Shuffle<T>(List<T> list) {
-    for (var i = list.Count - 1; i > 0; i--) {
-      var j = Random.Range(0, i + 1);
-      (list[i], list[j]) = (list[j], list[i]);
+  GameObject ResolvePiecesPoolPrefab() {
+    if (piecesPrefab != null) {
+      return piecesPrefab;
     }
+    if (embeddedPiecesRoot == null) {
+      return null;
+    }
+
+    var enemyInfo = GetComponent<EnemyInfo>();
+    var enemyType = enemyInfo != null && !string.IsNullOrWhiteSpace(enemyInfo.enemyType)
+      ? enemyInfo.enemyType.Trim()
+      : gameObject.name;
+    var key = new EmbeddedPiecesPoolKey(
+      gameObject.scene.handle,
+      enemyType,
+      embeddedPiecesRoot.childCount
+    );
+    if (embeddedPoolTemplates.TryGetValue(key, out var template) && template != null) {
+      return template;
+    }
+
+    template = Instantiate(embeddedPiecesRoot.gameObject);
+    template.name = enemyType + " PIECES Pool Template";
+    template.SetActive(false);
+    embeddedPoolTemplates[key] = template;
+    return template;
   }
 }

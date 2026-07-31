@@ -35,6 +35,10 @@ public partial class SpriteWithNormals {
     }
     if (normalChanged && normalTexture != null) {
       _mpb.SetTexture(NormalMapPropertyId, normalTexture);
+      _mpb.SetFloat(
+        NormalMapIsSrgbPropertyId,
+        UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(normalTexture.graphicsFormat) ? 1f : 0f
+      );
     }
     _renderer.SetPropertyBlock(_mpb);
     _lastAppliedNormalTexture = normalTexture;

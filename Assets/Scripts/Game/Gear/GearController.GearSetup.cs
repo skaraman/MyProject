@@ -9,6 +9,7 @@ public partial class GearController {
 
   public void LoadGear(bool publishReady) {
     EnsureRuntimeInitialized("load_gear");
+    ResetGearDamageFade();
     GetSavedGearState();
     RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("load_gear");
     RefreshGear();
@@ -163,6 +164,7 @@ public partial class GearController {
     if (effectControllerInitialized) {
       effectAnimationController?.InvalidateSpriteFrameCache();
     }
+    RefreshGearDamageFadeAfterEquip();
     QueueWarmupForEquippedCharacter(new Dictionary<string, string>(equipPartPrefixScratch, StringComparer.OrdinalIgnoreCase));
   }
 

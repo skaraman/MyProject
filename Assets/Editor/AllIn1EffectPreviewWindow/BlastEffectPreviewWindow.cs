@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 
 public sealed class BlastEffectPreviewWindow : EditorWindow {
-  const string MenuPath = "Tools/Shader Preview/Blast Effect Preview";
+  const string MenuPath = "Tools/Shader Preview/Other Effects/Blast Preview";
   const string ShaderName = "Esperanza/Effects/BlastEnergy";
   const string MaterialPath = "Assets/Materials/Gameplay/BlastEnergy.mat";
   const string BlastBallTexturePath = "Assets/Sprites/Effects/Ball/Ball.png";

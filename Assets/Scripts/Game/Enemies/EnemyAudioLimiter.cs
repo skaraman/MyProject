@@ -52,7 +52,7 @@ public static class EnemyAudioLimiter {
     float d1 = float.MaxValue, d2 = float.MaxValue, d3 = float.MaxValue;
 
     foreach (var enemy in activeEnemies) {
-      if (enemy == null || !enemy.isActiveAndEnabled) continue;
+      if (enemy == null || !enemy.isActiveAndEnabled || enemy.isCulled) continue;
       float distSq = (enemy.transform.position - referencePos).sqrMagnitude;
       if (distSq < d1) {
         d3 = d2; e3 = e2;

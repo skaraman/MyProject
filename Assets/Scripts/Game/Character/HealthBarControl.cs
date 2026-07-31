@@ -143,20 +143,50 @@ public class HealthBarControl : MonoBehaviour {
     healthText?.EnsureGlyphCapacity(NumericGlyphCapacity);
     nrgText?.EnsureGlyphCapacity(NumericGlyphCapacity);
 
-    var activeForm = EsperanzaForms.GetActive();
-    lastLabelPrefix = Form != null ? Form : activeForm;
-    RefreshSprites(lastLabelPrefix);
+    lastLabelPrefix = ResolveRuntimeForm();
+    RefreshFormVisuals(lastLabelPrefix);
     RefreshVitals(force: true);
   }
 
   void Update() {
-    var desiredLabelPrefix = Form != null ? Form : EsperanzaForms.GetActive();
+    var desiredLabelPrefix = ResolveRuntimeForm();
     if (desiredLabelPrefix != lastLabelPrefix) {
       lastLabelPrefix = desiredLabelPrefix;
-      RefreshSprites(lastLabelPrefix);
+      RefreshFormVisuals(lastLabelPrefix);
     }
 
     RefreshVitals();
+  }
+
+  string ResolveRuntimeForm() {
+    var activeForm = EsperanzaForms.GetActive();
+    return string.IsNullOrWhiteSpace(activeForm) ? Form : activeForm;
+  }
+
+  void RefreshFormVisuals(string formName) {
+    RefreshSprites(formName);
+    ApplyVitalTextColors(formName);
+  }
+
+  void ApplyVitalTextColors(string formName) {
+    ApplyFontTextColors(healthText, formName, ShaderColors.PrimaryGroup);
+    ApplyFontTextColors(nrgText, formName, ShaderColors.SecondaryGroup);
+  }
+
+  static void ApplyFontTextColors(FontText target, string formName, string colorGroup) {
+    if (target == null ||
+        !ShaderColors.TryGetFormPalette(
+          formName,
+          colorGroup,
+          out var color,
+          out var outlineColor,
+          out _,
+          out _
+        )) {
+      return;
+    }
+
+    target.SetShaderColors(color, outlineColor);
   }
 
   void RefreshVitals(

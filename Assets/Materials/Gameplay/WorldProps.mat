@@ -13,6 +13,7 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - GLOWLIGHT_ON
+  - STYLIZEDRIM_ON
   m_InvalidKeywords:
   - _GLOWAFFECTLIGHT_ON
   m_LightmapFlags: 4
@@ -173,6 +174,7 @@ Material:
     - _FadeBurnTransition: 0.075
     - _FadeBurnWidth: 0.025
     - _FadeTextureStrength: 0
+    - _FadeUseSpriteUvRect: 0
     - _FishEyeAmount: 0
     - _FishEyeUvAmount: 0.35
     - _FlickerAlpha: 0
@@ -246,7 +248,8 @@ Material:
     - _MyDstMode: 10
     - _MySrcMode: 5
     - _NegativeAmount: 1
-    - _NormalStrength: 1.01
+    - _NormalMapIsSrgb: 0
+    - _NormalStrength: 8.23
     - _OffsetUvX: 0
     - _OffsetUvY: 0
     - _OffsetX: 0
@@ -312,6 +315,10 @@ Material:
     - _ShineSpeed: 1
     - _ShineWidth: 0.1
     - _ShineWidth2: 0.2
+    - _StylizedRimEnabled: 1
+    - _StylizedRimEnvironmentInfluence: 0.144
+    - _StylizedRimIntensity: 2.61
+    - _StylizedRimPower: 2.61
     - _TextureScrollSpeedX: 0
     - _TextureScrollSpeedY: 0
     - _TextureScrollXSpeed: 1
@@ -393,6 +400,8 @@ Material:
     - _RadialClipCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
     - _ShadowColor: {r: 0, g: 0, b: 0, a: 1}
     - _ShineColor: {r: 1, g: 1, b: 1, a: 1}
+    - _SpriteUvRect: {r: 0, g: 0, b: 1, a: 1}
+    - _StylizedRimColor: {r: 1.2, g: 1.05, b: 0.8, a: 1}
     - _TwistCenter: {r: 0.5, g: 0.5, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

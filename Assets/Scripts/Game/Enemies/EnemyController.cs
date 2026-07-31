@@ -143,6 +143,7 @@ public partial class EnemyController : MonoBehaviour {
   internal void ManagedUpdate() {
     if (isCulled) {
       if (shadowCaster != null && shadowCaster.enabled) shadowCaster.enabled = false;
+      StopLocomotionSound();
       return;
     }
     if (shadowCaster != null && !shadowCaster.enabled) shadowCaster.enabled = true;
@@ -166,11 +167,13 @@ public partial class EnemyController : MonoBehaviour {
     if (Application.isPlaying && _activeListIndex < 0) {
       _activeListIndex = s_AllActive.Count;
       s_AllActive.Add(this);
+      EnemyAudioLimiter.Register(this);
       EnsureUpdateRegistration();
     }
   }
 
   void OnDisable() {
+    EnemyAudioLimiter.Unregister(this);
     if (Application.isPlaying && _activeListIndex >= 0) {
       var lastIndex = s_AllActive.Count - 1;
       var removeIndex =

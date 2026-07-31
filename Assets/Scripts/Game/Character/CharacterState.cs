@@ -10,6 +10,10 @@ public class CharacterState : MonoBehaviour {
 
   public int level = 0;
 
+  [Header("Debug")]
+  [SerializeField, Tooltip("Treat every known form as unlocked for availability checks without bulk-unlocking saved progression.")]
+  private bool debugUnlockAllForms = true;
+
   private Action offLoadGame;
   private GearController gearController;
   private bool formsSavePending;
@@ -21,6 +25,9 @@ public class CharacterState : MonoBehaviour {
 
   // Cache list to avoid allocations
   private readonly List<string> cachedKeys = new();
+
+  public static bool DebugUnlockAllForms =>
+    runtimeInstance != null && runtimeInstance.debugUnlockAllForms;
 
   static bool ShouldLogLoadStateDebug() {
     if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
@@ -165,6 +172,12 @@ public class CharacterState : MonoBehaviour {
     }
   }
 
+  void SaveCreatedDefaultGear() {
+    var gearSave = new SaveData();
+    gearSave.SetComplex(SaveKeys.AllGear, EquippedItems.AllGearForms);
+    SaveSlotManager.Save(SaveKeys.EquippedGear, gearSave);
+  }
+
   public void InitializeRuntimeStateForNewGame() {
     EnsureRuntimeReferences();
     ResetRuntimeState();
@@ -179,6 +192,8 @@ public class CharacterState : MonoBehaviour {
     }
 
     gearController?.LoadGear(publishReady: false);
+    EquippedItems.RandomizeDefaultBoostsForNewGame();
+    SaveCreatedDefaultGear();
     GatherAllStatValues();
     SaveFormsState();
     MessageBus.Send(CharacterMessageTopics.DialogStateReady, "new_game");

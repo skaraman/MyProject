@@ -13,6 +13,7 @@ public class Destructible : MonoBehaviour
 {
     private int lastProcessedHitFrame = -1;
     private ulong lastProcessedHitSourceId;
+    private CharacterState characterState;
 
     [Header("Colliders")]
     public List<Collider2D> colliders = new List<Collider2D>();
@@ -337,6 +338,8 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(receiverCollider, collision.collider.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, collision.collider))
         {
+            PlayHitEffect(targetPool.collider, hitBox);
+            GrantEsperHitFormXp(hitBox);
             HandleCollision(targetPool);
         }
     }
@@ -370,6 +373,8 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(receiverCollider, collider.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, collider))
         {
+            PlayHitEffect(targetPool.collider, hitBox);
+            GrantEsperHitFormXp(hitBox);
             HandleCollision(targetPool);
         }
     }
@@ -386,8 +391,37 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(targetCollider, hitBox.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, null))
         {
+            PlayHitEffect(targetCollider, hitBox);
+            GrantEsperHitFormXp(hitBox);
             HandleCollision(targetPool);
         }
+    }
+
+    private static void PlayHitEffect(Collider2D targetCollider, HitBox2D hitBox)
+    {
+        if (hitBox != null &&
+            HurtBox2D.TryResolve(targetCollider, out HurtBox2D hurtBox))
+        {
+            HitEmphasisBurst.Play(hurtBox, hitBox);
+        }
+    }
+
+    private void GrantEsperHitFormXp(HitBox2D hitBox)
+    {
+        if (hitBox == null ||
+            hitBox.IsEnemyOwned ||
+            hitBox.ActorOwner == null ||
+            hitBox.ActorOwner.GetComponent<GearController>() == null)
+        {
+            return;
+        }
+
+        if (characterState == null)
+        {
+            characterState = SingleSceneManager.ResolveGameplayCharacterState();
+        }
+
+        characterState?.GrantActiveFormXp(1, "destructible_hit");
     }
 
     private bool TryBeginHit(HitBox2D hitBox, Collider2D sourceCollider)
@@ -604,7 +638,15 @@ public class Destructible : MonoBehaviour
             rb.linearDamping = 0f;
             rb.angularDamping = 0.05f;
 
-            Vector2 forceDirection = new Vector2(Random.Range(-1f, 1f), Random.Range(0.5f, 1.5f)).normalized;
+            float horizontalDirection = Random.Range(-1f, 1f);
+            if (Mathf.Abs(horizontalDirection) < 0.5f)
+            {
+                horizontalDirection = (Random.value < 0.5f ? -1f : 1f) * 0.5f;
+            }
+            Vector2 forceDirection = new Vector2(
+                horizontalDirection,
+                Random.Range(-0.03f, 0.08f)
+            ).normalized;
             float forceMagnitude = Random.Range(minLaunchForce, maxLaunchForce);
 
             rb.AddForce(forceDirection * forceMagnitude, ForceMode2D.Impulse);

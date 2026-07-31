@@ -176,22 +176,35 @@ public class FireMaterialPreset : MonoBehaviour {
     SetTextureIfPresent(material, "_NoiseTex", sharedBreakupTexture);
     SetTextureIfPresent(material, "_FlowTex", sharedFlowTexture);
     SetFloatIfPresent(material, "_PreviewTime", timeValue);
-    SetFloatIfPresent(material, "_Opacity", overlayAlpha);
-    SetFloatIfPresent(material, "_FlameHeight", Mathf.Lerp(0.92f, 0.5f, clipBottom));
-    SetFloatIfPresent(material, "_BodyWidth", Mathf.Lerp(0.54f, 0.4f, clipPulse));
-    SetFloatIfPresent(material, "_EdgeSoftness", 0.09f);
-    SetFloatIfPresent(material, "_Breakup", Mathf.Lerp(0.55f, 0.85f, breakupPulse));
-    SetFloatIfPresent(material, "_NoiseScale", 2.35f);
-    SetFloatIfPresent(material, "_DetailScale", Mathf.Lerp(5.5f, 7.2f, detailPulse));
+    SetVectorIfPresent(material, "_SourceRectInEffect", new Vector4(0f, 0f, 1f, 1f));
+    SetVectorIfPresent(material, "_SpriteUvRect", GetSpriteUvRect());
+    SetFloatIfPresent(material, "_FlameCoverage", Mathf.Lerp(0.72f, 0.9f, clipPulse));
+    SetFloatIfPresent(
+      material,
+      "_FlameHeight",
+      Mathf.Lerp(0.26f, 0.12f, clipBottom) * Mathf.Lerp(0.88f, 1.12f, clipPulse));
+    SetFloatIfPresent(material, "_TongueWidth", Mathf.Lerp(0.045f, 0.075f, clipPulse));
+    SetFloatIfPresent(material, "_TongueCount", Mathf.Lerp(patternRepeat + 4f, patternRepeat + 1f, clipPulse));
     SetFloatIfPresent(material, "_FlowSpeed", 1.12f);
-    SetFloatIfPresent(material, "_TongueStrength", Mathf.Lerp(0.16f, 0.25f, glowPulse));
-    SetFloatIfPresent(material, "_TongueFrequency", 8.2f);
-    SetFloatIfPresent(material, "_DistortionStrength", 0.14f);
-    SetFloatIfPresent(material, "_SourceMotion", sourceMotion);
-    SetFloatIfPresent(material, "_PatternRepeat", patternRepeat);
+    SetFloatIfPresent(
+      material,
+      "_Sway",
+      Mathf.Lerp(0.018f, 0.055f, breakupPulse) * Mathf.Lerp(0.75f, 1.25f, sourceMotion / 0.4f));
+    SetFloatIfPresent(material, "_Breakup", Mathf.Lerp(0.28f, 0.68f, breakupPulse));
+    SetFloatIfPresent(
+      material,
+      "_NoiseScale",
+      Mathf.Lerp(patternRepeat * 0.7f, patternRepeat * 1.1f, detailPulse));
+    SetFloatIfPresent(material, "_SurfaceOpacity", Mathf.Lerp(0.28f, 0.18f, glowPulse));
+    SetFloatIfPresent(material, "_FlameOpacity", overlayAlpha);
+    SetFloatIfPresent(material, "_Brightness", edgeBrightness);
+    SetColorIfPresent(material, "_HotColor", brightEdgeColor);
+    SetColorIfPresent(material, "_FlameColor", hotEdgeColor);
+
+    // Keep custom materials made against the older preview contract usable.
+    SetFloatIfPresent(material, "_Opacity", overlayAlpha);
     SetFloatIfPresent(material, "_CoreIntensity", edgeBrightness);
     SetColorIfPresent(material, "_BrightColor", brightEdgeColor);
-    SetColorIfPresent(material, "_HotColor", hotEdgeColor);
     SetColorIfPresent(material, "_BodyColor", darkInteriorColor);
   }
 
@@ -335,9 +348,10 @@ public class FireMaterialPreset : MonoBehaviour {
 
   bool HasEdgeLitFireProperties(Material material) {
     if (material == null) return false;
-    return material.HasProperty("_BrightColor") &&
+    return material.HasProperty("_FlameCoverage") &&
+           material.HasProperty("_FlameColor") &&
            material.HasProperty("_HotColor") &&
-           material.HasProperty("_BodyColor");
+           material.HasProperty("_SurfaceOpacity");
   }
 
   bool IsLegacyFireTemplateMaterial(Material material) {
@@ -395,9 +409,29 @@ public class FireMaterialPreset : MonoBehaviour {
     material.SetColor(property, value);
   }
 
+  void SetVectorIfPresent(Material material, string property, Vector4 value) {
+    if (material == null || !material.HasProperty(property)) return;
+    material.SetVector(property, value);
+  }
+
   void SetTextureIfPresent(Material material, string property, Texture texture) {
     if (material == null || texture == null || !material.HasProperty(property)) return;
     material.SetTexture(property, texture);
+  }
+
+  Vector4 GetSpriteUvRect() {
+    if (sourceRenderer == null || sourceRenderer.sprite == null || sourceRenderer.sprite.texture == null) {
+      return new Vector4(0f, 0f, 1f, 1f);
+    }
+
+    var sprite = sourceRenderer.sprite;
+    var texture = sprite.texture;
+    var textureRect = sprite.textureRect;
+    return new Vector4(
+      textureRect.x / texture.width,
+      textureRect.y / texture.height,
+      textureRect.width / texture.width,
+      textureRect.height / texture.height);
   }
 
   Color GetDarkInteriorColor() {

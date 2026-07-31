@@ -401,8 +401,10 @@ public partial class SingleSceneManager : MonoBehaviour {
   readonly List<string> persistentPlayerEffectAtlasAddresses = new(256);
   int persistentPlayerAppearanceContentVersion = -1;
   int persistentPlayerEffectContentVersion = -1;
+  int persistentPlayerExpressionContentVersion = -1;
   bool persistentPlayerAppearancePlanEvaluated;
   bool persistentPlayerEffectPlanEvaluated;
+  bool persistentPlayerExpressionRefreshPending;
   readonly List<string> environmentCacheLibraryScratch = new(256);
   readonly List<string> environmentCacheAddressScratch = new(4096);
   readonly List<string> environmentCacheAssetAddressScratch = new(64);
@@ -463,12 +465,15 @@ public partial class SingleSceneManager : MonoBehaviour {
     player?.SetSceneAppearanceAtlasPinsManaged(false);
     TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
     TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);
+    TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerExpressionAtlasPinOwnerId);
     persistentPlayerAppearanceAtlasAddresses.Clear();
     persistentPlayerEffectAtlasAddresses.Clear();
     persistentPlayerAppearanceContentVersion = -1;
     persistentPlayerEffectContentVersion = -1;
+    persistentPlayerExpressionContentVersion = -1;
     persistentPlayerAppearancePlanEvaluated = false;
     persistentPlayerEffectPlanEvaluated = false;
+    persistentPlayerExpressionRefreshPending = false;
     if (ReferenceEquals(instance, this)) {
       instance = null;
     }
@@ -644,6 +649,7 @@ public partial class SingleSceneManager : MonoBehaviour {
 
   void Update() {
     UpdateLoadingScreenFeedback();
+    TickPersistentPlayerExpressionAtlasPins();
 
     if (!init) {
       if (ShouldRunStartupGameplayWarmFlow()) {

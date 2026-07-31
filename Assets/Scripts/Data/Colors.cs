@@ -5,7 +5,7 @@ using UnityEngine;
 public static class ShaderColors {
   public const string PrimaryGroup = "primary";
   public const string SecondaryGroup = "secondary";
-  public const string StrokeValue = "stroke";
+  public const string OutlineValue = "outline";
   public const string ColorValue = "color";
 
   public static Dictionary<string, Color> myColors { get; } = new Dictionary<string, Color> {
@@ -24,28 +24,28 @@ public static class ShaderColors {
 
   public static Dictionary<string, Dictionary<string, Dictionary<string, string>>> pairs { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, string>>> {
     ["Base"] = new Dictionary<string, Dictionary<string, string>> {
-      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Yellow" }, { ColorValue, "Brown" } },
-      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "Brown" }, { ColorValue, "Yellow" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { OutlineValue, "Yellow" }, { ColorValue, "Brown" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { OutlineValue, "Brown" }, { ColorValue, "Yellow" } }
     },
     ["Bolt"] = new Dictionary<string, Dictionary<string, string>> {
-      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Green" }, { ColorValue, "Grey" } },
-      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "Grey" }, { ColorValue, "Green" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { OutlineValue, "Green" }, { ColorValue, "Grey" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { OutlineValue, "Grey" }, { ColorValue, "Green" } }
     },
     ["Fire"] = new Dictionary<string, Dictionary<string, string>> {
-      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Red" }, { ColorValue, "Yellow" } },
-      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "Yellow" }, { ColorValue, "Red" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { OutlineValue, "Red" }, { ColorValue, "Yellow" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { OutlineValue, "Yellow" }, { ColorValue, "Red" } }
     },
     ["Cold"] = new Dictionary<string, Dictionary<string, string>> {
-      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Blue" }, { ColorValue, "DarkBlue" } },
-      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "DarkBlue" }, { ColorValue, "Blue" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { OutlineValue, "Blue" }, { ColorValue, "DarkBlue" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { OutlineValue, "DarkBlue" }, { ColorValue, "Blue" } }
     },
     ["Aqua"] = new Dictionary<string, Dictionary<string, string>> {
-      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "ShineBlue" }, { ColorValue, "LightBlue" } },
-      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "LightBlue" }, { ColorValue, "ShineBlue" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { OutlineValue, "ShineBlue" }, { ColorValue, "LightBlue" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { OutlineValue, "LightBlue" }, { ColorValue, "ShineBlue" } }
     },
     ["Dark"] = new Dictionary<string, Dictionary<string, string>> {
-      [PrimaryGroup] = new Dictionary<string, string> { { StrokeValue, "Purple" }, { ColorValue, "DarkPurple" } },
-      [SecondaryGroup] = new Dictionary<string, string> { { StrokeValue, "DarkPurple" }, { ColorValue, "Purple" } }
+      [PrimaryGroup] = new Dictionary<string, string> { { OutlineValue, "Purple" }, { ColorValue, "DarkPurple" } },
+      [SecondaryGroup] = new Dictionary<string, string> { { OutlineValue, "DarkPurple" }, { ColorValue, "Purple" } }
     },
   };
 
@@ -64,10 +64,49 @@ public static class ShaderColors {
     out Color color,
     out string colorName
   ) {
+    return TryGetFormGroupValue(formName, groupName, ColorValue, out color, out colorName);
+  }
+
+  public static bool TryGetFormOutlineColor(
+    string formName,
+    string groupName,
+    out Color color,
+    out string colorName
+  ) {
+    return TryGetFormGroupValue(formName, groupName, OutlineValue, out color, out colorName);
+  }
+
+  public static bool TryGetFormPalette(
+    string formName,
+    string groupName,
+    out Color color,
+    out Color outlineColor,
+    out string colorName,
+    out string outlineColorName
+  ) {
+    var hasColor = TryGetFormColor(formName, groupName, out color, out colorName);
+    var hasOutlineColor = TryGetFormOutlineColor(
+      formName,
+      groupName,
+      out outlineColor,
+      out outlineColorName
+    );
+    return hasColor && hasOutlineColor;
+  }
+
+  static bool TryGetFormGroupValue(
+    string formName,
+    string groupName,
+    string valueName,
+    out Color color,
+    out string colorName
+  ) {
     color = Color.white;
     colorName = null;
     var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
-    if (string.IsNullOrWhiteSpace(resolvedForm) || string.IsNullOrWhiteSpace(groupName)) {
+    if (string.IsNullOrWhiteSpace(resolvedForm) ||
+        string.IsNullOrWhiteSpace(groupName) ||
+        string.IsNullOrWhiteSpace(valueName)) {
       return false;
     }
 
@@ -77,7 +116,7 @@ public static class ShaderColors {
     if (!formGroups.TryGetValue(groupName.Trim(), out var groupValues) || groupValues == null) {
       return false;
     }
-    if (!groupValues.TryGetValue(ColorValue, out colorName) || string.IsNullOrWhiteSpace(colorName)) {
+    if (!groupValues.TryGetValue(valueName.Trim(), out colorName) || string.IsNullOrWhiteSpace(colorName)) {
       return false;
     }
 
@@ -107,5 +146,4 @@ public static class ShaderColors {
 //   public Sprite Sapphire;
 //   public Sprite Amethyst;
 // }
-
 

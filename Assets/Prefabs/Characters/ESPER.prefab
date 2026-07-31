@@ -1191,7 +1191,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -5328,7 +5328,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -6681,7 +6681,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -8387,6 +8387,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   damageNumberPrefab: {fileID: 5719518687213778881, guid: 89df7c78c7e217a4cb780f9b4f3d699a, type: 3}
+  screenShakeFactor: 0.65
 --- !u!61 &6113769149490559953
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -9354,7 +9355,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -12503,7 +12504,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bf84b2e1ed6d28489c4ee0a7dd14fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  libraryName: Esperanza/Gear/GearTorso_split/base_aa_torso
+  libraryName: Esperanza/Gear/GearTorso
   labelPrefix: Base_aa
   category: Breathe
   isAnimation: 1
@@ -12534,7 +12535,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -16694,7 +16695,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -17482,7 +17483,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -18004,7 +18005,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -19332,7 +19333,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -23557,7 +23558,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -23915,6 +23916,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   level: 0
+  debugUnlockAllForms: 1
 --- !u!114 &7837511971689069820
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -23940,6 +23942,23 @@ MonoBehaviour:
   hairAnimationMotionInfluence: 0.035
   hairAnimationMotionMaxImpulse: 0.45
   hairAnimationChangeImpulse: 0.22
+  gearDamageFadePerHit: 0.03
+  maximumGearDamageFade: 0.49
+  gearDamageFadeSecondsPerHit: 0.6
+  gearDamageFadeTextureOverride: {fileID: 0}
+  gearDamageFadeTextureScaleX: 1
+  gearDamageFadeTextureScaleY: 1
+  gearDamageFadeTextureOffset: {x: 0, y: 0}
+  gearDamageFadeBurnTextureOverride: {fileID: 0}
+  gearDamageFadeBurnTextureScaleX: 0
+  gearDamageFadeBurnTextureScaleY: 0
+  gearDamageFadeBurnTextureOffset: {x: 0, y: 0}
+  gearDamageFadeBurnWidth: 0
+  gearDamageFadeBurnTransition: 0
+  gearDamageFadeBurnGlow: 0
+  gearDamageFadeBurnColor: {r: 0, g: 0, b: 0, a: 0}
+  previewGearDamageFade: 0
+  gearDamageFadePreviewAmount: 0
   slowDown: 0
   forceLoop: 0
   _bool: 0
@@ -24598,7 +24617,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -24977,7 +24996,7 @@ MonoBehaviour:
   keywordToggles:
   - keyword: GLOW_ON
     enabled: 1
-    keywordHash: 1631
+    keywordHash: 1670
   floatAnimations:
   - prop: _Glow
     propHash: 433
@@ -27165,6 +27184,7 @@ MonoBehaviour:
   unpinKey: 27
   clickEvent: PolygonPointClicked
   hoverEvent: PolygonPointHover
+  enableRuntimeInteraction: 0
   lineColor: {r: 1, g: 0, b: 0.030630589, a: 1}
   lineWidth: 6.38
 --- !u!114 &2743169162597921159

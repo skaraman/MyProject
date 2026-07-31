@@ -20,6 +20,9 @@ public sealed class EsperanzaHealth : MonoBehaviour {
   [SerializeField, Tooltip("Prefab used to show red damage numbers over ESPER.")]
   GameObject damageNumberPrefab;
 
+  [SerializeField, Min(0f), Tooltip("Camera displacement when one hit removes 100% of ESPER's max health. Actual shake scales with the percentage removed.")]
+  float screenShakeFactor = 0.65f;
+
   static bool ShouldLogCombatDebug() {
     return SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs &&
            (Application.isEditor || Debug.isDebugBuild);
@@ -65,6 +68,8 @@ public sealed class EsperanzaHealth : MonoBehaviour {
     var maximumHealth = state.MaximumHealth;
     if (actualDamage != null && actualDamage.IsPositive) {
       HitEmphasisBurst.Play(hurtBox, hitBox);
+      ScreenShake.Play(actualDamage, maximumHealth, screenShakeFactor);
+      ResolveGearController()?.ApplyGearHitDamage(actualDamage, maximumHealth);
     }
     SpawnDamageNumber(actualDamage);
     ResolveGearController()?.TryPlayAnimation(

@@ -328,8 +328,21 @@ public partial class SingleSceneManager {
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
 
-    AddPersistentAtlasAddress(ResolveEsperanzaExpressionAtlasAddress(".png"));
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (!TryResolveEsperanzaExpressionAtlasAddress(".png", out var atlasAddress)) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerExpressionAtlasPinOwnerId);
+      persistentPlayerExpressionContentVersion = contentVersion;
+      persistentPlayerExpressionRefreshPending = ActiveContentRegistryRuntime.HasActiveExternalContent();
+      persistentAtlasAddressScratch.Clear();
+      persistentAtlasSeenAddressScratch.Clear();
+      return;
+    }
+
+    AddPersistentAtlasAddress(atlasAddress);
     if (persistentAtlasAddressScratch.Count <= 0) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerExpressionAtlasPinOwnerId);
+      persistentPlayerExpressionContentVersion = contentVersion;
+      persistentPlayerExpressionRefreshPending = false;
       persistentAtlasAddressScratch.Clear();
       persistentAtlasSeenAddressScratch.Clear();
       return;
@@ -342,6 +355,8 @@ public partial class SingleSceneManager {
       TextureResidencyCache.LoadPriority.Warmup
     );
     QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
+    persistentPlayerExpressionContentVersion = contentVersion;
+    persistentPlayerExpressionRefreshPending = false;
 
     if (ShouldLogLoadingProgressDebug()) {
       RuntimeLog.Log(
@@ -353,6 +368,15 @@ public partial class SingleSceneManager {
 
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
+  }
+
+  void TickPersistentPlayerExpressionAtlasPins() {
+    if (!persistentPlayerExpressionRefreshPending) return;
+
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (persistentPlayerExpressionContentVersion == contentVersion) return;
+
+    RefreshPersistentPlayerExpressionAtlasPins("content_pack_ready");
   }
 
   void RefreshPersistentPlayerBaselineAtlasPins(string source) {
@@ -483,10 +507,11 @@ public partial class SingleSceneManager {
     return ActiveContentRegistryRuntime.ResolveCoreAssetPath(sourceAssetPath);
   }
 
-  static string ResolveEsperanzaExpressionAtlasAddress(string extension) {
+  static bool TryResolveEsperanzaExpressionAtlasAddress(string extension, out string address) {
+    address = "";
     var normalizedExtension = string.IsNullOrWhiteSpace(extension) ? "" : extension.Trim();
     if (string.IsNullOrWhiteSpace(normalizedExtension)) {
-      return "";
+      return false;
     }
 
     var activeForm = EsperanzaForms.GetActive();
@@ -494,7 +519,25 @@ public partial class SingleSceneManager {
       activeForm,
       normalizedExtension
     );
-    return ActiveContentRegistryRuntime.ResolveActiveContentAssetPath(sourceAssetPath);
+    if (string.IsNullOrWhiteSpace(sourceAssetPath)) {
+      return false;
+    }
+
+    if (!ActiveContentRegistryRuntime.HasActiveExternalContent()) {
+      address = sourceAssetPath;
+      return true;
+    }
+
+    var uiPackId = "UI" + activeForm;
+    if (!ContentPackCatalogLoader.IsPackReady(uiPackId)) {
+      return false;
+    }
+
+    return ContentPackCatalogLoader.TryResolveExportedAddress(
+      sourceAssetPath,
+      new[] { uiPackId },
+      out address
+    );
   }
 
   void PrimeLoadingTextRuntimeAssets(string source) {

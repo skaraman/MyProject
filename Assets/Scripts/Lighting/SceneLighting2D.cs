@@ -34,10 +34,10 @@ public sealed class SceneLighting2D : MonoBehaviour {
   [SerializeField] Light2D sunLight;
 
   [Header("Day / Night")]
-  [SerializeField] Color nightAmbientColor = new(0.18f, 0.25f, 0.45f, 1f);
-  [SerializeField, Range(0f, 1f)] float nightAmbientIntensityMultiplier = 0.22f;
-  [SerializeField] Color nightSunColor = new(0.28f, 0.38f, 0.65f, 1f);
-  [SerializeField, Range(0f, 1f)] float nightSunIntensityMultiplier;
+  [SerializeField] Color nightAmbientColor = new(0.24f, 0.34f, 0.58f, 1f);
+  [SerializeField, Range(0f, 1f)] float nightAmbientIntensityMultiplier = 0.42f;
+  [SerializeField] Color nightSunColor = new(0.42f, 0.56f, 0.88f, 1f);
+  [SerializeField, Range(0f, 1f)] float nightSunIntensityMultiplier = 0.32f;
   [SerializeField, Range(0f, 1f)] float nightAmount;
 
   [Header("Ground Shadows")]
@@ -45,6 +45,7 @@ public sealed class SceneLighting2D : MonoBehaviour {
   [SerializeField] int shadowSortingOrder = 1000;
   [SerializeField] Vector2 sunShadowDirection = new(0.45f, -1f);
   [SerializeField, Range(0f, 1f)] float sunShadowOpacity = 0.28f;
+  [SerializeField, Range(0f, 1f)] float moonShadowOpacity = 0.1f;
   [SerializeField, Range(0f, 1f)] float localShadowOpacity = 0.24f;
   [SerializeField, Range(0f, 0.5f)] float localLightSwitchHysteresis = 0.15f;
 
@@ -237,6 +238,7 @@ public sealed class SceneLighting2D : MonoBehaviour {
     nightAmbientIntensityMultiplier = Mathf.Clamp01(nightAmbientIntensityMultiplier);
     nightSunIntensityMultiplier = Mathf.Clamp01(nightSunIntensityMultiplier);
     sunShadowOpacity = Mathf.Clamp01(sunShadowOpacity);
+    moonShadowOpacity = Mathf.Clamp01(moonShadowOpacity);
     localShadowOpacity = Mathf.Clamp01(localShadowOpacity);
     localLightSwitchHysteresis = Mathf.Clamp(localLightSwitchHysteresis, 0f, 0.5f);
     shadowSortingLayerId = 0;
@@ -249,22 +251,39 @@ public sealed class SceneLighting2D : MonoBehaviour {
     ApplyLighting();
   }
 
-  public bool TryGetSunShadow(int casterSortingLayerId, out ShadowProjection projection) {
+  public bool TryGetCelestialShadow(
+    Vector2 groundPosition,
+    int casterSortingLayerId,
+    out ShadowProjection projection
+  ) {
     projection = default;
-    var source = ResolveStrongestSun(casterSortingLayerId);
-    if (source == null) {
-      return false;
-    }
-
-    var daylight = 1f - ResolveSmoothedNightAmount();
-    var opacity = sunShadowOpacity * source.ShadowStrength * daylight;
+    var night = ResolveSmoothedNightAmount();
+    var sunSource = ResolveStrongestCelestial(
+      ProjectedShadowLightRole.Sun,
+      casterSortingLayerId
+    );
+    var moonSource = ResolveStrongestCelestial(
+      ProjectedShadowLightRole.Moon,
+      casterSortingLayerId
+    );
+    var sunOpacity = sunSource != null
+      ? sunShadowOpacity * sunSource.ShadowStrength * (1f - night)
+      : 0f;
+    var moonOpacity = moonSource != null
+      ? moonShadowOpacity * moonSource.ShadowStrength * night
+      : 0f;
+    var useMoon = moonOpacity > sunOpacity;
+    var source = useMoon ? moonSource : sunSource;
+    var opacity = useMoon ? moonOpacity : sunOpacity;
     if (opacity <= 0.001f) {
       return false;
     }
 
     Vector2 direction;
     if (!source.TryGetDirectionOverride(out direction)) {
-      direction = sunShadowDirection;
+      direction = useMoon
+        ? groundPosition - (Vector2)source.SourceLight.transform.position
+        : sunShadowDirection;
     }
     if (direction.sqrMagnitude <= 0.0001f) {
       direction = Vector2.down;
@@ -448,25 +467,28 @@ public sealed class SceneLighting2D : MonoBehaviour {
     return value * value * (3f - (2f * value));
   }
 
-  ProjectedShadowLight2D ResolveStrongestSun(int casterSortingLayerId) {
+  ProjectedShadowLight2D ResolveStrongestCelestial(
+    ProjectedShadowLightRole lightRole,
+    int casterSortingLayerId
+  ) {
     PurgeStaleLights();
 
-    var sceneSun = sunLight != null
+    var preferredSource = lightRole == ProjectedShadowLightRole.Sun && sunLight != null
       ? sunLight.GetComponent<ProjectedShadowLight2D>()
       : null;
     if (IsEligibleSource(
-      sceneSun,
-      ProjectedShadowLightRole.Sun,
+      preferredSource,
+      lightRole,
       casterSortingLayerId
     )) {
-      return sceneSun;
+      return preferredSource;
     }
 
     ProjectedShadowLight2D strongestSource = null;
     var strongestIntensity = MinimumLightIntensity;
     foreach (var pair in registeredLights) {
       var source = pair.Value;
-      if (!IsEligibleSource(source, ProjectedShadowLightRole.Sun, casterSortingLayerId)) {
+      if (!IsEligibleSource(source, lightRole, casterSortingLayerId)) {
         continue;
       }
 

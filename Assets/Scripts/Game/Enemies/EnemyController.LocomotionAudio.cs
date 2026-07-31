@@ -9,6 +9,11 @@ public partial class EnemyController {
 
   void UpdateLocomotionSound() {
     var soundId = ResolveLocomotionSoundId();
+    if (string.IsNullOrEmpty(soundId)) {
+      StopLocomotionSound();
+      return;
+    }
+
     if (string.IsNullOrEmpty(locomotionSoundLoopId)) {
       locomotionSoundLoopId = "enemy.locomotion:" + ObjectEntityId.GetString(this);
     }

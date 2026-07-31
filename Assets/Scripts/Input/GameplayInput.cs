@@ -26,6 +26,8 @@ public class GameplayInput : MonoBehaviour {
   private CharacterState characterState;
   private ProjectedSpriteShadowCaster2D projectedShadowCaster;
   public GameObject formsWheel;
+  private GameplayFormWheelController formsWheelController;
+  private int suppressCharacterGameplayThroughFrame = -1;
 
   [Header("Movement")]
   [SerializeField, Min(0.01f)] private float baseMoveSpeed = 10f;
@@ -98,21 +100,21 @@ public class GameplayInput : MonoBehaviour {
 
   void RegisterInputHandlers() {
     if (actions.Count > 0) return;
-    actions.Add(MessageBus.On("gameplay.attack1", o => { if (_IsPressed(o)) attack1(); }));
-    actions.Add(MessageBus.On("gameplay.attack2", o => { if (_IsPressed(o)) attack2(); }));
-    actions.Add(MessageBus.On("gameplay.attack3", o => { if (_IsPressed(o)) attack3(); }));
-    actions.Add(MessageBus.On("gameplay.attack4", o => { if (_IsPressed(o)) attack4(); }));
-    actions.Add(MessageBus.On("gameplay.block", o => { if (_IsPressed(o)) block(); }));
-    actions.Add(MessageBus.On("gameplay.dash", o => { if (_IsPressed(o)) dash(); }));
-    actions.Add(MessageBus.On("gameplay.dodge", o => { if (_IsPressed(o)) dodge(); }));
-    actions.Add(MessageBus.On("gameplay.jump", o => { if (_IsPressed(o)) Jump(); }));
+    actions.Add(MessageBus.On("gameplay.attack1", o => { if (_CanProcessCharacterAction(o)) attack1(); }));
+    actions.Add(MessageBus.On("gameplay.attack2", o => { if (_CanProcessCharacterAction(o)) attack2(); }));
+    actions.Add(MessageBus.On("gameplay.attack3", o => { if (_CanProcessCharacterAction(o)) attack3(); }));
+    actions.Add(MessageBus.On("gameplay.attack4", o => { if (_CanProcessCharacterAction(o)) attack4(); }));
+    actions.Add(MessageBus.On("gameplay.block", o => { if (_CanProcessCharacterAction(o)) block(); }));
+    actions.Add(MessageBus.On("gameplay.dash", o => { if (_CanProcessCharacterAction(o)) dash(); }));
+    actions.Add(MessageBus.On("gameplay.dodge", o => { if (_CanProcessCharacterAction(o)) dodge(); }));
+    actions.Add(MessageBus.On("gameplay.jump", o => { if (_CanProcessCharacterAction(o)) Jump(); }));
     actions.Add(MessageBus.On("gameplay.pause", o => { if (_IsPressed(o)) pause(); }));
-    actions.Add(MessageBus.On("gameplay.dance", o => { if (_IsPressed(o)) dance(); }));
+    actions.Add(MessageBus.On("gameplay.dance", o => { if (_CanProcessCharacterAction(o)) dance(); }));
     actions.Add(MessageBus.On("gameplay.wheel", o => { if (_IsPressed(o)) ToggleFormsWheel(); }));
-    actions.Add(MessageBus.On("gameplay.charUp", o => charUp(o)));
-    actions.Add(MessageBus.On("gameplay.charDown", o => charDown(o)));
-    actions.Add(MessageBus.On("gameplay.charLeft", o => charLeft(o)));
-    actions.Add(MessageBus.On("gameplay.charRight", o => charRight(o)));
+    actions.Add(MessageBus.On("gameplay.charUp", RouteCharUp));
+    actions.Add(MessageBus.On("gameplay.charDown", RouteCharDown));
+    actions.Add(MessageBus.On("gameplay.charLeft", RouteCharLeft));
+    actions.Add(MessageBus.On("gameplay.charRight", RouteCharRight));
   }
 
   bool _IsPressed(object o) {
@@ -121,6 +123,12 @@ public class GameplayInput : MonoBehaviour {
       return false;
     }
     return InputMessageValue.IsPressed(o);
+  }
+
+  bool _CanProcessCharacterAction(object value) {
+    return _IsPressed(value) &&
+           !IsFormsWheelOpen &&
+           Time.frameCount > suppressCharacterGameplayThroughFrame;
   }
 
   float _ReadDirectionalValue(object value, bool horizontalAxis, bool positiveDirection) {
@@ -150,7 +158,7 @@ public class GameplayInput : MonoBehaviour {
     if (SpriteStreamingLoadingState.IsLoadingOverlayActive) {
       return;
     }
-    var moveInput = _ResolveMoveInput();
+    var moveInput = IsFormsWheelOpen ? Vector2.zero : _ResolveMoveInput();
     _UpdateRunSprint(moveInput);
     _TickStanceTimer();
     if (isJumping) {
@@ -402,13 +410,116 @@ public class GameplayInput : MonoBehaviour {
     if (rawLeft > 0f) leftIgnoredUntilRelease = true;
   }
 
+  void RouteCharUp(object value) {
+    if (!IsFormsWheelOpen) {
+      charUp(value);
+      return;
+    }
+
+    rawUp = 0f;
+    if (_IsPressed(value)) {
+      ResolveFormsWheelController()?.Navigate(Vector2.up);
+    }
+  }
+
+  void RouteCharDown(object value) {
+    if (!IsFormsWheelOpen) {
+      charDown(value);
+      return;
+    }
+
+    rawDown = 0f;
+    if (_IsPressed(value)) {
+      ResolveFormsWheelController()?.Navigate(Vector2.down);
+    }
+  }
+
+  void RouteCharLeft(object value) {
+    if (!IsFormsWheelOpen) {
+      charLeft(value);
+      return;
+    }
+
+    rawLeft = 0f;
+    if (_IsPressed(value)) {
+      ResolveFormsWheelController()?.Navigate(Vector2.left);
+    }
+  }
+
+  void RouteCharRight(object value) {
+    if (!IsFormsWheelOpen) {
+      charRight(value);
+      return;
+    }
+
+    rawRight = 0f;
+    if (_IsPressed(value)) {
+      ResolveFormsWheelController()?.Navigate(Vector2.right);
+    }
+  }
+
   void pause() {
+    if (IsFormsWheelOpen) {
+      formsWheel.SetActive(false);
+    }
     MessageBus.Send("openPauseMenu", null);
   }
 
   void ToggleFormsWheel() {
     if (formsWheel == null) return;
-    formsWheel.SetActive(!formsWheel.activeSelf);
+
+    if (IsFormsWheelOpen) {
+      var controller = ResolveFormsWheelController();
+      if (controller != null && controller.ConfirmSelection()) {
+        return;
+      }
+      formsWheel.SetActive(false);
+      return;
+    }
+
+    ResetDirectionalInputState();
+    formsWheel.SetActive(true);
+  }
+
+  GameplayFormWheelController ResolveFormsWheelController() {
+    if (formsWheelController == null && formsWheel != null) {
+      formsWheelController = formsWheel.GetComponent<GameplayFormWheelController>();
+    }
+    return formsWheelController;
+  }
+
+  bool IsFormsWheelOpen {
+    get {
+      return formsWheel != null && formsWheel.activeInHierarchy;
+    }
+  }
+
+  void ResetDirectionalInputState() {
+    rawLeft = 0f;
+    rawRight = 0f;
+    rawUp = 0f;
+    rawDown = 0f;
+    leftIgnoredUntilRelease = false;
+    rightIgnoredUntilRelease = false;
+    activeHorizontalDir = 0;
+  }
+
+  internal void NotifyFormsWheelOpened(GameplayFormWheelController controller) {
+    if (controller != null) {
+      formsWheelController = controller;
+    }
+    ResetDirectionalInputState();
+  }
+
+  internal void NotifyFormsWheelClosed(GameplayFormWheelController controller) {
+    if (controller != null) {
+      formsWheelController = controller;
+    }
+    ResetDirectionalInputState();
+    suppressCharacterGameplayThroughFrame = Mathf.Max(
+      suppressCharacterGameplayThroughFrame,
+      Time.frameCount
+    );
   }
 
   void _CameraFollow() {

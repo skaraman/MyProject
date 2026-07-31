@@ -23,6 +23,8 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
   const string HurtAnimation = "Hurt";
   const int AirborneCapacity = 24;
   const int PersistentDecalCapacity = 64;
+  const int DeathDecalMinCount = 2;
+  const int DeathDecalMaxCount = 4;
   const float BloodSpawnChance = 0.5f;
   const float MinimumBloodScale = 0.5f;
   const float Gravity = 11.5f;
@@ -62,11 +64,28 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
     }
   }
 
+  readonly struct PendingDeathDecals {
+    public readonly Vector3 groundPosition;
+    public readonly int sortingLayerId;
+    public readonly int sortingOrder;
+
+    public PendingDeathDecals(
+      Vector3 groundPosition,
+      int sortingLayerId,
+      int sortingOrder
+    ) {
+      this.groundPosition = groundPosition;
+      this.sortingLayerId = sortingLayerId;
+      this.sortingOrder = sortingOrder;
+    }
+  }
+
   static HurtBloodSplatter instance;
   static bool missingSpriteWarningLogged;
 
   readonly List<SpriteRenderer> rendererScratch = new(64);
   readonly List<PendingPlay> pendingPlays = new(AirborneCapacity);
+  readonly List<PendingDeathDecals> pendingDeathDecals = new(AirborneCapacity);
   AirborneSlot[] airborneSlots;
   DecalSlot[] decalSlots;
   Sprite[] spraySprites;
@@ -105,6 +124,15 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
 
     var manager = ResolveOrCreate(actor);
     manager?.QueueOrSpawn(actor, isFacingRight);
+  }
+
+  public static void PlayDeathDecals(Transform actor) {
+    if (!Application.isPlaying || actor == null || !actor.gameObject.activeInHierarchy) {
+      return;
+    }
+
+    var manager = ResolveOrCreate(actor);
+    manager?.QueueOrSpawnDeathDecals(actor);
   }
 
   static HurtBloodSplatter ResolveOrCreate(Transform actor) {
@@ -193,6 +221,48 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
       pendingPlays.RemoveAt(0);
     }
     pendingPlays.Add(new PendingPlay(actor, isFacingRight));
+  }
+
+  void QueueOrSpawnDeathDecals(Transform actor) {
+    var groundPosition = ResolveGroundPosition(actor);
+    ResolveGroundSorting(actor, groundPosition, out var sortingLayerId, out var sortingOrder);
+
+    if (spritesReady) {
+      SpawnDeathDecals(groundPosition, sortingLayerId, sortingOrder);
+      return;
+    }
+    if (spriteLoadFailed) {
+      return;
+    }
+
+    if (pendingDeathDecals.Count >= AirborneCapacity) {
+      pendingDeathDecals.RemoveAt(0);
+    }
+    pendingDeathDecals.Add(new PendingDeathDecals(
+      groundPosition,
+      sortingLayerId,
+      sortingOrder
+    ));
+  }
+
+  void SpawnDeathDecals(Vector3 groundPosition, int sortingLayerId, int sortingOrder) {
+    var count = Random.Range(DeathDecalMinCount, DeathDecalMaxCount + 1);
+    for (var i = 0; i < count; i++) {
+      var variantIndex = Random.Range(0, puddleSprites.Length);
+      var position = groundPosition + new Vector3(
+        Random.Range(-0.48f, 0.48f),
+        Random.Range(-0.12f, 0.12f),
+        0f
+      );
+      SpawnGroundDecal(
+        position,
+        Random.Range(0.58f, 0.9f),
+        sortingLayerId,
+        sortingOrder - 1,
+        null,
+        puddleSprites[variantIndex]
+      );
+    }
   }
 
   void Spawn(Transform actor, bool isFacingRight) {
@@ -311,6 +381,7 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
     if (!allSpritesLoaded || spraySprites.Length != puddleSprites.Length) {
       spriteLoadFailed = true;
       pendingPlays.Clear();
+      pendingDeathDecals.Clear();
       if (!missingSpriteWarningLogged) {
         missingSpriteWarningLogged = true;
         Debug.LogWarning(
@@ -331,6 +402,15 @@ public sealed class HurtBloodSplatter : MonoBehaviour {
       Spawn(pending.actor, pending.isFacingRight);
     }
     pendingPlays.Clear();
+    for (var i = 0; i < pendingDeathDecals.Count; i++) {
+      var pending = pendingDeathDecals[i];
+      SpawnDeathDecals(
+        pending.groundPosition,
+        pending.sortingLayerId,
+        pending.sortingOrder
+      );
+    }
+    pendingDeathDecals.Clear();
   }
 
   static bool AreAllLeasesDone(TextureResidencyCache.Lease[] leases) {

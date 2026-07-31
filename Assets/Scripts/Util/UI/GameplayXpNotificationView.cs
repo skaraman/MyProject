@@ -7,9 +7,16 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class GameplayXpNotificationView : MonoBehaviour {
   const int MaximumAbilityLanes = 6;
+  const string DirectFormUiRoot = "FormUIs/";
+  const string DirectFormUiSuffix = "UI";
+  const string CharUiCategory = "CharUI";
+  const string XpBarBackLabel = "XPBarBack";
+  const string XpBarFillLabel = "XPBarFill";
 
   sealed class Lane {
     public Transform root;
+    public SpriteWithNormals backSprite;
+    public SpriteWithNormals fillSprite;
     public AnchoredSpriteStretch fill;
     public FontText label;
     public SpriteRenderer[] renderers = Array.Empty<SpriteRenderer>();
@@ -37,6 +44,7 @@ public sealed class GameplayXpNotificationView : MonoBehaviour {
 
   void OnEnable() {
     ResolveHierarchy();
+    ApplyActiveFormTheme();
     ResetAllLanes();
     RegisterHandlers();
   }
@@ -53,7 +61,7 @@ public sealed class GameplayXpNotificationView : MonoBehaviour {
 
     actions.Add(MessageBus.On(CharacterMessageTopics.FormXpGained, OnFormXpGained));
     actions.Add(MessageBus.On(CharacterMessageTopics.AbilityXpGained, OnAbilityXpGained));
-    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, _ => ResetAllLanes()));
+    actions.Add(MessageBus.On(CharacterMessageTopics.FormChanged, OnFormChanged));
   }
 
   void UnregisterHandlers() {
@@ -123,6 +131,11 @@ public sealed class GameplayXpNotificationView : MonoBehaviour {
     if (availableLane != null) {
       AssignLane(availableLane, gain, now, setAbilityLabel: true);
     }
+  }
+
+  void OnFormChanged(string formName) {
+    ResetAllLanes();
+    ApplyActiveFormTheme(formName);
   }
 
   void AssignLane(Lane lane, XpProgressGain gain, float now, bool setAbilityLabel) {
@@ -313,18 +326,77 @@ public sealed class GameplayXpNotificationView : MonoBehaviour {
     }
 
     var shownPosition = root.localPosition;
-    var fillRoot = FindChildRecursive(root, "XPBarFill");
+    var backRoot = FindChildRecursive(root, XpBarBackLabel);
+    var fillRoot = FindChildRecursive(root, XpBarFillLabel);
     var labelRoot = hasLabel ? FindChildRecursive(root, "labeltext") : null;
     var renderers = root.GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
 
     return new Lane {
       root = root,
+      backSprite = backRoot != null ? backRoot.GetComponent<SpriteWithNormals>() : null,
+      fillSprite = fillRoot != null ? fillRoot.GetComponent<SpriteWithNormals>() : null,
       fill = fillRoot != null ? fillRoot.GetComponent<AnchoredSpriteStretch>() : null,
       label = labelRoot != null ? labelRoot.GetComponent<FontText>() : null,
       hiddenPosition = ResolveOffscreenPosition(root, shownPosition, renderers, exitRight: hasLabel),
       shownPosition = shownPosition,
       renderers = renderers
     };
+  }
+
+  void ApplyActiveFormTheme(string requestedForm = null) {
+    var activeForm = EsperanzaForms.ResolveFormKey(requestedForm);
+    if (string.IsNullOrWhiteSpace(activeForm)) {
+      activeForm = EsperanzaForms.GetActive();
+    }
+    if (string.IsNullOrWhiteSpace(activeForm)) {
+      return;
+    }
+
+    ApplyLaneTheme(formLane, activeForm, applyLabelColors: false);
+    for (var i = 0; i < abilityLanes.Length; i++) {
+      ApplyLaneTheme(abilityLanes[i], activeForm, applyLabelColors: true);
+    }
+  }
+
+  static void ApplyLaneTheme(Lane lane, string formName, bool applyLabelColors) {
+    if (lane == null) {
+      return;
+    }
+
+    ApplySpriteTheme(lane.backSprite, formName, XpBarBackLabel);
+    ApplySpriteTheme(lane.fillSprite, formName, XpBarFillLabel);
+    RefreshRenderers(lane);
+
+    if (applyLabelColors &&
+        lane.label != null &&
+        ShaderColors.TryGetFormPalette(
+          formName,
+          ShaderColors.PrimaryGroup,
+          out var labelColor,
+          out var labelOutlineColor,
+          out _,
+          out _
+        )) {
+      lane.label.SetShaderColors(labelColor, labelOutlineColor);
+    }
+  }
+
+  static void ApplySpriteTheme(SpriteWithNormals sprite, string formName, string label) {
+    if (sprite == null || string.IsNullOrWhiteSpace(formName) || string.IsNullOrWhiteSpace(label)) {
+      return;
+    }
+
+    var libraryName = DirectFormUiRoot + formName + DirectFormUiSuffix;
+    if (!string.Equals(sprite.libraryName, libraryName, StringComparison.OrdinalIgnoreCase)) {
+      sprite.SetLibraryName(libraryName);
+    }
+    if (!string.Equals(sprite.labelPrefix, label, StringComparison.Ordinal)) {
+      sprite.SetLabelPrefix(label);
+    }
+    if (!string.Equals(sprite.category, CharUiCategory, StringComparison.Ordinal)) {
+      sprite.SetAnimation(CharUiCategory);
+    }
+    sprite.ForceUpdateSpriteAndNormal();
   }
 
   Vector3 ResolveOffscreenPosition(
@@ -558,6 +630,18 @@ public sealed class GameplayXpNotificationView : MonoBehaviour {
   static void RefreshRenderers(Lane lane) {
     if (lane != null && lane.root != null) {
       lane.renderers = lane.root.GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
+      for (var i = 0; i < lane.renderers.Length; i++) {
+        var renderer = lane.renderers[i];
+        if (renderer == null) {
+          continue;
+        }
+
+        var formEffect = renderer.GetComponent<FormSpriteEffect>();
+        if (formEffect == null && Application.isPlaying) {
+          formEffect = renderer.gameObject.AddComponent<FormSpriteEffect>();
+        }
+        formEffect?.SetEffect(FormSpriteEffect.EffectSelection.FollowCharacterForm);
+      }
     }
   }
 

@@ -12,6 +12,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	_MainTex.GetDimensions(texWidth, texHeight);
 	float4 texelSize = float4(1.0 / texWidth, 1 / texHeight, texWidth, texHeight);
 
+	float2 originalSpriteUv = i.uv;
 	float2 uvRect = i.uv;
 	half2 center = half2(0.5, 0.5);
 	#if ATLAS_ON
@@ -453,14 +454,31 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	//-----------------------------------------------------------------------------
 
 	#if FADE_ON
-	half2 tiledUvFade1= CUSTOM_TRANSFORM_TEX(i.uv, _FadeTex_ScaleAndTiling);
-	half2 tiledUvFade2 = CUSTOM_TRANSFORM_TEX(i.uv, _FadeBurnTex_ScaleAndTiling);
+	half2 fadeSourceUv = i.uv;
+	if (_FadeUseSpriteUvRect > 0.5)
+	{
+		half2 spriteUvSize = max(abs(_SpriteUvRect.zw), half2(0.0001, 0.0001));
+		fadeSourceUv = (originalSpriteUv - _SpriteUvRect.xy) / spriteUvSize;
+	}
+	half2 tiledUvFade1 = CUSTOM_TRANSFORM_TEX(fadeSourceUv, _FadeTex_ScaleAndTiling);
+	half2 tiledUvFade2 = CUSTOM_TRANSFORM_TEX(fadeSourceUv, _FadeBurnTex_ScaleAndTiling);
 	#if ATLAS_ON
-	tiledUvFade1 = half2((tiledUvFade1.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUvFade1.y - _MinYUV) / (_MaxYUV - _MinYUV));
-	tiledUvFade2 = half2((tiledUvFade2.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUvFade2.y - _MinYUV) / (_MaxYUV - _MinYUV));
+	if (_FadeUseSpriteUvRect <= 0.5)
+	{
+		tiledUvFade1 = half2((tiledUvFade1.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUvFade1.y - _MinYUV) / (_MaxYUV - _MinYUV));
+		tiledUvFade2 = half2((tiledUvFade2.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUvFade2.y - _MinYUV) / (_MaxYUV - _MinYUV));
+	}
 	#endif
 	half fadeTemp = ALLIN1_SAMPLE_TEXTURE_2D(_FadeTex, tiledUvFade1).r;
-	half fade = smoothstep(_FadeAmount, _FadeAmount + _FadeBurnTransition, fadeTemp);
+	half fade;
+	if (_FadeBurnTransition <= 0.0)
+	{
+		fade = step(_FadeAmount, fadeTemp);
+	}
+	else
+	{
+		fade = smoothstep(_FadeAmount, _FadeAmount + _FadeBurnTransition, fadeTemp);
+	}
 	half fadeBurn = saturate(smoothstep(_FadeAmount - _FadeBurnWidth, _FadeAmount - _FadeBurnWidth + 0.1, fadeTemp) * _FadeAmount);
 	col.a *= fade;
 	_FadeBurnColor.rgb *= _FadeBurnGlow;
@@ -580,6 +598,33 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	col.rgb = lerp(col.rgb, lightResult, mask.rgb);
 	#else
 	col.rgb = lightResult;
+	#endif
+
+	#if STYLIZEDRIM_ON
+	half3 stylizedRimNormal = normalize(
+		DecodeAllIn1SpriteNormal(ALLIN1_SAMPLE_TEXTURE_2D(_NormalMap, i.uv))
+	);
+	half stylizedRim = pow(
+		saturate(length(stylizedRimNormal.xy)),
+		max(_StylizedRimPower, 0.0001)
+	);
+	half hasEnvironmentKeyLight = step(0.0001, _EnvironmentKeyLightStrength);
+	half environmentInfluence = saturate(_StylizedRimEnvironmentInfluence) * hasEnvironmentKeyLight;
+	half3 stylizedRimColor = _StylizedRimColor.rgb * lerp(
+		half3(1.0, 1.0, 1.0),
+		_EnvironmentKeyLightColor.rgb,
+		environmentInfluence
+	);
+	half stylizedRimStrength = lerp(
+		1.0,
+		max(_EnvironmentKeyLightStrength, 0.15),
+		environmentInfluence
+	);
+	col.rgb += stylizedRimColor
+		* stylizedRim
+		* _StylizedRimIntensity
+		* stylizedRimStrength
+		* col.a;
 	#endif
 
 	return col;

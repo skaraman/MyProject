@@ -317,6 +317,9 @@ public class PauseMenuInput : MonoBehaviour {
 
     formHoverIndex = ResolveButtonIndex(formButtons, targetObject);
     if (formHoverIndex >= 0) {
+      CharacterMenu
+        ?.GetComponent<PauseMenuCharacterButtonsInput>()
+        ?.FocusTopMenu();
       if (formButtons.hoverIndex != formHoverIndex) {
         formButtons.SetHoverIndex(formHoverIndex);
       }
@@ -351,7 +354,7 @@ public class PauseMenuInput : MonoBehaviour {
 
     formHoverIndex = ResolveButtonIndex(formButtons, targetObject);
     if (formHoverIndex >= 0) {
-      select();
+      SelectFormIndex(formHoverIndex);
     }
   }
 
@@ -431,8 +434,18 @@ public class PauseMenuInput : MonoBehaviour {
     }
 
     ApplyChangingUiLabels(resolvedForm);
-    var primaryColorName = ApplyTextColorGroup(primaryUIText, resolvedForm, "primary");
-    var secondaryColorName = ApplyTextColorGroup(secondaryUIText, resolvedForm, "secondary");
+    var primaryColorName = ApplyTextColorGroup(
+      primaryUIText,
+      resolvedForm,
+      ShaderColors.PrimaryGroup,
+      out var primaryOutlineColorName
+    );
+    var secondaryColorName = ApplyTextColorGroup(
+      secondaryUIText,
+      resolvedForm,
+      ShaderColors.SecondaryGroup,
+      out var secondaryOutlineColorName
+    );
 
     if (gearButtons != null) {
       gearButtons.OnGearReady(resolvedForm);
@@ -442,7 +455,9 @@ public class PauseMenuInput : MonoBehaviour {
       RuntimeLog.Log(
         "[PauseMenuInput] Applied form='" + resolvedForm +
         "' primary_color='" + (string.IsNullOrWhiteSpace(primaryColorName) ? "-" : primaryColorName) +
+        "' primary_outline='" + (string.IsNullOrWhiteSpace(primaryOutlineColorName) ? "-" : primaryOutlineColorName) +
         "' secondary_color='" + (string.IsNullOrWhiteSpace(secondaryColorName) ? "-" : secondaryColorName) +
+        "' secondary_outline='" + (string.IsNullOrWhiteSpace(secondaryOutlineColorName) ? "-" : secondaryOutlineColorName) +
         "' source='" + (source ?? "") + "'"
       );
     }
@@ -488,25 +503,46 @@ public class PauseMenuInput : MonoBehaviour {
     }
   }
 
-  string ApplyTextColorGroup(List<GameObject> targets, string formName, string groupName) {
-    if (!ShaderColors.TryGetFormColor(formName, groupName, out var color, out var colorName)) {
+  string ApplyTextColorGroup(
+    List<GameObject> targets,
+    string formName,
+    string groupName,
+    out string outlineColorName
+  ) {
+    outlineColorName = null;
+    if (!ShaderColors.TryGetFormPalette(
+          formName,
+          groupName,
+          out var color,
+          out var outlineColor,
+          out var colorName,
+          out outlineColorName
+        )) {
       return null;
     }
 
     for (int i = 0; i < targets.Count; i++) {
-      ApplyAnimatorColor(targets[i], color);
+      ApplyFontTextColors(targets[i], color, outlineColor);
     }
 
     return colorName;
   }
 
-  void ApplyAnimatorColor(GameObject target, Color color) {
+  void ApplyFontTextColors(GameObject target, Color color, Color outlineColor) {
     if (target == null) return;
+
+    var fontText = target.GetComponent<FontText>();
+    if (fontText != null) {
+      fontText.SetShaderColors(color, outlineColor);
+      return;
+    }
 
     var animator = target.GetComponent<AllIn1AnimatorInspector>();
     if (animator == null) return;
 
     animator.AddColorSequence("_Color", color, color, 1f, replaceExisting: true);
+    animator.AddColorSequence("_OutlineColor", outlineColor, outlineColor, 1f, replaceExisting: true);
+    animator.Refresh();
   }
 
   static int ResolveButtonIndex(ButtonGroup buttonGroup, GameObject target) {

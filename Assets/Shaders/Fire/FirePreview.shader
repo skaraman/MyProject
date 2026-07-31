@@ -1,17 +1,26 @@
 Shader "Hidden/Esperanza/FirePreview" {
   Properties {
     [PerRendererData][NoScaleOffset] _MainTex("Sprite Texture", 2D) = "white" {}
-    [NoScaleOffset] _NoiseTex("Breakup", 2D) = "white" {}
-    [NoScaleOffset] _FlowTex("Flow", 2D) = "gray" {}
+    [NoScaleOffset] _NoiseTex("Breakup Pattern", 2D) = "white" {}
+    [NoScaleOffset] _FlowTex("Flow Pattern", 2D) = "gray" {}
     _PreviewTime("Preview Time", Float) = 0
-    _FireSpeed("Fire Speed", Range(0, 5)) = 1.0
-    _BurnAmount("Burn Amount", Range(0, 1)) = 0.5
-    _FireSpread("Fire Spread", Range(0, 5)) = 1.0
-    _Distortion("Distortion", Range(0, 1)) = 0.15
-    _FireIntensity("Fire Intensity", Range(0, 3)) = 1.2
-    _CoreColor("Core Color", Color) = (1, 0.95, 0.6, 1)
-    _EdgeColor("Edge Color", Color) = (1, 0.4, 0.05, 1)
-    _SmokeColor("Smoke Color", Color) = (0.1, 0.02, 0.01, 1)
+    _SourceRectInEffect("Source Rect In Effect", Vector) = (0, 0, 1, 1)
+    _SpriteUvRect("Sprite UV Rect", Vector) = (0, 0, 1, 1)
+
+    _FlameCoverage("Flame Coverage", Range(0, 1)) = 0.82
+    _FlameHeight("Flame Height", Range(0.01, 0.4)) = 0.19
+    _TongueWidth("Tongue Width", Range(0.005, 0.15)) = 0.065
+    _TongueCount("Tongue Count", Range(2, 18)) = 8
+    _FlowSpeed("Flow Speed", Range(0, 3)) = 1.25
+    _Sway("Sway", Range(0, 0.12)) = 0.035
+    _Breakup("Breakup", Range(0, 1)) = 0.42
+    _NoiseScale("Noise Scale", Range(1, 10)) = 4
+    _SurfaceOpacity("Surface Opacity", Range(0, 1)) = 0.25
+    _FlameOpacity("Flame Opacity", Range(0, 1)) = 0.88
+    _Brightness("Brightness", Range(0, 3)) = 1.65
+
+    [HDR] _HotColor("Hot Center", Color) = (1, 0.94, 0.58, 1)
+    [HDR] _FlameColor("Outer Flame", Color) = (1, 0.26, 0.015, 1)
   }
 
   SubShader {
@@ -28,7 +37,10 @@ Shader "Hidden/Esperanza/FirePreview" {
     Blend SrcAlpha OneMinusSrcAlpha
 
     Pass {
+      Name "Fire Overlay"
+
       CGPROGRAM
+      #pragma target 3.0
       #pragma vertex vert
       #pragma fragment frag
 
@@ -37,16 +49,24 @@ Shader "Hidden/Esperanza/FirePreview" {
       sampler2D _MainTex;
       sampler2D _NoiseTex;
       sampler2D _FlowTex;
+      float4 _MainTex_TexelSize;
 
       float _PreviewTime;
-      float _FireSpeed;
-      float _BurnAmount;
-      float _FireSpread;
-      float _Distortion;
-      float _FireIntensity;
-      float4 _CoreColor;
-      float4 _EdgeColor;
-      float4 _SmokeColor;
+      float4 _SourceRectInEffect;
+      float4 _SpriteUvRect;
+      float _FlameCoverage;
+      float _FlameHeight;
+      float _TongueWidth;
+      float _TongueCount;
+      float _FlowSpeed;
+      float _Sway;
+      float _Breakup;
+      float _NoiseScale;
+      float _SurfaceOpacity;
+      float _FlameOpacity;
+      float _Brightness;
+      float4 _HotColor;
+      float4 _FlameColor;
 
       #include "Assets/Shaders/Fire/FirePreviewCore.hlsl"
 
@@ -71,19 +91,11 @@ Shader "Hidden/Esperanza/FirePreview" {
       }
 
       fixed4 frag(v2f i) : SV_Target {
-        float2 uv = i.uv;
-        float previewTime = _PreviewTime;
-        
         float3 color;
         float alpha;
-
-        FirePreviewCore_float(
-          uv,
-          previewTime,
-          color,
-          alpha
-        );
-
+        float2 spriteUvSize = max(_SpriteUvRect.zw, float2(1e-4, 1e-4));
+        float2 effectUv = (i.uv - _SpriteUvRect.xy) / spriteUvSize;
+        FirePreviewCore_float(effectUv, _PreviewTime, color, alpha);
         return float4(color * i.color.rgb, alpha * i.color.a);
       }
       ENDCG

@@ -14,10 +14,10 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 		[NoScaleOffset]_FadeTex("Fade Texture", 2D) = "white" {} //7
 		_FadeAmount("Fade Amount",  Range(-0.1,1)) = -0.1 //8
 		_FadeBurnWidth("Fade Burn Width",  Range(0,1)) = 0.025 //9
-		_FadeBurnTransition("Burn Transition",  Range(0.01,0.5)) = 0.075 //10
+		_FadeBurnTransition("Burn Transition",  Range(0,0.5)) = 0.075 //10
 		_FadeBurnColor("Fade Burn Color", Color) = (1,1,0,1) //11
 		[NoScaleOffset]_FadeBurnTex("Fade Burn Texture", 2D) = "white" {} //12
-		_FadeBurnGlow("Fade Burn Glow",  Range(1,250)) = 2//13
+		_FadeBurnGlow("Fade Burn Glow",  Range(0,250)) = 2//13
         
 		_OutlineColor("Outline Base Color", Color) = (1,1,1,1) //14
 		_OutlineAlpha("Outline Base Alpha",  Range(0,1)) = 1 //15
@@ -261,7 +261,15 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 		[HideInInspector] _MinYUV("_MinYUV", Range(0, 1)) = 0.0
 		[HideInInspector] _MaxYUV("_MaxYUV", Range(0, 1)) = 1.0
 		[HideInInspector] _RandomSeed("_MaxYUV", Range(0, 10000)) = 0.0
+		[HideInInspector] [PerRendererData] _SpriteUvRect("Sprite UV Rect", Vector) = (0, 0, 1, 1)
+		[HideInInspector] [PerRendererData] _FadeUseSpriteUvRect("Fade Uses Sprite UV Rect", Float) = 0
     	_EditorDrawers("Editor Drawers", Int) = 14
+		[HideInInspector] [PerRendererData] _NormalMapIsSrgb("Normal Map Is sRGB", Float) = 0
+		[Toggle(STYLIZEDRIM_ON)] _StylizedRimEnabled("Stylized Normal Rim", Float) = 0
+		[HDR] _StylizedRimColor("Stylized Rim Color", Color) = (1, 0.9, 0.7, 1)
+		_StylizedRimIntensity("Stylized Rim Intensity", Range(0, 4)) = 1
+		_StylizedRimPower("Stylized Rim Power", Range(0.5, 8)) = 2.5
+		_StylizedRimEnvironmentInfluence("Environment Light Influence", Range(0, 1)) = 0.65
     }
 
 

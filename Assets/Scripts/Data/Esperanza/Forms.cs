@@ -104,6 +104,10 @@ public static class EsperanzaForms {
       return false;
     }
 
+    if (CharacterState.DebugUnlockAllForms) {
+      return true;
+    }
+
     EnsureKnownForms();
     return Unlocked.TryGetValue(resolvedForm, out var unlocked) && unlocked == 1;
   }

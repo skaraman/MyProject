@@ -1,0 +1,97 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &1
+MonoBehaviour:
+  m_ObjectHideFlags: 53
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a8c2f8e3b1d4f8aa9c6e2b7d5013f94, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: myEditor::FormEffectPreviewDefaults
+  hasFireDefaults: 1
+  fireDefaults:
+    rid: 8997990409708503128
+  hasAquaDefaults: 1
+  aquaDefaults:
+    rid: 8997990409708503136
+  hasBoltDefaults: 1
+  boltDefaults:
+    rid: 8997990409708503139
+  hasColdDefaults: 1
+  coldDefaults:
+    rid: 8997990409708503144
+  hasDarkDefaults: 1
+  darkDefaults:
+    rid: 8997990409708503146
+  references:
+    version: 2
+    RefIds:
+    - rid: 8997990409708503128
+      type: {class: AllIn1EffectPreviewDrawer, ns: , asm: myEditor}
+      data:
+        breakupPatternSprite: {fileID: 0}
+        flowPatternSprite: {fileID: 0}
+        flameCoverage: 0.47
+        flameSize: 0.352
+        flameMovement: 0.766
+        flameWildness: 0
+        spriteVisibility: 1
+        flameBrightness: 0
+        hotColor: {r: 1, g: 0, b: 0.007926464, a: 1}
+        flameColor: {r: 1, g: 0.7532815, b: 0, a: 1}
+        showAdvancedPatterns: 0
+    - rid: 8997990409708503136
+      type: {class: AquaEffectPreviewDrawer, ns: , asm: myEditor}
+      data:
+        beadPatternSprite: {fileID: 0}
+        flowPatternSprite: {fileID: 0}
+        wetness: 0.686
+        dripSize: 0
+        flow: 1
+        beading: 1
+        spriteVisibility: 0.711
+        shine: 1
+        waterColor: {r: 0.04, g: 0.42, b: 0.92, a: 1}
+        highlightColor: {r: 0.54, g: 0.95, b: 1, a: 1}
+        showAdvancedPatterns: 0
+    - rid: 8997990409708503139
+      type: {class: BoltEffectPreviewDrawer, ns: , asm: myEditor}
+      data:
+        charge: 1
+        reach: 0
+        thickness: 0
+        activity: 0.351
+        randomness: 0.536
+        branching: 1
+        spriteVisibility: 1
+        brightness: 0
+        coreColor: {r: 0.7405064, g: 1, b: 0, a: 1}
+        electricityColor: {r: 0.20717126, g: 1, b: 0, a: 1}
+    - rid: 8997990409708503144
+      type: {class: ColdEffectPreviewDrawer, ns: , asm: myEditor}
+      data:
+        freeze: 0.598
+        icicleSize: 0.205
+        freezeCycle: 0.204
+        frostDetail: 0.591
+        snowfall: 0.61
+        spriteVisibility: 1
+        iceShine: 1
+        iceColor: {r: 0, g: 0.5502393, b: 1, a: 1}
+        frozenHighlight: {r: 1, g: 1, b: 1, a: 1}
+    - rid: 8997990409708503146
+      type: {class: DarkEffectPreviewDrawer, ns: , asm: myEditor}
+      data:
+        presence: 1
+        edgeAura: 0.474
+        tendrilReach: 0.26
+        restlessness: 0.259
+        veins: 1
+        spriteVisibility: 1
+        voidDepth: 1
+        darkPurple: {r: 0.22, g: 0.015, b: 0.36, a: 1}
+        abyssColor: {r: 0.07342473, g: 0.03938234, b: 0.14150941, a: 1}

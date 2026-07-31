@@ -80,6 +80,10 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       TrimmedAtlasExporterWindow.CopySourceImporterSettings(definition.sourceAtlasAssetPath, importer);
     }
 
+    // Source snapshots can overwrite the streaming/normal policy, so make the
+    // generated atlas conform after those settings have been copied.
+    SpriteStreamingTextureImportPolicy.Apply(importer, definition.sliceAtlas);
+
     if (!importer.alphaIsTransparency) {
       importer.alphaIsTransparency = true;
     }

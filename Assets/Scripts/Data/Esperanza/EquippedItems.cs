@@ -105,6 +105,47 @@ public static class EquippedItems {
     return CloneGearForms(DefaultGearForms);
   }
 
+  public static void RandomizeDefaultBoostsForNewGame() {
+    EnsureKnownForms();
+
+    foreach (var formEntry in AllGearForms) {
+      if (formEntry.Value == null ||
+          !Abbreviations.FormMajorMinor.TryGetValue(formEntry.Key, out var majorMinor) ||
+          majorMinor == null ||
+          majorMinor.Count == 0) {
+        continue;
+      }
+
+      var availableMajorStats = new List<string>(majorMinor.Keys);
+      Shuffle(availableMajorStats);
+      var nextStatIndex = 0;
+
+      foreach (var slotEntry in formEntry.Value) {
+        var item = slotEntry.Value;
+        if (item == null) {
+          continue;
+        }
+
+        var statName = availableMajorStats[nextStatIndex % availableMajorStats.Count];
+        nextStatIndex++;
+        item.boosts = new List<BoostEntry> {
+          new BoostEntry {
+            statName = statName,
+            value = 1f
+          }
+        };
+        item.name = GearNames.Generate(item.gearId, item.slot, item.boosts);
+      }
+    }
+  }
+
+  static void Shuffle(List<string> values) {
+    for (var i = values.Count - 1; i > 0; i--) {
+      var swapIndex = UnityEngine.Random.Range(0, i + 1);
+      (values[i], values[swapIndex]) = (values[swapIndex], values[i]);
+    }
+  }
+
   public static List<string> GetEquippedGearIds(IEnumerable<string> forms = null) {
     EnsureKnownForms();
 
@@ -197,53 +238,53 @@ public static class EquippedItems {
   static Dictionary<string, Dictionary<string, GearItem>> CreateDefaultGearForms() {
     return new Dictionary<string, Dictionary<string, GearItem>>(StringComparer.Ordinal) {
       ["Base"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateFormGearItem("Base", "Normal", "Regular Top", "Chest", "Base_aa"),
-        ["Legs"] = CreateFormGearItem("Base", "Normal", "Regular Bottoms", "Legs", "Base_aa"),
-        ["Feet"] = CreateFormGearItem("Base", "Normal", "Regular Boots", "Feet", "Base_aa"),
+        ["Chest"] = CreateFormGearItem("Base", "Basic", "Chest", "Base_aa", "STR"),
+        ["Legs"] = CreateFormGearItem("Base", "Basic", "Legs", "Base_aa", "DEX"),
+        ["Feet"] = CreateFormGearItem("Base", "Basic", "Feet", "Base_aa", "END"),
         ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Aqua"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateFormGearItem("Aqua", "Normal", "Wetsuit Top", "Chest", "Aqua_aa"),
-        ["Legs"] = CreateFormGearItem("Aqua", "Normal", "Wetsuit Bottoms", "Legs", "Aqua_aa"),
+        ["Chest"] = CreateFormGearItem("Aqua", "Basic", "Chest", "Aqua_aa", "INT"),
+        ["Legs"] = CreateFormGearItem("Aqua", "Basic", "Legs", "Aqua_aa", "DEX"),
         ["Head"] = null, ["Feet"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Bolt"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateFormGearItem("Bolt", "Normal", "Anti-Static Top", "Chest", "Bolt_aa"),
-        ["Legs"] = CreateFormGearItem("Bolt", "Normal", "Anti-Static Pants", "Legs", "Bolt_aa"),
-        ["Feet"] = CreateFormGearItem("Bolt", "Normal", "Anti-static Boots", "Feet", "Bolt_aa"),
+        ["Chest"] = CreateFormGearItem("Bolt", "Basic", "Chest", "Bolt_aa", "DEX"),
+        ["Legs"] = CreateFormGearItem("Bolt", "Basic", "Legs", "Bolt_aa", "END"),
+        ["Feet"] = CreateFormGearItem("Bolt", "Basic", "Feet", "Bolt_aa", "AMP"),
         ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Cold"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateFormGearItem("Cold", "Normal", "Warm Top", "Chest", "Cold_aa"),
-        ["Legs"] = CreateFormGearItem("Cold", "Normal", "Warm Bottoms", "Legs", "Cold_aa"),
-        ["Feet"] = CreateFormGearItem("Cold", "Normal", "Warm Footies", "Feet", "Cold_aa"),
+        ["Chest"] = CreateFormGearItem("Cold", "Basic", "Chest", "Cold_aa", "END"),
+        ["Legs"] = CreateFormGearItem("Cold", "Basic", "Legs", "Cold_aa", "INT"),
+        ["Feet"] = CreateFormGearItem("Cold", "Basic", "Feet", "Cold_aa", "CHL"),
         ["Head"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Fire"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateFormGearItem("Fire", "Normal", "Sheer Top", "Chest", "Fire_aa"),
-        ["Legs"] = CreateFormGearItem("Fire", "Normal", "Skimmies", "Legs", "Fire_aa"),
+        ["Chest"] = CreateFormGearItem("Fire", "Basic", "Chest", "Fire_aa", "STR"),
+        ["Legs"] = CreateFormGearItem("Fire", "Basic", "Legs", "Fire_aa", "END"),
         ["Head"] = null, ["Feet"] = null, ["Shoulders"] = null, ["Arms"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
         ["Ring10"] = null, ["Ring11"] = null, ["Ring12"] = null
       },
       ["Dark"] = new Dictionary<string, GearItem>(StringComparer.Ordinal) {
-        ["Chest"] = CreateFormGearItem("Dark", "Normal", "Void Shirt", "Chest", "Dark_aa"),
-        ["Legs"] = CreateFormGearItem("Dark", "Normal", "Void Pants", "Legs", "Dark_aa"),
-        ["Feet"] = CreateFormGearItem("Dark", "Normal", "Void Footies", "Feet", "Dark_aa"),
-        ["Arms"] = CreateFormGearItem("Dark", "Normal", "Void Gloves", "Arms", "Dark_aa"),
+        ["Chest"] = CreateFormGearItem("Dark", "Basic", "Chest", "Dark_aa", "UMB"),
+        ["Legs"] = CreateFormGearItem("Dark", "Basic", "Legs", "Dark_aa", "VOI"),
+        ["Feet"] = CreateFormGearItem("Dark", "Basic", "Feet", "Dark_aa", "ABY"),
+        ["Arms"] = CreateFormGearItem("Dark", "Basic", "Arms", "Dark_aa", "ECL"),
         ["Head"] = null, ["Shoulders"] = null, ["Belt"] = null, ["Zemi"] = null,
         ["Ring1"] = null, ["Ring2"] = null, ["Ring3"] = null, ["Ring4"] = null, ["Ring5"] = null,
         ["Ring6"] = null, ["Ring7"] = null, ["Ring8"] = null, ["Ring9"] = null,
@@ -276,24 +317,42 @@ public static class EquippedItems {
     return emptySlots;
   }
 
-  static GearItem CreateGearItem(string type, string name, string slot, string gearId, string gearColor) {
+  static GearItem CreateGearItem(
+    string type,
+    string slot,
+    string gearId,
+    string gearColor,
+    string boostStat
+  ) {
+    var boosts = new List<BoostEntry> {
+      new BoostEntry {
+        statName = boostStat,
+        value = 1f
+      }
+    };
     return new GearItem {
       type = type,
-      name = name,
+      name = GearNames.Generate(gearId, slot, boosts),
       slot = slot,
       gearId = gearId,
       gearColor = gearColor,
-      boosts = new List<BoostEntry>()
+      boosts = boosts
     };
   }
 
-  static GearItem CreateFormGearItem(string formName, string type, string name, string slot, string gearId) {
+  static GearItem CreateFormGearItem(
+    string formName,
+    string type,
+    string slot,
+    string gearId,
+    string boostStat
+  ) {
     ShaderColors.TryGetFormColor(
       formName,
       ShaderColors.PrimaryGroup,
       out _,
       out var colorName
     );
-    return CreateGearItem(type, name, slot, gearId, colorName ?? "");
+    return CreateGearItem(type, slot, gearId, colorName ?? "", boostStat);
   }
 }

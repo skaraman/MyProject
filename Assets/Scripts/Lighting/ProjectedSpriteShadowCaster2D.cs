@@ -239,7 +239,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     var receiverPosition = (Vector2)transform.position;
     receiverPosition.y -= verticalDisplacement;
 
-    SyncSunShadow(
+    SyncCelestialShadow(
       lightingManager,
       groundPosition,
       verticalDisplacement,
@@ -254,7 +254,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     );
   }
 
-  void SyncSunShadow(
+  void SyncCelestialShadow(
     SceneLighting2D lightingManager,
     Vector2 groundPosition,
     float verticalDisplacement,
@@ -264,7 +264,11 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       SetBindingsEnabled(sunBindings, false);
       return;
     }
-    if (!lightingManager.TryGetSunShadow(casterSortingLayerId, out var projection)) {
+    if (!lightingManager.TryGetCelestialShadow(
+      groundPosition,
+      casterSortingLayerId,
+      out var projection
+    )) {
       SetBindingsEnabled(sunBindings, false);
       return;
     }

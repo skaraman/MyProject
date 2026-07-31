@@ -57,6 +57,9 @@ public class EnemyHealth : MonoBehaviour {
   [Tooltip("FontText to display current health text")]
   public FontText healthText;
 
+  [SerializeField, Min(0f), Tooltip("Camera displacement when one hit removes 100% of this enemy's max health. Actual shake scales with the percentage removed.")]
+  float screenShakeFactor = 0.65f;
+
   FontText maxHealthText;
 
   static bool ShouldLogDebug() {
@@ -257,6 +260,7 @@ public class EnemyHealth : MonoBehaviour {
     var actualDamage = hpBefore - enemyInfo.currentHp;
 
     GrantAbilityHitXp(hitId, actualDamage);
+    ScreenShake.Play(actualDamage, maxHp, screenShakeFactor);
 
     SpawnDamageNumber(damageResult.amount, damageResult.kind);
     UpdateVisuals();
@@ -686,6 +690,13 @@ public class EnemyHealth : MonoBehaviour {
       LocationManager.currentLocation,
       gameObject
     );
+
+    var destructionManager = GetComponent<DestructionManager>();
+    if (destructionManager != null) {
+      destructionManager.LaunchRandom();
+    }
+
+    HurtBloodSplatter.PlayDeathDecals(transform);
 
     if (ShouldLogDebug()) {
       RuntimeLog.Log(
