@@ -609,6 +609,11 @@ public partial class GearController {
       return;
     }
 
+    // Persistent atlas collection may cover an entire clip, but startup only
+    // promises the initial warm window. Scanning every frame of every planned
+    // animation here repeats the same resolve/readiness work and can turn the
+    // reveal coroutine into a multi-million-allocation frame.
+    var warmFrames = Mathf.Max(prewarmFramesPerAnimation, MinimumPlayerWarmFramesAtStartup);
     for (var animationIndex = 0; animationIndex < persistentWarmAnimationScratch.Count; animationIndex++) {
       var animationName = persistentWarmAnimationScratch[animationIndex];
       if (!Animations.Esperanza.TryGetValue(animationName, out var animationData) || animationData == null) {
@@ -617,7 +622,10 @@ public partial class GearController {
 
       var category = ResolveEsperanzaAnimationCategory(animationName, animationData);
       var clipStart = Mathf.Max(animationData.start, 1);
-      var clipEnd = Mathf.Max(animationData.end, clipStart);
+      var clipEnd = Mathf.Min(
+        Mathf.Max(animationData.end, clipStart),
+        clipStart + warmFrames - 1
+      );
       CountAnimationWindowReadiness(target, category, clipStart, clipEnd, ref readyCount, ref totalSampleCount);
     }
   }

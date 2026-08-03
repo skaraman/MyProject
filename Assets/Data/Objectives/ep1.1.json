@@ -3,8 +3,13 @@
     "title": "Objective 1",
     "description": "Kill the Imps!",
     "objective": "Kill_Imp_10",
-    "spawns": [
-        "Imp_10"
-    ],
-    "respawns": []
+    "spawns": {
+        "Imp": 10
+    },
+    "enemyLevels": {
+        "Imp": 1
+    },
+    "respawns": {
+        "Imp": 0
+    }
 }]

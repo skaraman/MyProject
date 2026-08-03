@@ -4,6 +4,9 @@ using Random = UnityEngine.Random;
 public class Piece : MonoBehaviour {
   const float GroundSlideLinearDamping = 2.5f;
   const float GroundSlideAngularDamping = 3f;
+  // Rigidbody2D angular velocity is degrees per second. Keep fragments below
+  // one full rotation per second for a readable cinematic scatter.
+  const float MaximumCinematicAngularVelocity = 240f;
   const float MinimumSlideSeconds = 0.35f;
   const float MaximumSlideSeconds = 2f;
   const float SettledSpeedSquared = 0.15f * 0.15f;
@@ -131,6 +134,20 @@ public class Piece : MonoBehaviour {
     UpdatePileSorting(force: true);
     rb.AddForce(force, ForceMode2D.Impulse);
     rb.AddTorque(torque, ForceMode2D.Impulse);
+    rb.angularVelocity = Mathf.Clamp(
+      rb.angularVelocity,
+      -MaximumCinematicAngularVelocity,
+      MaximumCinematicAngularVelocity
+    );
+  }
+
+  void FixedUpdate() {
+    if (!launched || done || isFading || rb == null || !rb.simulated) return;
+    rb.angularVelocity = Mathf.Clamp(
+      rb.angularVelocity,
+      -MaximumCinematicAngularVelocity,
+      MaximumCinematicAngularVelocity
+    );
   }
 
   void Update() {

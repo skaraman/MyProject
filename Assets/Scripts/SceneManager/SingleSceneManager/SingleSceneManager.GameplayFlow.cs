@@ -6,6 +6,12 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 public partial class SingleSceneManager {
+  static readonly Unity.Profiling.ProfilerMarker EnsureGameplayPlayerBootstrapProfilerMarker =
+    new("SingleSceneManager.EnsureGameplayPlayerBootstrap");
+  static readonly Unity.Profiling.ProfilerMarker ApplyGameplayStateUnderBlackProfilerMarker =
+    new("SingleSceneManager.ApplyGameplayStateUnderBlack");
+  static readonly Unity.Profiling.ProfilerMarker PrepareNewGameRuntimeStateProfilerMarker =
+    new("SingleSceneManager.PrepareNewGameRuntimeState");
 
   IEnumerator StartGameFlowRoutine(bool isNewGame, SaveData loadedSlot) {
     var context = isNewGame ? WarmGateMode.StartGame : WarmGateMode.LoadSave;
@@ -288,6 +294,7 @@ public partial class SingleSceneManager {
   }
 
   void PrepareNewGameRuntimeStateUnderLoadingOverlay() {
+    using var profilerScope = PrepareNewGameRuntimeStateProfilerMarker.Auto();
     EnsureGameplayPlayerBootstrap("new_game");
     var player = ResolvePlayerGearController();
     var characterState = ResolvePlayerCharacterState();

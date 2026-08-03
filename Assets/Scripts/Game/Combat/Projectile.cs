@@ -72,11 +72,15 @@ public class Projectile : MonoBehaviour {
   private readonly GameObject[] hBoxTargetObjects = new GameObject[1];
   private readonly Dictionary<string, Dictionary<string, List<HBox>>> runtimeHBoxData = new();
   private readonly Dictionary<string, List<HBox>> runtimeHBoxSequences = new();
-  private readonly Collider2D[] overlapResults = new Collider2D[16];
+  private readonly Collider2D[] overlapResults = new Collider2D[128];
+  private readonly HashSet<ulong> overlapHurtBoxIds = new();
+  private bool hasOverlapScanTimestamp;
+  private float lastOverlapScanFixedTime;
   private SpriteWithNormals configuredSpriteTarget;
   private PolygonCollider2D configuredHitboxCollider;
   private HitBox2D offensiveHitBox;
   private ProjectedSpriteShadowCaster2D shadowCaster;
+  private int lastHitSoundFrame = -1;
 
   public string PoolKey => poolKey;
 
@@ -103,6 +107,9 @@ public class Projectile : MonoBehaviour {
 
   void OnEnable() {
     ResetLifetime();
+    hasOverlapScanTimestamp = false;
+    overlapHurtBoxIds.Clear();
+    lastHitSoundFrame = -1;
   }
 
   void Update() {
@@ -130,11 +137,20 @@ public class Projectile : MonoBehaviour {
     TryApplyRuntimeSpawnOffsetTuning("validate");
   }
 
-  public void Launch(ProjectileManager owner, string key, Vector3 direction, Transform target = null, float? speedOverride = null) {
+  public void Launch(
+    ProjectileManager owner,
+    string key,
+    Vector3 direction,
+    Transform target = null,
+    float? speedOverride = null,
+    Transform actorOwner = null
+  ) {
     this.owner = owner;
     poolKey = ResolveKey(key);
     RestoreAuthoredSettings();
     hitSoundId = null;
+    lastHitSoundFrame = -1;
+    offensiveHitBox?.SetActorOwner(actorOwner);
     ApplyProjectileData(poolKey);
     effectKey = !string.IsNullOrEmpty(effectKeyOverride) ? NormalizeKey(effectKeyOverride) : poolKey;
     this.target = target;
@@ -418,6 +434,7 @@ public class Projectile : MonoBehaviour {
   }
 
   void OnCollisionEnter2D(Collision2D collision) {
+    GlobalCollisionCooldown.TryApply(collision);
     HandleContact(collision.collider);
   }
 
@@ -445,20 +462,43 @@ public class Projectile : MonoBehaviour {
       return;
     }
 
+    // Movement is driven by FixedUpdate and trigger callbacks remain
+    // immediate. This fallback only needs one read per physics timestamp,
+    // rather than repeating the same overlap query on every render frame.
+    var fixedTime = Time.fixedTime;
+    if (hasOverlapScanTimestamp && Mathf.Approximately(lastOverlapScanFixedTime, fixedTime)) {
+      return;
+    }
+    lastOverlapScanFixedTime = fixedTime;
+    hasOverlapScanTimestamp = true;
+
     var overlapCount = hitboxCollider.Overlap(ContactFilter2D.noFilter, overlapResults);
+    var acceptedAny = false;
+    overlapHurtBoxIds.Clear();
     for (var i = 0; i < overlapCount; i++) {
       var other = overlapResults[i];
       overlapResults[i] = null;
       if (!HurtBox2D.TryResolve(other, out var hurtBox)) continue;
-      if (!TryAcceptHurtBoxContact(other, hurtBox)) continue;
-      for (var remaining = i + 1; remaining < overlapCount; remaining++) {
-        overlapResults[remaining] = null;
+      var hurtBoxId = ObjectEntityId.GetRawValue(hurtBox);
+      if (!overlapHurtBoxIds.Add(hurtBoxId)) {
+        continue;
       }
-      return;
+      if (TryAcceptHurtBoxContact(other, hurtBox, deferDespawn: true)) {
+        acceptedAny = true;
+      }
+    }
+    overlapHurtBoxIds.Clear();
+
+    if (acceptedAny && despawnOnHurtBoxHit) {
+      Despawn();
     }
   }
 
-  private bool TryAcceptHurtBoxContact(Collider2D other, HurtBox2D hurtBox) {
+  private bool TryAcceptHurtBoxContact(
+    Collider2D other,
+    HurtBox2D hurtBox,
+    bool deferDespawn = false
+  ) {
     if (offensiveHitBox == null || other == null || hurtBox == null) return false;
 
     var accepted = offensiveHitBox.TryHit(other);
@@ -466,10 +506,11 @@ public class Projectile : MonoBehaviour {
                                    hurtBox.LastHitFrame == Time.frameCount;
     if (!accepted && !acceptedEarlierThisFrame) return false;
 
-    if (!string.IsNullOrWhiteSpace(hitSoundId)) {
+    if (!string.IsNullOrWhiteSpace(hitSoundId) && lastHitSoundFrame != Time.frameCount) {
       SoundEffectPlayer.Play(hitSoundId);
+      lastHitSoundFrame = Time.frameCount;
     }
-    if (despawnOnHurtBoxHit) {
+    if (despawnOnHurtBoxHit && !deferDespawn) {
       Despawn();
     }
     return true;

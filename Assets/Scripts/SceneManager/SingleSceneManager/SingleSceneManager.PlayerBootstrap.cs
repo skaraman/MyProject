@@ -105,6 +105,7 @@ public partial class SingleSceneManager {
   }
 
   void EnsureGameplayPlayerBootstrap(string source) {
+    using var profilerScope = EnsureGameplayPlayerBootstrapProfilerMarker.Auto();
     var existing = FindScenePlayerController();
     if (existing != null) {
       EnsureGameplayPlayerEnabled(existing);

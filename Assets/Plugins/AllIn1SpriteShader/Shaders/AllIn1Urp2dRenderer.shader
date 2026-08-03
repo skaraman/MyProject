@@ -265,11 +265,13 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 		[HideInInspector] [PerRendererData] _FadeUseSpriteUvRect("Fade Uses Sprite UV Rect", Float) = 0
     	_EditorDrawers("Editor Drawers", Int) = 14
 		[HideInInspector] [PerRendererData] _NormalMapIsSrgb("Normal Map Is sRGB", Float) = 0
-		[Toggle(STYLIZEDRIM_ON)] _StylizedRimEnabled("Stylized Normal Rim", Float) = 0
+		[Toggle(STYLIZEDRIM_ON)] _StylizedRimEnabled("Fake Top-Right Rim", Float) = 0
 		[HDR] _StylizedRimColor("Stylized Rim Color", Color) = (1, 0.9, 0.7, 1)
-		_StylizedRimIntensity("Stylized Rim Intensity", Range(0, 4)) = 1
-		_StylizedRimPower("Stylized Rim Power", Range(0.5, 8)) = 2.5
-		_StylizedRimEnvironmentInfluence("Environment Light Influence", Range(0, 1)) = 0.65
+		_StylizedRimIntensity("Stylized Rim Intensity", Range(0, 4)) = 0.1
+		_StylizedRimPower("Stylized Rim Width (Screen Pixels)", Range(0.5, 8)) = 1
+		_StylizedRimNormalWidth("Normal-Directed Extra Width", Range(0, 8)) = 3
+		_StylizedRimEnvironmentInfluence("Day/Night Color Influence", Range(0, 1)) = 0.65
+		_StylizedRimLightResponse("Nearby Light Rim Boost", Range(0, 4)) = 1.5
     }
 
 

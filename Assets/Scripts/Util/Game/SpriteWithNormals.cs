@@ -24,6 +24,12 @@ public partial class SpriteWithNormals : MonoBehaviour {
 
   [SerializeField] bool isAnimation = true;
   [SerializeField] bool doNotRender;
+  // Decorative pieces can opt out of projected shadows while retaining their
+  // normal-map/rendering behavior. Keep this enabled by default for authored
+  // coverage and disable it only on sources that are redundant in the shadow.
+  [Header("Projected Shadow")]
+  [Tooltip("When disabled, this sprite keeps rendering normally but is omitted from projected ground shadows.")]
+  [SerializeField] bool castProjectedShadow = true;
   bool externalVisualSuppressed;
   [SerializeField] bool useTrimmedAtlasOffset;
   [Header("Shader Margins")]
@@ -59,6 +65,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const int InternalRetryFrames = 2;
   const int MaxPairLookupCacheEntries = 2048;
   const int MaxSharedAnimationAtlasCacheEntries = 2048;
+  const int MaxConventionNormalAddressCacheEntries = 4096;
   const bool ForceDisableDebugLogsForPerfPass = true;
   static int WarmupRequestBudgetPerFrame => Application.isMobilePlatform ? 64 : 256;
   const int WarmupQueueThrottleThreshold = 2048;
@@ -167,6 +174,9 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static readonly HashSet<SpriteLookupKey> s_ReportedResolveErrorKeys = new();
   static readonly Dictionary<AnimationAtlasCacheKey, string[]> s_AnimationAtlasAddressCache = new();
   static int s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
+  static readonly Dictionary<ConventionNormalCacheKey, string> s_ConventionNormalAddressCache =
+    new(MaxConventionNormalAddressCacheEntries);
+  static int s_ConventionNormalAddressCacheContentReloadVersion = int.MinValue;
   int _activeListIndex = -1;
   static int s_ManagedUpdateCursor;
   static bool s_UpdateRegistered;
@@ -231,6 +241,12 @@ public partial class SpriteWithNormals : MonoBehaviour {
     s_ReportedResolveErrorKeys.Clear();
     s_AnimationAtlasAddressCache.Clear();
     s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
+    s_ConventionNormalAddressCache.Clear();
+    s_ConventionNormalAddressCacheInsertionOrder.Clear();
+    s_ConventionNormalAddressCacheContentReloadVersion = int.MinValue;
+#if UNITY_EDITOR
+    s_ConventionNormalAtlasSpriteMetadata.Clear();
+#endif
     s_ManagedUpdateCursor = 0;
     s_UpdateRegistered = false;
 #if UNITY_EDITOR
@@ -367,15 +383,19 @@ public partial class SpriteWithNormals : MonoBehaviour {
 
   public bool IsAnimation => isAnimation;
   public bool DoNotRender => doNotRender;
+  public bool CastsProjectedShadow => castProjectedShadow;
   public int LastRequestedFrame => _lastRequestedFrame;
 
-  public void SetAnimation(string value) {
+  public void SetAnimation(string value, int initialFrame = int.MinValue) {
     var previous = category ?? "";
     var next = value ?? "";
     if (!string.Equals(previous, next, StringComparison.Ordinal)) {
       LogSpriteFetch("set_category", "from='" + previous + "' to='" + next + "'");
     }
     category = value;
+    if (isAnimation && initialFrame != int.MinValue) {
+      _lastRequestedFrame = Mathf.Max(initialFrame, 1);
+    }
     _hasLastLookup = false;
   }
   public void SetLibraryName(string value) {

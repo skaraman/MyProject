@@ -137,7 +137,14 @@ public class ProjectileManager : MonoBehaviour {
     return Mathf.Max(outAddresses.Count - beforeCount, 0);
   }
 
-  public GameObject SpawnProjectile(string key, Vector3 position, Vector3 direction, Transform target = null, float? speedOverride = null) {
+  public GameObject SpawnProjectile(
+    string key,
+    Vector3 position,
+    Vector3 direction,
+    Transform target = null,
+    float? speedOverride = null,
+    Transform actorOwner = null
+  ) {
     key = NormalizeProjectileKey(key);
     if (string.IsNullOrWhiteSpace(key)) {
       Debug.LogWarning("[ProjectileManager] SpawnProjectile called with null or empty key.");
@@ -155,7 +162,7 @@ public class ProjectileManager : MonoBehaviour {
     var projectile = obj.GetComponent<Projectile>();
     if (projectile != null) {
       projectile.ConfigureAnimationData(effectAnimations);
-      projectile.Launch(this, key, direction, target, speedOverride);
+      projectile.Launch(this, key, direction, target, speedOverride, actorOwner);
     }
     else {
       Debug.LogWarning($"[ProjectileManager] Spawned prefab '{key}' without Projectile component.");

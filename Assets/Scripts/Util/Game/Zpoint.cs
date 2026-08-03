@@ -11,6 +11,8 @@ public class Zpoint : MonoBehaviour {
 
   private const float Y_MOVEMENT_THRESHOLD = 0.01f;
   private const float Y_TO_SORTING_ORDER_MULTIPLIER = 100f;
+  // Keep the full resort scan independent of the display refresh rate.
+  private const float SORT_UPDATE_INTERVAL_SECONDS = 1f / 30f;
   private const int SORT_UPDATE_INTERVAL_FRAMES = 2;
 
   static readonly List<Zpoint>[] s_ActiveByFrameBucket = {
@@ -18,20 +20,29 @@ public class Zpoint : MonoBehaviour {
     new List<Zpoint>()
   };
   static int s_NextSortFrameBucket;
+  static float s_NextSortTime;
   int _activeListIndex = -1;
   int _sortFrameBucket;
   static bool s_UpdateRegistered;
   static readonly System.Action s_UpdateCallback = UpdateAll;
 
   static void UpdateAll() {
-    var active = s_ActiveByFrameBucket[Time.frameCount % SORT_UPDATE_INTERVAL_FRAMES];
-    var remaining = active.Count;
-    var index = 0;
-    while (index < active.Count && remaining-- > 0) {
-      var target = active[index];
-      target.ManagedUpdate();
-      if (index < active.Count && active[index] == target) {
-        index++;
+    var now = Time.unscaledTime;
+    if (now < s_NextSortTime) {
+      return;
+    }
+    s_NextSortTime = now + SORT_UPDATE_INTERVAL_SECONDS;
+
+    for (var bucketIndex = 0; bucketIndex < s_ActiveByFrameBucket.Length; bucketIndex++) {
+      var active = s_ActiveByFrameBucket[bucketIndex];
+      var remaining = active.Count;
+      var index = 0;
+      while (index < active.Count && remaining-- > 0) {
+        var target = active[index];
+        target.ManagedUpdate();
+        if (index < active.Count && active[index] == target) {
+          index++;
+        }
       }
     }
   }
@@ -59,6 +70,7 @@ public class Zpoint : MonoBehaviour {
       active.Clear();
     }
     s_NextSortFrameBucket = 0;
+    s_NextSortTime = 0f;
     s_UpdateRegistered = false;
   }
 

@@ -76,14 +76,14 @@ public static partial class SpriteIndexBuilder {
       changed = true;
     }
 
-    if (settings.BuildAddressablesWithPlayerBuild != AddressableAssetSettings.PlayerBuildOption.DoNotBuildWithPlayer) {
-      settings.BuildAddressablesWithPlayerBuild = AddressableAssetSettings.PlayerBuildOption.DoNotBuildWithPlayer;
+    if (settings.BuildAddressablesWithPlayerBuild != AddressableAssetSettings.PlayerBuildOption.BuildWithPlayer) {
+      settings.BuildAddressablesWithPlayerBuild = AddressableAssetSettings.PlayerBuildOption.BuildWithPlayer;
       changed = true;
     }
 
     if (!changed) {
       if (logResult) {
-        Debug.Log("[SpriteIndexBuilder] Addressables defaults already configured (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=False, BuildAddressablesWithPlayer=False).");
+        Debug.Log("[SpriteIndexBuilder] Addressables defaults already configured (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=False, BuildAddressablesWithPlayer=True).");
       }
       return;
     }
@@ -91,7 +91,7 @@ public static partial class SpriteIndexBuilder {
     EditorUtility.SetDirty(settings);
     AssetDatabase.SaveAssets();
     if (logResult) {
-      Debug.Log("[SpriteIndexBuilder] Addressables defaults updated (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=False, BuildAddressablesWithPlayer=False).");
+      Debug.Log("[SpriteIndexBuilder] Addressables defaults updated (Player=Packed, Play Mode=Fast, OptimizeCatalog=True, DisableVisibleSubAssets=False, BuildAddressablesWithPlayer=True).");
     }
   }
 

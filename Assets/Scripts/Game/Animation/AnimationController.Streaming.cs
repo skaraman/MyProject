@@ -901,12 +901,26 @@ public partial class AnimationController {
       : categoryOverride;
     var clipStart = Math.Max(animation.start, 1);
     var clipEnd = Math.Max(animation.end, clipStart);
+    // Appearance pins are a hotset, not a complete animation preload.  Walking
+    // every frame of long clips here makes an animation switch allocate and
+    // resolve far more addresses than the configured pin window can retain.
+    // The active clip begins at its current frame; pending/queued clips begin
+    // at their authored first frame.  UpdateSpriteAndNormal's existing
+    // prefetch continues coverage as playback advances.
+    var pinStart = string.Equals(animationName, currentAnimation, StringComparison.Ordinal)
+      ? Math.Max(currentFrame, clipStart)
+      : clipStart;
+    pinStart = Math.Min(pinStart, clipEnd);
+    var pinEnd = Math.Min(
+      clipEnd,
+      pinStart + Math.Max(SpriteStreamingRuntimeSettings.PinWindowFrames, 1) - 1
+    );
 
     CollectAnimationAtlasAddressesForTargetSet(
       criticalSpriteTargets,
       categoryName,
-      clipStart,
-      clipEnd,
+      pinStart,
+      pinEnd,
       maxPinAddresses
     );
     if (appearancePinAddressBuffer.Count >= maxPinAddresses) return;
@@ -914,8 +928,8 @@ public partial class AnimationController {
     CollectAnimationAtlasAddressesForTargetSet(
       spriteTargets,
       categoryName,
-      clipStart,
-      clipEnd,
+      pinStart,
+      pinEnd,
       maxPinAddresses,
       skipCriticalTargets: true
     );

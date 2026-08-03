@@ -14,6 +14,7 @@ public class Destructible : MonoBehaviour
     private int lastProcessedHitFrame = -1;
     private ulong lastProcessedHitSourceId;
     private CharacterState characterState;
+    private DestructibleHitPieceParticles hitPieceParticles;
 
     [Header("Colliders")]
     public List<Collider2D> colliders = new List<Collider2D>();
@@ -101,6 +102,12 @@ public class Destructible : MonoBehaviour
         }
 
         SyncLegacyPieces();
+
+        if (!TryGetComponent(out hitPieceParticles))
+        {
+            hitPieceParticles = gameObject.AddComponent<DestructibleHitPieceParticles>();
+        }
+        hitPieceParticles.Initialize(piecesParent);
 
         // Ensure the global shadow pool is pre-warmed so pieces don't create it mid-combat
         DestructiblePiece.EnsureShadowPool();
@@ -318,6 +325,7 @@ public class Destructible : MonoBehaviour
 
     public void ProcessCollision(Collision2D collision, Collider2D receiverCollider)
     {
+        GlobalCollisionCooldown.TryApply(collision);
         if (debugCollisions) Debug.Log($"[Destructible] OnCollisionEnter2D from: {collision.collider.gameObject.name} on {(receiverCollider != null ? receiverCollider.name : "root")}");
 
         // Prioritize actual HitBox2D components using static cache
@@ -338,6 +346,10 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(receiverCollider, collision.collider.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, collision.collider))
         {
+            PlayBrokenPieceHitParticles(
+                targetPool.collider,
+                collision.collider.transform.position
+            );
             PlayHitEffect(targetPool.collider, hitBox);
             GrantEsperHitFormXp(hitBox);
             HandleCollision(targetPool);
@@ -373,6 +385,10 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(receiverCollider, collider.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, collider))
         {
+            PlayBrokenPieceHitParticles(
+                targetPool.collider,
+                collider.transform.position
+            );
             PlayHitEffect(targetPool.collider, hitBox);
             GrantEsperHitFormXp(hitBox);
             HandleCollision(targetPool);
@@ -391,6 +407,10 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(targetCollider, hitBox.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, null))
         {
+            PlayBrokenPieceHitParticles(
+                targetCollider,
+                hitBox.transform.position
+            );
             PlayHitEffect(targetCollider, hitBox);
             GrantEsperHitFormXp(hitBox);
             HandleCollision(targetPool);
@@ -404,6 +424,25 @@ public class Destructible : MonoBehaviour
         {
             HitEmphasisBurst.Play(hurtBox, hitBox);
         }
+    }
+
+    private void PlayBrokenPieceHitParticles(
+        Collider2D targetCollider,
+        Vector3 sourcePosition
+    )
+    {
+        if (hitPieceParticles == null)
+        {
+            return;
+        }
+
+        var impactPosition = targetCollider != null
+            ? (Vector3)targetCollider.ClosestPoint(sourcePosition)
+            : transform.position;
+        impactPosition.z = transform.position.z;
+
+        var impactDirection = (Vector2)(impactPosition - sourcePosition);
+        hitPieceParticles.Play(impactPosition, impactDirection);
     }
 
     private void GrantEsperHitFormXp(HitBox2D hitBox)
@@ -636,7 +675,7 @@ public class Destructible : MonoBehaviour
             rb.simulated = true;
             rb.gravityScale = 1f;
             rb.linearDamping = 0f;
-            rb.angularDamping = 0.05f;
+            rb.angularDamping = 1.5f;
 
             float horizontalDirection = Random.Range(-1f, 1f);
             if (Mathf.Abs(horizontalDirection) < 0.5f)
@@ -650,7 +689,9 @@ public class Destructible : MonoBehaviour
             float forceMagnitude = Random.Range(minLaunchForce, maxLaunchForce);
 
             rb.AddForce(forceDirection * forceMagnitude, ForceMode2D.Impulse);
-            rb.AddTorque(Random.Range(-10f, 10f), ForceMode2D.Impulse);
+            // Keep the rotation readable and restrained so the break-up feels
+            // cinematic instead of like a high-speed physics burst.
+            rb.AddTorque(Random.Range(-1f, 1f), ForceMode2D.Impulse);
         }
         
         pieceObj.SetActive(true);

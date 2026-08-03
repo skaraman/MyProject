@@ -128,7 +128,7 @@ public static class GearNames {
       ["prefix"] = new List<string> { "Mending", },
       ["suffix"] = new List<string> { "Healing", },
     },
-    ["BONUS"] = new Dictionary<string, List<string>> {
+    ["BNS"] = new Dictionary<string, List<string>> {
       ["prefix"] = new List<string> { "Bonus", },
       ["suffix"] = new List<string> { "Bonus", },
     },

@@ -36,7 +36,7 @@ public class FontCharacter : MonoBehaviour {
     // Common punctuation and symbols
     {' ', " "}, {'!', "!"}, {'"', "\""}, {'#', "#"}, {'$', "$"}, {'%', "%"}, {'&', "&"}, {'\'', "'"},
     {'(', "("}, {')', ")"}, {'*', "*"}, {'+', "+"}, {',', ","}, {'-', "-"}, {'.', "."}, {'/', "/"},
-    {':', ":"}, {';', ";"}, {'<', "<"}, {'=', "="}, {'>', ">"}, {'?', "?"}, {'@', "@"}, {'[', "["},
+    {':', ":"}, {';', ";"}, {'<', "<"}, {'=', ":"}, {'>', ">"}, {'?', "?"}, {'@', "@"}, {'[', "["},
     {'\\', "\\"}, {']', "]"}, {'^', "^"}, {'_', "_"}, {'`', "`"}, {'{', "{"}, {'|', "|"}, {'}', "}"},
     {'~', "~"}
   };
@@ -75,6 +75,12 @@ public class FontCharacter : MonoBehaviour {
 
   void Awake() {
     CacheDependencies();
+    SuppressSpriteWithNormalsUntilConfigured();
+  }
+
+  void OnEnable() {
+    CacheDependencies();
+    SuppressSpriteWithNormalsUntilConfigured();
   }
 
   void Reset() {
@@ -94,6 +100,9 @@ public class FontCharacter : MonoBehaviour {
   public void UpdateSprite() {
     CacheDependencies();
     if (IsReadyAndMatches(character, font)) {
+      if (spriteWithNormals != null && spriteWithNormals.DoNotRender) {
+        spriteWithNormals.SetDoNotRender(false);
+      }
       return;
     }
     if (!TryGetGlyphLabel(out var label)) {
@@ -153,6 +162,17 @@ public class FontCharacter : MonoBehaviour {
         spriteResolver.enabled) {
       spriteResolver.enabled = false;
     }
+  }
+
+  void SuppressSpriteWithNormalsUntilConfigured() {
+    // Prevent SpriteWithNormals' ManagedUpdate from resolving stale default values
+    // before FontCharacter.ApplySpriteWithNormals configures the correct glyph.
+    // Disabled FontText components are baked static labels; their serialized
+    // glyphs have no runtime generator that would clear this suppression.
+    if (!Application.isPlaying || spriteWithNormals == null) return;
+    if (parentFontText != null && !parentFontText.enabled) return;
+
+    spriteWithNormals.SetDoNotRender(true);
   }
 
   GlyphRendererState CaptureRendererState() {

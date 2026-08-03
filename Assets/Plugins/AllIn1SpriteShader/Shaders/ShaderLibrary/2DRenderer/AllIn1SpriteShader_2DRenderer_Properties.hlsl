@@ -10,7 +10,8 @@ CBUFFER_START(UnityPerMaterial)
 	half _NormalStrength;
 	half _NormalMapIsSrgb;
 	half4 _StylizedRimColor;
-	half _StylizedRimIntensity, _StylizedRimPower, _StylizedRimEnvironmentInfluence;
+	half _StylizedRimIntensity, _StylizedRimPower, _StylizedRimNormalWidth;
+	half _StylizedRimEnvironmentInfluence, _StylizedRimLightResponse;
 				
 	half _MinXUV, _MaxXUV, _MinYUV, _MaxYUV;
 			
@@ -146,6 +147,7 @@ CBUFFER_END
 
 half4 _EnvironmentKeyLightColor;
 half _EnvironmentKeyLightStrength;
+half _EnvironmentBaseLightStrength;
 
 			
 #define CUSTOM_TRANSFORM_TEX(uv, st) uv * st.xy + st.zw
@@ -159,7 +161,7 @@ DECLARE_TEX_AND_SAMPLER(_MainTex)
 DECLARE_TEX_AND_SAMPLER(_MaskTex)
 DECLARE_TEX_AND_SAMPLER(_NormalMap)
 
-half3 DecodeAllIn1SpriteNormal(half4 normalSample)
+half3 DecodeAllIn1SpriteNormalRaw(half4 normalSample)
 {
 	#if !defined(UNITY_COLORSPACE_GAMMA)
 	normalSample.rgb = lerp(
@@ -169,9 +171,31 @@ half3 DecodeAllIn1SpriteNormal(half4 normalSample)
 	);
 	#endif
 
-	half3 normalTS = UnpackNormal(normalSample);
+	return UnpackNormal(normalSample);
+}
+
+half3 DecodeAllIn1SpriteNormal(half4 normalSample)
+{
+	half3 normalTS = DecodeAllIn1SpriteNormalRaw(normalSample);
 	normalTS.xy *= _NormalStrength;
 	return normalTS;
+}
+
+half SampleAllIn1SpriteAlpha(
+	float2 uv,
+	float2 spriteUvMin,
+	float2 spriteUvMax,
+	float2 textureTexelSize
+)
+{
+	half insideSpriteRect =
+		step(spriteUvMin.x, uv.x) *
+		step(uv.x, spriteUvMax.x) *
+		step(spriteUvMin.y, uv.y) *
+		step(uv.y, spriteUvMax.y);
+	float2 inset = min(textureTexelSize * 0.5, (spriteUvMax - spriteUvMin) * 0.49);
+	float2 safeUv = clamp(uv, spriteUvMin + inset, spriteUvMax - inset);
+	return SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, safeUv).a * insideSpriteRect;
 }
             
 #if FADE_ON

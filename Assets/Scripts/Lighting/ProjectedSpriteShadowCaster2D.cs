@@ -140,11 +140,21 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   ) {
     configuredSources.Clear();
     animationController?.CopySpriteTargetsTo(configuredSources);
+    RemoveDisabledShadowSources();
     AddSupplementalSources(supplementalSources);
     proxiesDirty = true;
 
     if (started && isActiveAndEnabled) {
       TryRebuildProxies();
+    }
+  }
+
+  void RemoveDisabledShadowSources() {
+    for (var i = configuredSources.Count - 1; i >= 0; i--) {
+      var source = configuredSources[i];
+      if (source == null || !source.CastsProjectedShadow) {
+        configuredSources.RemoveAt(i);
+      }
     }
   }
 
@@ -200,7 +210,9 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
            sourceIndex < supplementalSourceBuffer.Count;
            sourceIndex++) {
         var source = supplementalSourceBuffer[sourceIndex];
-        if (source == null || !configuredSourceSet.Add(source)) {
+        if (source == null ||
+            !source.CastsProjectedShadow ||
+            !configuredSourceSet.Add(source)) {
           continue;
         }
 

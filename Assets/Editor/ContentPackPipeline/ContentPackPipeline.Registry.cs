@@ -193,18 +193,21 @@ public static partial class ContentPackPipeline {
   }
 
   [Serializable]
+  sealed class ExportedObjectiveMetadataJson {
+    public string id;
+    public string title;
+    public string description;
+    public string objective;
+  }
+
   sealed class ExportedObjectiveJson {
     public string id;
     public string title;
     public string description;
     public string objective;
     public List<string> spawns = new();
+    public List<string> enemyLevels = new();
     public List<string> respawns = new();
-  }
-
-  [Serializable]
-  sealed class ExportedObjectiveListJson {
-    public List<ExportedObjectiveJson> items = new();
   }
 
   static void AppendObjectiveSnapshots(
@@ -237,6 +240,7 @@ public static partial class ContentPackPipeline {
           snapshot.description,
           snapshot.objective,
           snapshot.spawns,
+          snapshot.enemyLevels,
           snapshot.respawns
         ));
       }
@@ -244,22 +248,100 @@ public static partial class ContentPackPipeline {
   }
 
   static List<ExportedObjectiveJson> ParseObjectiveSnapshots(string jsonText) {
-    if (string.IsNullOrWhiteSpace(jsonText)) {
-      return new List<ExportedObjectiveJson>();
+    var snapshots = new List<ExportedObjectiveJson>();
+    if (string.IsNullOrWhiteSpace(jsonText)) return snapshots;
+
+    var objectiveJsonObjects = ExtractTopLevelJsonObjects(jsonText);
+    for (var i = 0; i < objectiveJsonObjects.Count; i++) {
+      var objectiveJson = objectiveJsonObjects[i];
+      var metadata = JsonUtility.FromJson<ExportedObjectiveMetadataJson>(objectiveJson);
+      if (metadata == null) continue;
+
+      var snapshot = new ExportedObjectiveJson {
+        id = metadata.id,
+        title = metadata.title,
+        description = metadata.description,
+        objective = metadata.objective
+      };
+      AppendEnemyValueMap(objectiveJson, "spawns", snapshot.spawns);
+      AppendEnemyValueMap(objectiveJson, "enemyLevels", snapshot.enemyLevels);
+      AppendEnemyValueMap(objectiveJson, "respawns", snapshot.respawns);
+      snapshots.Add(snapshot);
     }
 
-    if (jsonText.StartsWith("[", StringComparison.Ordinal)) {
-      var wrappedJson = "{\"items\":" + jsonText + "}";
-      var wrapper = JsonUtility.FromJson<ExportedObjectiveListJson>(wrappedJson);
-      return wrapper != null && wrapper.items != null
-        ? wrapper.items
-        : new List<ExportedObjectiveJson>();
+    return snapshots;
+  }
+
+  static List<string> ExtractTopLevelJsonObjects(string jsonText) {
+    var objects = new List<string>();
+    if (string.IsNullOrWhiteSpace(jsonText)) return objects;
+
+    var objectStart = -1;
+    var objectDepth = 0;
+    var inString = false;
+    var escaped = false;
+    for (var i = 0; i < jsonText.Length; i++) {
+      var character = jsonText[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        }
+        else if (character == '\\') {
+          escaped = true;
+        }
+        else if (character == '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (character == '"') {
+        inString = true;
+        continue;
+      }
+      if (character == '{') {
+        if (objectDepth == 0) objectStart = i;
+        objectDepth += 1;
+        continue;
+      }
+      if (character != '}' || objectDepth <= 0) continue;
+
+      objectDepth -= 1;
+      if (objectDepth != 0 || objectStart < 0) continue;
+      objects.Add(jsonText.Substring(objectStart, i - objectStart + 1));
+      objectStart = -1;
     }
 
-    var snapshot = JsonUtility.FromJson<ExportedObjectiveJson>(jsonText);
-    return snapshot != null
-      ? new List<ExportedObjectiveJson> { snapshot }
-      : new List<ExportedObjectiveJson>();
+    return objects;
+  }
+
+  static void AppendEnemyValueMap(string json, string propertyName, List<string> output) {
+    if (string.IsNullOrWhiteSpace(json) ||
+        string.IsNullOrWhiteSpace(propertyName) ||
+        output == null) {
+      return;
+    }
+
+    var propertyMatch = Regex.Match(
+      json,
+      "\"" + Regex.Escape(propertyName) + "\"\\s*:\\s*\\{(?<body>[^{}]*)\\}",
+      RegexOptions.CultureInvariant
+    );
+    if (!propertyMatch.Success) return;
+
+    var entryMatches = Regex.Matches(
+      propertyMatch.Groups["body"].Value,
+      "\"(?<enemyType>(?:\\\\.|[^\"\\\\])+)\"\\s*:\\s*" +
+      "(?<value>[+-]?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)",
+      RegexOptions.CultureInvariant
+    );
+    var seenEnemyTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    for (var i = 0; i < entryMatches.Count; i++) {
+      var enemyType = Regex.Unescape(entryMatches[i].Groups["enemyType"].Value).Trim();
+      var value = entryMatches[i].Groups["value"].Value;
+      if (string.IsNullOrWhiteSpace(enemyType) || !seenEnemyTypes.Add(enemyType)) continue;
+      output.Add(enemyType + "_" + value);
+    }
   }
 
   static bool TryReadLocationSnapshot(PackDefinition pack, out LocationInfo locationInfo) {

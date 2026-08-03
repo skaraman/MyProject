@@ -202,6 +202,7 @@ public sealed class ActiveContentRegistry : ScriptableObject {
       source.description,
       NormalizeToken(source.objective),
       source.spawns,
+      source.enemyLevels,
       source.respawns
     );
   }
@@ -375,6 +376,7 @@ public sealed class ContentObjectiveDefinition {
   public string description;
   public string objective;
   public List<string> spawns = new();
+  public List<string> enemyLevels = new();
   public List<string> respawns = new();
 
   public ContentObjectiveDefinition() {
@@ -387,6 +389,7 @@ public sealed class ContentObjectiveDefinition {
     string description,
     string objective,
     IList<string> spawns,
+    IList<string> enemyLevels,
     IList<string> respawns
   ) {
     this.packId = string.IsNullOrWhiteSpace(packId) ? "" : packId.Trim();
@@ -395,6 +398,7 @@ public sealed class ContentObjectiveDefinition {
     this.description = string.IsNullOrWhiteSpace(description) ? "" : description.Trim();
     this.objective = string.IsNullOrWhiteSpace(objective) ? "" : objective.Trim();
     CopyRules(this.spawns, spawns);
+    CopyRules(this.enemyLevels, enemyLevels);
     CopyRules(this.respawns, respawns);
   }
 

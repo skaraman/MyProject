@@ -601,29 +601,86 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
 	#if STYLIZEDRIM_ON
+	float2 spriteUvA = _SpriteUvRect.xy;
+	float2 spriteUvB = _SpriteUvRect.xy + _SpriteUvRect.zw;
+	float2 spriteUvMin = min(spriteUvA, spriteUvB);
+	float2 spriteUvMax = max(spriteUvA, spriteUvB);
 	half3 stylizedRimNormal = normalize(
-		DecodeAllIn1SpriteNormal(ALLIN1_SAMPLE_TEXTURE_2D(_NormalMap, i.uv))
+		DecodeAllIn1SpriteNormalRaw(ALLIN1_SAMPLE_TEXTURE_2D(_NormalMap, i.uv))
 	);
-	half stylizedRim = pow(
-		saturate(length(stylizedRimNormal.xy)),
-		max(_StylizedRimPower, 0.0001)
+	half2 fakeTopRightNormalDirection = normalize(half2(0.65, 0.75));
+	half topRightNormalAmount = smoothstep(
+		0.05,
+		0.65,
+		dot(stylizedRimNormal.xy, fakeTopRightNormalDirection)
 	);
+	float minimumRimWidth = max(_StylizedRimPower, 0.5);
+	float normalRimWidth = minimumRimWidth + max(_StylizedRimNormalWidth, 0.0);
+	float2 uvRightPerPixel = ddx(i.uv);
+	float2 uvUpPerPixel = -ddy(i.uv);
+	half minimumAlphaRight = SampleAllIn1SpriteAlpha(
+		i.uv + (uvRightPerPixel * minimumRimWidth),
+		spriteUvMin,
+		spriteUvMax,
+		texelSize.xy
+	);
+	half minimumAlphaUp = SampleAllIn1SpriteAlpha(
+		i.uv + (uvUpPerPixel * minimumRimWidth),
+		spriteUvMin,
+		spriteUvMax,
+		texelSize.xy
+	);
+	half normalAlphaRight = SampleAllIn1SpriteAlpha(
+		i.uv + (uvRightPerPixel * normalRimWidth),
+		spriteUvMin,
+		spriteUvMax,
+		texelSize.xy
+	);
+	half normalAlphaUp = SampleAllIn1SpriteAlpha(
+		i.uv + (uvUpPerPixel * normalRimWidth),
+		spriteUvMin,
+		spriteUvMax,
+		texelSize.xy
+	);
+	half minimumRim = saturate(
+		(originalAlpha - min(minimumAlphaRight, minimumAlphaUp)) * 4.0
+	);
+	half normalDirectedRim = saturate(
+		(originalAlpha - min(normalAlphaRight, normalAlphaUp)) * 4.0
+	) * topRightNormalAmount;
+	half stylizedRim = max(minimumRim, normalDirectedRim);
+	half shinyFactor = lerp(0.75, 1.5, topRightNormalAmount);
+
 	half hasEnvironmentKeyLight = step(0.0001, _EnvironmentKeyLightStrength);
 	half environmentInfluence = saturate(_StylizedRimEnvironmentInfluence) * hasEnvironmentKeyLight;
+	half environmentColorPeak = max(
+		max(_EnvironmentKeyLightColor.r, _EnvironmentKeyLightColor.g),
+		max(_EnvironmentKeyLightColor.b, 0.0001)
+	);
+	half3 brightEnvironmentColor = _EnvironmentKeyLightColor.rgb / environmentColorPeak;
 	half3 stylizedRimColor = _StylizedRimColor.rgb * lerp(
 		half3(1.0, 1.0, 1.0),
-		_EnvironmentKeyLightColor.rgb,
+		brightEnvironmentColor,
 		environmentInfluence
 	);
-	half stylizedRimStrength = lerp(
-		1.0,
-		max(_EnvironmentKeyLightStrength, 0.15),
-		environmentInfluence
+	half3 inferredLight = lightResult / max(
+		surfaceData.albedo,
+		half3(0.08, 0.08, 0.08)
 	);
+	half inferredLightStrength = max(
+		max(inferredLight.r, inferredLight.g),
+		inferredLight.b
+	);
+	half nearbyLightStrength = saturate(
+		max(inferredLightStrength - _EnvironmentBaseLightStrength, 0.0) * 0.75
+	);
+	half responsiveRimIntensity =
+		_StylizedRimIntensity +
+		(nearbyLightStrength * _StylizedRimLightResponse);
 	col.rgb += stylizedRimColor
 		* stylizedRim
-		* _StylizedRimIntensity
-		* stylizedRimStrength
+		* responsiveRimIntensity
+		* shinyFactor
 		* col.a;
 	#endif
 

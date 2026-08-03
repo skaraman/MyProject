@@ -70,7 +70,12 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
   void OnPreprocessTexture() {
     var importer = assetImporter as TextureImporter;
     if (importer == null) return;
-    if (!TryBuildImportDefinition(assetPath, out var definition)) return;
+    if (!TryBuildImportDefinition(assetPath, out var definition)) {
+      if (SpriteStreamingTextureImportPolicy.IsPairedNormalAtlasPath(assetPath)) {
+        SpriteStreamingTextureImportPolicy.Apply(importer, forceMultipleSpriteImportMode: false);
+      }
+      return;
+    }
 
     SpriteStreamingTextureImportPolicy.Apply(importer, definition.sliceAtlas);
     if (definition.hasImporterSnapshot) {
@@ -136,7 +141,11 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       if (!deletedAssetPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
       var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.ResolveRuntimeMetadataAssetPath(deletedAssetPath);
       if (string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) continue;
-      InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".png"));
+      var colorAtlasAssetPath = Path.ChangeExtension(runtimeMetadataAssetPath, ".png");
+      InvalidateSiblingGeneratedAtlas(colorAtlasAssetPath);
+      if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAtlasAssetPath, out var normalAtlasAssetPath)) {
+        InvalidateSiblingGeneratedAtlas(normalAtlasAssetPath);
+      }
       InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".jpg"));
       InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".jpeg"));
     }
@@ -199,7 +208,13 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       return false;
     }
 
-    var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.BuildRuntimeMetadataAssetPath(normalizedAtlasAssetPath);
+    var metadataOwnerAtlasPath = normalizedAtlasAssetPath;
+    if (SpriteStreamingTextureImportPolicy.IsPairedNormalAtlasPath(normalizedAtlasAssetPath) &&
+        SpriteStreamingTextureImportPolicy.TryGetPairedColorAtlasPath(normalizedAtlasAssetPath, out var pairedColorAtlasPath)) {
+      metadataOwnerAtlasPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(pairedColorAtlasPath);
+    }
+
+    var runtimeMetadataAssetPath = TrimmedAtlasExporterWindow.BuildRuntimeMetadataAssetPath(metadataOwnerAtlasPath);
     if (string.IsNullOrWhiteSpace(runtimeMetadataAssetPath)) return false;
 
     if (GeneratedAtlasImportMetadataStore.TryRead(normalizedAtlasAssetPath, out var importerJson)) {
@@ -208,7 +223,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       }
     }
 
-    var editorMetadataAssetPath = TrimmedAtlasExporterWindow.BuildEditorMetadataAssetPath(normalizedAtlasAssetPath);
+    var editorMetadataAssetPath = TrimmedAtlasExporterWindow.BuildEditorMetadataAssetPath(metadataOwnerAtlasPath);
     return TryBuildImportDefinitionFromMetadataJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, editorMetadataAssetPath, out definition) ||
            TryBuildImportDefinitionFromMetadataJson(normalizedAtlasAssetPath, runtimeMetadataAssetPath, runtimeMetadataAssetPath, out definition);
   }

@@ -87,6 +87,33 @@ public partial class SpriteWithNormals {
     }
   }
 
+  readonly struct ConventionNormalCacheKey : IEquatable<ConventionNormalCacheKey> {
+    public readonly string colorAtlasAddress;
+    public readonly string colorSpriteName;
+
+    public ConventionNormalCacheKey(string colorAtlasAddress, string colorSpriteName) {
+      this.colorAtlasAddress = colorAtlasAddress ?? "";
+      this.colorSpriteName = colorSpriteName ?? "";
+    }
+
+    public bool Equals(ConventionNormalCacheKey other) {
+      return string.Equals(colorAtlasAddress, other.colorAtlasAddress, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(colorSpriteName, other.colorSpriteName, StringComparison.Ordinal);
+    }
+
+    public override bool Equals(object obj) {
+      return obj is ConventionNormalCacheKey other && Equals(other);
+    }
+
+    public override int GetHashCode() {
+      unchecked {
+        var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(colorAtlasAddress);
+        hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(colorSpriteName);
+        return hash;
+      }
+    }
+  }
+
   readonly struct PaddedSpriteCacheKey : IEquatable<PaddedSpriteCacheKey> {
     public readonly ulong sourceSpriteId;
     public readonly int marginX;

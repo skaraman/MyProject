@@ -31,6 +31,7 @@ public partial class SingleSceneManager {
   };
 
   void ApplyGameplayStateUnderBlack() {
+    using var profilerScope = ApplyGameplayStateUnderBlackProfilerMarker.Auto();
     pendingRevealSection = Section.Gameplay;
     SetLoadingRootActive(true);
     InvalidateCachedPlayerGearController("apply_gameplay_state_under_black");

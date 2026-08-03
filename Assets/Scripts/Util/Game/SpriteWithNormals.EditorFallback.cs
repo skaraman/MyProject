@@ -173,6 +173,9 @@ public partial class SpriteWithNormals {
     editorRuntimeAtlasAddressIndex.Clear();
     editorRuntimeAtlasAddressIndexBuilt = false;
     s_AnimationAtlasAddressCache.Clear();
+    s_ConventionNormalAddressCache.Clear();
+    s_ConventionNormalAddressCacheInsertionOrder.Clear();
+    s_ConventionNormalAtlasSpriteMetadata.Clear();
   }
 
   static bool IsEditorRuntimeAtlasAddressAvailable(string runtimeAddress) {

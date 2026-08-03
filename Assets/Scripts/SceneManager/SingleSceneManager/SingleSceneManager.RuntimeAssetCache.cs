@@ -166,10 +166,15 @@ public partial class SingleSceneManager {
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
     var pinBudget = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetPlayerAddresses, 1);
+    // The full persistent plan is only useful while it fits in the owner pin
+    // budget. Stop at the first address that exceeds it; otherwise a large
+    // animation graph is exhaustively resolved just to take the same dynamic
+    // fallback path below.
+    var collectionLimit = pinBudget < int.MaxValue ? pinBudget + 1 : int.MaxValue;
     var collectedCount = player.CollectPersistentSkinStartupAddresses(
       persistentAtlasAddressScratch,
       persistentAtlasSeenAddressScratch,
-      int.MaxValue
+      collectionLimit
     );
     if (collectedCount <= 0 || persistentAtlasAddressScratch.Count <= 0) {
       TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerAppearanceAtlasPinOwnerId);
@@ -260,10 +265,13 @@ public partial class SingleSceneManager {
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
     var maxPinnedAddresses = Math.Max(SpriteStreamingRuntimeSettings.PinBudgetEffectAddresses, 1);
+    // As with the player skin plan, only collect enough to determine whether
+    // complete pin coverage is possible.
+    var collectionLimit = maxPinnedAddresses < int.MaxValue ? maxPinnedAddresses + 1 : int.MaxValue;
     var collectedCount = player.CollectPersistentEffectStartupAddresses(
       persistentAtlasAddressScratch,
       persistentAtlasSeenAddressScratch,
-      int.MaxValue
+      collectionLimit
     );
     if (collectedCount <= 0 || persistentAtlasAddressScratch.Count <= 0) {
       TextureResidencyCache.ReleaseOwnerPins(PersistentPlayerEffectAtlasPinOwnerId);

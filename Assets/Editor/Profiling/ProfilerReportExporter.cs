@@ -12,6 +12,12 @@ public static class ProfilerReportExporter {
   const string OutputFolderName = "ProfilerCaptures";
   const string LatestReportFileName = "latest.csv";
 
+  struct FrameTiming {
+    public double startTimeMs;
+    public double gpuTimeMs;
+    public bool hasGpuTiming;
+  }
+
   [MenuItem("Tools/Diagnostics/Export Selected Profiler Frame for Codex")]
   static void ExportSelectedProfilerFrame() {
     var profilerWindow = EditorWindow.GetWindow<ProfilerWindow>();
@@ -71,7 +77,10 @@ public static class ProfilerReportExporter {
       return;
     }
 
-    ExportFrameRange(firstFrameIndex, lastFrameIndex);
+    // A whole profiler buffer can contain millions of individual samples. Keep this
+    // export compact enough to analyze as a set; use the selected/worst-frame commands
+    // when the aggregate points to a sample that needs object-level attribution.
+    ExportFrameRange(firstFrameIndex, lastFrameIndex, mergeSamples: true);
   }
 
   static bool TryGetPlayerLoopTimeMs(int frameIndex, out double playerLoopTimeMs) {
@@ -104,14 +113,14 @@ public static class ProfilerReportExporter {
   }
 
   static void ExportFrame(int frameIndex) {
-    ExportFrameRange(frameIndex, frameIndex);
+    ExportFrameRange(frameIndex, frameIndex, mergeSamples: false);
   }
 
-  static void ExportFrameRange(int startFrameIndex, int endFrameIndex) {
+  static void ExportFrameRange(int startFrameIndex, int endFrameIndex, bool mergeSamples) {
     var outputPath = GetOutputPath();
     Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
 
-    var exportedThreadCount = WriteFrameReport(startFrameIndex, endFrameIndex, outputPath);
+    var exportedThreadCount = WriteFrameReport(startFrameIndex, endFrameIndex, mergeSamples, outputPath);
     if (exportedThreadCount <= 0) {
       EditorUtility.DisplayDialog(
         "Profiler Export",
@@ -148,24 +157,33 @@ public static class ProfilerReportExporter {
     }
   }
 
-  static int WriteFrameReport(int startFrameIndex, int endFrameIndex, string outputPath) {
+  static int WriteFrameReport(
+    int startFrameIndex,
+    int endFrameIndex,
+    bool mergeSamples,
+    string outputPath
+  ) {
     var exportedThreadCount = 0;
 
     using (var writer = new StreamWriter(outputPath, false, new UTF8Encoding(false))) {
       WriteHeader(writer);
 
       for (var frameIndex = startFrameIndex; frameIndex <= endFrameIndex; frameIndex++) {
+        TryGetFrameTiming(frameIndex, out var timing);
+
         for (var threadIndex = 0; ; threadIndex++) {
           using (var frameData = ProfilerDriver.GetHierarchyFrameDataView(
             frameIndex,
             threadIndex,
-            HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName,
+            mergeSamples
+              ? HierarchyFrameDataView.ViewModes.MergeSamplesWithTheSameName
+              : HierarchyFrameDataView.ViewModes.Default,
             HierarchyFrameDataView.columnTotalTime,
             false
           )) {
             if (frameData == null || !frameData.valid) break;
 
-            WriteThreadRows(writer, frameData);
+            WriteThreadRows(writer, frameData, threadIndex, timing, mergeSamples);
             exportedThreadCount++;
           }
         }
@@ -177,20 +195,27 @@ public static class ProfilerReportExporter {
 
   static void WriteHeader(StreamWriter writer) {
     writer.WriteLine(
-      "frame_index,frame_display_index,frame_time_ms,frame_fps," +
-      "thread_group,thread_name,depth,path,name,object_name," +
+      "frame_index,frame_display_index,frame_time_ms,frame_fps,frame_start_ms," +
+      "frame_gpu_ms,has_gpu_timing,thread_index,samples_merged,thread_group,thread_name," +
+      "depth,path,name,object_name," +
       "total_ms,self_ms,calls,gc_alloc_bytes"
     );
   }
 
-  static void WriteThreadRows(StreamWriter writer, HierarchyFrameDataView frameData) {
+  static void WriteThreadRows(
+    StreamWriter writer,
+    HierarchyFrameDataView frameData,
+    int threadIndex,
+    FrameTiming timing,
+    bool samplesMerged
+  ) {
     var pendingItems = new Stack<int>();
     var childItems = new List<int>();
     pendingItems.Push(frameData.GetRootItemID());
 
     while (pendingItems.Count > 0) {
       var itemId = pendingItems.Pop();
-      WriteItemRow(writer, frameData, itemId);
+      WriteItemRow(writer, frameData, itemId, threadIndex, timing, samplesMerged);
 
       childItems.Clear();
       frameData.GetItemChildren(itemId, childItems);
@@ -200,11 +225,23 @@ public static class ProfilerReportExporter {
     }
   }
 
-  static void WriteItemRow(StreamWriter writer, HierarchyFrameDataView frameData, int itemId) {
+  static void WriteItemRow(
+    StreamWriter writer,
+    HierarchyFrameDataView frameData,
+    int itemId,
+    int threadIndex,
+    FrameTiming timing,
+    bool samplesMerged
+  ) {
     WriteInteger(writer, frameData.frameIndex);
     WriteInteger(writer, frameData.frameIndex + 1);
     WriteNumber(writer, frameData.frameTimeMs);
     WriteNumber(writer, frameData.frameFps);
+    WriteNumber(writer, timing.startTimeMs);
+    WriteNumber(writer, timing.gpuTimeMs);
+    WriteInteger(writer, timing.hasGpuTiming ? 1 : 0);
+    WriteInteger(writer, threadIndex);
+    WriteInteger(writer, samplesMerged ? 1 : 0);
     WriteText(writer, frameData.threadGroupName);
     WriteText(writer, frameData.threadName);
     WriteInteger(writer, frameData.GetItemDepth(itemId));
@@ -215,6 +252,18 @@ public static class ProfilerReportExporter {
     WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnSelfTime));
     WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnCalls));
     WriteNumber(writer, frameData.GetItemColumnDataAsDouble(itemId, HierarchyFrameDataView.columnGcMemory), true);
+  }
+
+  static void TryGetFrameTiming(int frameIndex, out FrameTiming timing) {
+    timing = default(FrameTiming);
+
+    using (var frameData = ProfilerDriver.GetRawFrameDataView(frameIndex, 0)) {
+      if (frameData == null || !frameData.valid) return;
+
+      timing.startTimeMs = frameData.frameStartTimeMs;
+      timing.gpuTimeMs = frameData.frameGpuTimeMs;
+      timing.hasGpuTiming = timing.gpuTimeMs > 0d;
+    }
   }
 
   static void WriteText(StreamWriter writer, string value) {

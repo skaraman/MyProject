@@ -626,7 +626,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     if (mainMaskSprite != null) {
       string spritePath = AssetDatabase.GetAssetPath(mainMaskSprite);
       if (!string.IsNullOrEmpty(spritePath) && spritePath.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase)) {
-        string normalPath = spritePath.Substring(0, spritePath.Length - 4) + ".jpg";
+        string normalPath = spritePath.Substring(0, spritePath.Length - 4) + "N.png";
         
         Sprite normalSprite = null;
         var allAssets = AssetDatabase.LoadAllAssetsAtPath(normalPath);

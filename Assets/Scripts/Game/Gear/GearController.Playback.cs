@@ -123,7 +123,12 @@ public partial class GearController {
     }
     var spawnPosition = ResolveProjectileSpawnPosition();
     var direction = ResolveProjectileDirection();
-    projectileManager.SpawnProjectile(projectileKey, spawnPosition, direction);
+    projectileManager.SpawnProjectile(
+      projectileKey,
+      spawnPosition,
+      direction,
+      actorOwner: transform
+    );
   }
 
   void PrepareEffectVisualForPlayback() {

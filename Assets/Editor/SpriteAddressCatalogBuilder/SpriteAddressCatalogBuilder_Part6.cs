@@ -157,6 +157,15 @@ public static partial class SpriteIndexBuilder {
 
     var colorAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.assetPath);
     var normalAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.normalAssetPath);
+    if (string.IsNullOrWhiteSpace(source.normalAssetPath) || IsLegacyJpegSpriteAddress(normalAssetPath)) {
+      if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAssetPath, out var pairedNormalAssetPath) &&
+          File.Exists(ContentPackPipeline.GetPhysicalPath(pairedNormalAssetPath))) {
+        normalAssetPath = pairedNormalAssetPath;
+      }
+      else if (IsLegacyJpegSpriteAddress(normalAssetPath)) {
+        normalAssetPath = "";
+      }
+    }
     if (string.IsNullOrWhiteSpace(colorAssetPath) || !File.Exists(ContentPackPipeline.GetPhysicalPath(colorAssetPath))) {
       state?.errors.Add("Sprite sheet source texture was not found. manifest='" + manifestPath + "' asset='" + colorAssetPath + "'");
       return;
@@ -202,8 +211,15 @@ public static partial class SpriteIndexBuilder {
       ParseLabel(spriteName, out _, out var frame);
       var colorAddress = SpriteSliceAddressUtility.BuildSliceAddress(colorAssetPath, spriteName);
       var normalAddress = "";
-      if (!string.IsNullOrWhiteSpace(normalAssetPath) && normalSpriteNames.Contains(spriteName)) {
-        normalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAssetPath, spriteName);
+      if (!string.IsNullOrWhiteSpace(normalAssetPath)) {
+        var normalSpriteName = normalSpriteNames.Contains(spriteName)
+          ? spriteName
+          : colorSpriteNames.Count == 1 && normalSpriteNames.Count == 1
+            ? normalSpriteNames.First()
+            : "";
+        if (!string.IsNullOrWhiteSpace(normalSpriteName)) {
+          normalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAssetPath, normalSpriteName);
+        }
       }
 
       if (!ValidateRuntimeAtlasAddress(state, colorAddress, libraryName + "/" + category + ":" + spriteName + " (sheet color)", recordError: true)) {
@@ -634,8 +650,7 @@ public static partial class SpriteIndexBuilder {
     }
     else if (!string.IsNullOrWhiteSpace(context) &&
              context.Contains("(normal)", StringComparison.OrdinalIgnoreCase) &&
-             (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
-              string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase))) {
+             IsConventionNormalPngAssetPath(atlasPath)) {
       score += 2;
     }
 
@@ -664,6 +679,31 @@ public static partial class SpriteIndexBuilder {
       return false;
     }
 
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorAddress, out var colorAtlasPath, out var spriteName) &&
+        SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAtlasPath, out var normalAtlasPath)) {
+      normalAtlasPath = NormalizePath(normalAtlasPath);
+      if (state.activeTextureAssetPaths.Contains(normalAtlasPath)) {
+        var normalSpriteNames = ReadSpriteNamesFromTextureMeta(normalAtlasPath);
+        var normalSpriteName = spriteName;
+        if (!normalSpriteNames.Contains(normalSpriteName, StringComparer.Ordinal)) {
+          var singleSpriteName = Path.GetFileNameWithoutExtension(normalAtlasPath);
+          if (normalSpriteNames.Count == 0 ||
+              (normalSpriteNames.Count == 1 && string.Equals(normalSpriteNames[0], singleSpriteName, StringComparison.Ordinal))) {
+            normalSpriteName = singleSpriteName;
+          }
+          else {
+            state.derivedNormalAtlasPathByColorAtlas[colorAddress] = "";
+            return false;
+          }
+        }
+
+        var conventionNormalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAtlasPath, normalSpriteName);
+        state.derivedNormalAtlasPathByColorAtlas[colorAddress] = conventionNormalAddress;
+        normalAddress = conventionNormalAddress;
+        return true;
+      }
+    }
+
     // Heuristic: replace "/Color/" or "_Color" with "/Normal/" or "_Normal" in address
     string candidate = null;
     if (colorAddress.Contains("/Color/", StringComparison.OrdinalIgnoreCase)) {
@@ -687,6 +727,23 @@ public static partial class SpriteIndexBuilder {
 
     state.derivedNormalAtlasPathByColorAtlas[colorAddress] = "";
     return false;
+  }
+
+  static bool IsLegacyJpegSpriteAddress(string spriteAddress) {
+    if (string.IsNullOrWhiteSpace(spriteAddress)) return false;
+    var atlasPath = spriteAddress;
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(spriteAddress, out var parsedAtlasPath, out _)) {
+      atlasPath = parsedAtlasPath;
+    }
+    var extension = Path.GetExtension(atlasPath);
+    return string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase);
+  }
+
+  static bool IsConventionNormalPngAssetPath(string assetPath) {
+    return !string.IsNullOrWhiteSpace(assetPath) &&
+           string.Equals(Path.GetExtension(assetPath), ".png", StringComparison.OrdinalIgnoreCase) &&
+           Path.GetFileNameWithoutExtension(assetPath).EndsWith("N", StringComparison.OrdinalIgnoreCase);
   }
 
 }

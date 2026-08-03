@@ -1458,6 +1458,9 @@ public partial class SingleSceneManager {
     AppendLoadFlowBool(builder, "allow_hard_bypass", request.allowHardTimeoutBypass);
     AppendLoadFlowBool(builder, "allow_critical_soft_timeout", request.allowCriticalReadySoftTimeout);
     AppendLoadFlowBool(builder, "player_present", playerController != null);
+    AppendLoadFlowInt(builder, "player_warm_frames", request.playerWarmFrames);
+    AppendLoadFlowInt(builder, "enemy_warm_frames", request.enemyWarmFrames);
+    AppendLoadFlowInt(builder, "effect_warm_frames", request.effectWarmFrames);
     AppendLoadFlowInt(builder, "active_enemies", activeEnemies != null ? activeEnemies.Length : 0);
     AppendLoadFlowInt(builder, "critical_enemies", request.criticalEnemyControllers != null ? request.criticalEnemyControllers.Length : 0);
     AppendLoadFlowInt(builder, "enemy_archetypes", request.enemyArchetypePrefabsByType != null ? request.enemyArchetypePrefabsByType.Count : 0);

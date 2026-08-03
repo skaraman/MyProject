@@ -7,6 +7,9 @@ using UnityEngine;
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Collider2D))]
 public class HitBox2D : MonoBehaviour {
+  const string AreaStatName = "AREA";
+  const int AreaOverlapCapacity = 128;
+
   [Tooltip("If true, ignores contacts with colliders owned by the same actor (prevents self-hits).")]
   public bool ignoreSameRoot = true;
 
@@ -20,15 +23,32 @@ public class HitBox2D : MonoBehaviour {
   public string hitId;
 
   private readonly HashSet<ulong> hitHurtBoxIds = new();
+  private readonly HashSet<ulong> areaHurtBoxIds = new();
   private readonly List<Collider2D> registeredColliders = new(4);
+  private readonly Collider2D[] areaOverlapResults = new Collider2D[AreaOverlapCapacity];
   private float nextHitTime;
   private Transform actorOwner;
+  private Collider2D ownCollider;
   public Transform ActorOwner => actorOwner;
   public bool IsEnemyOwned { get; private set; }
+
+  public void SetActorOwner(Transform owner) {
+    if (owner == null) {
+      actorOwner = ResolveActorOwner(transform, out var isEnemy);
+      IsEnemyOwned = isEnemy;
+      return;
+    }
+
+    actorOwner = owner;
+    IsEnemyOwned = owner.GetComponentInParent<EnemyController>() != null ||
+                   owner.GetComponentInParent<EnemyInfo>() != null ||
+                   owner.GetComponentInChildren<EnemyInfo>() != null;
+  }
 
   void Awake() {
     actorOwner = ResolveActorOwner(transform, out var isEnemy);
     IsEnemyOwned = isEnemy;
+    ownCollider = GetComponent<Collider2D>();
     RegisterOwnedColliders();
   }
 
@@ -62,6 +82,7 @@ public class HitBox2D : MonoBehaviour {
 
   void OnEnable() {
     hitHurtBoxIds.Clear();
+    areaHurtBoxIds.Clear();
     nextHitTime = 0f;
     RegisterOwnedColliders();
   }
@@ -88,6 +109,7 @@ public class HitBox2D : MonoBehaviour {
 
   void OnCollisionEnter2D(Collision2D collision) {
     HandleContact(collision.collider);
+    GlobalCollisionCooldown.TryApply(collision);
   }
 
   private void HandleContact(Collider2D other) {
@@ -95,10 +117,27 @@ public class HitBox2D : MonoBehaviour {
   }
 
   public bool TryHit(Collider2D other) {
+    if (!HurtBox2D.TryResolve(other, out var directHurtBox) || directHurtBox == null) {
+      return false;
+    }
+
+    if (!TryHitCore(other, bypassCooldown: false)) {
+      return false;
+    }
+
+    TryHitNearbyHurtBoxes(ObjectEntityId.GetRawValue(directHurtBox));
+    return true;
+  }
+
+  private bool TryHitCore(Collider2D other, bool bypassCooldown) {
     if (!isActiveAndEnabled || other == null) return false;
     if (ignoreSameRoot && IsOwnedBySameActor(other)) return false;
-    var now = TimeScale.GetNow(this);
-    if (hitCooldown > 0f && now < nextHitTime) return false;
+
+    var now = 0f;
+    if (!bypassCooldown && hitCooldown > 0f) {
+      now = TimeScale.GetNow(this);
+      if (now < nextHitTime) return false;
+    }
 
     if (!HurtBox2D.TryResolve(other, out var hurtBox)) return false;
     if (!hurtBox.isActiveAndEnabled) return false;
@@ -115,11 +154,79 @@ public class HitBox2D : MonoBehaviour {
       hitHurtBoxIds.Add(hurtBoxId);
     }
 
-    if (hitCooldown > 0f) {
+    if (!bypassCooldown && hitCooldown > 0f) {
       nextHitTime = now + hitCooldown;
     }
 
     return true;
+  }
+
+  private void TryHitNearbyHurtBoxes(ulong directHurtBoxId) {
+    if (!isActiveAndEnabled || ownCollider == null || !ownCollider.enabled) {
+      return;
+    }
+
+    var bounds = ownCollider.bounds;
+    var area = Mathf.Max(ResolveArea(), 0f);
+    var querySize = new Vector2(
+      Mathf.Max(bounds.size.x + area, 0.01f),
+      Mathf.Max(bounds.size.y + area, 0.01f)
+    );
+
+    // Keep the direct target out of the secondary pass even when this hitbox
+    // intentionally allows the same HurtBox to be hit again later.
+    areaHurtBoxIds.Clear();
+    if (directHurtBoxId != 0UL) {
+      areaHurtBoxIds.Add(directHurtBoxId);
+    }
+
+    var overlapCount = Physics2D.OverlapBox(
+      bounds.center,
+      querySize,
+      0f,
+      ContactFilter2D.noFilter,
+      areaOverlapResults
+    );
+    for (var i = 0; i < overlapCount; i++) {
+      var other = areaOverlapResults[i];
+      areaOverlapResults[i] = null;
+      if (other == null || !HurtBox2D.TryResolve(other, out var hurtBox) || hurtBox == null) {
+        continue;
+      }
+
+      var hurtBoxId = ObjectEntityId.GetRawValue(hurtBox);
+      if (!areaHurtBoxIds.Add(hurtBoxId)) {
+        continue;
+      }
+
+      // The first contact already established the attack cooldown. Additional
+      // hurt boxes in this same area pass must still receive the hit.
+      TryHitCore(other, bypassCooldown: true);
+    }
+
+    areaHurtBoxIds.Clear();
+  }
+
+  private float ResolveArea() {
+    if (actorOwner == null) {
+      return 0f;
+    }
+
+    var enemyInfo = actorOwner.GetComponent<EnemyInfo>() ??
+                    actorOwner.GetComponentInParent<EnemyInfo>() ??
+                    actorOwner.GetComponentInChildren<EnemyInfo>();
+    if (enemyInfo != null) {
+      return enemyInfo.GetResolvedEngineStat(AreaStatName, 0f);
+    }
+
+    if (actorOwner.GetComponentInParent<GearController>() == null ||
+        AllStatValues.Esperanza == null ||
+        !AllStatValues.Esperanza.TryGetValue(AreaStatName, out var areaStat) ||
+        areaStat == null) {
+      return 0f;
+    }
+
+    return areaStat.ToSingleClamped();
   }
 
   private bool IsOwnedBySameActor(Collider2D other) {

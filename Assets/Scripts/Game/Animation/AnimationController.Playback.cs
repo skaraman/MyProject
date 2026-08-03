@@ -390,7 +390,7 @@ public partial class AnimationController {
     activeSpriteCategory = normalizedCategory;
     foreach (var target in spriteTargets) {
       if (target == null) continue;
-      target.SetAnimation(normalizedCategory);
+      target.SetAnimation(normalizedCategory, currentFrame);
     }
     InvalidateSpriteFrameCache();
   }

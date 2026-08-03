@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System.Linq;
 using AllIn1SpriteShader;
 using UnityEditor;
@@ -164,7 +164,7 @@ namespace AllIn1SpriteShader {
       if (enabledProperty == null) return;
 
       var enabled = targetMat.IsKeywordEnabled("STYLIZEDRIM_ON");
-      var nextEnabled = EditorGUILayout.Toggle(new GUIContent("Stylized Normal Rim"), enabled);
+      var nextEnabled = EditorGUILayout.Toggle(new GUIContent("Fake Top-Right Rim"), enabled);
       if (nextEnabled != enabled) {
         enabledProperty.floatValue = nextEnabled ? 1f : 0f;
         if (nextEnabled) targetMat.EnableKeyword("STYLIZEDRIM_ON");
@@ -176,7 +176,9 @@ namespace AllIn1SpriteShader {
       DrawNamedProperty("_StylizedRimColor");
       DrawNamedProperty("_StylizedRimIntensity");
       DrawNamedProperty("_StylizedRimPower");
+      DrawNamedProperty("_StylizedRimNormalWidth");
       DrawNamedProperty("_StylizedRimEnvironmentInfluence");
+      DrawNamedProperty("_StylizedRimLightResponse");
     }
 
     private void DrawNamedProperty(string propertyName) {

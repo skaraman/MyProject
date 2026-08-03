@@ -101,16 +101,32 @@ public static class SpriteStreamingTextureImportPolicy {
   }
 
   public static bool IsPairedNormalAtlasPath(string assetPath) {
-    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+    if (!TryGetPairedColorAtlasPath(assetPath, out var pairedColorPath)) return false;
+    return File.Exists(pairedColorPath);
+  }
 
-    var extension = Path.GetExtension(assetPath);
-    if (!string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase)) {
-      return false;
-    }
+  public static bool TryGetPairedNormalAtlasPath(string colorAssetPath, out string normalAssetPath) {
+    normalAssetPath = "";
+    if (string.IsNullOrWhiteSpace(colorAssetPath) ||
+        !string.Equals(Path.GetExtension(colorAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) return false;
 
-    var pairedColorPath = Path.ChangeExtension(assetPath, ".png");
-    return !string.IsNullOrWhiteSpace(pairedColorPath) && File.Exists(pairedColorPath);
+    var colorStem = Path.GetFileNameWithoutExtension(colorAssetPath);
+    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal)) return false;
+
+    normalAssetPath = colorAssetPath.Substring(0, colorAssetPath.Length - 4) + "N.png";
+    return true;
+  }
+
+  public static bool TryGetPairedColorAtlasPath(string normalAssetPath, out string colorAssetPath) {
+    colorAssetPath = "";
+    if (string.IsNullOrWhiteSpace(normalAssetPath) ||
+        !string.Equals(Path.GetExtension(normalAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) return false;
+
+    var normalStem = Path.GetFileNameWithoutExtension(normalAssetPath);
+    if (string.IsNullOrWhiteSpace(normalStem) || !normalStem.EndsWith("N", StringComparison.Ordinal)) return false;
+
+    colorAssetPath = normalAssetPath.Substring(0, normalAssetPath.Length - "N.png".Length) + ".png";
+    return true;
   }
 
   static bool TryResetTransparentSpritePlatformFormat(TextureImporter importer, string platformName, TextureImporterPlatformSettings settings) {

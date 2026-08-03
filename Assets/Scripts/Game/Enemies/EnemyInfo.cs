@@ -5,6 +5,7 @@ using UnityEngine;
 public class EnemyInfo : MonoBehaviour {
   public string enemyType;
   public int level = 1;
+  public float statMultiplier = 1f;
 
   [NonSerialized] public EndlessNumber currentHp = new();
   [NonSerialized] public Spawner ownerSpawner;
@@ -25,11 +26,13 @@ public class EnemyInfo : MonoBehaviour {
   public void ApplySpawnContext(
     string resolvedEnemyType,
     int resolvedLevel,
+    float resolvedStatMultiplier,
     IList<DemonStatModifier> statBonuses,
     Spawner resolvedOwnerSpawner
   ) {
     enemyType = DemonStats.NormalizeDemonType(resolvedEnemyType);
     level = Mathf.Max(resolvedLevel, 1);
+    statMultiplier = Mathf.Max(resolvedStatMultiplier, 0.0001f);
     ownerSpawner = resolvedOwnerSpawner;
 
     CopyStatBonuses(statBonuses);
@@ -43,6 +46,7 @@ public class EnemyInfo : MonoBehaviour {
         " object='" + gameObject.name + "'" +
         " enemy_type='" + enemyType + "'" +
         " level=" + level +
+        " stat_multiplier=" + statMultiplier +
         " bonuses=" + runtimeStatBonuses.Count +
         " stats={" + DescribeResolvedStats() + "}"
       );
@@ -104,6 +108,12 @@ public class EnemyInfo : MonoBehaviour {
       resolvedStats,
       resolvedStatKeyScratch
     );
+    if (Mathf.Approximately(statMultiplier, 1f)) return;
+
+    var multiplier = new EndlessNumber(statMultiplier);
+    foreach (var stat in resolvedStats) {
+      stat.Value?.MultiplyInPlace(multiplier);
+    }
   }
 
   string DescribeResolvedStats() {

@@ -26,6 +26,10 @@ public class SpriteStreamingSettings : ScriptableObject {
   [Min(1)] public int maxAddressableStartsPerFrame = 16;
   [Min(1)] public int animationWarmupFrames = 24;
   [Min(0)] public int animationSwitchGateMs = 150;
+  [Header("Loading Warm Gate")]
+  [Min(1)] public int loadingPlayerWarmFrames = 8;
+  [Min(1)] public int loadingEnemyWarmFrames = 4;
+  [Min(1)] public int loadingEffectWarmFrames = 2;
   public bool keepLoadedSpritesForSession = true;
   public bool enableStreamingDiagnostics = false;
   [Header("Content Packs")]
@@ -128,6 +132,30 @@ public static class SpriteStreamingRuntimeSettings {
 
   public static int AnimationSwitchGateMs {
     get { return GetIntSetting(Asset != null ? Asset.animationSwitchGateMs : 150, 150, 0); }
+  }
+
+  // Keep loading work bounded even if an asset is accidentally configured with
+  // an excessively large warm window. These limits cover the initial visible
+  // playback without turning the loading gate into a full animation bake.
+  public static int LoadingPlayerWarmFrames {
+    get {
+      var configured = GetPositiveOrFallback(Asset != null ? Asset.loadingPlayerWarmFrames : 8, 8);
+      return Mathf.Clamp(configured, 1, 8);
+    }
+  }
+
+  public static int LoadingEnemyWarmFrames {
+    get {
+      var configured = GetPositiveOrFallback(Asset != null ? Asset.loadingEnemyWarmFrames : 4, 4);
+      return Mathf.Clamp(configured, 1, 4);
+    }
+  }
+
+  public static int LoadingEffectWarmFrames {
+    get {
+      var configured = GetPositiveOrFallback(Asset != null ? Asset.loadingEffectWarmFrames : 2, 2);
+      return Mathf.Clamp(configured, 1, 2);
+    }
   }
 
   public static bool EnableDiagnostics {

@@ -179,17 +179,9 @@ public static partial class ContentPackPipeline {
       return "";
     }
 
-    var jpgAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedColorAssetPath, ".jpg"));
-    if (File.Exists(Path.GetFullPath(jpgAssetPath))) {
-      return jpgAssetPath;
-    }
-
-    var jpegAssetPath = NormalizeAssetPath(Path.ChangeExtension(normalizedColorAssetPath, ".jpeg"));
-    if (File.Exists(Path.GetFullPath(jpegAssetPath))) {
-      return jpegAssetPath;
-    }
-
-    return "";
+    if (!SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(normalizedColorAssetPath, out var normalAssetPath)) return "";
+    normalAssetPath = NormalizeAssetPath(normalAssetPath);
+    return File.Exists(Path.GetFullPath(normalAssetPath)) ? normalAssetPath : "";
   }
 
   static void CollectAtlasMetadataDependencies(List<string> result, List<string> errors) {

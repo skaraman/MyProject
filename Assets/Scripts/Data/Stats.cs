@@ -128,42 +128,42 @@ public static class FormStatIncreases {
       ["DEX"] = new Dictionary<string, float> { ["AKSP"] = 0.01f, ["NRGRG"] = 0.01f, ["CDMG"] = 1 },
       ["END"] = new Dictionary<string, float> { ["NRG"] = 10, ["HPRG"] = 0.01f, ["ARM"] = 1 },
       ["INT"] = new Dictionary<string, float> { ["HEAL"] = 1, ["CCHC"] = 0.1f, ["LDMG"] = 1 },
-      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = 0.1f, ["DDMG"] = 1, ["BONUS"] = 1 }
+      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = 0.1f, ["DDMG"] = 1, ["BNS"] = 1 }
     },
     ["Bolt"] = new Dictionary<string, Dictionary<string, float>> {
       ["DEX"] = new Dictionary<string, float> { ["DMG"] = 1, ["MVSP"] = MovementSpeedIncreasePercentPerPoint, ["AKSP"] = 0.01f },
       ["END"] = new Dictionary<string, float> { ["NRG"] = 1, ["NRGRG"] = 0.01f, ["HP"] = 10 },
       ["AMP"] = new Dictionary<string, float> { ["CDST"] = 1, ["HPRG"] = 0.01f, ["ARM"] = 1 },
       ["VLT"] = new Dictionary<string, float> { ["LDSC"] = 1, ["CCHC"] = 0.1f, ["HEAL"] = 1 },
-      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = 0.1f, ["DDMG"] = 1, ["BONUS"] = 1 }
+      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = 0.1f, ["DDMG"] = 1, ["BNS"] = 1 }
     },
     ["Fire"] = new Dictionary<string, Dictionary<string, float>> {
       ["STR"] = new Dictionary<string, float> { ["DMG"] = 1, ["DCHC"] = .1f, ["HPRG"] = .01f },
       ["END"] = new Dictionary<string, float> { ["NRG"] = 1, ["NRGRG"] = .01f, ["HP"] = 10 },
       ["PYR"] = new Dictionary<string, float> { ["FDMG"] = 1, ["AKSP"] = .01f, ["ARM"] = 1 },
       ["EMB"] = new Dictionary<string, float> { ["AREA"] = 1, ["CCHC"] = .1f, ["HEAL"] = 1 },
-      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["DDMG"] = 1, ["BONUS"] = 1 }
+      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["DDMG"] = 1, ["BNS"] = 1 }
     },
     ["Cold"] = new Dictionary<string, Dictionary<string, float>> {
       ["END"] = new Dictionary<string, float> { ["DMG"] = 1, ["NRGRG"] = .01f, ["NRG"] = 1 },
       ["INT"] = new Dictionary<string, float> { ["HEAL"] = 1, ["CCHC"] = .1f, ["LDMG"] = 1 },
       ["CHL"] = new Dictionary<string, float> { ["DUR"] = 1, ["HP"] = 10, ["ARM"] = 1 },
       ["ICI"] = new Dictionary<string, float> { ["AFT"] = .1f, ["CCHC"] = .1f, ["HEAL"] = 1 },
-      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["DDMG"] = 1, ["BONUS"] = 1 }
+      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["DDMG"] = 1, ["BNS"] = 1 }
     },
     ["Aqua"] = new Dictionary<string, Dictionary<string, float>> {
       ["INT"] = new Dictionary<string, float> { ["DMG"] = 1, ["HEAL"] = 1, ["CCHC"] = .1f },
       ["DEX"] = new Dictionary<string, float> { ["AKSP"] = .01f, ["NRGRG"] = .01f, ["CDMG"] = 1 },
       ["VAP"] = new Dictionary<string, float> { ["EVD"] = .1f, ["NRG"] = 1, ["ARM"] = 1 },
       ["MOI"] = new Dictionary<string, float> { ["CLN"] = .01f, ["CCHC"] = .1f, ["HP"] = 10 },
-      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["DDMG"] = 1, ["BONUS"] = 1 }
+      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["DDMG"] = 1, ["BNS"] = 1 }
     },
     ["Dark"] = new Dictionary<string, Dictionary<string, float>> {
       ["UMB"] = new Dictionary<string, float> { ["DMG"] = 1, ["NRG"] = 1, ["FEAR"] = 1 },
       ["VOI"] = new Dictionary<string, float> { ["SPEC"] = 0.1f, ["AKSP"] = .01f, ["CCHC"] = .1f },
       ["ABY"] = new Dictionary<string, float> { ["PEN"] = 1, ["ARM"] = 1, ["LDMG"] = 1 },
       ["ECL"] = new Dictionary<string, float> { ["EVD"] = 1, ["NRGRG"] = .01f, ["AREA"] = 1 },
-      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["CDMG"] = 1, ["BONUS"] = 1 }
+      ["LCK"] = new Dictionary<string, float> { ["LCHC"] = .1f, ["CDMG"] = 1, ["BNS"] = 1 }
     }
   };
 
@@ -192,7 +192,7 @@ public static class FormStatIncreases {
 
   public static void ApplyBonusToFlatStats(IDictionary<string, StatValue> stats) {
     if (stats == null ||
-        !stats.TryGetValue("BONUS", out var bonus) ||
+        !stats.TryGetValue("BNS", out var bonus) ||
         bonus == null ||
         bonus.IsPercentage ||
         bonus.IsZero) {
@@ -202,7 +202,7 @@ public static class FormStatIncreases {
     var statNames = new List<string>(stats.Keys);
     for (var i = 0; i < statNames.Count; i++) {
       var statName = statNames[i];
-      if (string.Equals(statName, "BONUS", StringComparison.OrdinalIgnoreCase)) {
+      if (string.Equals(statName, "BNS", StringComparison.OrdinalIgnoreCase)) {
         continue;
       }
       if (IsPercentageStat(statName)) {
@@ -221,7 +221,7 @@ public static class FormStatIncreases {
   ) {
     if (stats == null ||
         statNameScratch == null ||
-        !stats.TryGetValue("BONUS", out var bonus) ||
+        !stats.TryGetValue("BNS", out var bonus) ||
         bonus == null ||
         bonus.IsPercentage ||
         bonus.IsZero) {
@@ -234,7 +234,7 @@ public static class FormStatIncreases {
     }
     for (var i = 0; i < statNameScratch.Count; i++) {
       var statName = statNameScratch[i];
-      if (string.Equals(statName, "BONUS", StringComparison.OrdinalIgnoreCase)) {
+      if (string.Equals(statName, "BNS", StringComparison.OrdinalIgnoreCase)) {
         continue;
       }
       if (IsPercentageStat(statName)) {
@@ -407,7 +407,7 @@ public static class AllStatValues {
     { "DMG", new StatValue("DMG") }, { "DCHC", new StatValue("DCHC") }, { "HP", new StatValue("HP") }, { "NRGRG", new StatValue("NRGRG") },
     { "CDMG", new StatValue("CDMG") }, { "NRG", new StatValue("NRG") }, { "HPRG", new StatValue("HPRG") }, { "ARM", new StatValue("ARM") },
     { "HEAL", new StatValue("HEAL") }, { "CCHC", new StatValue("CCHC") }, { "LDMG", new StatValue("LDMG") }, { "LCHC", new StatValue("LCHC") },
-    { "DDMG", new StatValue("DDMG") }, { "BONUS", new StatValue("BONUS") }, { "MVSP", new StatValue("MVSP") }, { "AKSP", new StatValue("AKSP") },
+    { "DDMG", new StatValue("DDMG") }, { "BNS", new StatValue("BNS") }, { "MVSP", new StatValue("MVSP") }, { "AKSP", new StatValue("AKSP") },
     { "CDST", new StatValue("CDST") }, { "LDSC", new StatValue("LDSC") }, { "FDMG", new StatValue("FDMG") }, { "AREA", new StatValue("AREA") },
     { "DUR", new StatValue("DUR") }, { "AFT", new StatValue("AFT") }, { "EVD", new StatValue("EVD") }, { "CLN", new StatValue("CLN") },
     { "FEAR", new StatValue("FEAR") }, { "SPEC", new StatValue("SPEC") }, { "PEN", new StatValue("PEN") }

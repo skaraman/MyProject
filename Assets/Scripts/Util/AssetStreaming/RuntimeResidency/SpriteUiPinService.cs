@@ -161,7 +161,7 @@ public static class SpriteUiPinService {
     if (target.IsAnimation) {
       var startFrame = Mathf.Max(target.LastRequestedFrame, 1);
       var lookAhead = Mathf.Max(SpriteStreamingRuntimeSettings.PinWindowFrames - 1, 0);
-      target.CollectAnimationAtlasAddressesUncached(
+      target.CollectAnimationAtlasAddresses(
         categoryOverride: null,
         startFrame: startFrame,
         endFrame: startFrame + lookAhead,

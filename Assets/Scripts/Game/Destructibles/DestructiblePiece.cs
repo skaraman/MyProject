@@ -42,6 +42,9 @@ public class DestructiblePiece : MonoBehaviour
 
     private const float SortingUnitsPerWorldUnit = 100f;
     private const int SortingOrderJitter = 3;
+    // Rigidbody2D angular velocity is degrees per second. Keep fragments
+    // below one rotation per second for a readable cinematic scatter.
+    private const float MaximumCinematicAngularVelocity = 240f;
     private const string FadeKeyword = "FADE_ON";
     private const float FadeVisibleAmount = -0.1f;
     private const float FadeHiddenAmount = 1f;
@@ -264,6 +267,20 @@ public class DestructiblePiece : MonoBehaviour
                 }
             }
         }
+    }
+
+    void FixedUpdate()
+    {
+        if (!flightActive || isFading || rb == null || !rb.simulated)
+        {
+            return;
+        }
+
+        rb.angularVelocity = Mathf.Clamp(
+            rb.angularVelocity,
+            -MaximumCinematicAngularVelocity,
+            MaximumCinematicAngularVelocity
+        );
     }
 
     void UpdateCleanup()

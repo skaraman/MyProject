@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 public sealed class EnemyDefeatedEvent {
@@ -210,6 +211,40 @@ public static class ContentEpisodeProgression {
       useRespawnRules: true,
       out respawnSeconds
     );
+  }
+
+  public static bool TryResolveCurrentEpisodeEnemyStatMultiplier(
+    string enemyType,
+    out float statMultiplier
+  ) {
+    statMultiplier = 1f;
+    var normalizedEnemyType = NormalizeToken(enemyType);
+    if (string.IsNullOrWhiteSpace(normalizedEnemyType)) return false;
+
+    var objectives = ResolveCurrentEpisodeObjectiveDefinitions();
+    var found = false;
+    for (var objectiveIndex = 0; objectiveIndex < objectives.Count; objectiveIndex++) {
+      var rules = objectives[objectiveIndex]?.enemyLevels;
+      if (rules == null) continue;
+
+      for (var ruleIndex = 0; ruleIndex < rules.Count; ruleIndex++) {
+        if (!TryParseEnemyMultiplierRule(
+              rules[ruleIndex],
+              out var subject,
+              out var ruleMultiplier
+            )) {
+          continue;
+        }
+        if (!string.Equals(normalizedEnemyType, subject, StringComparison.OrdinalIgnoreCase)) continue;
+
+        statMultiplier = found
+          ? Mathf.Max(statMultiplier, ruleMultiplier)
+          : ruleMultiplier;
+        found = true;
+      }
+    }
+
+    return found;
   }
 
   public static int ResolveCompletedPartCount() {
@@ -512,13 +547,45 @@ public static class ContentEpisodeProgression {
     value = 0;
 
     var normalized = NormalizeToken(rule);
-    var parts = normalized.Split('_');
-    if (parts.Length != 2) return false;
+    var separatorIndex = normalized.LastIndexOf('_');
+    if (separatorIndex <= 0 || separatorIndex >= normalized.Length - 1) return false;
 
-    subject = NormalizeToken(parts[0]);
+    subject = NormalizeToken(normalized.Substring(0, separatorIndex));
     if (string.IsNullOrWhiteSpace(subject)) return false;
-    if (!int.TryParse(parts[1], out value)) return false;
+    if (!int.TryParse(
+          normalized.Substring(separatorIndex + 1),
+          NumberStyles.Integer,
+          CultureInfo.InvariantCulture,
+          out value
+        )) {
+      return false;
+    }
     return value >= 0;
+  }
+
+  static bool TryParseEnemyMultiplierRule(
+    string rule,
+    out string subject,
+    out float multiplier
+  ) {
+    subject = "";
+    multiplier = 1f;
+
+    var normalized = NormalizeToken(rule);
+    var separatorIndex = normalized.LastIndexOf('_');
+    if (separatorIndex <= 0 || separatorIndex >= normalized.Length - 1) return false;
+
+    subject = NormalizeToken(normalized.Substring(0, separatorIndex));
+    if (string.IsNullOrWhiteSpace(subject)) return false;
+    if (!float.TryParse(
+          normalized.Substring(separatorIndex + 1),
+          NumberStyles.Float,
+          CultureInfo.InvariantCulture,
+          out multiplier
+        )) {
+      return false;
+    }
+    return multiplier > 0f && !float.IsInfinity(multiplier) && !float.IsNaN(multiplier);
   }
 
   static void AddUniqueEnemyType(List<string> output, string enemyType) {

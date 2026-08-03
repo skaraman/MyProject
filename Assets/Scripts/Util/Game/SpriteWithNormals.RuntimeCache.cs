@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -540,12 +541,17 @@ public partial class SpriteWithNormals {
   }
 
   SpriteAddressPair StripUnavailableRuntimeNormalAddress(SpriteAddressPair pair, SpriteLookupKey lookupKey) {
-    if (!string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress) &&
-        (pair.RuntimeNormalAddress.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-         pair.RuntimeNormalAddress.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))) {
-      pair.normalAddress = "";
-      pair.normalAtlasAddress = "";
-      pair.normalSpriteName = "";
+    var hasLegacyJpegNormal = IsLegacyJpegNormalAddress(pair.RuntimeNormalAddress);
+    if ((hasLegacyJpegNormal || string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)) &&
+        TryBuildConventionNormalAddress(pair, out var conventionNormalAddress) &&
+        IsConventionNormalAvailable(conventionNormalAddress)) {
+      var conventionPair = SpriteAddressPair.Create("", conventionNormalAddress);
+      pair.normalAddress = conventionPair.normalAddress;
+      pair.normalAtlasAddress = conventionPair.normalAtlasAddress;
+      pair.normalSpriteName = conventionPair.normalSpriteName;
+    }
+    else if (hasLegacyJpegNormal) {
+      ClearNormalAddress(ref pair);
     }
 
 #if UNITY_EDITOR
@@ -563,11 +569,184 @@ public partial class SpriteWithNormals {
       );
     }
 
+    ClearNormalAddress(ref pair);
+#endif
+    return pair;
+  }
+
+  static bool IsLegacyJpegNormalAddress(string address) {
+    return !string.IsNullOrWhiteSpace(address) &&
+           (address.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+            address.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase));
+  }
+
+#if UNITY_EDITOR
+  sealed class ConventionNormalAtlasSpriteMetadata {
+    readonly HashSet<string> spriteNames;
+
+    public readonly int spriteCount;
+    public readonly string onlySpriteName;
+
+    public ConventionNormalAtlasSpriteMetadata(
+      HashSet<string> spriteNames,
+      int spriteCount,
+      string onlySpriteName
+    ) {
+      this.spriteNames = spriteNames;
+      this.spriteCount = Mathf.Max(spriteCount, 0);
+      this.onlySpriteName = onlySpriteName ?? "";
+    }
+
+    public bool Contains(string spriteName) {
+      return !string.IsNullOrWhiteSpace(spriteName) &&
+             spriteNames != null &&
+             spriteNames.Contains(spriteName);
+    }
+  }
+
+  static readonly Dictionary<string, ConventionNormalAtlasSpriteMetadata>
+    s_ConventionNormalAtlasSpriteMetadata = new(StringComparer.OrdinalIgnoreCase);
+#endif
+  static readonly Queue<ConventionNormalCacheKey> s_ConventionNormalAddressCacheInsertionOrder = new();
+
+  static void EnsureConventionNormalAddressCacheVersion() {
+    var contentReloadVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (s_ConventionNormalAddressCacheContentReloadVersion == contentReloadVersion) return;
+
+    s_ConventionNormalAddressCache.Clear();
+    s_ConventionNormalAddressCacheInsertionOrder.Clear();
+#if UNITY_EDITOR
+    s_ConventionNormalAtlasSpriteMetadata.Clear();
+#endif
+    s_ConventionNormalAddressCacheContentReloadVersion = contentReloadVersion;
+  }
+
+  static void CacheConventionNormalAddress(ConventionNormalCacheKey cacheKey, string normalAddress) {
+    if (s_ConventionNormalAddressCache.ContainsKey(cacheKey)) {
+      s_ConventionNormalAddressCache[cacheKey] = normalAddress ?? "";
+      return;
+    }
+
+    while (s_ConventionNormalAddressCache.Count >= MaxConventionNormalAddressCacheEntries &&
+           s_ConventionNormalAddressCacheInsertionOrder.Count > 0) {
+      var oldestKey = s_ConventionNormalAddressCacheInsertionOrder.Dequeue();
+      if (s_ConventionNormalAddressCache.Remove(oldestKey)) break;
+    }
+
+    if (s_ConventionNormalAddressCache.Count >= MaxConventionNormalAddressCacheEntries) return;
+    s_ConventionNormalAddressCache[cacheKey] = normalAddress ?? "";
+    s_ConventionNormalAddressCacheInsertionOrder.Enqueue(cacheKey);
+  }
+
+#if UNITY_EDITOR
+  static ConventionNormalAtlasSpriteMetadata GetConventionNormalAtlasSpriteMetadata(
+    string normalAtlasAddress
+  ) {
+    if (s_ConventionNormalAtlasSpriteMetadata.TryGetValue(
+          normalAtlasAddress,
+          out var cachedMetadata
+        )) {
+      return cachedMetadata;
+    }
+
+    if (s_ConventionNormalAtlasSpriteMetadata.Count >= MaxConventionNormalAddressCacheEntries) {
+      s_ConventionNormalAtlasSpriteMetadata.Clear();
+    }
+
+    var spriteNames = new HashSet<string>(StringComparer.Ordinal);
+    var spriteCount = 0;
+    var onlySpriteName = "";
+    var normalAssets = AssetDatabase.LoadAllAssetsAtPath(normalAtlasAddress);
+    if (normalAssets != null) {
+      for (var i = 0; i < normalAssets.Length; i++) {
+        if (normalAssets[i] is not Sprite candidate) continue;
+        var candidateName = candidate.name;
+        spriteCount++;
+        onlySpriteName = candidateName;
+        if (!string.IsNullOrWhiteSpace(candidateName)) {
+          spriteNames.Add(candidateName);
+        }
+      }
+    }
+
+    if (spriteCount != 1) {
+      onlySpriteName = "";
+    }
+
+    var metadata = new ConventionNormalAtlasSpriteMetadata(
+      spriteNames,
+      spriteCount,
+      onlySpriteName
+    );
+    s_ConventionNormalAtlasSpriteMetadata[normalAtlasAddress] = metadata;
+    return metadata;
+  }
+#endif
+
+  static bool TryBuildConventionNormalAddress(SpriteAddressPair pair, out string normalAddress) {
+    normalAddress = "";
+    var colorAtlasAddress = pair.RuntimeColorAddress;
+    if (string.IsNullOrWhiteSpace(colorAtlasAddress)) return false;
+
+    EnsureConventionNormalAddressCacheVersion();
+    var cacheKey = new ConventionNormalCacheKey(colorAtlasAddress, pair.colorSpriteName);
+    if (s_ConventionNormalAddressCache.TryGetValue(cacheKey, out normalAddress)) {
+      return !string.IsNullOrWhiteSpace(normalAddress);
+    }
+
+    if (!string.Equals(Path.GetExtension(colorAtlasAddress), ".png", StringComparison.OrdinalIgnoreCase)) {
+      CacheConventionNormalAddress(cacheKey, "");
+      return false;
+    }
+
+    var colorStem = Path.GetFileNameWithoutExtension(colorAtlasAddress);
+    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal)) {
+      CacheConventionNormalAddress(cacheKey, "");
+      return false;
+    }
+
+    var normalAtlasAddress = colorAtlasAddress.Substring(0, colorAtlasAddress.Length - 4) + "N.png";
+    var normalSpriteName = pair.colorSpriteName;
+#if UNITY_EDITOR
+    if (Application.isEditor && !string.IsNullOrWhiteSpace(normalSpriteName)) {
+      // AssetDatabase.LoadAllAssetsAtPath allocates an Object[] and marshals every
+      // Sprite.name. Persistent warm-plan and animation pin scans can ask about
+      // thousands of slices from the same atlas, so cache that atlas inventory
+      // once instead of rebuilding it for every frame.
+      var atlasMetadata = GetConventionNormalAtlasSpriteMetadata(normalAtlasAddress);
+      if (!atlasMetadata.Contains(normalSpriteName) && atlasMetadata.spriteCount == 1) {
+        normalSpriteName = atlasMetadata.onlySpriteName;
+      }
+    }
+#endif
+    normalAddress = string.IsNullOrWhiteSpace(normalSpriteName)
+      ? normalAtlasAddress
+      : SpriteSliceAddressUtility.BuildSliceAddress(normalAtlasAddress, normalSpriteName);
+    CacheConventionNormalAddress(cacheKey, normalAddress);
+    return !string.IsNullOrWhiteSpace(normalAddress);
+  }
+
+  static bool IsConventionNormalAvailable(string normalAddress) {
+#if UNITY_EDITOR
+    if (Application.isEditor) {
+      var normalAtlasAddress = normalAddress;
+      if (SpriteSliceAddressUtility.TryParseSliceAddress(normalAddress, out var parsedAtlasAddress, out _)) {
+        normalAtlasAddress = parsedAtlasAddress;
+      }
+
+      if (!Application.isPlaying) {
+        return AssetDatabase.LoadMainAssetAtPath(normalAtlasAddress) != null;
+      }
+      return IsEditorRuntimeAtlasAddressAvailable(normalAtlasAddress);
+    }
+#endif
+    return true;
+  }
+
+  static void ClearNormalAddress(ref SpriteAddressPair pair) {
     pair.normalAddress = "";
     pair.normalAtlasAddress = "";
     pair.normalSpriteName = "";
-#endif
-    return pair;
   }
 
   bool TryResolvePairCached(SpriteLookupKey key, out SpriteAddressPair pair, out bool pending) {

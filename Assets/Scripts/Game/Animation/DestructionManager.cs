@@ -55,8 +55,9 @@ public class DestructionManager : MonoBehaviour {
   public Vector2 planarForceMin = new(-6f, -1.25f);
   [Tooltip("Ground-plane impulse maximum: X scatters sideways and Y adds slight visual depth.")]
   public Vector2 planarForceMax = new(6f, 1.25f);
-  public float torqueMin = -8f;
-  public float torqueMax = 8f;
+  [Tooltip("Cinematic rotational impulse range for launched pieces.")]
+  public float torqueMin = -1f;
+  public float torqueMax = 1f;
   public List<Piece> pieces = new();
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

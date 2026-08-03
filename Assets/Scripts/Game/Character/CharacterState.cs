@@ -6,6 +6,14 @@ using UnityEditor;
 #endif
 
 public class CharacterState : MonoBehaviour {
+  static readonly Unity.Profiling.ProfilerMarker NewGameResetProfilerMarker =
+    new("CharacterState.NewGame.Reset");
+  static readonly Unity.Profiling.ProfilerMarker NewGameLoadGearProfilerMarker =
+    new("CharacterState.NewGame.LoadGear");
+  static readonly Unity.Profiling.ProfilerMarker NewGameCreateDefaultsProfilerMarker =
+    new("CharacterState.NewGame.CreateDefaults");
+  static readonly Unity.Profiling.ProfilerMarker NewGameGatherStatsProfilerMarker =
+    new("CharacterState.NewGame.GatherStats");
   static CharacterState runtimeInstance;
 
   public int level = 0;
@@ -179,9 +187,11 @@ public class CharacterState : MonoBehaviour {
   }
 
   public void InitializeRuntimeStateForNewGame() {
-    EnsureRuntimeReferences();
-    ResetRuntimeState();
-    DialogController.SaveState("new_game");
+    using (NewGameResetProfilerMarker.Auto()) {
+      EnsureRuntimeReferences();
+      ResetRuntimeState();
+      DialogController.SaveState("new_game");
+    }
     if (ShouldLogLoadStateDebug()) {
       RuntimeLog.Log(
         "[CharacterState][LoadState] stage=new_game_begin" +
@@ -191,10 +201,16 @@ public class CharacterState : MonoBehaviour {
       );
     }
 
-    gearController?.LoadGear(publishReady: false);
-    EquippedItems.RandomizeDefaultBoostsForNewGame();
-    SaveCreatedDefaultGear();
-    GatherAllStatValues();
+    using (NewGameLoadGearProfilerMarker.Auto()) {
+      gearController?.LoadGear(publishReady: false);
+    }
+    using (NewGameCreateDefaultsProfilerMarker.Auto()) {
+      EquippedItems.RandomizeDefaultBoostsForNewGame();
+      SaveCreatedDefaultGear();
+    }
+    using (NewGameGatherStatsProfilerMarker.Auto()) {
+      GatherAllStatValues();
+    }
     SaveFormsState();
     MessageBus.Send(CharacterMessageTopics.DialogStateReady, "new_game");
     NotifyFormStateChanged(EsperanzaForms.GetActive(), "new_game");

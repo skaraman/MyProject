@@ -180,6 +180,9 @@ public static partial class SpriteIndexBuilder {
         var autoDerivedNormal = false;
         if (normalRows.TryGetValue(pair.Key, out var normalRef)) {
           normalAddress = ResolveSpriteAddress(state, normalRef, normalLibraryName + "/" + category + ":" + label + " (normal)", recordError: false);
+          if (IsLegacyJpegSpriteAddress(normalAddress)) {
+            normalAddress = "";
+          }
           if (!string.IsNullOrWhiteSpace(normalAddress) &&
               !ValidateRuntimeAtlasAddress(state, normalAddress, normalLibraryName + "/" + category + ":" + label + " (normal)", recordError: false)) {
             normalAddress = "";

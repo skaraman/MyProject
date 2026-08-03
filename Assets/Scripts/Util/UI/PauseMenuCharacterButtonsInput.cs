@@ -23,7 +23,8 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   public bool HasFocusedButton => focusedButton != null;
 
   void OnEnable() {
-    RebuildButtons();
+    EnsureViewsResolved(force: true);
+    ShowAllStatsView(false);
     RegisterHandlers();
     SetTopMenuFocused(focusedButton == null);
   }
@@ -36,6 +37,7 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
 
   void OnTransformChildrenChanged() {
     if (isActiveAndEnabled) {
+      EnsureViewsResolved(force: true);
       RebuildButtons();
     }
   }
@@ -53,6 +55,7 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
     actions.Add(MessageBus.On("pauseMenu.hover", OnHover));
     actions.Add(MessageBus.On("pauseMenu.unhover", _ => ClearHover()));
     actions.Add(MessageBus.On("pauseMenu.click", OnClick));
+    actions.Add(MessageBus.On(ButtonSelectedMessage, OnCharacterButtonSelected));
   }
 
   void UnregisterHandlers() {
@@ -76,7 +79,7 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
 
       for (var buttonIndex = 0; buttonIndex < group.buttons.Count; buttonIndex++) {
         var button = group.buttons[buttonIndex];
-        if (button == null || ContainsButton(button)) {
+        if (button == null || !button.activeInHierarchy || ContainsButton(button)) {
           continue;
         }
 
@@ -107,7 +110,8 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
       return;
     }
 
-    var spriteRenderer = button.GetComponent<SpriteRenderer>();
+    var spriteRenderer = button.GetComponent<SpriteRenderer>() ??
+                         button.GetComponentInChildren<SpriteRenderer>(includeInactive: true);
     if (spriteRenderer == null || spriteRenderer.sprite == null) {
       return;
     }
@@ -372,5 +376,124 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
     }
 
     return matchingButtonCount == 1;
+  }
+
+  GameObject statsView;
+  GameObject allStatsView;
+  GameObject openAllStatsButton;
+  GameObject closeAllStatsButton;
+
+  void EnsureViewsResolved(bool force = false) {
+    if (force || statsView == null) {
+      statsView = FindChildRecursive(transform, "StatsView")?.gameObject;
+    }
+    if (force || allStatsView == null) {
+      allStatsView = FindChildRecursive(transform, "AllStatsView")?.gameObject;
+    }
+    if (force || openAllStatsButton == null) {
+      var btn = statsView != null ? FindChildRecursive(statsView.transform, "levelNumber") : null;
+      btn ??= FindChildRecursive(transform, "levelNumber");
+      openAllStatsButton = btn != null ? btn.gameObject : null;
+    }
+    if (force || closeAllStatsButton == null) {
+      var btn = allStatsView != null ? FindChildRecursive(allStatsView.transform, "CloseAllStats") : null;
+      btn ??= FindChildRecursive(transform, "CloseAllStats");
+      closeAllStatsButton = btn != null ? btn.gameObject : null;
+    }
+
+    EnsureViewButtonsRegistered();
+  }
+
+  void EnsureViewButtonsRegistered() {
+    if (statsView != null && openAllStatsButton != null) {
+      var statsButtons = statsView.GetComponentInChildren<StatsButtons>(includeInactive: true);
+      if (statsButtons == null) {
+        statsButtons = statsView.AddComponent<StatsButtons>();
+      }
+      if (!statsButtons.buttons.Contains(openAllStatsButton)) {
+        statsButtons.buttons.Add(openAllStatsButton);
+      }
+    }
+
+    if (allStatsView != null && closeAllStatsButton != null) {
+      var allStatsButtons = allStatsView.GetComponentInChildren<StatsButtons>(includeInactive: true);
+      if (allStatsButtons == null) {
+        allStatsButtons = allStatsView.AddComponent<StatsButtons>();
+      }
+      if (!allStatsButtons.buttons.Contains(closeAllStatsButton)) {
+        allStatsButtons.buttons.Add(closeAllStatsButton);
+      }
+    }
+  }
+
+  void OnCharacterButtonSelected(object payload) {
+    if (!isActiveAndEnabled) {
+      return;
+    }
+
+    var buttonObject = payload as GameObject;
+    if (buttonObject == null) {
+      return;
+    }
+
+    EnsureViewsResolved();
+    if (MatchesButtonTarget(buttonObject, openAllStatsButton)) {
+      ShowAllStatsView(true);
+    }
+    else if (MatchesButtonTarget(buttonObject, closeAllStatsButton)) {
+      ShowAllStatsView(false);
+    }
+  }
+
+  void ShowAllStatsView(bool showAllStats) {
+    EnsureViewsResolved();
+
+    if (statsView != null) {
+      statsView.SetActive(!showAllStats);
+    }
+    if (allStatsView != null) {
+      allStatsView.SetActive(showAllStats);
+    }
+
+    RebuildButtons();
+    ClearHover();
+    ClearFocus();
+
+    RuntimeLog.Log(
+      "[PauseMenuCharacterButtonsInput] ShowAllStatsView showAllStats=" + (showAllStats ? 1 : 0) +
+      " statsView=" + ((statsView != null && statsView.activeSelf) ? 1 : 0) +
+      " allStatsView=" + ((allStatsView != null && allStatsView.activeSelf) ? 1 : 0)
+    );
+  }
+
+  static bool MatchesButtonTarget(GameObject target, GameObject button) {
+    if (target == null || button == null) {
+      return false;
+    }
+
+    if (target == button) {
+      return true;
+    }
+
+    return target.transform.IsChildOf(button.transform);
+  }
+
+  static Transform FindChildRecursive(Transform root, string targetName) {
+    if (root == null || string.IsNullOrWhiteSpace(targetName)) {
+      return null;
+    }
+
+    if (string.Equals(root.name, targetName, StringComparison.OrdinalIgnoreCase)) {
+      return root;
+    }
+
+    for (var i = 0; i < root.childCount; i++) {
+      var result = FindChildRecursive(root.GetChild(i), targetName);
+      if (result != null) {
+        return result;
+      }
+    }
+
+    return null;
   }
 }

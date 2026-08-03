@@ -21,6 +21,7 @@ public class Spawner : MonoBehaviour {
     public int respawnDelaySeconds = -1;
     public List<float> pendingRespawnSeconds = new();
     public int level;
+    public float statMultiplier = 1f;
     public List<DemonStatModifier> statBonuses = new();
   }
 
@@ -658,6 +659,7 @@ public class Spawner : MonoBehaviour {
         " enemy_type='" + spawnRule.enemyType + "'" +
         " prefab='" + spawnRule.prefab.name + "'" +
         " level=" + spawnRule.level +
+        " stat_multiplier=" + spawnRule.statMultiplier +
         " bonuses=" + (spawnRule.statBonuses != null ? spawnRule.statBonuses.Count : 0) +
         " max_alive=" + spawnRule.maxAlive +
         " pool_size=" + requiredPoolSize
@@ -717,6 +719,7 @@ public class Spawner : MonoBehaviour {
 
       var maxAlive = 0;
       var respawnDelaySeconds = -1;
+      var statMultiplier = 1f;
       if (!ContentEpisodeProgression.TryResolveCurrentEpisodeSpawnCount(enemyType, out maxAlive)) continue;
       if (!ContentEpisodeProgression.TryResolveCurrentEpisodeRespawnSeconds(
         enemyType,
@@ -724,6 +727,10 @@ public class Spawner : MonoBehaviour {
       )) {
         respawnDelaySeconds = -1;
       }
+      ContentEpisodeProgression.TryResolveCurrentEpisodeEnemyStatMultiplier(
+        enemyType,
+        out statMultiplier
+      );
 
       if (maxAlive <= 0) continue;
       TryAddSpawnRule(
@@ -732,6 +739,7 @@ public class Spawner : MonoBehaviour {
         maxAlive,
         respawnDelaySeconds,
         level: 1,
+        statMultiplier: statMultiplier,
         statBonuses: null
       );
     }
@@ -757,6 +765,7 @@ public class Spawner : MonoBehaviour {
     int maxAlive,
     int respawnDelaySeconds,
     int level,
+    float statMultiplier,
     IList<DemonStatModifier> statBonuses
   ) {
     var normalizedEnemyType = NormalizeEnemyType(enemyType);
@@ -775,6 +784,7 @@ public class Spawner : MonoBehaviour {
         respawnDelaySeconds
       );
       existing.level = Mathf.Max(level, 1);
+      existing.statMultiplier = Mathf.Max(statMultiplier, 0.0001f);
       existing.statBonuses = CloneStatBonuses(statBonuses);
       return true;
     }
@@ -785,6 +795,7 @@ public class Spawner : MonoBehaviour {
       maxAlive = Mathf.Max(maxAlive, 1),
       respawnDelaySeconds = respawnDelaySeconds,
       level = Mathf.Max(level, 1),
+      statMultiplier = Mathf.Max(statMultiplier, 0.0001f),
       statBonuses = CloneStatBonuses(statBonuses)
     };
     spawnRule.pendingRespawnSeconds.Capacity = spawnRule.maxAlive;
@@ -882,6 +893,7 @@ public class Spawner : MonoBehaviour {
       enemyInfo.ApplySpawnContext(
         spawnRule.enemyType,
         spawnRule.level,
+        spawnRule.statMultiplier,
         spawnRule.statBonuses,
         this
       );

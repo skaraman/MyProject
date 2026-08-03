@@ -11,6 +11,7 @@ using UnityEngine.Rendering.Universal;
 public class DayNightCycle2D : MonoBehaviour {
   static readonly int EnvironmentKeyLightColorId = Shader.PropertyToID("_EnvironmentKeyLightColor");
   static readonly int EnvironmentKeyLightStrengthId = Shader.PropertyToID("_EnvironmentKeyLightStrength");
+  static readonly int EnvironmentBaseLightStrengthId = Shader.PropertyToID("_EnvironmentBaseLightStrength");
 
   [Header("Cycle Configuration")]
   [Tooltip("Total real-time minutes for a full 24-hour cycle. 24 minutes = 1 minute per in-game hour.")]
@@ -201,6 +202,7 @@ public class DayNightCycle2D : MonoBehaviour {
       Instance = null;
       Shader.SetGlobalColor(EnvironmentKeyLightColorId, Color.white);
       Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, 0f);
+      Shader.SetGlobalFloat(EnvironmentBaseLightStrengthId, 0f);
     }
   }
 
@@ -211,6 +213,7 @@ public class DayNightCycle2D : MonoBehaviour {
       Instance = null;
       Shader.SetGlobalColor(EnvironmentKeyLightColorId, Color.white);
       Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, 0f);
+      Shader.SetGlobalFloat(EnvironmentBaseLightStrengthId, 0f);
     }
   }
 
@@ -412,6 +415,10 @@ public class DayNightCycle2D : MonoBehaviour {
     var normalizedKeyStrength = environmentKeyIntensity / Mathf.Max(daySunIntensity, 0.0001f);
     Shader.SetGlobalColor(EnvironmentKeyLightColorId, environmentKeyColor);
     Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, normalizedKeyStrength);
+    Shader.SetGlobalFloat(
+      EnvironmentBaseLightStrengthId,
+      targetSunIntensity + appliedMoonIntensity + targetAmbientIntensity
+    );
 
     // Dynamic 2D Sun Shadow Vector calculation
     Vector2 shadowDir = CalculateSunShadowDirection(currentHour);

@@ -720,6 +720,12 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void _TryPlayLocomotion(string anim) {
+    var controller = gearController != null ? gearController.Controller : null;
+    if (controller != null &&
+        controller.IsPlaying &&
+        string.Equals(controller.CurrentAnimation, anim, StringComparison.Ordinal)) {
+      return;
+    }
     _TryPlayResolvedAnimation(anim, forceRestart: false, resolveInterrupts: true);
   }
 
