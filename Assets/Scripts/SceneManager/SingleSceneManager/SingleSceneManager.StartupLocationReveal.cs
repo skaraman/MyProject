@@ -317,7 +317,7 @@ public partial class SingleSceneManager {
     pendingRevealSection = Section.None;
     currentSection = Section.None;
     if (autoSaver != null) {
-      autoSaver.enableTimeTracking = true;
+      autoSaver.enableTimeTracking = false;
     }
     HideAllSectionsForTransition(Section.Gameplay);
     _SwitchMap("none");
@@ -785,6 +785,9 @@ public partial class SingleSceneManager {
                              ShouldRestoreSceneLightsForSection(sectionToReveal);
     SetSceneObjectLightsActive(shouldEnableLights);
     if (sectionToReveal == Section.Gameplay) {
+      if (autoSaver != null) {
+        autoSaver.enableTimeTracking = true;
+      }
       ResumePlayerAnimationAfterLoadingOverlay("reveal_complete");
       lastGameplayRevealCompletedAt = Time.realtimeSinceStartup;
     }
@@ -898,6 +901,9 @@ public partial class SingleSceneManager {
     ReleasePreUnlockResidentPins("force_release");
     SetLoadingBlackscreenHold(false);
     ForceBlackscreenVisible(false);
+    if (autoSaver != null) {
+      autoSaver.enableTimeTracking = sectionToReveal == Section.Gameplay;
+    }
     ResumePlayerAnimationAfterLoadingOverlay("force_release");
     SpriteStreamingLoadingState.ForceClearLoadingOverlay();
     RestoreSceneLightingForCurrentActivation();

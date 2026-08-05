@@ -80,6 +80,7 @@ public class Projectile : MonoBehaviour {
   private PolygonCollider2D configuredHitboxCollider;
   private HitBox2D offensiveHitBox;
   private ProjectedSpriteShadowCaster2D shadowCaster;
+  private EffectLight2D effectLight;
   private int lastHitSoundFrame = -1;
 
   public string PoolKey => poolKey;
@@ -89,6 +90,7 @@ public class Projectile : MonoBehaviour {
     if (hitboxCollider == null) hitboxCollider = GetComponentInChildren<PolygonCollider2D>();
     if (hitboxCollider != null) hitboxCollider.TryGetComponent(out offensiveHitBox);
     rb2d = GetComponent<Rigidbody2D>();
+    effectLight = GetComponent<EffectLight2D>();
     CaptureAuthoredSettings();
     InitializeAnimationController();
     EnsureShadowCaster();
@@ -178,6 +180,7 @@ public class Projectile : MonoBehaviour {
   }
 
   public void Despawn() {
+    effectLight?.LeaveLingeringLight();
     if (owner != null) {
       owner.DespawnProjectile(poolKey, gameObject);
     }

@@ -588,11 +588,18 @@ public class PauseMenuInput : MonoBehaviour {
   void up() { }
 
   void down() {
-    if (!topMenuFocused || CharacterMenu == null || !CharacterMenu.activeSelf) {
+    if (!topMenuFocused) {
       return;
     }
 
-    CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopmostButton();
+    if (CharacterMenu != null && CharacterMenu.activeSelf) {
+      CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopmostButton();
+      return;
+    }
+
+    if (AbilityMenu != null && AbilityMenu.activeSelf) {
+      AbilityMenu.GetComponent<PauseMenuAbilitiesViewController>()?.FocusSwitch();
+    }
   }
 
 }

@@ -8,20 +8,28 @@ using UnityEngine;
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class DestructibleHitPieceParticles : MonoBehaviour {
+  static readonly int MainColorPropertyId = Shader.PropertyToID("_Color");
+
   const int MaxParticles = 96;
   const int MinimumParticlesPerBurst = 7;
   const int MaximumParticlesPerBurst = 10;
-  const float MinimumLifetimeSeconds = 0.65f;
-  const float MaximumLifetimeSeconds = 1.05f;
-  const float MinimumSpeed = 0.3f;
-  const float MaximumSpeed = 0.85f;
-  const float MinimumSize = 0.6f;
-  const float MaximumSize = 1.05f;
+  const float MinimumLifetimeSeconds = 0.4f;
+  const float MaximumLifetimeSeconds = 0.7f;
+  const float MinimumSpeed = 1f;
+  const float MaximumSpeed = 1.8f;
+  const float MinimumSize = 0.35f;
+  const float MaximumSize = 0.7f;
   const int SortingOrderOffset = 12;
   const string BrokenPiecesName = "BrokenPieces";
   const string BrokenName = "Broken";
 
-  readonly List<Sprite> sourceSprites = new(32);
+  sealed class ParticleSource {
+    public SpriteRenderer renderer;
+    public AllIn1AnimatorInspector animator;
+  }
+
+  readonly List<ParticleSource> particleSources = new(32);
+  MaterialPropertyBlock sourcePropertyBlock;
 
   ParticleSystem particleSystem;
   ParticleSystemRenderer particleRenderer;
@@ -32,6 +40,10 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
   int sortingOrder;
   Vector2 lastImpactDirection = Vector2.up;
   uint burstSequence;
+
+  void Awake() {
+    sourcePropertyBlock = new MaterialPropertyBlock();
+  }
 
   public void Initialize(Transform brokenPiecesRoot) {
     if (initialized) {
@@ -57,9 +69,10 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
         continue;
       }
 
-      if (!sourceSprites.Contains(sourceRenderer.sprite)) {
-        sourceSprites.Add(sourceRenderer.sprite);
-      }
+      particleSources.Add(new ParticleSource {
+        renderer = sourceRenderer,
+        animator = sourceRenderer.GetComponent<AllIn1AnimatorInspector>()
+      });
 
       if (sourceMaterial == null && sourceRenderer.sharedMaterial != null) {
         sourceMaterial = sourceRenderer.sharedMaterial;
@@ -70,7 +83,7 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
       }
     }
 
-    if (sourceSprites.Count == 0) {
+    if (particleSources.Count == 0) {
       return;
     }
 
@@ -83,7 +96,7 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
       Initialize(sourceRoot);
     }
 
-    if (!initialized || particleSystem == null || sourceSprites.Count == 0) {
+    if (!initialized || particleSystem == null || particleSources.Count == 0) {
       return;
     }
 
@@ -91,7 +104,6 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
       lastImpactDirection = impactDirection.normalized;
     }
 
-    particleSystem.transform.position = impactPosition;
     var baseAngle = Mathf.Atan2(lastImpactDirection.y, lastImpactDirection.x) * Mathf.Rad2Deg;
     var randomState = CreateRandomState();
     var particleCount = RandomRange(
@@ -101,6 +113,9 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
     );
 
     for (var i = 0; i < particleCount; i++) {
+      var sourceIndex = RandomRange(ref randomState, 0, particleSources.Count);
+      var source = particleSources[sourceIndex];
+
       // Keep most shards on the impact-facing side while allowing enough
       // spread to read as a hand-authored cinematic burst.
       var angle = baseAngle + RandomRange(ref randomState, -82f, 82f);
@@ -110,7 +125,10 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
       );
 
       var emitParams = new ParticleSystem.EmitParams {
-        position = Vector3.zero,
+        // The system uses world simulation space, so the emission position
+        // must also be supplied in world space. A zero position otherwise
+        // places the burst at the scene origin.
+        position = impactPosition,
         velocity = direction * RandomRange(ref randomState, MinimumSpeed, MaximumSpeed),
         startLifetime = RandomRange(
           ref randomState,
@@ -119,9 +137,14 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
         ),
         startSize = RandomRange(ref randomState, MinimumSize, MaximumSize),
         rotation = RandomRange(ref randomState, -Mathf.PI, Mathf.PI),
-        startColor = Color.white,
+        startColor = SampleMainColor(source),
         randomSeed = NextRandomUInt(ref randomState)
       };
+
+      // Choose the authored sprite explicitly so its sampled Main Color stays
+      // paired with the same BrokenPieces renderer.
+      var textureSheet = particleSystem.textureSheetAnimation;
+      textureSheet.startFrame = new ParticleSystem.MinMaxCurve(sourceIndex);
       particleSystem.Emit(emitParams, 1);
     }
 
@@ -153,6 +176,56 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
 
   static int RandomRange(ref uint state, int minimum, int maximumExclusive) {
     return minimum + (int)(NextRandom01(ref state) * (maximumExclusive - minimum));
+  }
+
+  Color SampleMainColor(ParticleSource source) {
+    var sourceRenderer = source.renderer;
+    if (sourceRenderer == null) {
+      return Color.white;
+    }
+
+    Color shaderColor;
+    sourcePropertyBlock.Clear();
+    sourceRenderer.GetPropertyBlock(sourcePropertyBlock);
+    if (sourcePropertyBlock.HasColor(MainColorPropertyId)) {
+      shaderColor = sourcePropertyBlock.GetColor(MainColorPropertyId);
+    }
+    else if (TryGetAuthoredMainColor(source.animator, out var authoredColor)) {
+      // BrokenPieces commonly start inactive, so their animator has not yet
+      // copied the inspector's _Color sequence into a property block.
+      shaderColor = authoredColor;
+    }
+    else {
+      var material = sourceRenderer.sharedMaterial;
+      shaderColor = material != null && material.HasColor(MainColorPropertyId)
+        ? material.GetColor(MainColorPropertyId)
+        : Color.white;
+    }
+
+    return sourceRenderer.color * shaderColor;
+  }
+
+  static bool TryGetAuthoredMainColor(
+    AllIn1AnimatorInspector animator,
+    out Color color
+  ) {
+    color = Color.white;
+    if (animator == null || animator.colorAnimations == null) {
+      return false;
+    }
+
+    for (var i = 0; i < animator.colorAnimations.Count; i++) {
+      var animation = animator.colorAnimations[i];
+      if (animation == null || animation.prop != "_Color" ||
+          animation.sequences == null || animation.sequences.Count == 0) {
+        continue;
+      }
+
+      color = animation.sequences[0].from;
+      return true;
+    }
+
+    return false;
   }
 
   void CreateParticleSystem(Material sourceMaterial, SpriteRenderer sortingSource) {
@@ -225,10 +298,10 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
     var textureSheet = particleSystem.textureSheetAnimation;
     textureSheet.enabled = true;
     textureSheet.mode = ParticleSystemAnimationMode.Sprites;
-    textureSheet.startFrame = new ParticleSystem.MinMaxCurve(0f, 1f);
+    textureSheet.startFrame = new ParticleSystem.MinMaxCurve(0f);
     textureSheet.frameOverTime = new ParticleSystem.MinMaxCurve(0f);
-    for (var i = 0; i < sourceSprites.Count; i++) {
-      textureSheet.AddSprite(sourceSprites[i]);
+    for (var i = 0; i < particleSources.Count; i++) {
+      textureSheet.AddSprite(particleSources[i].renderer.sprite);
     }
 
     particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
@@ -237,9 +310,12 @@ public sealed class DestructibleHitPieceParticles : MonoBehaviour {
     // not guaranteed to support ParticleSystem texture-sheet rendering. Use
     // the built-in sprite shader for reliable visibility, with the authored
     // material retained only as a fallback if the shader is unavailable.
-    var particleShader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ??
-                         Shader.Find("Particles/Standard Unlit") ??
-                         Shader.Find("Sprites/Default");
+    // These sprites rely on the sprite shader's alpha handling. Prefer it
+    // over the particle shaders so transparent pixels do not render as a
+    // solid quad around each texture-sheet frame.
+    var particleShader = Shader.Find("Sprites/Default") ??
+                         Shader.Find("Universal Render Pipeline/Particles/Unlit") ??
+                         Shader.Find("Particles/Standard Unlit");
     if (particleShader != null) {
       particleMaterial = new Material(particleShader) {
         hideFlags = HideFlags.HideAndDontSave

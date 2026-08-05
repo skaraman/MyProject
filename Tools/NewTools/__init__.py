@@ -7,5 +7,5 @@ else:
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-    from newTools_lib.app import AA
-    from newTools_lib.app import main
+    from NewTools.app import AA
+    from NewTools.app import main

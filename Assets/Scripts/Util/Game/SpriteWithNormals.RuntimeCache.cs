@@ -12,15 +12,16 @@ public partial class SpriteWithNormals {
       if (ShouldLogFetch) {
         LogSpriteFetch(
           "cancel_pending",
-          "pending_color='" + (_pendingColorAddress ?? "") + "' pending_normal='" + (_pendingNormalAddress ?? "") + "'" +
+          "pending_color='" + (_pendingColorAddress ?? "") + "' pending_normal='" + (_pendingNormalAddress ?? "") + "' pending_specular='" + (_pendingSpecularAddress ?? "") + "'" +
           " has_deferred=" + (_hasDeferredRequest ? 1 : 0)
         );
       }
     }
     ReleaseLease(ref _pendingColorLease);
     ReleaseLease(ref _pendingNormalLease);
-    _pendingColorAddress = _pendingNormalAddress = "";
-    _pendingColorSliceAddress = _pendingNormalSliceAddress = "";
+    ReleaseLease(ref _pendingSpecularLease);
+    _pendingColorAddress = _pendingNormalAddress = _pendingSpecularAddress = "";
+    _pendingColorSliceAddress = _pendingNormalSliceAddress = _pendingSpecularSliceAddress = "";
     _pendingRetargetAllowedFrame = 0;
     _deferredOverwriteAllowedFrame = 0;
     _pendingSupplementWaitStartedAt = -1f;
@@ -34,6 +35,7 @@ public partial class SpriteWithNormals {
   void ReleaseActiveLeases() {
     ReleaseLease(ref _activeColorLease);
     ReleaseLease(ref _activeNormalLease);
+    ReleaseLease(ref _activeSpecularLease);
   }
 
   static void ReleaseLease(ref TextureResidencyCache.Lease lease) {
@@ -91,7 +93,7 @@ public partial class SpriteWithNormals {
 #endif
 
   bool HasPendingLoadRequest() {
-    return _pendingColorLease != null || _pendingNormalLease != null;
+    return _pendingColorLease != null || _pendingNormalLease != null || _pendingSpecularLease != null;
   }
 
   void BeginPendingLoadRequest(int requestVersion, SpriteAddressPair pair) {
@@ -117,7 +119,9 @@ public partial class SpriteWithNormals {
           _pendingColorLease,
           _pendingLoadPair.colorAddress,
           _pendingNormalLease,
-          _pendingLoadPair.normalAddress)) {
+          _pendingLoadPair.normalAddress,
+          _pendingSpecularLease,
+          _pendingLoadPair.specularAddress)) {
       if ((Time.realtimeSinceStartup - _pendingSupplementWaitStartedAt) < ResolveEditorSpriteMapSupplementWaitTimeoutSeconds()) {
         return true;
       }
@@ -131,6 +135,7 @@ public partial class SpriteWithNormals {
       _pendingLoadRequestVersion,
       _pendingColorLease,
       _pendingNormalLease,
+      _pendingSpecularLease,
       _pendingLoadPair,
       allowBlockingEditorSliceFallback
     );
@@ -138,9 +143,9 @@ public partial class SpriteWithNormals {
   }
 
   void ClearPendingState() {
-    _pendingColorLease = _pendingNormalLease = null;
-    _pendingColorAddress = _pendingNormalAddress = "";
-    _pendingColorSliceAddress = _pendingNormalSliceAddress = "";
+    _pendingColorLease = _pendingNormalLease = _pendingSpecularLease = null;
+    _pendingColorAddress = _pendingNormalAddress = _pendingSpecularAddress = "";
+    _pendingColorSliceAddress = _pendingNormalSliceAddress = _pendingSpecularSliceAddress = "";
     _pendingRetargetAllowedFrame = 0;
     _deferredOverwriteAllowedFrame = 0;
     _pendingSupplementWaitStartedAt = -1f;
@@ -155,7 +160,7 @@ public partial class SpriteWithNormals {
     _deferredRequest = default;
     _deferredOverwriteAllowedFrame = 0;
     if (ShouldLogFetch) {
-      LogSpriteFetch("start_deferred", "color='" + (deferred.colorAddress ?? "") + "' normal='" + (deferred.normalAddress ?? "") + "'");
+      LogSpriteFetch("start_deferred", "color='" + (deferred.colorAddress ?? "") + "' normal='" + (deferred.normalAddress ?? "") + "' specular='" + (deferred.specularAddress ?? "") + "'");
     }
     QueueRuntimeLoad(deferred);
   }
@@ -178,7 +183,8 @@ public partial class SpriteWithNormals {
     if (!string.Equals(lookupLabelPrefix, _lastLookupLabelPrefix, StringComparison.Ordinal)) return false;
     if (!string.Equals(lookupCategory, _lastLookupCategory, StringComparison.Ordinal)) return false;
     if (AddressEquals(nextPair.RuntimeColorAddress, _pendingColorAddress) &&
-        AddressEquals(nextPair.RuntimeNormalAddress, _pendingNormalAddress)) {
+        AddressEquals(nextPair.RuntimeNormalAddress, _pendingNormalAddress) &&
+        AddressEquals(nextPair.RuntimeSpecularAddress, _pendingSpecularAddress)) {
       return false;
     }
     return true;
@@ -370,10 +376,12 @@ public partial class SpriteWithNormals {
     SpriteAddressPair pair,
     out Sprite colorSprite,
     out Sprite normalSprite,
+    out Sprite specularSprite,
     out string sourceTag
   ) {
     colorSprite = null;
     normalSprite = null;
+    specularSprite = null;
     sourceTag = "none";
 
     var colorFromLocal = TryGetLocalLoadedSprite(pair.colorAddress, out colorSprite);
@@ -394,8 +402,17 @@ public partial class SpriteWithNormals {
       }
     }
 
+    var specularFromLocal = true;
+    if (!string.IsNullOrWhiteSpace(pair.specularAddress)) {
+      specularFromLocal = TryGetLocalLoadedSprite(pair.specularAddress, out specularSprite);
+      if (!specularFromLocal) {
+        TextureResidencyCache.TryGetLoadedSprite(pair.specularAddress, out specularSprite, pump: false);
+        if (specularSprite != null) CacheLocalLoadedSprite(pair.specularAddress, specularSprite);
+      }
+    }
+
     // Both caches resolve by exact slice address before storing the sprite.
-    sourceTag = ResolveCacheSourceTag(colorFromLocal, normalFromLocal, pair.normalAddress);
+    sourceTag = ResolveCacheSourceTag(colorFromLocal, normalFromLocal, specularFromLocal, pair.normalAddress, pair.specularAddress);
     return true;
   }
 
@@ -419,11 +436,13 @@ public partial class SpriteWithNormals {
     _localLoadedSpriteByAddress[normalizedAddress] = sprite;
   }
 
-  static string ResolveCacheSourceTag(bool colorFromLocal, bool normalFromLocal, string normalAddress) {
+  static string ResolveCacheSourceTag(bool colorFromLocal, bool normalFromLocal, bool specularFromLocal, string normalAddress, string specularAddress) {
     var hasNormal = !string.IsNullOrWhiteSpace(normalAddress);
-    if (!hasNormal) return colorFromLocal ? "local" : "global";
-    if (colorFromLocal && normalFromLocal) return "local";
-    if (!colorFromLocal && !normalFromLocal) return "global";
+    var hasSpecular = !string.IsNullOrWhiteSpace(specularAddress);
+    var allLocal = colorFromLocal && (!hasNormal || normalFromLocal) && (!hasSpecular || specularFromLocal);
+    var allGlobal = !colorFromLocal && (!hasNormal || !normalFromLocal) && (!hasSpecular || !specularFromLocal);
+    if (allLocal) return "local";
+    if (allGlobal) return "global";
     return "mixed";
   }
 
@@ -520,8 +539,10 @@ public partial class SpriteWithNormals {
     _lastLookupFrame = lookupKey.frame;
     _targetColorAddress = fallbackPair.RuntimeColorAddress ?? "";
     _targetNormalAddress = fallbackPair.RuntimeNormalAddress ?? "";
+    _targetSpecularAddress = fallbackPair.RuntimeSpecularAddress ?? "";
     _targetColorSliceAddress = fallbackPair.colorAddress ?? "";
     _targetNormalSliceAddress = fallbackPair.normalAddress ?? "";
+    _targetSpecularSliceAddress = fallbackPair.specularAddress ?? "";
 
     if (Application.isPlaying) {
       CancelPendingRequest();
@@ -544,7 +565,7 @@ public partial class SpriteWithNormals {
     var hasLegacyJpegNormal = IsLegacyJpegNormalAddress(pair.RuntimeNormalAddress);
     if ((hasLegacyJpegNormal || string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)) &&
         TryBuildConventionNormalAddress(pair, out var conventionNormalAddress) &&
-        IsConventionNormalAvailable(conventionNormalAddress)) {
+        IsConventionAtlasAvailable(conventionNormalAddress)) {
       var conventionPair = SpriteAddressPair.Create("", conventionNormalAddress);
       pair.normalAddress = conventionPair.normalAddress;
       pair.normalAtlasAddress = conventionPair.normalAtlasAddress;
@@ -554,22 +575,45 @@ public partial class SpriteWithNormals {
       ClearNormalAddress(ref pair);
     }
 
-#if UNITY_EDITOR
-    if (!Application.isPlaying || !Application.isEditor) return pair;
-    if (string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)) return pair;
-    if (IsEditorRuntimeAtlasAddressAvailable(pair.RuntimeNormalAddress)) return pair;
-
-    var warningKey = "runtime_missing_normal_addressable|" + pair.RuntimeNormalAddress;
-    if (_editorPreviewNormalMissWarnings.Add(warningKey)) {
-      Debug.LogWarning(
-        "[SpriteWithNormals] Dropped unavailable runtime normal atlas on " + gameObject.name +
-        " key=(" + lookupKey + ")" +
-        " color='" + (pair.RuntimeColorAddress ?? "") + "'" +
-        " normal='" + (pair.RuntimeNormalAddress ?? "") + "'"
-      );
+    if (string.IsNullOrWhiteSpace(pair.RuntimeSpecularAddress) &&
+        TryBuildConventionSpecularAddress(pair, out var conventionSpecularAddress) &&
+        IsConventionAtlasAvailable(conventionSpecularAddress)) {
+      var conventionSpecularPair = SpriteAddressPair.Create("", "", conventionSpecularAddress);
+      pair.specularAddress = conventionSpecularPair.specularAddress;
+      pair.specularAtlasAddress = conventionSpecularPair.specularAtlasAddress;
+      pair.specularSpriteName = conventionSpecularPair.specularSpriteName;
     }
 
-    ClearNormalAddress(ref pair);
+#if UNITY_EDITOR
+    if (!Application.isPlaying || !Application.isEditor) return pair;
+
+    if (!string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress) &&
+        !IsEditorRuntimeAtlasAddressAvailable(pair.RuntimeNormalAddress)) {
+      var warningKey = "runtime_missing_normal_addressable|" + pair.RuntimeNormalAddress;
+      if (_editorPreviewNormalMissWarnings.Add(warningKey)) {
+        Debug.LogWarning(
+          "[SpriteWithNormals] Dropped unavailable runtime normal atlas on " + gameObject.name +
+          " key=(" + lookupKey + ")" +
+          " color='" + (pair.RuntimeColorAddress ?? "") + "'" +
+          " normal='" + (pair.RuntimeNormalAddress ?? "") + "'"
+        );
+      }
+      ClearNormalAddress(ref pair);
+    }
+
+    if (!string.IsNullOrWhiteSpace(pair.RuntimeSpecularAddress) &&
+        !IsEditorRuntimeAtlasAddressAvailable(pair.RuntimeSpecularAddress)) {
+      var warningKey = "runtime_missing_specular_addressable|" + pair.RuntimeSpecularAddress;
+      if (_editorPreviewSpecularMissWarnings.Add(warningKey)) {
+        Debug.LogWarning(
+          "[SpriteWithNormals] Dropped unavailable runtime specular atlas on " + gameObject.name +
+          " key=(" + lookupKey + ")" +
+          " color='" + (pair.RuntimeColorAddress ?? "") + "'" +
+          " specular='" + (pair.RuntimeSpecularAddress ?? "") + "'"
+        );
+      }
+      ClearSpecularAddress(ref pair);
+    }
 #endif
     return pair;
   }
@@ -606,8 +650,11 @@ public partial class SpriteWithNormals {
 
   static readonly Dictionary<string, ConventionNormalAtlasSpriteMetadata>
     s_ConventionNormalAtlasSpriteMetadata = new(StringComparer.OrdinalIgnoreCase);
+  static readonly Dictionary<string, ConventionNormalAtlasSpriteMetadata>
+    s_ConventionSpecularAtlasSpriteMetadata = new(StringComparer.OrdinalIgnoreCase);
 #endif
   static readonly Queue<ConventionNormalCacheKey> s_ConventionNormalAddressCacheInsertionOrder = new();
+  static readonly Queue<ConventionNormalCacheKey> s_ConventionSpecularAddressCacheInsertionOrder = new();
 
   static void EnsureConventionNormalAddressCacheVersion() {
     var contentReloadVersion = ActiveContentRegistryRuntime.ReloadVersion;
@@ -615,10 +662,14 @@ public partial class SpriteWithNormals {
 
     s_ConventionNormalAddressCache.Clear();
     s_ConventionNormalAddressCacheInsertionOrder.Clear();
+    s_ConventionSpecularAddressCache.Clear();
+    s_ConventionSpecularAddressCacheInsertionOrder.Clear();
 #if UNITY_EDITOR
     s_ConventionNormalAtlasSpriteMetadata.Clear();
+    s_ConventionSpecularAtlasSpriteMetadata.Clear();
 #endif
     s_ConventionNormalAddressCacheContentReloadVersion = contentReloadVersion;
+    s_ConventionSpecularAddressCacheContentReloadVersion = contentReloadVersion;
   }
 
   static void CacheConventionNormalAddress(ConventionNormalCacheKey cacheKey, string normalAddress) {
@@ -636,6 +687,23 @@ public partial class SpriteWithNormals {
     if (s_ConventionNormalAddressCache.Count >= MaxConventionNormalAddressCacheEntries) return;
     s_ConventionNormalAddressCache[cacheKey] = normalAddress ?? "";
     s_ConventionNormalAddressCacheInsertionOrder.Enqueue(cacheKey);
+  }
+
+  static void CacheConventionSpecularAddress(ConventionNormalCacheKey cacheKey, string specularAddress) {
+    if (s_ConventionSpecularAddressCache.ContainsKey(cacheKey)) {
+      s_ConventionSpecularAddressCache[cacheKey] = specularAddress ?? "";
+      return;
+    }
+
+    while (s_ConventionSpecularAddressCache.Count >= MaxConventionNormalAddressCacheEntries &&
+           s_ConventionSpecularAddressCacheInsertionOrder.Count > 0) {
+      var oldestKey = s_ConventionSpecularAddressCacheInsertionOrder.Dequeue();
+      if (s_ConventionSpecularAddressCache.Remove(oldestKey)) break;
+    }
+
+    if (s_ConventionSpecularAddressCache.Count >= MaxConventionNormalAddressCacheEntries) return;
+    s_ConventionSpecularAddressCache[cacheKey] = specularAddress ?? "";
+    s_ConventionSpecularAddressCacheInsertionOrder.Enqueue(cacheKey);
   }
 
 #if UNITY_EDITOR
@@ -681,6 +749,49 @@ public partial class SpriteWithNormals {
     s_ConventionNormalAtlasSpriteMetadata[normalAtlasAddress] = metadata;
     return metadata;
   }
+
+  static ConventionNormalAtlasSpriteMetadata GetConventionSpecularAtlasSpriteMetadata(
+    string specularAtlasAddress
+  ) {
+    if (s_ConventionSpecularAtlasSpriteMetadata.TryGetValue(
+          specularAtlasAddress,
+          out var cachedMetadata
+        )) {
+      return cachedMetadata;
+    }
+
+    if (s_ConventionSpecularAtlasSpriteMetadata.Count >= MaxConventionNormalAddressCacheEntries) {
+      s_ConventionSpecularAtlasSpriteMetadata.Clear();
+    }
+
+    var spriteNames = new HashSet<string>(StringComparer.Ordinal);
+    var spriteCount = 0;
+    var onlySpriteName = "";
+    var specularAssets = AssetDatabase.LoadAllAssetsAtPath(specularAtlasAddress);
+    if (specularAssets != null) {
+      for (var i = 0; i < specularAssets.Length; i++) {
+        if (specularAssets[i] is not Sprite candidate) continue;
+        var candidateName = candidate.name;
+        spriteCount++;
+        onlySpriteName = candidateName;
+        if (!string.IsNullOrWhiteSpace(candidateName)) {
+          spriteNames.Add(candidateName);
+        }
+      }
+    }
+
+    if (spriteCount != 1) {
+      onlySpriteName = "";
+    }
+
+    var metadata = new ConventionNormalAtlasSpriteMetadata(
+      spriteNames,
+      spriteCount,
+      onlySpriteName
+    );
+    s_ConventionSpecularAtlasSpriteMetadata[specularAtlasAddress] = metadata;
+    return metadata;
+  }
 #endif
 
   static bool TryBuildConventionNormalAddress(SpriteAddressPair pair, out string normalAddress) {
@@ -700,7 +811,7 @@ public partial class SpriteWithNormals {
     }
 
     var colorStem = Path.GetFileNameWithoutExtension(colorAtlasAddress);
-    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal)) {
+    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal) || colorStem.EndsWith("S", StringComparison.Ordinal)) {
       CacheConventionNormalAddress(cacheKey, "");
       return false;
     }
@@ -726,18 +837,57 @@ public partial class SpriteWithNormals {
     return !string.IsNullOrWhiteSpace(normalAddress);
   }
 
-  static bool IsConventionNormalAvailable(string normalAddress) {
+  static bool TryBuildConventionSpecularAddress(SpriteAddressPair pair, out string specularAddress) {
+    specularAddress = "";
+    var colorAtlasAddress = pair.RuntimeColorAddress;
+    if (string.IsNullOrWhiteSpace(colorAtlasAddress)) return false;
+
+    EnsureConventionNormalAddressCacheVersion();
+    var cacheKey = new ConventionNormalCacheKey(colorAtlasAddress, pair.colorSpriteName);
+    if (s_ConventionSpecularAddressCache.TryGetValue(cacheKey, out specularAddress)) {
+      return !string.IsNullOrWhiteSpace(specularAddress);
+    }
+
+    if (!string.Equals(Path.GetExtension(colorAtlasAddress), ".png", StringComparison.OrdinalIgnoreCase)) {
+      CacheConventionSpecularAddress(cacheKey, "");
+      return false;
+    }
+
+    var colorStem = Path.GetFileNameWithoutExtension(colorAtlasAddress);
+    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal) || colorStem.EndsWith("S", StringComparison.Ordinal)) {
+      CacheConventionSpecularAddress(cacheKey, "");
+      return false;
+    }
+
+    var specularAtlasAddress = colorAtlasAddress.Substring(0, colorAtlasAddress.Length - 4) + "S.png";
+    var specularSpriteName = pair.colorSpriteName;
+#if UNITY_EDITOR
+    if (Application.isEditor && !string.IsNullOrWhiteSpace(specularSpriteName)) {
+      var atlasMetadata = GetConventionSpecularAtlasSpriteMetadata(specularAtlasAddress);
+      if (!atlasMetadata.Contains(specularSpriteName) && atlasMetadata.spriteCount == 1) {
+        specularSpriteName = atlasMetadata.onlySpriteName;
+      }
+    }
+#endif
+    specularAddress = string.IsNullOrWhiteSpace(specularSpriteName)
+      ? specularAtlasAddress
+      : SpriteSliceAddressUtility.BuildSliceAddress(specularAtlasAddress, specularSpriteName);
+    CacheConventionSpecularAddress(cacheKey, specularAddress);
+    return !string.IsNullOrWhiteSpace(specularAddress);
+  }
+
+  static bool IsConventionAtlasAvailable(string atlasOrSliceAddress) {
 #if UNITY_EDITOR
     if (Application.isEditor) {
-      var normalAtlasAddress = normalAddress;
-      if (SpriteSliceAddressUtility.TryParseSliceAddress(normalAddress, out var parsedAtlasAddress, out _)) {
-        normalAtlasAddress = parsedAtlasAddress;
+      var atlasAddress = atlasOrSliceAddress;
+      if (SpriteSliceAddressUtility.TryParseSliceAddress(atlasOrSliceAddress, out var parsedAtlasAddress, out _)) {
+        atlasAddress = parsedAtlasAddress;
       }
 
       if (!Application.isPlaying) {
-        return AssetDatabase.LoadMainAssetAtPath(normalAtlasAddress) != null;
+        return AssetDatabase.LoadMainAssetAtPath(atlasAddress) != null;
       }
-      return IsEditorRuntimeAtlasAddressAvailable(normalAtlasAddress);
+      return IsEditorRuntimeAtlasAddressAvailable(atlasAddress);
     }
 #endif
     return true;
@@ -747,6 +897,12 @@ public partial class SpriteWithNormals {
     pair.normalAddress = "";
     pair.normalAtlasAddress = "";
     pair.normalSpriteName = "";
+  }
+
+  static void ClearSpecularAddress(ref SpriteAddressPair pair) {
+    pair.specularAddress = "";
+    pair.specularAtlasAddress = "";
+    pair.specularSpriteName = "";
   }
 
   bool TryResolvePairCached(SpriteLookupKey key, out SpriteAddressPair pair, out bool pending) {
@@ -789,10 +945,14 @@ public partial class SpriteWithNormals {
     _hasLastLookup = false;
     _targetColorAddress = "";
     _targetNormalAddress = "";
+    _targetSpecularAddress = "";
     _targetColorSliceAddress = "";
     _targetNormalSliceAddress = "";
+    _targetSpecularSliceAddress = "";
     _lastAppliedNormalTexture = null;
     _hasAppliedNormalTexture = false;
+    _lastAppliedSpecularTexture = null;
+    _hasAppliedSpecularTexture = false;
   }
 
   void CachePairLookupHit(PairLookupCacheKey cacheKey, SpriteAddressPair pair) {

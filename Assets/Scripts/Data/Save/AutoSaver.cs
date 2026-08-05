@@ -33,7 +33,7 @@ public class AutoSaver : MonoBehaviour {
   }
 
   void FixedUpdate() {
-    if (!enableTimeTracking) return;
+    if (!enableTimeTracking || !SingleSceneManager.IsBlackscreenFullyTransparent) return;
     secondTracker += Time.unscaledDeltaTime;
     if (secondTracker >= 1f) {
       wholeSeconds = Mathf.FloorToInt(secondTracker);
@@ -73,6 +73,8 @@ public class AutoSaver : MonoBehaviour {
 
   void SaveAll() {
     characterState ??= SingleSceneManager.ResolveGameplayCharacterState();
+    characterState?.FlushPendingProgressSave();
+    ContentEpisodeProgression.FlushPendingSave();
     gameData["playtimeHours"] = playtimeHours;
     gameData["playtimeMinutes"] = playtimeMinutes;
     gameData["playtimeSeconds"] = playtimeSeconds;

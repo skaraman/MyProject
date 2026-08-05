@@ -15,6 +15,7 @@ public class Destructible : MonoBehaviour
     private ulong lastProcessedHitSourceId;
     private CharacterState characterState;
     private DestructibleHitPieceParticles hitPieceParticles;
+    private TreeLeafHitReaction treeLeafHitReaction;
 
     [Header("Colliders")]
     public List<Collider2D> colliders = new List<Collider2D>();
@@ -108,6 +109,7 @@ public class Destructible : MonoBehaviour
             hitPieceParticles = gameObject.AddComponent<DestructibleHitPieceParticles>();
         }
         hitPieceParticles.Initialize(piecesParent);
+        treeLeafHitReaction = TreeLeafHitReaction.TryAttach(this, piecesParent);
 
         // Ensure the global shadow pool is pre-warmed so pieces don't create it mid-combat
         DestructiblePiece.EnsureShadowPool();
@@ -346,6 +348,10 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(receiverCollider, collision.collider.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, collision.collider))
         {
+            treeLeafHitReaction?.PlayHit(
+                collision.collider.transform.position,
+                hitBox != null ? (Object)hitBox : collision.collider
+            );
             PlayBrokenPieceHitParticles(
                 targetPool.collider,
                 collision.collider.transform.position
@@ -385,6 +391,10 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(receiverCollider, collider.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, collider))
         {
+            treeLeafHitReaction?.PlayHit(
+                collider.transform.position,
+                hitBox != null ? (Object)hitBox : collider
+            );
             PlayBrokenPieceHitParticles(
                 targetPool.collider,
                 collider.transform.position
@@ -407,6 +417,7 @@ public class Destructible : MonoBehaviour
         PiecePool targetPool = GetPoolForReceiver(targetCollider, hitBox.transform.position);
         if (targetPool != null && TryBeginHit(hitBox, null))
         {
+            treeLeafHitReaction?.PlayHit(hitBox.transform.position, hitBox);
             PlayBrokenPieceHitParticles(
                 targetCollider,
                 hitBox.transform.position
@@ -441,6 +452,8 @@ public class Destructible : MonoBehaviour
             : transform.position;
         impactPosition.z = transform.position.z;
 
+        // Send the broken pieces away from the impact point rather than back
+        // toward the incoming hit source.
         var impactDirection = (Vector2)(impactPosition - sourcePosition);
         hitPieceParticles.Play(impactPosition, impactDirection);
     }
@@ -658,6 +671,7 @@ public class Destructible : MonoBehaviour
         if (pieceObj == null) return;
 
         RemovePieceFromAllPools(pieceObj);
+        treeLeafHitReaction?.OnPieceLaunched(pieceObj);
 
         DestructiblePiece pieceBehaviour = pieceObj.GetComponent<DestructiblePiece>();
         if (pieceBehaviour != null)

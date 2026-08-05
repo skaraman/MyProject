@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 5925633004132038823}
   - component: {fileID: 1763875991487582888}
   - component: {fileID: 4187777387214015948}
+  - component: {fileID: 5848543765470082463}
   m_Layer: 6
   m_Name: c
   m_TagString: Untagged
@@ -55,6 +56,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -215,6 +217,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 5973408823054350585}
   attachedPiece2: {fileID: 4569729618514228900}
   pair: {fileID: 4862689463523083618}
+--- !u!114 &5848543765470082463
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 66057456169531185}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &118559548544430488
 GameObject:
   m_ObjectHideFlags: 0
@@ -326,6 +389,7 @@ GameObject:
   - component: {fileID: 8150018801728422613}
   - component: {fileID: 7473642288790388765}
   - component: {fileID: 5296529038772934630}
+  - component: {fileID: 4974239434278247037}
   m_Layer: 6
   m_Name: k
   m_TagString: Untagged
@@ -366,6 +430,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -526,6 +591,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 4664008289978310926}
   attachedPiece2: {fileID: 8036676540073619230}
   pair: {fileID: 5589703184252351388}
+--- !u!114 &4974239434278247037
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 271596113758498789}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &306216995367654974
 GameObject:
   m_ObjectHideFlags: 0
@@ -581,6 +707,7 @@ GameObject:
   - component: {fileID: 7063332275328662067}
   - component: {fileID: 2909791598362059414}
   - component: {fileID: 1658435818590662486}
+  - component: {fileID: 1965699728611444355}
   m_Layer: 6
   m_Name: f
   m_TagString: Untagged
@@ -620,6 +747,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -689,6 +817,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &1965699728611444355
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 412392879215288320}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &984233142018626261
 GameObject:
   m_ObjectHideFlags: 0
@@ -700,6 +889,7 @@ GameObject:
   - component: {fileID: 8489632449127252874}
   - component: {fileID: 3446027940934217410}
   - component: {fileID: 1259978320536710877}
+  - component: {fileID: 4746635713356279075}
   m_Layer: 6
   m_Name: d
   m_TagString: Untagged
@@ -739,6 +929,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -808,6 +999,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &4746635713356279075
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 984233142018626261}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &1360996862197527849
 GameObject:
   m_ObjectHideFlags: 0
@@ -852,6 +1104,7 @@ GameObject:
   - component: {fileID: 6606490228950123296}
   - component: {fileID: 6967785254245826826}
   - component: {fileID: 4195969542088679477}
+  - component: {fileID: 4170393056574786535}
   m_Layer: 6
   m_Name: r
   m_TagString: Untagged
@@ -891,6 +1144,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -960,6 +1214,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &4170393056574786535
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1623343183010968844}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &1753049752903423835
 GameObject:
   m_ObjectHideFlags: 0
@@ -1015,6 +1330,7 @@ GameObject:
   - component: {fileID: 6135906438976278507}
   - component: {fileID: 1157621570234952542}
   - component: {fileID: 5147060114117818758}
+  - component: {fileID: 2495124297067918547}
   m_Layer: 6
   m_Name: a
   m_TagString: Untagged
@@ -1054,6 +1370,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -1123,6 +1440,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &2495124297067918547
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1936297672612997992}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &2048621040441159485
 GameObject:
   m_ObjectHideFlags: 0
@@ -1138,6 +1516,7 @@ GameObject:
   - component: {fileID: 1481439790904532552}
   - component: {fileID: 2723843473651257198}
   - component: {fileID: 2821661518243684400}
+  - component: {fileID: 2864570305399841339}
   m_Layer: 6
   m_Name: n
   m_TagString: Untagged
@@ -1178,6 +1557,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -1338,6 +1718,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 6749522346326323971}
   attachedPiece2: {fileID: 2641438707923122470}
   pair: {fileID: 7175840849096002266}
+--- !u!114 &2864570305399841339
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2048621040441159485}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &2206615115877715810
 GameObject:
   m_ObjectHideFlags: 0
@@ -1493,6 +1934,7 @@ GameObject:
   - component: {fileID: 1590064100655361859}
   - component: {fileID: 2149662373959292769}
   - component: {fileID: 5799890847687712756}
+  - component: {fileID: 3612627309531049581}
   m_Layer: 6
   m_Name: a
   m_TagString: Untagged
@@ -1533,6 +1975,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -1693,6 +2136,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 7248249332357143259}
   attachedPiece2: {fileID: 66057456169531185}
   pair: {fileID: 1936297672612997992}
+--- !u!114 &3612627309531049581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2281004496742882263}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &2523500842126209785
 GameObject:
   m_ObjectHideFlags: 0
@@ -1704,6 +2208,7 @@ GameObject:
   - component: {fileID: 8667945545779984301}
   - component: {fileID: 8747324034267624066}
   - component: {fileID: 7784952732388657024}
+  - component: {fileID: 6841341693512048621}
   m_Layer: 6
   m_Name: i
   m_TagString: Untagged
@@ -1743,6 +2248,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -1812,6 +2318,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &6841341693512048621
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2523500842126209785}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &2564844583875817150
 GameObject:
   m_ObjectHideFlags: 0
@@ -1915,6 +2482,7 @@ GameObject:
   - component: {fileID: 3369028438723930910}
   - component: {fileID: 4005612454591273196}
   - component: {fileID: 2315268847007743870}
+  - component: {fileID: 8250635686331874720}
   m_Layer: 6
   m_Name: p
   m_TagString: Untagged
@@ -1955,6 +2523,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -2115,6 +2684,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 3415110053068361835}
   attachedPiece2: {fileID: 6266220547228330597}
   pair: {fileID: 2984681133351716022}
+--- !u!114 &8250635686331874720
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2641438707923122470}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &2773858012150257206
 GameObject:
   m_ObjectHideFlags: 0
@@ -2126,6 +2756,7 @@ GameObject:
   - component: {fileID: 6174525835298674330}
   - component: {fileID: 5399676143604478181}
   - component: {fileID: 4195596076244053709}
+  - component: {fileID: 6417384303399319863}
   m_Layer: 6
   m_Name: g
   m_TagString: Untagged
@@ -2165,6 +2796,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -2234,6 +2866,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &6417384303399319863
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2773858012150257206}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &2984681133351716022
 GameObject:
   m_ObjectHideFlags: 0
@@ -2245,6 +2938,7 @@ GameObject:
   - component: {fileID: 5156251900358214798}
   - component: {fileID: 4137352672233209658}
   - component: {fileID: 16666680920702591}
+  - component: {fileID: 5025394087446720712}
   m_Layer: 6
   m_Name: p
   m_TagString: Untagged
@@ -2284,6 +2978,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -2353,6 +3048,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &5025394087446720712
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2984681133351716022}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &3365331241616310647
 GameObject:
   m_ObjectHideFlags: 0
@@ -2412,6 +3168,7 @@ GameObject:
   - component: {fileID: 5511238877775376018}
   - component: {fileID: 416695358544688150}
   - component: {fileID: 1990916528723820240}
+  - component: {fileID: 7940108745336101265}
   m_Layer: 6
   m_Name: q
   m_TagString: Untagged
@@ -2452,6 +3209,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -2612,6 +3370,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 6266220547228330597}
   attachedPiece2: {fileID: 2281004496742882263}
   pair: {fileID: 7240463483093952631}
+--- !u!114 &7940108745336101265
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3415110053068361835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &3517051246598042323
 GameObject:
   m_ObjectHideFlags: 0
@@ -2671,6 +3490,7 @@ GameObject:
   - component: {fileID: 8627000495806050979}
   - component: {fileID: 705668572753845031}
   - component: {fileID: 6432142478400598224}
+  - component: {fileID: 1530309062306529658}
   m_Layer: 6
   m_Name: h
   m_TagString: Untagged
@@ -2711,6 +3531,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -2871,6 +3692,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 4452517429897920989}
   attachedPiece2: {fileID: 8169576187842178424}
   pair: {fileID: 8321318650175689550}
+--- !u!114 &1530309062306529658
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3817609922681663431}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4209421522028838608
 GameObject:
   m_ObjectHideFlags: 0
@@ -2930,6 +3812,7 @@ GameObject:
   - component: {fileID: 6221845266729647129}
   - component: {fileID: 6725184847845637505}
   - component: {fileID: 2441617210956806155}
+  - component: {fileID: 8634014973492645304}
   m_Layer: 6
   m_Name: i
   m_TagString: Untagged
@@ -2970,6 +3853,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -3130,6 +4014,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 8169576187842178424}
   attachedPiece2: {fileID: 271596113758498789}
   pair: {fileID: 2523500842126209785}
+--- !u!114 &8634014973492645304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4452517429897920989}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4569729618514228900
 GameObject:
   m_ObjectHideFlags: 0
@@ -3145,6 +4090,7 @@ GameObject:
   - component: {fileID: 3011509042430672443}
   - component: {fileID: 8458593544801239725}
   - component: {fileID: 7220496194021497891}
+  - component: {fileID: 6964710735370885509}
   m_Layer: 6
   m_Name: e
   m_TagString: Untagged
@@ -3185,6 +4131,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -3345,6 +4292,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 6718845442122377604}
   attachedPiece2: {fileID: 7530085318497429051}
   pair: {fileID: 8123644235592200037}
+--- !u!114 &6964710735370885509
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4569729618514228900}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4664008289978310926
 GameObject:
   m_ObjectHideFlags: 0
@@ -3360,6 +4368,7 @@ GameObject:
   - component: {fileID: 3116437994855486899}
   - component: {fileID: 3104244825598381788}
   - component: {fileID: 8993229479800061383}
+  - component: {fileID: 2948205305252551868}
   m_Layer: 6
   m_Name: l
   m_TagString: Untagged
@@ -3400,6 +4409,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -3560,6 +4570,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 8036676540073619230}
   attachedPiece2: {fileID: 2048621040441159485}
   pair: {fileID: 8828026241649221271}
+--- !u!114 &2948205305252551868
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4664008289978310926}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4734471846500817209
 GameObject:
   m_ObjectHideFlags: 0
@@ -3615,6 +4686,7 @@ GameObject:
   - component: {fileID: 5125580267403804166}
   - component: {fileID: 7285765612980616008}
   - component: {fileID: 10239516556946613}
+  - component: {fileID: 1184196872114073543}
   m_Layer: 6
   m_Name: b
   m_TagString: Untagged
@@ -3654,6 +4726,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -3723,6 +4796,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &1184196872114073543
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4787381082788012809}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4834271115624678423
 GameObject:
   m_ObjectHideFlags: 0
@@ -3734,6 +4868,7 @@ GameObject:
   - component: {fileID: 2628259872245046867}
   - component: {fileID: 3436484176073987147}
   - component: {fileID: 1470714388263787609}
+  - component: {fileID: 2605100859533794551}
   m_Layer: 6
   m_Name: j
   m_TagString: Untagged
@@ -3773,6 +4908,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -3842,6 +4978,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &2605100859533794551
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4834271115624678423}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4862689463523083618
 GameObject:
   m_ObjectHideFlags: 0
@@ -3853,6 +5050,7 @@ GameObject:
   - component: {fileID: 7684864250677334114}
   - component: {fileID: 1898008588105880908}
   - component: {fileID: 346529727743778104}
+  - component: {fileID: 6039103943085054156}
   m_Layer: 6
   m_Name: c
   m_TagString: Untagged
@@ -3892,6 +5090,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -3961,6 +5160,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &6039103943085054156
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4862689463523083618}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &4956206202087890899
 GameObject:
   m_ObjectHideFlags: 0
@@ -4065,6 +5325,7 @@ GameObject:
   - component: {fileID: 4104604141810395107}
   - component: {fileID: 8461416290899001115}
   - component: {fileID: 6117206883684411696}
+  - component: {fileID: 4329837878282631492}
   m_Layer: 6
   m_Name: k
   m_TagString: Untagged
@@ -4104,6 +5365,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -4173,6 +5435,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &4329837878282631492
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5589703184252351388}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &5973408823054350585
 GameObject:
   m_ObjectHideFlags: 0
@@ -4188,6 +5511,7 @@ GameObject:
   - component: {fileID: 3971620361712251622}
   - component: {fileID: 7801015887723351587}
   - component: {fileID: 7597938244424248809}
+  - component: {fileID: 3605840164335754923}
   m_Layer: 6
   m_Name: d
   m_TagString: Untagged
@@ -4228,6 +5552,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -4388,6 +5713,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 6718845442122377604}
   attachedPiece2: {fileID: 4569729618514228900}
   pair: {fileID: 984233142018626261}
+--- !u!114 &3605840164335754923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5973408823054350585}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &6117166539714010262
 GameObject:
   m_ObjectHideFlags: 0
@@ -4447,6 +5833,7 @@ GameObject:
   - component: {fileID: 6969370608839806787}
   - component: {fileID: 6577378857960486957}
   - component: {fileID: 3175848318246893614}
+  - component: {fileID: 2910174431531235691}
   m_Layer: 6
   m_Name: r
   m_TagString: Untagged
@@ -4487,6 +5874,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -4647,6 +6035,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 2281004496742882263}
   attachedPiece2: {fileID: 7248249332357143259}
   pair: {fileID: 1623343183010968844}
+--- !u!114 &2910174431531235691
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6266220547228330597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &6701053567657441823
 GameObject:
   m_ObjectHideFlags: 0
@@ -4706,6 +6155,7 @@ GameObject:
   - component: {fileID: 4824135623937616331}
   - component: {fileID: 9174758350198567223}
   - component: {fileID: 4310787291290957187}
+  - component: {fileID: 570003953683610883}
   m_Layer: 6
   m_Name: f
   m_TagString: Untagged
@@ -4746,6 +6196,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -4906,6 +6357,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 7530085318497429051}
   attachedPiece2: {fileID: 3817609922681663431}
   pair: {fileID: 412392879215288320}
+--- !u!114 &570003953683610883
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6718845442122377604}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &6749522346326323971
 GameObject:
   m_ObjectHideFlags: 0
@@ -4921,6 +6433,7 @@ GameObject:
   - component: {fileID: 6867300719145154936}
   - component: {fileID: 1513676564190591869}
   - component: {fileID: 791420446199754029}
+  - component: {fileID: 6015533073064326214}
   m_Layer: 6
   m_Name: o
   m_TagString: Untagged
@@ -4961,6 +6474,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -5121,6 +6635,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 3415110053068361835}
   attachedPiece2: {fileID: 2641438707923122470}
   pair: {fileID: 7355127268676235864}
+--- !u!114 &6015533073064326214
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6749522346326323971}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &6808330354424747212
 GameObject:
   m_ObjectHideFlags: 0
@@ -5326,6 +6901,7 @@ GameObject:
   - component: {fileID: 418170849839207025}
   - component: {fileID: 764556449869627177}
   - component: {fileID: 6434124655468881658}
+  - component: {fileID: 7721453945700516815}
   m_Layer: 6
   m_Name: n
   m_TagString: Untagged
@@ -5365,6 +6941,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -5434,6 +7011,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &7721453945700516815
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7175840849096002266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &7235122664840542659
 GameObject:
   m_ObjectHideFlags: 0
@@ -5489,6 +7127,7 @@ GameObject:
   - component: {fileID: 5102583822387717456}
   - component: {fileID: 1481456799005958378}
   - component: {fileID: 5253178897715793846}
+  - component: {fileID: 5870641622256730878}
   m_Layer: 6
   m_Name: q
   m_TagString: Untagged
@@ -5528,6 +7167,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -5597,6 +7237,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &5870641622256730878
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7240463483093952631}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &7248249332357143259
 GameObject:
   m_ObjectHideFlags: 0
@@ -5612,6 +7313,7 @@ GameObject:
   - component: {fileID: 3807852169916967846}
   - component: {fileID: 6791853719582635286}
   - component: {fileID: 3736872714983045209}
+  - component: {fileID: 8832204763478396329}
   m_Layer: 6
   m_Name: b
   m_TagString: Untagged
@@ -5652,6 +7354,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -5812,6 +7515,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 66057456169531185}
   attachedPiece2: {fileID: 5973408823054350585}
   pair: {fileID: 4787381082788012809}
+--- !u!114 &8832204763478396329
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7248249332357143259}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &7355127268676235864
 GameObject:
   m_ObjectHideFlags: 0
@@ -5823,6 +7587,7 @@ GameObject:
   - component: {fileID: 879433853463542640}
   - component: {fileID: 6092822967360424014}
   - component: {fileID: 559618618094055320}
+  - component: {fileID: 4252129472281946696}
   m_Layer: 6
   m_Name: o
   m_TagString: Untagged
@@ -5862,6 +7627,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -5931,6 +7697,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &4252129472281946696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7355127268676235864}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &7390959869158293289
 GameObject:
   m_ObjectHideFlags: 0
@@ -5942,6 +7769,7 @@ GameObject:
   - component: {fileID: 9221050757557833194}
   - component: {fileID: 81736452733209812}
   - component: {fileID: 4833943804028586210}
+  - component: {fileID: 9131984123940277927}
   m_Layer: 6
   m_Name: m
   m_TagString: Untagged
@@ -5981,6 +7809,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -6050,6 +7879,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &9131984123940277927
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7390959869158293289}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &7530085318497429051
 GameObject:
   m_ObjectHideFlags: 0
@@ -6065,6 +7955,7 @@ GameObject:
   - component: {fileID: 2631823588474394776}
   - component: {fileID: 852167568961334722}
   - component: {fileID: 7280683619156841980}
+  - component: {fileID: 4028166931271300787}
   m_Layer: 6
   m_Name: g
   m_TagString: Untagged
@@ -6105,6 +7996,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -6265,6 +8157,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 3817609922681663431}
   attachedPiece2: {fileID: 4452517429897920989}
   pair: {fileID: 2773858012150257206}
+--- !u!114 &4028166931271300787
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7530085318497429051}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &8036676540073619230
 GameObject:
   m_ObjectHideFlags: 0
@@ -6280,6 +8233,7 @@ GameObject:
   - component: {fileID: 3318361233428848134}
   - component: {fileID: 9126524443821322569}
   - component: {fileID: 3471872242450154997}
+  - component: {fileID: 6732363029064443811}
   m_Layer: 6
   m_Name: m
   m_TagString: Untagged
@@ -6320,6 +8274,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -6480,6 +8435,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 2048621040441159485}
   attachedPiece2: {fileID: 2281004496742882263}
   pair: {fileID: 7390959869158293289}
+--- !u!114 &6732363029064443811
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8036676540073619230}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &8123644235592200037
 GameObject:
   m_ObjectHideFlags: 0
@@ -6491,6 +8507,7 @@ GameObject:
   - component: {fileID: 570787214247491724}
   - component: {fileID: 614192063314810607}
   - component: {fileID: 5821905010822131711}
+  - component: {fileID: 9116875357639862897}
   m_Layer: 6
   m_Name: e
   m_TagString: Untagged
@@ -6530,6 +8547,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -6599,6 +8617,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &9116875357639862897
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8123644235592200037}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &8169576187842178424
 GameObject:
   m_ObjectHideFlags: 0
@@ -6614,6 +8693,7 @@ GameObject:
   - component: {fileID: 8092288868975300134}
   - component: {fileID: 508357581846878538}
   - component: {fileID: 313984761593497241}
+  - component: {fileID: 7556330069057759769}
   m_Layer: 6
   m_Name: j
   m_TagString: Untagged
@@ -6654,6 +8734,7 @@ MonoBehaviour:
   category: broken5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -6814,6 +8895,67 @@ MonoBehaviour:
   attachedPiece1: {fileID: 271596113758498789}
   attachedPiece2: {fileID: 4664008289978310926}
   pair: {fileID: 4834271115624678423}
+--- !u!114 &7556330069057759769
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8169576187842178424}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20754719, g: 0.15566039, b: 0.1705485, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &8275900740850065094
 GameObject:
   m_ObjectHideFlags: 0
@@ -6869,6 +9011,7 @@ GameObject:
   - component: {fileID: 5692685775306134588}
   - component: {fileID: 7113927369652743306}
   - component: {fileID: 5367350094087263950}
+  - component: {fileID: 5234046822063166931}
   m_Layer: 6
   m_Name: h
   m_TagString: Untagged
@@ -6908,6 +9051,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -6977,6 +9121,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &5234046822063166931
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8321318650175689550}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &8806708697185688549
 GameObject:
   m_ObjectHideFlags: 0
@@ -7032,6 +9237,7 @@ GameObject:
   - component: {fileID: 1848231761338730707}
   - component: {fileID: 1743725324348987766}
   - component: {fileID: 5998162067402904714}
+  - component: {fileID: 234244005041300245}
   m_Layer: 6
   m_Name: l
   m_TagString: Untagged
@@ -7071,6 +9277,7 @@ MonoBehaviour:
   category: pieces5
   isAnimation: 0
   doNotRender: 0
+  castProjectedShadow: 1
   useTrimmedAtlasOffset: 0
   shaderMarginPixelsX: 0
   shaderMarginPixelsY: 0
@@ -7140,6 +9347,67 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
   m_BlendShapeWeights: []
+--- !u!114 &234244005041300245
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8828026241649221271}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c80ea8199c3c10546b57d1dc317828d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Project.Internal::AllIn1AnimatorInspector
+  _bool: 0
+  animateWhenNotVisible: 0
+  keywordToggles: []
+  floatAnimations: []
+  colorAnimations:
+  - prop: _Color
+    propHash: 57
+    sequences:
+    - from: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      to: {r: 0.20784314, g: 0.15686275, b: 0.17254902, a: 1}
+      duration: 1
+      delay: 0
+      easing:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: 0
+          value: 0
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 1
+          outSlope: 1
+          tangentMode: 34
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 0
+    loop: 1
+    autoPlay: 1
+    currentSequenceIndex: 0
+    timer: 0
+    lastValue: {r: 0, g: 0, b: 0, a: 0}
+    staticEvaluationState: 0
+    staticValue: {r: 0, g: 0, b: 0, a: 0}
+    isDone: 0
+  vectorAnimations: []
+  textureAssignments: []
+  activeFloatAnimations: []
+  activeColorAnimations: []
+  activeVectorAnimations: []
 --- !u!1 &8892602258272579744
 GameObject:
   m_ObjectHideFlags: 0

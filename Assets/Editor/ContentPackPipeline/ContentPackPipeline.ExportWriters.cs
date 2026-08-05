@@ -385,7 +385,8 @@ public static partial class ContentPackPipeline {
         libraryName = NormalizeAssetPath(source.libraryName),
         category = NormalizeToken(source.category),
         labelPrefix = NormalizeToken(source.labelPrefix),
-        normalAssetPath = NormalizeAssetPath(source.normalAssetPath)
+        normalAssetPath = NormalizeAssetPath(source.normalAssetPath),
+        specularAssetPath = NormalizeAssetPath(source.specularAssetPath)
       });
     }
 

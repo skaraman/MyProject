@@ -35,11 +35,11 @@ public sealed class ProjectedShadowLight2D : MonoBehaviour {
 
   void OnEnable() {
     CacheLight();
-    SceneLighting2D.RegisterLight(this);
+    DayNightCycle2D.RegisterLight(this);
   }
 
   void OnDisable() {
-    SceneLighting2D.UnregisterLight(this);
+    DayNightCycle2D.UnregisterLight(this);
   }
 
   void OnValidate() {
@@ -49,7 +49,7 @@ public sealed class ProjectedShadowLight2D : MonoBehaviour {
     CacheLight();
 
     if (Application.isPlaying && isActiveAndEnabled) {
-      SceneLighting2D.RegisterLight(this);
+      DayNightCycle2D.RegisterLight(this);
     }
   }
 

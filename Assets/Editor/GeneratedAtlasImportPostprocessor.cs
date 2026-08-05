@@ -71,7 +71,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     var importer = assetImporter as TextureImporter;
     if (importer == null) return;
     if (!TryBuildImportDefinition(assetPath, out var definition)) {
-      if (SpriteStreamingTextureImportPolicy.IsPairedNormalAtlasPath(assetPath)) {
+      if (SpriteStreamingTextureImportPolicy.IsPairedLightingDataAtlasPath(assetPath)) {
         SpriteStreamingTextureImportPolicy.Apply(importer, forceMultipleSpriteImportMode: false);
       }
       return;
@@ -146,6 +146,9 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
       if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAtlasAssetPath, out var normalAtlasAssetPath)) {
         InvalidateSiblingGeneratedAtlas(normalAtlasAssetPath);
       }
+      if (SpriteStreamingTextureImportPolicy.TryGetPairedSpecularAtlasPath(colorAtlasAssetPath, out var specularAtlasAssetPath)) {
+        InvalidateSiblingGeneratedAtlas(specularAtlasAssetPath);
+      }
       InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".jpg"));
       InvalidateSiblingGeneratedAtlas(Path.ChangeExtension(runtimeMetadataAssetPath, ".jpeg"));
     }
@@ -209,7 +212,7 @@ public sealed class GeneratedAtlasImportPostprocessor : AssetPostprocessor {
     }
 
     var metadataOwnerAtlasPath = normalizedAtlasAssetPath;
-    if (SpriteStreamingTextureImportPolicy.IsPairedNormalAtlasPath(normalizedAtlasAssetPath) &&
+    if (SpriteStreamingTextureImportPolicy.IsPairedLightingDataAtlasPath(normalizedAtlasAssetPath) &&
         SpriteStreamingTextureImportPolicy.TryGetPairedColorAtlasPath(normalizedAtlasAssetPath, out var pairedColorAtlasPath)) {
       metadataOwnerAtlasPath = TrimmedAtlasExporterWindow.NormalizeAssetPath(pairedColorAtlasPath);
     }

@@ -38,6 +38,11 @@ internal sealed class ContentPackPlayerDeployment : IPreprocessBuildWithReport, 
     }
 
     ValidateBuildTarget(report.summary.platform);
+    if (!SpriteIndexBuilder.PrepareForPlayerBuild(logResult: true, failOnError: true)) {
+      throw new BuildFailedException(
+        "[ContentPackDeployment] Failed to prepare the sprite runtime index for the player build."
+      );
+    }
     ValidateDeploymentSource(selection, report.summary.platform);
   }
 

@@ -500,7 +500,7 @@ public sealed class GameplayXpNotificationView : MonoBehaviour {
     RefreshRenderers(lane);
   }
 
-  static string ResolveAbilityAbbreviation(string animationName) {
+  public static string ResolveAbilityAbbreviation(string animationName) {
     var displayName = EsperanzaAbilities.GetDisplayName(animationName);
     if (TryFindAbbreviation(displayName, out var abbreviation)) {
       return abbreviation;

@@ -249,11 +249,10 @@ public class FontCharacter : MonoBehaviour {
       return SpriteColdLoadState.Pending;
     }
 
-    if (!Application.isPlaying || spriteWithNormals == null) {
-      return SpriteColdLoadState.Ready;
-    }
-
-    return spriteWithNormals.GetFrameColdLoadState(0, out _);
+    // Font readability depends on the color glyph only. Normal/specular maps
+    // are optional lighting supplements and must not keep otherwise loaded text
+    // hidden while those companion atlases are still streaming.
+    return SpriteColdLoadState.Ready;
   }
 
   void UpdateRenderReadiness(SpriteColdLoadState nextState) {

@@ -515,7 +515,7 @@ public class Spawner : MonoBehaviour {
     pool.Despawn(enemy);
 
     if (spawnRule == null) return;
-    if (spawnRule.respawnDelaySeconds < 0) return;
+    if (spawnRule.respawnDelaySeconds <= 0) return;
     if (!spawnGateOpen) return;
 
     spawnRule.pendingRespawnSeconds.Add(spawnRule.respawnDelaySeconds);

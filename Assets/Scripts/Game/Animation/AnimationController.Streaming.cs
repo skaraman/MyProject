@@ -1082,6 +1082,18 @@ public partial class AnimationController {
         TextureResidencyCache.RequestLoad(pair.StreamingNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
       }
     }
+    if (!string.IsNullOrWhiteSpace(pair.StreamingSpecularAddress)) {
+      if (loadingContextActive) {
+        if (immediateBudget > 0) {
+          TextureResidencyCache.RequestLoad(pair.StreamingSpecularAddress, TextureResidencyCache.LoadPriority.Warmup);
+          immediateBudget--;
+        }
+      }
+      else {
+        // Keep specular maps warmup-priority to reduce immediate queue pressure.
+        TextureResidencyCache.RequestLoad(pair.StreamingSpecularAddress, TextureResidencyCache.LoadPriority.Warmup);
+      }
+    }
   }
 
   bool AreSampledTargetsReadyForWindow(string targetCategory, int startFrame, int endFrame, int maxSampleTargets) {

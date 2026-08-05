@@ -12,13 +12,13 @@ else:
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-    from newTools_lib.common import CommonMixin
-    from newTools_lib.common import tk
-    from newTools_lib.image_tools import ImageToolsMixin
-    from newTools_lib.spritelib_overwrite import SpriteLibraryOverwriteMixin
-    from newTools_lib.spritelib_replace import SpriteLibraryReplaceMixin
-    from newTools_lib.spritelib_ui import SpriteLibraryUiMixin
-    from newTools_lib.spritelib_yaml import SpriteLibraryYamlMixin
+    from NewTools.common import CommonMixin
+    from NewTools.common import tk
+    from NewTools.image_tools import ImageToolsMixin
+    from NewTools.spritelib_overwrite import SpriteLibraryOverwriteMixin
+    from NewTools.spritelib_replace import SpriteLibraryReplaceMixin
+    from NewTools.spritelib_ui import SpriteLibraryUiMixin
+    from NewTools.spritelib_yaml import SpriteLibraryYamlMixin
 
 
 class AA(

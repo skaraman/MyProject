@@ -47,6 +47,10 @@ public class SceneTimeScaleManager : MonoBehaviour {
     new LayerFactorEntry {
       layerIndex = 1,
       factor = 1f
+    },
+    new LayerFactorEntry {
+      layerIndex = 2,
+      factor = 1f
     }
   };
   [SerializeField, Min(0f)] float sceneMultiplier = 1f;
@@ -140,12 +144,12 @@ public class SceneTimeScaleManager : MonoBehaviour {
 
   void Reset() {
     sceneObjectsRoot = transform;
-    EnsureDefaultLayer();
+    EnsureDefaultLayers();
   }
 
   void OnValidate() {
     sceneMultiplier = Mathf.Max(sceneMultiplier, 0f);
-    EnsureDefaultLayer();
+    EnsureDefaultLayers();
     RebuildLayerLookups();
   }
 
@@ -164,6 +168,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
     }
     if (destination.Count <= 0) {
       destination[1] = 1f;
+      destination[2] = 1f;
     }
   }
 
@@ -177,7 +182,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
         });
       }
     }
-    EnsureDefaultLayer();
+    EnsureDefaultLayers();
     RebuildLayerLookups();
     LogDebug(
       "[SceneTimeScaleManager] Applied layer factor snapshot" +
@@ -325,9 +330,10 @@ public class SceneTimeScaleManager : MonoBehaviour {
     instance = this;
     instanceLookupAttempted = true;
     ResolveSceneObjectsRoot();
-    EnsureDefaultLayer();
+    EnsureDefaultLayers();
     RebuildLayerLookups();
     EnsureObservedLayer(1);
+    EnsureObservedLayer(2);
     IncrementStateVersion();
   }
 
@@ -342,25 +348,38 @@ public class SceneTimeScaleManager : MonoBehaviour {
     }
   }
 
-  void EnsureDefaultLayer() {
+  void EnsureDefaultLayers() {
     if (layerFactors == null) {
       layerFactors = new List<LayerFactorEntry>();
     }
 
+    var hasLayer1 = false;
+    var hasLayer2 = false;
     for (var i = 0; i < layerFactors.Count; i++) {
       var entry = layerFactors[i];
       entry.layerIndex = Mathf.Max(entry.layerIndex, 0);
       entry.factor = Mathf.Max(entry.factor, 0f);
       layerFactors[i] = entry;
       if (entry.layerIndex == 1) {
-        return;
+        hasLayer1 = true;
+      }
+      else if (entry.layerIndex == 2) {
+        hasLayer2 = true;
       }
     }
 
-    layerFactors.Add(new LayerFactorEntry {
-      layerIndex = 1,
-      factor = 1f
-    });
+    if (!hasLayer1) {
+      layerFactors.Add(new LayerFactorEntry {
+        layerIndex = 1,
+        factor = 1f
+      });
+    }
+    if (!hasLayer2) {
+      layerFactors.Add(new LayerFactorEntry {
+        layerIndex = 2,
+        factor = 1f
+      });
+    }
   }
 
   void RebuildLayerLookups() {
@@ -376,6 +395,7 @@ public class SceneTimeScaleManager : MonoBehaviour {
 
     if (layerFactorLookup.Count <= 0) {
       layerFactorLookup[1] = 1f;
+      layerFactorLookup[2] = 1f;
     }
   }
 

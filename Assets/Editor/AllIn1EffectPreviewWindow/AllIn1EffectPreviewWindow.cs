@@ -84,6 +84,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   string[] availableAtlasSpriteLabelsWithDefault = { "Procedural Default" };
   readonly SpriteTextureCache mainMaskTextureCache = new("MainMask");
   readonly SpriteTextureCache normalMaskTextureCache = new("NormalMask");
+  readonly SpriteTextureCache specularMaskTextureCache = new("SpecularMask");
   string activeTextureSlotName;
   Vector2 scrollPosition;
   double lastEditorTime;
@@ -622,27 +623,25 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
     SetVectorIfPresent("_SourceRectInEffect", sourceRectInEffectUv);
     SetVectorIfPresent("_SpriteUvRect", new Vector4(0f, 0f, 1f, 1f));
     SetFloatIfPresent("_HasNormalMap", 0f);
+    SetTextureIfPresent("_SpecularMap", Texture2D.blackTexture);
 
     if (mainMaskSprite != null) {
       string spritePath = AssetDatabase.GetAssetPath(mainMaskSprite);
       if (!string.IsNullOrEmpty(spritePath) && spritePath.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase)) {
-        string normalPath = spritePath.Substring(0, spritePath.Length - 4) + "N.png";
-        
-        Sprite normalSprite = null;
-        var allAssets = AssetDatabase.LoadAllAssetsAtPath(normalPath);
-        foreach(var asset in allAssets) {
-            if (asset is Sprite s && s.name == mainMaskSprite.name) {
-                normalSprite = s;
-                break;
-            }
+        if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(spritePath, out var normalPath) &&
+            TryLoadCompanionSprite(normalPath, mainMaskSprite.name, out var normalSprite)) {
+          var normalTex = normalMaskTextureCache.GetTexture(normalSprite);
+          if (normalTex != null) {
+            SetTextureIfPresent("_NormalMap", normalTex);
+            SetFloatIfPresent("_HasNormalMap", 1f);
+          }
         }
-        
-        if (normalSprite != null) {
-            var normalTex = normalMaskTextureCache.GetTexture(normalSprite);
-            if (normalTex != null) {
-                SetTextureIfPresent("_NormalMap", normalTex);
-                SetFloatIfPresent("_HasNormalMap", 1f);
-            }
+        if (SpriteStreamingTextureImportPolicy.TryGetPairedSpecularAtlasPath(spritePath, out var specularPath) &&
+            TryLoadCompanionSprite(specularPath, mainMaskSprite.name, out var specularSprite)) {
+          var specularTex = specularMaskTextureCache.GetTexture(specularSprite);
+          if (specularTex != null) {
+            SetTextureIfPresent("_SpecularMap", specularTex);
+          }
         }
       }
     }
@@ -659,6 +658,28 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
   void SetTextureIfPresent(string propertyName, Texture texture) {
     if (previewMaterial == null || !previewMaterial.HasProperty(propertyName) || texture == null) return;
     previewMaterial.SetTexture(propertyName, texture);
+  }
+
+  static bool TryLoadCompanionSprite(string assetPath, string preferredSpriteName, out Sprite sprite) {
+    sprite = null;
+    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+
+    Sprite onlySprite = null;
+    var spriteCount = 0;
+    var allAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+    for (var i = 0; i < allAssets.Length; i++) {
+      if (allAssets[i] is not Sprite candidate) continue;
+      onlySprite = candidate;
+      spriteCount++;
+      if (string.Equals(candidate.name, preferredSpriteName, System.StringComparison.Ordinal)) {
+        sprite = candidate;
+        return true;
+      }
+    }
+
+    if (spriteCount != 1) return false;
+    sprite = onlySprite;
+    return sprite != null;
   }
 
   void SetVectorIfPresent(string propertyName, Vector4 value) {
@@ -979,6 +1000,7 @@ public sealed class AllIn1EffectPreviewWindow : EditorWindow {
 
     mainMaskTextureCache.Clear();
     normalMaskTextureCache.Clear();
+    specularMaskTextureCache.Clear();
   }
 }
 #endif

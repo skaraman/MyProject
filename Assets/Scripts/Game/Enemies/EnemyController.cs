@@ -552,6 +552,7 @@ public partial class EnemyController : MonoBehaviour {
     effectNode.SetDoNotRender(false);
     effectNode.SetLabelPrefix("Empty");
     effectNode.ForceUpdateSpriteAndNormal(0);
+    effectNode.SetAnimation("");
     effectNode.SetLabelPrefix("");
     effectResetToEmptyPending = false;
   }

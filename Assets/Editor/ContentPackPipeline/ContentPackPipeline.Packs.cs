@@ -398,6 +398,8 @@ public static partial class ContentPackPipeline {
       AddUniquePath(pack.ownedRoots, pack.authoringSources[i].assetPath);
       AddUniquePath(pack.seedRoots, pack.authoringSources[i].normalAssetPath);
       AddUniquePath(pack.ownedRoots, pack.authoringSources[i].normalAssetPath);
+      AddUniquePath(pack.seedRoots, pack.authoringSources[i].specularAssetPath);
+      AddUniquePath(pack.ownedRoots, pack.authoringSources[i].specularAssetPath);
     }
   }
 
@@ -425,7 +427,8 @@ public static partial class ContentPackPipeline {
       libraryName = NormalizeAssetPath(source.libraryName),
       category = NormalizeToken(source.category),
       labelPrefix = NormalizeToken(source.labelPrefix),
-      normalAssetPath = StripAuthoringSliceSuffix(NormalizeAssetPath(source.normalAssetPath))
+      normalAssetPath = StripAuthoringSliceSuffix(NormalizeAssetPath(source.normalAssetPath)),
+      specularAssetPath = StripAuthoringSliceSuffix(NormalizeAssetPath(source.specularAssetPath))
     };
   }
 
@@ -915,6 +918,7 @@ public static partial class ContentPackPipeline {
 
       RegisterAuthoringSourceTarget(pack, source.assetPath, source, errors);
       RegisterPairedNormalMapTarget(pack, source.assetPath, source, errors);
+      RegisterPairedSpecularMapTarget(pack, source.assetPath, source, errors);
 
       if (!string.IsNullOrWhiteSpace(source.normalAssetPath)) {
         AddUniquePath(pack.assetDependencies, source.normalAssetPath);
@@ -925,6 +929,16 @@ public static partial class ContentPackPipeline {
 
         RegisterAuthoringSourceTarget(pack, source.normalAssetPath, source, errors);
         RegisterPairedNormalMapTarget(pack, source.normalAssetPath, source, errors);
+      }
+
+      if (!string.IsNullOrWhiteSpace(source.specularAssetPath)) {
+        AddUniquePath(pack.assetDependencies, source.specularAssetPath);
+        var specularDependencies = CollectPackDependencies(new List<string> { source.specularAssetPath }, errors);
+        for (var dependencyIndex = 0; dependencyIndex < specularDependencies.Count; dependencyIndex++) {
+          AddUniquePath(pack.assetDependencies, specularDependencies[dependencyIndex]);
+        }
+
+        RegisterAuthoringSourceTarget(pack, source.specularAssetPath, source, errors);
       }
     }
   }
@@ -938,6 +952,17 @@ public static partial class ContentPackPipeline {
     var normalMapAssetPath = ResolvePairedNormalMapAssetPath(colorAssetPath);
     if (string.IsNullOrWhiteSpace(normalMapAssetPath)) return;
     RegisterAuthoringSourceTarget(pack, normalMapAssetPath, source, errors);
+  }
+
+  static void RegisterPairedSpecularMapTarget(
+    PackDefinition pack,
+    string colorAssetPath,
+    ContentPackAuthoringSourceJson source,
+    List<string> errors
+  ) {
+    var specularMapAssetPath = ResolvePairedSpecularMapAssetPath(colorAssetPath);
+    if (string.IsNullOrWhiteSpace(specularMapAssetPath)) return;
+    RegisterAuthoringSourceTarget(pack, specularMapAssetPath, source, errors);
   }
 
   static void RegisterAuthoringSourceTarget(
@@ -1008,6 +1033,17 @@ public static partial class ContentPackPipeline {
         }
         if (!IsRuntimeTexturePath(normalAssetPath)) {
           errors?.Add("Sprite sheet normal authoring source must be a .png, .jpg, or .jpeg asset. asset='" + normalAssetPath + "'");
+          return false;
+        }
+      }
+      if (!string.IsNullOrWhiteSpace(source.specularAssetPath)) {
+        var specularAssetPath = NormalizeAssetPath(source.specularAssetPath);
+        if (!File.Exists(Path.GetFullPath(specularAssetPath))) {
+          errors?.Add("Missing sprite sheet specular asset '" + specularAssetPath + "'.");
+          return false;
+        }
+        if (!string.Equals(Path.GetExtension(specularAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) {
+          errors?.Add("Sprite sheet specular authoring source must be a .png asset. asset='" + specularAssetPath + "'");
           return false;
         }
       }
@@ -1249,6 +1285,7 @@ public static partial class ContentPackPipeline {
       if (source == null) continue;
       if (IsRuntimeTexturePath(source.assetPath)) return true;
       if (IsRuntimeTexturePath(source.normalAssetPath)) return true;
+      if (IsRuntimeTexturePath(source.specularAssetPath)) return true;
     }
 
     return false;

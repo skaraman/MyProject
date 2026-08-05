@@ -75,6 +75,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   const int LoadingManagedUpdateBudgetPerFrame = 256;
   static readonly int NormalMapPropertyId = Shader.PropertyToID("_NormalMap");
   static readonly int NormalMapIsSrgbPropertyId = Shader.PropertyToID("_NormalMapIsSrgb");
+  static readonly int SpecularMapPropertyId = Shader.PropertyToID("_SpecularMap");
   static readonly int SpriteUvRectPropertyId = Shader.PropertyToID("_SpriteUvRect");
   static readonly int SpriteEffectActivePropertyId = Shader.PropertyToID("_SpriteEffectActive");
   static readonly Color32 TransparentPaddingColor = new(0, 0, 0, 0);
@@ -99,12 +100,16 @@ public partial class SpriteWithNormals : MonoBehaviour {
   int _requestVersion;
   string _targetColorAddress = "";
   string _targetNormalAddress = "";
+  string _targetSpecularAddress = "";
   string _targetColorSliceAddress = "";
   string _targetNormalSliceAddress = "";
+  string _targetSpecularSliceAddress = "";
   string _pendingColorAddress = "";
   string _pendingNormalAddress = "";
+  string _pendingSpecularAddress = "";
   string _pendingColorSliceAddress = "";
   string _pendingNormalSliceAddress = "";
+  string _pendingSpecularSliceAddress = "";
   string _lastLookupLibraryName = "";
   string _lastLookupLabelPrefix = "";
   string _lastLookupCategory = "";
@@ -122,14 +127,20 @@ public partial class SpriteWithNormals : MonoBehaviour {
   bool _hasDeferredRequest;
   SpriteAddressPair _deferredRequest;
   static Texture2D _fallbackNormalTexture;
+  static Texture2D _fallbackSpecularTexture;
   int _nextInternalRetryFrame;
   readonly HashSet<string> _sliceMismatchWarnings = new(StringComparer.OrdinalIgnoreCase);
+#if UNITY_EDITOR
   string _lastPendingColorSliceWarningAddress = "";
   string _lastPendingNormalSliceWarningAddress = "";
+  string _lastPendingSpecularSliceWarningAddress = "";
+#endif
   int _pendingRetargetAllowedFrame;
   int _deferredOverwriteAllowedFrame;
   Texture _lastAppliedNormalTexture;
   bool _hasAppliedNormalTexture;
+  Texture _lastAppliedSpecularTexture;
+  bool _hasAppliedSpecularTexture;
   bool _hasAppliedSpriteUvRect;
   string _appliedColorSliceAddress = "";
   Vector4 _lastSpriteUvRect;
@@ -147,11 +158,14 @@ public partial class SpriteWithNormals : MonoBehaviour {
   int _adaptiveStaleCountInWindow;
   int _adaptiveCooldownLastDecayFrame = -1;
   readonly HashSet<string> _editorPreviewNormalMissWarnings = new(StringComparer.OrdinalIgnoreCase);
+  readonly HashSet<string> _editorPreviewSpecularMissWarnings = new(StringComparer.OrdinalIgnoreCase);
 
   TextureResidencyCache.Lease _pendingColorLease;
   TextureResidencyCache.Lease _pendingNormalLease;
+  TextureResidencyCache.Lease _pendingSpecularLease;
   TextureResidencyCache.Lease _activeColorLease;
   TextureResidencyCache.Lease _activeNormalLease;
+  TextureResidencyCache.Lease _activeSpecularLease;
   SpriteAddressPair _pendingLoadPair;
   float _pendingSupplementWaitStartedAt = -1f;
   int _pendingLoadRequestVersion;
@@ -177,6 +191,9 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static readonly Dictionary<ConventionNormalCacheKey, string> s_ConventionNormalAddressCache =
     new(MaxConventionNormalAddressCacheEntries);
   static int s_ConventionNormalAddressCacheContentReloadVersion = int.MinValue;
+  static readonly Dictionary<ConventionNormalCacheKey, string> s_ConventionSpecularAddressCache =
+    new(MaxConventionNormalAddressCacheEntries);
+  static int s_ConventionSpecularAddressCacheContentReloadVersion = int.MinValue;
   int _activeListIndex = -1;
   static int s_ManagedUpdateCursor;
   static bool s_UpdateRegistered;
@@ -242,16 +259,11 @@ public partial class SpriteWithNormals : MonoBehaviour {
     s_AnimationAtlasAddressCache.Clear();
     s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
     s_ConventionNormalAddressCache.Clear();
-    s_ConventionNormalAddressCacheInsertionOrder.Clear();
     s_ConventionNormalAddressCacheContentReloadVersion = int.MinValue;
-#if UNITY_EDITOR
-    s_ConventionNormalAtlasSpriteMetadata.Clear();
-#endif
+    s_ConventionSpecularAddressCache.Clear();
+    s_ConventionSpecularAddressCacheContentReloadVersion = int.MinValue;
     s_ManagedUpdateCursor = 0;
     s_UpdateRegistered = false;
-#if UNITY_EDITOR
-    ResetEditorFallbackState();
-#endif
   }
 
   void Awake() {
@@ -283,6 +295,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _deferredOverwriteAllowedFrame = 0;
     _lastAppliedNormalTexture = null;
     _hasAppliedNormalTexture = false;
+    _lastAppliedSpecularTexture = null;
+    _hasAppliedSpecularTexture = false;
     _adaptiveCooldownMultiplier = 1;
     _adaptiveStaleWindowStartFrame = -1;
     _adaptiveStaleCountInWindow = 0;
@@ -356,10 +370,15 @@ public partial class SpriteWithNormals : MonoBehaviour {
     ResetPairLookupCaches();
     _localLoadedSpriteByAddress.Clear();
     _sliceMismatchWarnings.Clear();
+#if UNITY_EDITOR
     _lastPendingColorSliceWarningAddress = "";
     _lastPendingNormalSliceWarningAddress = "";
+    _lastPendingSpecularSliceWarningAddress = "";
+#endif
     _lastAppliedNormalTexture = null;
     _hasAppliedNormalTexture = false;
+    _lastAppliedSpecularTexture = null;
+    _hasAppliedSpecularTexture = false;
   }
 
   void OnDestroy() {
@@ -375,10 +394,15 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _localLoadedSpriteByAddress.Clear();
     ClearGeneratedPaddedSprites();
     _sliceMismatchWarnings.Clear();
+#if UNITY_EDITOR
     _lastPendingColorSliceWarningAddress = "";
     _lastPendingNormalSliceWarningAddress = "";
+    _lastPendingSpecularSliceWarningAddress = "";
+#endif
     _lastAppliedNormalTexture = null;
     _hasAppliedNormalTexture = false;
+    _lastAppliedSpecularTexture = null;
+    _hasAppliedSpecularTexture = false;
   }
 
   public bool IsAnimation => isAnimation;
@@ -510,8 +534,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
   public void ForceUpdateSpriteAndNormal(int frame) {
     _targetColorAddress = "";
     _targetNormalAddress = "";
+    _targetSpecularAddress = "";
     _targetColorSliceAddress = "";
     _targetNormalSliceAddress = "";
+    _targetSpecularSliceAddress = "";
     _hasLastLookup = false;
     ResetPairLookupCaches();
     UpdateSpriteAndNormal(frame);
@@ -608,6 +634,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
       PrimeTrimmedMetadataWarmup(colorWarmupAddress);
       WarmupAddress(pair.StreamingColorAddress, priority);
       WarmupAddress(pair.StreamingNormalAddress, priority);
+      WarmupAddress(pair.StreamingSpecularAddress, priority);
     }
   }
 
@@ -657,7 +684,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
     if (!colorState.IsCommitReady()) return colorState;
 
-    if (!TryGetLoadedSpritesForPair(pair, out _, out var normalSprite, out _)) {
+    if (!TryGetLoadedSpritesForPair(pair, out _, out var normalSprite, out var specularSprite, out _)) {
       var exactState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
       return exactState.IsCommitReady() ? SpriteColdLoadState.Pending : exactState;
     }
@@ -666,12 +693,19 @@ public partial class SpriteWithNormals : MonoBehaviour {
       var exactNormalState = TextureResidencyCache.GetRequestState(normalRequestAddress, pump: false);
       return exactNormalState.IsCommitReady() ? SpriteColdLoadState.Pending : exactNormalState;
     }
+    if (pair.HasSpecular && specularSprite == null) {
+      var specularRequestAddress = ResolveWarmupAddress(pair.specularAddress, pair.StreamingSpecularAddress);
+      var exactSpecularState = TextureResidencyCache.GetRequestState(specularRequestAddress, pump: false);
+      return exactSpecularState.IsCommitReady() ? SpriteColdLoadState.Pending : exactSpecularState;
+    }
 
     var metadataState = GetTrimmedMetadataState(colorRequestAddress, requestIfNeeded: true);
     if (!metadataState.IsCommitReady()) return metadataState;
 
-    if (pair.HasNormal &&
-        TextureResidencyCache.GetRequestState(ResolveWarmupAddress(pair.normalAddress, pair.StreamingNormalAddress), pump: false) == SpriteColdLoadState.Pending) {
+    if ((pair.HasNormal &&
+         TextureResidencyCache.GetRequestState(ResolveWarmupAddress(pair.normalAddress, pair.StreamingNormalAddress), pump: false) == SpriteColdLoadState.Pending) ||
+        (pair.HasSpecular &&
+         TextureResidencyCache.GetRequestState(ResolveWarmupAddress(pair.specularAddress, pair.StreamingSpecularAddress), pump: false) == SpriteColdLoadState.Pending)) {
       colorReadyOnly = true;
     }
     return SpriteColdLoadState.Ready;
@@ -731,9 +765,11 @@ public partial class SpriteWithNormals : MonoBehaviour {
       if (!TryGetFrameAddressPair(0, out var staticPair, lookupCategory)) return;
       var staticColorAddress = ResolveWarmupAddress(staticPair.colorAddress, staticPair.RuntimeColorAddress);
       var staticNormalAddress = ResolveWarmupAddress(staticPair.normalAddress, staticPair.RuntimeNormalAddress);
+      var staticSpecularAddress = ResolveWarmupAddress(staticPair.specularAddress, staticPair.RuntimeSpecularAddress);
       TrackTrimmedMetadataWarmupCandidate(staticColorAddress);
       AddUniqueAddress(outAddresses, staticColorAddress, seenAddresses, maxAddresses);
       AddUniqueAddress(outAddresses, staticNormalAddress, seenAddresses, maxAddresses);
+      AddUniqueAddress(outAddresses, staticSpecularAddress, seenAddresses, maxAddresses);
       return;
     }
 
@@ -749,9 +785,11 @@ public partial class SpriteWithNormals : MonoBehaviour {
       pair = StripUnavailableRuntimeNormalAddress(pair, lookupKey);
       var colorWarmupAddress = ResolveWarmupAddress(pair.colorAddress, pair.RuntimeColorAddress);
       var normalWarmupAddress = ResolveWarmupAddress(pair.normalAddress, pair.RuntimeNormalAddress);
+      var specularWarmupAddress = ResolveWarmupAddress(pair.specularAddress, pair.RuntimeSpecularAddress);
       TrackTrimmedMetadataWarmupCandidate(colorWarmupAddress);
       AddUniqueAddress(outAddresses, colorWarmupAddress, seenAddresses, maxAddresses);
       AddUniqueAddress(outAddresses, normalWarmupAddress, seenAddresses, maxAddresses);
+      AddUniqueAddress(outAddresses, specularWarmupAddress, seenAddresses, maxAddresses);
     }
   }
 
@@ -884,6 +922,12 @@ public partial class SpriteWithNormals : MonoBehaviour {
       AddUniqueAddress(
         outAddresses,
         pair.RuntimeNormalAddress,
+        seenAddresses,
+        maxAddresses
+      );
+      AddUniqueAddress(
+        outAddresses,
+        pair.RuntimeSpecularAddress,
         seenAddresses,
         maxAddresses
       );
@@ -1046,7 +1090,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _lastLookupFrame = lookupFrame;
 
     if (AddressEquals(pair.colorAddress, _targetColorSliceAddress) &&
-        AddressEquals(pair.normalAddress, _targetNormalSliceAddress)) {
+        AddressEquals(pair.normalAddress, _targetNormalSliceAddress) &&
+        AddressEquals(pair.specularAddress, _targetSpecularSliceAddress)) {
       if (ShouldLogFetch) LogSpriteFetch("skip_same_target_addresses");
       return;
     }
@@ -1063,8 +1108,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
 
     _targetColorAddress = pair.RuntimeColorAddress ?? "";
     _targetNormalAddress = pair.RuntimeNormalAddress ?? "";
+    _targetSpecularAddress = pair.RuntimeSpecularAddress ?? "";
     _targetColorSliceAddress = pair.colorAddress ?? "";
     _targetNormalSliceAddress = pair.normalAddress ?? "";
+    _targetSpecularSliceAddress = pair.specularAddress ?? "";
 
     if (Application.isPlaying) {
       ApplyLoadedPairProfilerMarker.Begin();
@@ -1108,13 +1155,16 @@ public partial class SpriteWithNormals : MonoBehaviour {
       return;
     }
     if (HasPendingLoadRequest()) {
-      if (AddressEquals(_pendingColorAddress, pair.RuntimeColorAddress) && AddressEquals(_pendingNormalAddress, pair.RuntimeNormalAddress)) {
+      if (AddressEquals(_pendingColorAddress, pair.RuntimeColorAddress) &&
+          AddressEquals(_pendingNormalAddress, pair.RuntimeNormalAddress) &&
+          AddressEquals(_pendingSpecularAddress, pair.RuntimeSpecularAddress)) {
         if (ShouldLogFetch) LogSpriteFetch("queue_skip_same_pending", "color='" + (_pendingColorAddress ?? "") + "' normal='" + (_pendingNormalAddress ?? "") + "'");
         return;
       }
       if (_hasDeferredRequest) {
         if (AddressEquals(_deferredRequest.RuntimeColorAddress, pair.RuntimeColorAddress) &&
-            AddressEquals(_deferredRequest.RuntimeNormalAddress, pair.RuntimeNormalAddress)) {
+            AddressEquals(_deferredRequest.RuntimeNormalAddress, pair.RuntimeNormalAddress) &&
+            AddressEquals(_deferredRequest.RuntimeSpecularAddress, pair.RuntimeSpecularAddress)) {
           if (ShouldLogFetch) LogSpriteFetch("queue_skip_same_deferred", "color='" + (pair.colorAddress ?? "") + "' normal='" + (pair.normalAddress ?? "") + "'");
           return;
         }
@@ -1144,7 +1194,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     if (!cacheKnownMiss) {
       if (!hasPendingState && TryApplyLoadedSpritesFromCache(pair)) {
         if (ShouldLogFetch) LogSpriteFetch("use_fastpath_cache_hit");
-        _pendingColorAddress = _pendingNormalAddress = "";
+        _pendingColorAddress = _pendingNormalAddress = _pendingSpecularAddress = "";
         TryStartDeferredRequest();
         return;
       }
@@ -1155,14 +1205,16 @@ public partial class SpriteWithNormals : MonoBehaviour {
     }
     _pendingColorAddress = pair.RuntimeColorAddress ?? "";
     _pendingNormalAddress = pair.RuntimeNormalAddress ?? "";
+    _pendingSpecularAddress = pair.RuntimeSpecularAddress ?? "";
     _pendingColorSliceAddress = pair.colorAddress ?? "";
     _pendingNormalSliceAddress = pair.normalAddress ?? "";
+    _pendingSpecularSliceAddress = pair.specularAddress ?? "";
 
     if (!cacheKnownMiss) {
       if (TryApplyLoadedSpritesFromCache(pair)) {
         if (ShouldLogFetch) LogSpriteFetch("use_cache_hit_applied");
-        _pendingColorAddress = _pendingNormalAddress = "";
-        _pendingColorSliceAddress = _pendingNormalSliceAddress = "";
+        _pendingColorAddress = _pendingNormalAddress = _pendingSpecularAddress = "";
+        _pendingColorSliceAddress = _pendingNormalSliceAddress = _pendingSpecularSliceAddress = "";
         TryStartDeferredRequest();
         return;
       }
@@ -1174,8 +1226,8 @@ public partial class SpriteWithNormals : MonoBehaviour {
     var colorLease = TextureResidencyCache.AcquireAsync(pair.StreamingColorAddress, colorPriority);
     if (colorLease == null) {
       Debug.LogError($"[SpriteWithNormals] Failed to request color atlas '{pair.StreamingColorAddress}' on {gameObject.name}");
-      _pendingColorAddress = _pendingNormalAddress = "";
-      _pendingColorSliceAddress = _pendingNormalSliceAddress = "";
+      _pendingColorAddress = _pendingNormalAddress = _pendingSpecularAddress = "";
+      _pendingColorSliceAddress = _pendingNormalSliceAddress = _pendingSpecularSliceAddress = "";
       TryStartDeferredRequest();
       return;
     }
@@ -1193,17 +1245,37 @@ public partial class SpriteWithNormals : MonoBehaviour {
       if (ShouldLogFetch) LogSpriteFetch("load_requested_normal", "priority=" + normalPriority + " is_done=" + (normalLease != null && normalLease.IsDone ? 1 : 0));
     }
 
+    var specularPriority = TextureResidencyCache.LoadPriority.Warmup;
+    var specularLease = string.IsNullOrWhiteSpace(pair.StreamingSpecularAddress)
+      ? null
+      : TextureResidencyCache.AcquireAsync(pair.StreamingSpecularAddress, specularPriority);
+
+    if (!string.IsNullOrWhiteSpace(pair.StreamingSpecularAddress) && specularLease == null)
+      Debug.LogError($"[SpriteWithNormals] Failed to request specular atlas '{pair.StreamingSpecularAddress}' on {gameObject.name}");
+    else if (!string.IsNullOrWhiteSpace(pair.StreamingSpecularAddress)) {
+      if (ShouldLogFetch) LogSpriteFetch("load_requested_specular", "priority=" + specularPriority + " is_done=" + (specularLease != null && specularLease.IsDone ? 1 : 0));
+    }
+
     _pendingColorLease = colorLease;
     _pendingNormalLease = normalLease;
+    _pendingSpecularLease = specularLease;
     var requestVersion = ++_requestVersion;
     if (colorLease.IsDone) {
-      if (ShouldWaitForPendingSpriteMapSupplement(colorLease, pair.colorAddress, normalLease, pair.normalAddress)) {
+      var waitingForLightingSupplement =
+        (normalLease != null && !normalLease.IsDone) ||
+        (specularLease != null && !specularLease.IsDone);
+      if (waitingForLightingSupplement) {
+        if (ShouldLogFetch) LogSpriteFetch("load_wait_lighting_supplements", "request_version=" + requestVersion);
+        BeginPendingLoadRequest(requestVersion, pair);
+        return;
+      }
+      if (ShouldWaitForPendingSpriteMapSupplement(colorLease, pair.colorAddress, normalLease, pair.normalAddress, specularLease, pair.specularAddress)) {
         if (ShouldLogFetch) LogSpriteFetch("load_wait_sprite_supplement", "request_version=" + requestVersion);
         BeginPendingLoadRequest(requestVersion, pair);
         return;
       }
       if (ShouldLogFetch) LogSpriteFetch("load_color_immediate_complete", "request_version=" + requestVersion);
-      CompleteLoadedSprites(requestVersion, colorLease, normalLease, pair);
+      CompleteLoadedSprites(requestVersion, colorLease, normalLease, specularLease, pair);
       return;
     }
 
@@ -1220,7 +1292,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   }
 
   bool TryApplyLoadedSpritesFromCache(SpriteAddressPair pair, bool cancelPendingIfAny = false) {
-    if (!TryGetLoadedSpritesForPair(pair, out var colorSprite, out var normalSprite, out var sourceTag)) {
+    if (!TryGetLoadedSpritesForPair(pair, out var colorSprite, out var normalSprite, out var specularSprite, out var sourceTag)) {
       if (ShouldLogFetch) LogSpriteFetch("use_lookup_miss_color", "address='" + (pair.colorAddress ?? "") + "' source='local+global'");
       return false;
     }
@@ -1254,6 +1326,37 @@ public partial class SpriteWithNormals : MonoBehaviour {
         );
       }
     }
+    if (!string.IsNullOrWhiteSpace(pair.specularAddress)) {
+      if (ShouldLogFetch) {
+        LogSpriteFetch(
+          specularSprite != null ? "use_lookup_hit_specular" : "use_lookup_miss_specular",
+          "address='" + (pair.specularAddress ?? "") + "'" +
+          (specularSprite != null ? " sprite='" + specularSprite.name + "'" : "") +
+          " source='" + sourceTag + "'"
+        );
+      }
+    }
+
+    var missingNormalSupplement =
+      !string.IsNullOrWhiteSpace(pair.normalAddress) && normalSprite == null;
+    var missingSpecularSupplement =
+      !string.IsNullOrWhiteSpace(pair.specularAddress) && specularSprite == null;
+    if (missingNormalSupplement || missingSpecularSupplement) {
+      // The color atlas is enough to display the sprite immediately, but it is
+      // not a complete cache hit when an authored lighting supplement is still
+      // absent. Apply the available channels, then let the caller request the
+      // full pair so the flat/black fallbacks are replaced when N/S finish.
+      if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+      if (_renderer != null) ApplySprites(colorSprite, normalSprite, specularSprite, pair.colorAddress);
+      if (ShouldLogFetch) {
+        LogSpriteFetch(
+          "use_lookup_incomplete_supplements",
+          "normal_missing=" + (missingNormalSupplement ? 1 : 0) +
+          " specular_missing=" + (missingSpecularSupplement ? 1 : 0)
+        );
+      }
+      return false;
+    }
 
     if (cancelPendingIfAny &&
         (HasPendingLoadRequest() || _hasDeferredRequest)) {
@@ -1261,7 +1364,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     }
 
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(colorSprite, normalSprite, pair.colorAddress);
+    if (_renderer != null) ApplySprites(colorSprite, normalSprite, specularSprite, pair.colorAddress);
 
     ReleaseActiveLeases();
     return true;
@@ -1271,6 +1374,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     int requestVersion,
     TextureResidencyCache.Lease colorLease,
     TextureResidencyCache.Lease normalLease,
+    TextureResidencyCache.Lease specularLease,
     SpriteAddressPair pair,
     bool allowBlockingEditorSliceFallback = false
   ) {
@@ -1278,12 +1382,14 @@ public partial class SpriteWithNormals : MonoBehaviour {
       if (ShouldLogFetch) LogSpriteFetch("complete_version_mismatch", "incoming=" + requestVersion + " current=" + _requestVersion);
       ReleaseLease(ref colorLease);
       ReleaseLease(ref normalLease);
+      ReleaseLease(ref specularLease);
       return;
     }
 
     var staleCompletion =
       !AddressEquals(pair.RuntimeColorAddress, _targetColorAddress) ||
-      !AddressEquals(pair.RuntimeNormalAddress, _targetNormalAddress);
+      !AddressEquals(pair.RuntimeNormalAddress, _targetNormalAddress) ||
+      !AddressEquals(pair.RuntimeSpecularAddress, _targetSpecularAddress);
     if (staleCompletion) {
       ClearPendingState();
       RecordAdaptiveStaleCompletion();
@@ -1297,11 +1403,13 @@ public partial class SpriteWithNormals : MonoBehaviour {
       if (ShouldLogFetch) LogSpriteFetch("complete_stale_dropped");
       ReleaseLease(ref colorLease);
       ReleaseLease(ref normalLease);
+      ReleaseLease(ref specularLease);
       TryStartDeferredRequest();
       return;
     }
     var colorSliceAddress = string.IsNullOrWhiteSpace(_targetColorSliceAddress) ? pair.colorAddress : _targetColorSliceAddress;
     var normalSliceAddress = string.IsNullOrWhiteSpace(_targetNormalSliceAddress) ? pair.normalAddress : _targetNormalSliceAddress;
+    var specularSliceAddress = string.IsNullOrWhiteSpace(_targetSpecularSliceAddress) ? pair.specularAddress : _targetSpecularSliceAddress;
     var colorRequestAddress = ResolveWarmupAddress(colorSliceAddress, pair.StreamingColorAddress);
     var allowBlockingEditorSliceFallbackNow = allowBlockingEditorSliceFallback;
 #if UNITY_EDITOR
@@ -1322,7 +1430,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
       if (colorState == SpriteColdLoadState.Pending) {
         return;
       }
-      if (ShouldWaitForPendingSpriteMapSupplement(colorLease, colorSliceAddress)) {
+      if (ShouldWaitForPendingSpriteMapSupplement(colorLease, colorSliceAddress, normalLease, normalSliceAddress, specularLease, specularSliceAddress)) {
         if (_pendingLoadRequestVersion != requestVersion) {
           BeginPendingLoadRequest(requestVersion, pair);
         }
@@ -1334,7 +1442,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
         return;
       }
 #endif
-      CompleteColorResolveFailure("complete_color_missing", colorSliceAddress, ref colorLease, ref normalLease);
+      CompleteColorResolveFailure("complete_color_missing", colorSliceAddress, ref colorLease, ref normalLease, ref specularLease);
       Debug.LogError($"[SpriteWithNormals] Failed to resolve color sprite '{colorSliceAddress}' on {gameObject.name}");
       return;
     }
@@ -1342,7 +1450,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
     if (colorSprite == null) {
       var colorState = TextureResidencyCache.GetRequestState(colorRequestAddress, pump: false);
       if (colorState == SpriteColdLoadState.Pending) return;
-      CompleteColorResolveFailure("complete_color_mismatch", colorSliceAddress, ref colorLease, ref normalLease);
+      CompleteColorResolveFailure("complete_color_mismatch", colorSliceAddress, ref colorLease, ref normalLease, ref specularLease);
       return;
     }
     CacheLocalLoadedSprite(colorSliceAddress, colorSprite);
@@ -1369,6 +1477,28 @@ public partial class SpriteWithNormals : MonoBehaviour {
     if (normalLease != null && normalLease.IsDone && normalSprite == null && !string.IsNullOrWhiteSpace(normalSliceAddress))
       Debug.LogError($"[SpriteWithNormals] Failed to resolve normal sprite '{normalSliceAddress}' on {gameObject.name}");
 
+    var specularSprite = ResolveLeaseSprite(specularLease, specularSliceAddress);
+#if UNITY_EDITOR
+    specularSprite ??= TryResolveEditorSliceFallback(specularSliceAddress, "specular", allowBlockingEditorSliceFallbackNow);
+#endif
+    if (specularLease != null &&
+        !string.IsNullOrWhiteSpace(specularSliceAddress) &&
+        specularSprite == null) {
+#if UNITY_EDITOR
+      if (TryKeepPendingSliceResolve(specularLease, specularSliceAddress, allowBlockingEditorSliceFallbackNow, "specular")) {
+        return;
+      }
+#endif
+    }
+    specularSprite = ResolveExpectedSliceSprite(specularSprite, specularSliceAddress, "specular");
+    if (specularSprite == null && !string.IsNullOrWhiteSpace(specularSliceAddress)) {
+      var specularRequestAddress = ResolveWarmupAddress(specularSliceAddress, pair.StreamingSpecularAddress);
+      if (TextureResidencyCache.GetRequestState(specularRequestAddress, pump: false) == SpriteColdLoadState.Pending) return;
+    }
+    if (specularSprite != null) CacheLocalLoadedSprite(specularSliceAddress, specularSprite);
+    if (specularLease != null && specularLease.IsDone && specularSprite == null && !string.IsNullOrWhiteSpace(specularSliceAddress))
+      Debug.LogError($"[SpriteWithNormals] Failed to resolve specular sprite '{specularSliceAddress}' on {gameObject.name}");
+
     var metadataState = GetTrimmedMetadataState(colorRequestAddress, requestIfNeeded: true);
     if (metadataState == SpriteColdLoadState.Pending) {
       return;
@@ -1377,18 +1507,19 @@ public partial class SpriteWithNormals : MonoBehaviour {
     if (ShouldLogFetch) {
       LogSpriteFetch(
         "complete_apply",
-        "color='" + (colorSprite != null ? colorSprite.name : "") + "' normal='" + (normalSprite != null ? normalSprite.name : "") + "'"
+        "color='" + (colorSprite != null ? colorSprite.name : "") + "' normal='" + (normalSprite != null ? normalSprite.name : "") + "' specular='" + (specularSprite != null ? specularSprite.name : "") + "'"
       );
     }
 
     ClearPendingState();
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(colorSprite, normalSprite, colorSliceAddress);
+    if (_renderer != null) ApplySprites(colorSprite, normalSprite, specularSprite, colorSliceAddress);
     RecordAdaptiveStableCompletion();
 
     ReleaseActiveLeases();
     _activeColorLease = colorLease;
     _activeNormalLease = normalLease;
+    _activeSpecularLease = specularLease;
     TryStartDeferredRequest();
   }
 
@@ -1401,7 +1532,7 @@ public partial class SpriteWithNormals : MonoBehaviour {
   ) {
     if (!Application.isEditor || !Application.isPlaying) return false;
     if (lease == null) return false;
-    if (lease != _pendingColorLease && lease != _pendingNormalLease) return false;
+    if (lease != _pendingColorLease && lease != _pendingNormalLease && lease != _pendingSpecularLease) return false;
     if (!SpriteSliceAddressUtility.TryGetSliceNameBounds(sliceAddress, out _, out _)) return false;
 
     var startedAt = _pendingSupplementWaitStartedAt;
@@ -1420,12 +1551,16 @@ public partial class SpriteWithNormals : MonoBehaviour {
     }
 
     var isNormalChannel = string.Equals(channel, "normal", StringComparison.Ordinal);
+    var isSpecularChannel = string.Equals(channel, "specular", StringComparison.Ordinal);
     var lastWarningAddress = isNormalChannel
       ? _lastPendingNormalSliceWarningAddress
-      : _lastPendingColorSliceWarningAddress;
+      : (isSpecularChannel ? _lastPendingSpecularSliceWarningAddress : _lastPendingColorSliceWarningAddress);
     if (!string.Equals(lastWarningAddress, sliceAddress, StringComparison.OrdinalIgnoreCase)) {
       if (isNormalChannel) {
         _lastPendingNormalSliceWarningAddress = sliceAddress;
+      }
+      else if (isSpecularChannel) {
+        _lastPendingSpecularSliceWarningAddress = sliceAddress;
       }
       else {
         _lastPendingColorSliceWarningAddress = sliceAddress;
@@ -1457,9 +1592,12 @@ public partial class SpriteWithNormals : MonoBehaviour {
         break;
       }
       warmupPair = StripUnavailableRuntimeNormalAddress(warmupPair, warmupKey);
-      if (!AddressEquals(warmupPair.RuntimeColorAddress, currentPair.RuntimeColorAddress) || !AddressEquals(warmupPair.RuntimeNormalAddress, currentPair.RuntimeNormalAddress)) {
+      if (!AddressEquals(warmupPair.RuntimeColorAddress, currentPair.RuntimeColorAddress) ||
+          !AddressEquals(warmupPair.RuntimeNormalAddress, currentPair.RuntimeNormalAddress) ||
+          !AddressEquals(warmupPair.RuntimeSpecularAddress, currentPair.RuntimeSpecularAddress)) {
         WarmupAddress(warmupPair.StreamingColorAddress, TextureResidencyCache.LoadPriority.Warmup);
         WarmupAddress(warmupPair.StreamingNormalAddress, TextureResidencyCache.LoadPriority.Warmup);
+        WarmupAddress(warmupPair.StreamingSpecularAddress, TextureResidencyCache.LoadPriority.Warmup);
       }
     }
   }
@@ -1480,10 +1618,13 @@ public partial class SpriteWithNormals : MonoBehaviour {
     TextureResidencyCache.Lease colorLease,
     string colorSliceAddress,
     TextureResidencyCache.Lease normalLease,
-    string normalSliceAddress
+    string normalSliceAddress,
+    TextureResidencyCache.Lease specularLease,
+    string specularSliceAddress
   ) {
     return ShouldWaitForPendingSpriteMapSupplement(colorLease, colorSliceAddress) ||
-           ShouldWaitForPendingSpriteMapSupplement(normalLease, normalSliceAddress);
+           ShouldWaitForPendingSpriteMapSupplement(normalLease, normalSliceAddress) ||
+           ShouldWaitForPendingSpriteMapSupplement(specularLease, specularSliceAddress);
   }
 
   static bool ShouldWaitForPendingSpriteMapSupplement(TextureResidencyCache.Lease lease, string sliceOrAtlasAddress) {
@@ -1528,6 +1669,19 @@ public partial class SpriteWithNormals : MonoBehaviour {
     _fallbackNormalTexture.SetPixel(0, 0, new Color(0.5f, 0.5f, 1f, 1f));
     _fallbackNormalTexture.Apply(false, true);
     return _fallbackNormalTexture;
+  }
+
+  static Texture2D GetFallbackSpecularTexture() {
+    if (_fallbackSpecularTexture != null) return _fallbackSpecularTexture;
+    _fallbackSpecularTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false, true) {
+      name = "SpriteWithNormals_FallbackSpecular",
+      wrapMode = TextureWrapMode.Repeat,
+      filterMode = FilterMode.Bilinear,
+      hideFlags = HideFlags.HideAndDontSave
+    };
+    _fallbackSpecularTexture.SetPixel(0, 0, new Color(0f, 0f, 0f, 0f));
+    _fallbackSpecularTexture.Apply(false, true);
+    return _fallbackSpecularTexture;
   }
 
 

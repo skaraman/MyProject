@@ -154,6 +154,7 @@ public static partial class ContentPackPipeline {
 
     CollectSupplementalTextDependencies(result, errors);
     CollectPairedNormalMapDependencies(result, errors);
+    CollectPairedSpecularMapDependencies(result, errors);
     CollectAtlasMetadataDependencies(result, errors);
     return result;
   }
@@ -182,6 +183,32 @@ public static partial class ContentPackPipeline {
     if (!SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(normalizedColorAssetPath, out var normalAssetPath)) return "";
     normalAssetPath = NormalizeAssetPath(normalAssetPath);
     return File.Exists(Path.GetFullPath(normalAssetPath)) ? normalAssetPath : "";
+  }
+
+  static void CollectPairedSpecularMapDependencies(List<string> result, List<string> errors) {
+    if (result == null || result.Count <= 0) return;
+
+    var pairedSpecularMapPaths = new List<string>();
+    for (var i = 0; i < result.Count; i++) {
+      var specularMapAssetPath = ResolvePairedSpecularMapAssetPath(result[i]);
+      if (string.IsNullOrWhiteSpace(specularMapAssetPath)) continue;
+      AddUniquePath(pairedSpecularMapPaths, specularMapAssetPath);
+    }
+
+    for (var i = 0; i < pairedSpecularMapPaths.Count; i++) {
+      TryAddExportableDependency(result, pairedSpecularMapPaths[i], errors);
+    }
+  }
+
+  static string ResolvePairedSpecularMapAssetPath(string colorAssetPath) {
+    var normalizedColorAssetPath = NormalizeAssetPath(colorAssetPath);
+    if (!string.Equals(Path.GetExtension(normalizedColorAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) {
+      return "";
+    }
+
+    if (!SpriteStreamingTextureImportPolicy.TryGetPairedSpecularAtlasPath(normalizedColorAssetPath, out var specularAssetPath)) return "";
+    specularAssetPath = NormalizeAssetPath(specularAssetPath);
+    return File.Exists(Path.GetFullPath(specularAssetPath)) ? specularAssetPath : "";
   }
 
   static void CollectAtlasMetadataDependencies(List<string> result, List<string> errors) {

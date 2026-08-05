@@ -36,7 +36,7 @@ public static partial class SpriteIndexBuilder {
       }
     }
     else if (string.Equals(contextLabel, BuildContext.PlayerPrebuild, StringComparison.Ordinal)) {
-      if (!ContentPackPipeline.PrepareSelectedPacksForPlayerBuild(contextLabel, logResult)) {
+      if (!ContentPackPipeline.PrepareSelectedPacksForRuntimeIndex(contextLabel, logResult)) {
         Debug.LogError("[SpriteIndexBuilder] [" + contextLabel + "] Player-build content pack preparation failed.");
         if (failOnError) throw new BuildFailedException("Player-build content pack preparation failed.");
         return false;
@@ -83,6 +83,17 @@ public static partial class SpriteIndexBuilder {
 
     for (var i = 0; i < orderedLibraryNames.Count; i++) {
       var requestedLibraryName = orderedLibraryNames[i];
+      var logLibraryProgress = state.logResult &&
+        (i == 0 || (i + 1) % 10 == 0 || i == orderedLibraryNames.Count - 1);
+      if (logLibraryProgress) {
+        Debug.Log(
+          "[SpriteIndexBuilder] Runtime index library progress." +
+          " library=" + (i + 1) + "/" + orderedLibraryNames.Count +
+          " requested='" + requestedLibraryName + "'" +
+          " phase='start'"
+        );
+      }
+
       var libraryName = ResolveCanonicalLibraryName(requestedLibraryName, librariesByKey, state.runtimeAmbiguityWarnings, contextLabel);
       if (string.IsNullOrWhiteSpace(libraryName)) {
         var normalizedRequested = SpriteAddressResolver.NormalizeNamePart(requestedLibraryName);
@@ -117,6 +128,14 @@ public static partial class SpriteIndexBuilder {
       var colorRows = hasColorLibrary
         ? ParseLibraryRows(colorLibraryPath, state.errors)
         : new Dictionary<string, SpriteRef>(StringComparer.Ordinal);
+      if (state.logResult && colorRows.Count >= 50000) {
+        Debug.Log(
+          "[SpriteIndexBuilder] Processing large runtime index library." +
+          " library=" + (i + 1) + "/" + orderedLibraryNames.Count +
+          " libraryName='" + libraryName + "'" +
+          " color_rows=" + colorRows.Count
+        );
+      }
       var normalLibraryName = libraryName + "N";
       var hasNormalLibrary = librariesByKey.TryGetValue(normalLibraryName, out var normalLibraryPath);
       if (hasColorLibrary && !hasNormalLibrary) {
@@ -140,10 +159,22 @@ public static partial class SpriteIndexBuilder {
       var skippedColorRowsForLibrary = 0;
       var failedResolveCount = 0;
       var failedValidateCount = 0;
+      var processedColorRowCount = 0;
+      var nextColorRowProgress = 50000;
       string sampleResolveContext = "";
       string sampleValidateFailure = "";
       string sampleValidateContext = "";
       foreach (var pair in colorRows) {
+        processedColorRowCount++;
+        if (state.logResult && processedColorRowCount >= nextColorRowProgress) {
+          Debug.Log(
+            "[SpriteIndexBuilder] Runtime index row progress." +
+            " libraryName='" + libraryName + "'" +
+            " processed=" + processedColorRowCount + "/" + colorRows.Count
+          );
+          nextColorRowProgress += 50000;
+        }
+
         var separator = pair.Key.IndexOf('\u001f');
         if (separator <= 0 || separator >= pair.Key.Length - 1) {
           state.errors.Add("Invalid row key '" + pair.Key + "' in '" + colorLibraryPath + "'.");
@@ -176,6 +207,13 @@ public static partial class SpriteIndexBuilder {
           continue;
         }
 
+        // Color entries are the primary runtime rows, so their normal/specular
+        // companions are not otherwise discovered from a separate library. Add
+        // the exact convention-based companions before deriving their slice
+        // addresses; without this, builds contain only atlas.png and glyph/UI
+        // lighting requests for atlasN.png and atlasS.png miss the catalog.
+        AddPairedAtlasTextureAssets(state, colorAddress);
+
         var normalAddress = "";
         var autoDerivedNormal = false;
         if (normalRows.TryGetValue(pair.Key, out var normalRef)) {
@@ -207,7 +245,14 @@ public static partial class SpriteIndexBuilder {
           state.missingNormalAddressCount++;
         }
 
-        shardRows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
+        var specularAddress = "";
+        if (TryResolveDerivedSpecularAddress(state, colorAddress, out var resolvedSpecularAddress)) {
+          if (ValidateRuntimeAtlasAddress(state, resolvedSpecularAddress, normalLibraryName + "/" + category + ":" + label + " (derived specular)", recordError: false)) {
+            specularAddress = resolvedSpecularAddress;
+          }
+        }
+
+        shardRows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress, specularAddress));
       }
 
       if (customSheetRows != null && customSheetRows.Count > 0) {
@@ -262,6 +307,16 @@ public static partial class SpriteIndexBuilder {
         shardRows.Count,
         ComputeHash(shardBody)
       ));
+
+      if (logLibraryProgress) {
+        Debug.Log(
+          "[SpriteIndexBuilder] Runtime index library progress." +
+          " library=" + (i + 1) + "/" + orderedLibraryNames.Count +
+          " libraryName='" + libraryName + "'" +
+          " rows=" + shardRows.Count +
+          " phase='done'"
+        );
+      }
     }
 
     EnsureActiveStageTextureEntries(state);

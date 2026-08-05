@@ -119,6 +119,7 @@ class SourceAssetSpec:
     category: str = ""
     label_prefix: str = ""
     normal_asset_path: str = ""
+    specular_asset_path: str = ""
 
     def source_label(self) -> str:
         if self.label:
@@ -852,6 +853,7 @@ def manifest_authoring_source_keys(manifest: dict[str, Any] | None) -> set[tuple
             str(source.get("category") or "").strip(),
             str(source.get("labelPrefix") or "").strip(),
             normalize_slashes(str(source.get("normalAssetPath") or "")).strip().lower(),
+            normalize_slashes(str(source.get("specularAssetPath") or "")).strip().lower(),
         ))
     return result
 
@@ -1102,6 +1104,7 @@ def parse_authoring_sources(manifest: dict[str, Any] | None) -> list[SourceAsset
         category = str(raw.get("category") or "")
         label_prefix = str(raw.get("labelPrefix") or raw.get("prefix") or "")
         normal_asset_path = normalize_slashes(str(raw.get("normalAssetPath") or raw.get("normalSource") or ""))
+        specular_asset_path = normalize_slashes(str(raw.get("specularAssetPath") or raw.get("specularSource") or ""))
         if not source_type or not asset_path:
             continue
         result.append(SourceAssetSpec(
@@ -1113,6 +1116,7 @@ def parse_authoring_sources(manifest: dict[str, Any] | None) -> list[SourceAsset
             category,
             label_prefix,
             normal_asset_path,
+            specular_asset_path,
         ))
     return result
 
@@ -1161,6 +1165,7 @@ def serialize_authoring_source(source: SourceAssetSpec) -> dict[str, str]:
         data["category"] = source.category.strip()
         data["labelPrefix"] = source.label_prefix.strip()
         data["normalAssetPath"] = normalize_slashes(source.normal_asset_path)
+        data["specularAssetPath"] = normalize_slashes(source.specular_asset_path)
     return data
 
 
@@ -1175,6 +1180,7 @@ def build_owned_roots(sources: Iterable[SourceAssetSpec]) -> list[str]:
         add_unique(roots, asset_path)
         if source.source_type == "sprite_sheet":
             add_unique(roots, normalize_slashes(source.normal_asset_path))
+            add_unique(roots, normalize_slashes(source.specular_asset_path))
     return roots
 
 
@@ -2603,6 +2609,11 @@ def verify_pack_option(project_root: Path, external_root: Path, option: PackOpti
             if normal_path is None or not normal_path.exists():
                 errors.append(f"Source {index}: missing normal asset '{source.normal_asset_path}'.")
 
+        if source.source_type == "sprite_sheet" and source.specular_asset_path:
+            specular_path = resolve_source_asset_path(project_root, external_root, source.specular_asset_path)
+            if specular_path is None or not specular_path.exists():
+                errors.append(f"Source {index}: missing specular asset '{source.specular_asset_path}'.")
+
         asset_key = strip_source_asset_suffix(source.asset_path).lower()
         target_path = normalize_target_relative_path(source.target_folder, source.asset_path)
         previous = seen_targets.get(asset_key)
@@ -2658,12 +2669,15 @@ def verify_pack_missing_paths(project_root: Path, external_root: Path, option: P
         if source.source_type != "sprite_sheet":
             continue
 
-        if not source.normal_asset_path:
-            continue
+        if source.normal_asset_path:
+            normal_path = resolve_source_asset_path(project_root, external_root, source.normal_asset_path)
+            if normal_path is None or not normal_path.exists():
+                errors.append(f"{pack_id}: missing normal asset '{source.normal_asset_path}'")
 
-        normal_path = resolve_source_asset_path(project_root, external_root, source.normal_asset_path)
-        if normal_path is None or not normal_path.exists():
-            errors.append(f"{pack_id}: missing normal asset '{source.normal_asset_path}'")
+        if source.specular_asset_path:
+            specular_path = resolve_source_asset_path(project_root, external_root, source.specular_asset_path)
+            if specular_path is None or not specular_path.exists():
+                errors.append(f"{pack_id}: missing specular asset '{source.specular_asset_path}'")
 
     return errors
 
@@ -2699,6 +2713,9 @@ def validate_authoring_source(source: SourceAssetSpec) -> str:
             supported_extensions = (".png", ".jpg", ".jpeg")
             if not normal_asset_path.lower().endswith(supported_extensions):
                 return "Sprite Sheet normal texture must point at a .png, .jpg, or .jpeg asset."
+        specular_asset_path = source.specular_asset_path.strip()
+        if specular_asset_path and not specular_asset_path.lower().endswith(".png"):
+            return "Sprite Sheet specular texture must point at a .png asset."
     elif source.source_type == "sprite_library":
         asset_path = source.asset_path.lower()
         has_custom_extension = asset_path.endswith(CUSTOM_LIBRARY_EXTENSION.lower())
@@ -4145,10 +4162,11 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 initial_label_prefix = source.label_prefix if source.source_type == "sprite_sheet" else source.label
             self.label_prefix_text = tk.StringVar(value=initial_label_prefix)
             self.normal_text = tk.StringVar(value=source.normal_asset_path if source else "")
+            self.specular_text = tk.StringVar(value=source.specular_asset_path if source else "")
             self.target_text = tk.StringVar(value=source.target_folder if source else "")
             self.title("Source Asset")
-            self.geometry("820x420")
-            self.minsize(720, 360)
+            self.geometry("820x460")
+            self.minsize(720, 400)
             self.configure(bg="#101418")
             self.transient(parent)
             self.grab_set()
@@ -4187,12 +4205,16 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             ttk.Entry(root, textvariable=self.normal_text).grid(row=5, column=1, sticky="ew", pady=(0, 8))
             ttk.Button(root, text="Browse", command=self.browse_normal_asset).grid(row=5, column=2, padx=(8, 0), pady=(0, 8))
 
-            ttk.Label(root, text="Target Folder").grid(row=6, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
-            ttk.Entry(root, textvariable=self.target_text).grid(row=6, column=1, sticky="ew", pady=(0, 8))
-            ttk.Button(root, text="Default", command=self.use_default_target).grid(row=6, column=2, padx=(8, 0), pady=(0, 8))
+            ttk.Label(root, text="Specular Texture").grid(row=6, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.specular_text).grid(row=6, column=1, sticky="ew", pady=(0, 8))
+            ttk.Button(root, text="Browse", command=self.browse_specular_asset).grid(row=6, column=2, padx=(8, 0), pady=(0, 8))
+
+            ttk.Label(root, text="Target Folder").grid(row=7, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+            ttk.Entry(root, textvariable=self.target_text).grid(row=7, column=1, sticky="ew", pady=(0, 8))
+            ttk.Button(root, text="Default", command=self.use_default_target).grid(row=7, column=2, padx=(8, 0), pady=(0, 8))
 
             footer = ttk.Frame(root)
-            footer.grid(row=7, column=0, columnspan=3, sticky="e", pady=(12, 0))
+            footer.grid(row=8, column=0, columnspan=3, sticky="e", pady=(12, 0))
             ttk.Button(footer, text="Save Source", command=self.save_source).pack(side=tk.LEFT, padx=(0, 8))
             ttk.Button(footer, text="Cancel", command=self.destroy).pack(side=tk.LEFT)
 
@@ -4230,6 +4252,8 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             self.asset_text.set(source.asset_path)
             if source.source_type == "sprite_sheet" and not self.label_prefix_text.get().strip():
                 self.label_prefix_text.set(source.label_prefix)
+            if source.source_type == "sprite_sheet":
+                self.detect_triplet_companions(source.asset_path)
             if not self.target_text.get().strip():
                 self.target_text.set(source.target_folder)
 
@@ -4241,6 +4265,28 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
             )
             if selected:
                 self.normal_text.set(normalize_asset_reference(selected, self.project_root))
+
+        def browse_specular_asset(self) -> None:
+            selected = filedialog.askopenfilename(
+                parent=self,
+                initialdir=str(self.project_root / "Assets"),
+                filetypes=[("Specular map", "*.png"), ("All files", "*.*")],
+            )
+            if selected:
+                self.specular_text.set(normalize_asset_reference(selected, self.project_root))
+
+        def detect_triplet_companions(self, asset_path: str) -> None:
+            source_path = resolve_project_or_absolute_path(self.project_root, asset_path)
+            if source_path.suffix.lower() != ".png":
+                return
+            if not self.normal_text.get().strip():
+                normal_path = source_path.with_name(source_path.stem + "N.png")
+                if normal_path.is_file():
+                    self.normal_text.set(normalize_asset_reference(str(normal_path), self.project_root))
+            if not self.specular_text.get().strip():
+                specular_path = source_path.with_name(source_path.stem + "S.png")
+                if specular_path.is_file():
+                    self.specular_text.set(normalize_asset_reference(str(specular_path), self.project_root))
 
         def use_default_target(self) -> None:
             self.target_text.set(default_target_folder_for_asset(self.asset_text.get()))
@@ -4260,6 +4306,7 @@ def launch_ui(project_root: Path, external_root: Path) -> None:
                 category=self.category_text.get().strip(),
                 label_prefix=self.label_prefix_text.get().strip(),
                 normal_asset_path=normalize_asset_reference(self.normal_text.get(), self.project_root),
+                specular_asset_path=normalize_asset_reference(self.specular_text.get(), self.project_root),
             )
             error = validate_authoring_source(source)
             if error:

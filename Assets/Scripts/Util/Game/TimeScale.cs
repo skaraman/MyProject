@@ -52,7 +52,10 @@ public static class TimeScale {
     }
   }
 
-  static readonly Dictionary<int, float> FallbackFactors = new() { { 1, 1f } };
+  static readonly Dictionary<int, float> FallbackFactors = new() {
+    { 1, 1f },
+    { 2, 1f }
+  };
   static readonly Stack<ScaledWaitInstruction> ScaledWaitPool = new();
 
   // Legacy compatibility surface. New layer ownership comes from SceneTimeScaleTarget.
@@ -71,6 +74,7 @@ public static class TimeScale {
       }
       if (sanitized.Count <= 0) {
         sanitized[1] = 1f;
+        sanitized[2] = 1f;
       }
 
       if (TryGetManager(out var manager)) {
@@ -99,6 +103,7 @@ public static class TimeScale {
     }
     if (destination.Count <= 0) {
       destination[1] = 1f;
+      destination[2] = 1f;
     }
   }
 

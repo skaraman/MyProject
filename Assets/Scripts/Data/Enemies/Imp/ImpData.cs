@@ -72,7 +72,7 @@ public static partial class ImpData {
     ["Death_Base_1"] = new AnimData {
       start = 1,
       end = 74,
-      duration = 1500,
+      duration = 250,
       category = "Death_Base_1"
     }
   };

@@ -89,6 +89,7 @@ public class GameplayInput : MonoBehaviour {
   private float lastAttackStartedAt = float.NegativeInfinity;
   private int lastAttackGateLogFrame = -1;
   private float nextPlayerReferenceResolveAt = -1f;
+  private float nextWallCollisionFilterRefreshAt = -1f;
 
   void OnEnable() {
     RegisterInputHandlers();
@@ -181,6 +182,9 @@ public class GameplayInput : MonoBehaviour {
 
   void TryResolvePlayerReferences(bool force = false) {
     if (!force && HasResolvedPlayerReferences()) {
+      if (Time.unscaledTime >= nextWallCollisionFilterRefreshAt) {
+        ConfigureWallCollisionFilter(EsperanzaParent);
+      }
       return;
     }
 
@@ -250,6 +254,49 @@ public class GameplayInput : MonoBehaviour {
     if (!IsComponentOnPlayerRoot(projectedShadowCaster, playerRoot)) {
       projectedShadowCaster = playerRoot.GetComponent<ProjectedSpriteShadowCaster2D>();
     }
+
+    ConfigureWallCollisionFilter(playerRoot);
+  }
+
+  void ConfigureWallCollisionFilter(GameObject playerRoot) {
+    if (playerRoot == null) {
+      return;
+    }
+
+    var playerColliders = playerRoot.GetComponentsInChildren<Collider2D>(true);
+    Collider2D footTouch = null;
+    for (var i = 0; i < playerColliders.Length; i++) {
+      var candidate = playerColliders[i];
+      if (candidate != null &&
+          string.Equals(candidate.gameObject.name, "foottouch", StringComparison.OrdinalIgnoreCase)) {
+        footTouch = candidate;
+        break;
+      }
+    }
+
+    if (footTouch == null) {
+      return;
+    }
+
+    var wallObjects = GameObject.FindGameObjectsWithTag("Wall");
+    for (var i = 0; i < playerColliders.Length; i++) {
+      var playerCollider = playerColliders[i];
+      if (playerCollider == null || playerCollider == footTouch) {
+        continue;
+      }
+
+      for (var j = 0; j < wallObjects.Length; j++) {
+        var wallColliders = wallObjects[j].GetComponentsInChildren<BoxCollider2D>(true);
+        for (var k = 0; k < wallColliders.Length; k++) {
+          var wallCollider = wallColliders[k];
+          if (wallCollider != null) {
+            Physics2D.IgnoreCollision(playerCollider, wallCollider, true);
+          }
+        }
+      }
+    }
+
+    nextWallCollisionFilterRefreshAt = Time.unscaledTime + 0.25f;
   }
 
   static GameObject ResolveRootFromComponent(Component component) {

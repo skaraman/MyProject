@@ -53,16 +53,21 @@ public static partial class SpriteIndexBuilder {
     if (state == null || string.IsNullOrWhiteSpace(projectMetaPath)) return;
     if (!projectMetaPath.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) return;
 
-    var assetPath = projectMetaPath.Substring(0, projectMetaPath.Length - ".meta".Length);
+    var assetPath = NormalizePath(projectMetaPath.Substring(0, projectMetaPath.Length - ".meta".Length));
     if (!IsActiveRuntimeTextureAssetPath(assetPath)) return;
 
     var guid = ReadGuidFromMeta(physicalMetaPath);
     if (string.IsNullOrWhiteSpace(guid)) return;
+    state.indexedActiveTextureAssetPaths.Add(assetPath);
     if (!state.activeTextureAssetPathByGuid.ContainsKey(guid)) {
       state.activeTextureAssetPathByGuid[guid] = assetPath;
     }
 
     var spriteNamesByFileId = ReadSpriteNamesByFileIdFromMeta(physicalMetaPath);
+    if (!state.spriteNamesByTextureAssetPath.TryGetValue(assetPath, out var spriteNames)) {
+      spriteNames = new HashSet<string>(StringComparer.Ordinal);
+      state.spriteNamesByTextureAssetPath[assetPath] = spriteNames;
+    }
     Dictionary<long, string> addressByFileId = null;
     if (spriteNamesByFileId.Count > 0 && !state.activeSpriteAddressByFileIdByGuid.TryGetValue(guid, out addressByFileId)) {
       addressByFileId = new Dictionary<long, string>();
@@ -70,6 +75,9 @@ public static partial class SpriteIndexBuilder {
     }
 
     foreach (var pair in spriteNamesByFileId) {
+      if (!string.IsNullOrWhiteSpace(pair.Value)) {
+        spriteNames.Add(pair.Value);
+      }
       var address = SpriteSliceAddressUtility.BuildSliceAddress(assetPath, pair.Value);
       if (!string.IsNullOrWhiteSpace(address) && addressByFileId != null) {
         addressByFileId[pair.Key] = address;
@@ -496,11 +504,28 @@ public static partial class SpriteIndexBuilder {
     var normalizedPath = NormalizePath(assetPath);
     if (!IsRuntimeTextureAssetPath(normalizedPath)) return false;
 
-    var guid = AssetDatabase.AssetPathToGUID(normalizedPath);
-    if (string.IsNullOrWhiteSpace(guid)) return false;
+    BuildActiveTextureGuidIndex(state);
+    if (!state.indexedActiveTextureAssetPaths.Contains(normalizedPath)) return false;
 
     state.activeTextureAssetPaths.Add(normalizedPath);
     return true;
+  }
+
+  static void AddPairedAtlasTextureAssets(BuildState state, string colorSliceAddress) {
+    if (state == null ||
+        !SpriteSliceAddressUtility.TryParseSliceAddress(colorSliceAddress, out var colorAtlasPath, out _)) {
+      return;
+    }
+
+    colorAtlasPath = NormalizePath(colorAtlasPath);
+    if (!state.pairedAtlasDiscoveryCompleted.Add(colorAtlasPath)) return;
+
+    if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAtlasPath, out var normalAtlasPath)) {
+      AddTextureAssetPathIfPresent(state, normalAtlasPath);
+    }
+    if (SpriteStreamingTextureImportPolicy.TryGetPairedSpecularAtlasPath(colorAtlasPath, out var specularAtlasPath)) {
+      AddTextureAssetPathIfPresent(state, specularAtlasPath);
+    }
   }
 
   static void CleanupStaleTextureEntries(BuildState state) {
@@ -615,7 +640,8 @@ public static partial class SpriteIndexBuilder {
         .Append(row.category).Append('\t')
         .Append(row.frame.ToString(CultureInfo.InvariantCulture)).Append('\t')
         .Append(row.colorAddress).Append('\t')
-        .Append(row.normalAddress).Append('\n');
+        .Append(row.normalAddress).Append('\t')
+        .Append(row.specularAddress).Append('\n');
     }
     return sb.ToString();
   }

@@ -12,7 +12,7 @@ public static class SpriteStreamingTextureImportPolicy {
     if (importer == null) return false;
 
     var changed = false;
-    var isPairedNormalAtlas = IsPairedNormalAtlasPath(importer.assetPath);
+    var isPairedLightingDataAtlas = IsPairedLightingDataAtlasPath(importer.assetPath);
 
     if (importer.textureType != TextureImporterType.Sprite) {
       importer.textureType = TextureImporterType.Sprite;
@@ -39,7 +39,7 @@ public static class SpriteStreamingTextureImportPolicy {
       changed = true;
     }
 
-    if (isPairedNormalAtlas && ApplyPairedNormalMapDataPolicy(importer)) {
+    if (isPairedLightingDataAtlas && ApplyPairedLightingDataPolicy(importer)) {
       changed = true;
     }
 
@@ -61,7 +61,7 @@ public static class SpriteStreamingTextureImportPolicy {
         platformChanged = true;
       }
 
-      if (isPairedNormalAtlas && settings.compressionQuality != 100) {
+      if (isPairedLightingDataAtlas && settings.compressionQuality != 100) {
         settings.compressionQuality = 100;
         platformChanged = true;
       }
@@ -78,8 +78,8 @@ public static class SpriteStreamingTextureImportPolicy {
     return changed;
   }
 
-  public static bool ApplyPairedNormalMapDataPolicy(TextureImporter importer) {
-    if (importer == null || !IsPairedNormalAtlasPath(importer.assetPath)) return false;
+  public static bool ApplyPairedLightingDataPolicy(TextureImporter importer) {
+    if (importer == null || !IsPairedLightingDataAtlasPath(importer.assetPath)) return false;
 
     var changed = false;
     if (importer.sRGBTexture) {
@@ -101,8 +101,17 @@ public static class SpriteStreamingTextureImportPolicy {
   }
 
   public static bool IsPairedNormalAtlasPath(string assetPath) {
-    if (!TryGetPairedColorAtlasPath(assetPath, out var pairedColorPath)) return false;
-    return File.Exists(pairedColorPath);
+    return TryGetPairedColorAtlasPath(assetPath, "N.png", out var pairedColorPath) &&
+           AssetPathExists(pairedColorPath);
+  }
+
+  public static bool IsPairedSpecularAtlasPath(string assetPath) {
+    return TryGetPairedColorAtlasPath(assetPath, "S.png", out var pairedColorPath) &&
+           AssetPathExists(pairedColorPath);
+  }
+
+  public static bool IsPairedLightingDataAtlasPath(string assetPath) {
+    return IsPairedNormalAtlasPath(assetPath) || IsPairedSpecularAtlasPath(assetPath);
   }
 
   public static bool TryGetPairedNormalAtlasPath(string colorAssetPath, out string normalAssetPath) {
@@ -111,22 +120,49 @@ public static class SpriteStreamingTextureImportPolicy {
         !string.Equals(Path.GetExtension(colorAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) return false;
 
     var colorStem = Path.GetFileNameWithoutExtension(colorAssetPath);
-    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal)) return false;
+    if (string.IsNullOrWhiteSpace(colorStem) || IsPairedLightingDataAtlasPath(colorAssetPath)) return false;
 
     normalAssetPath = colorAssetPath.Substring(0, colorAssetPath.Length - 4) + "N.png";
     return true;
   }
 
-  public static bool TryGetPairedColorAtlasPath(string normalAssetPath, out string colorAssetPath) {
-    colorAssetPath = "";
-    if (string.IsNullOrWhiteSpace(normalAssetPath) ||
-        !string.Equals(Path.GetExtension(normalAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) return false;
+  public static bool TryGetPairedSpecularAtlasPath(string colorAssetPath, out string specularAssetPath) {
+    specularAssetPath = "";
+    if (string.IsNullOrWhiteSpace(colorAssetPath) ||
+        !string.Equals(Path.GetExtension(colorAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) return false;
 
-    var normalStem = Path.GetFileNameWithoutExtension(normalAssetPath);
-    if (string.IsNullOrWhiteSpace(normalStem) || !normalStem.EndsWith("N", StringComparison.Ordinal)) return false;
+    var colorStem = Path.GetFileNameWithoutExtension(colorAssetPath);
+    if (string.IsNullOrWhiteSpace(colorStem) || IsPairedLightingDataAtlasPath(colorAssetPath)) return false;
 
-    colorAssetPath = normalAssetPath.Substring(0, normalAssetPath.Length - "N.png".Length) + ".png";
+    specularAssetPath = colorAssetPath.Substring(0, colorAssetPath.Length - 4) + "S.png";
     return true;
+  }
+
+  public static bool TryGetPairedColorAtlasPath(string lightingDataAssetPath, out string colorAssetPath) {
+    if (TryGetPairedColorAtlasPath(lightingDataAssetPath, "N.png", out colorAssetPath)) return true;
+    return TryGetPairedColorAtlasPath(lightingDataAssetPath, "S.png", out colorAssetPath);
+  }
+
+  static bool TryGetPairedColorAtlasPath(string lightingDataAssetPath, string suffix, out string colorAssetPath) {
+    colorAssetPath = "";
+    if (string.IsNullOrWhiteSpace(lightingDataAssetPath) ||
+        string.IsNullOrWhiteSpace(suffix) ||
+        !string.Equals(Path.GetExtension(lightingDataAssetPath), ".png", StringComparison.OrdinalIgnoreCase)) return false;
+
+    var lightingDataStem = Path.GetFileNameWithoutExtension(lightingDataAssetPath);
+    var suffixStem = Path.GetFileNameWithoutExtension(suffix);
+    if (string.IsNullOrWhiteSpace(lightingDataStem) ||
+        string.IsNullOrWhiteSpace(suffixStem) ||
+        !lightingDataStem.EndsWith(suffixStem, StringComparison.Ordinal)) return false;
+
+    colorAssetPath = lightingDataAssetPath.Substring(0, lightingDataAssetPath.Length - suffix.Length) + ".png";
+    return true;
+  }
+
+  static bool AssetPathExists(string assetPath) {
+    if (string.IsNullOrWhiteSpace(assetPath)) return false;
+    if (File.Exists(assetPath)) return true;
+    return AssetImporter.GetAtPath(assetPath) != null;
   }
 
   static bool TryResetTransparentSpritePlatformFormat(TextureImporter importer, string platformName, TextureImporterPlatformSettings settings) {

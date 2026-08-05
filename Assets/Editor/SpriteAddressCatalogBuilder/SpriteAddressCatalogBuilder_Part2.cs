@@ -20,6 +20,9 @@ using UnityEngine.Profiling;
 
 
 public static partial class SpriteIndexBuilder {
+  const string PlayerPrebuildFingerprintPath = "Library/SpriteStreaming/player-prebuild-input.sha256";
+  const string PlayerPrebuildFingerprintVersion = "2";
+
   static bool RunAddressablesPlayerBuildPass(
     string contextLabel,
     string passLabel,
@@ -978,12 +981,71 @@ public static partial class SpriteIndexBuilder {
   // Content pack builds are driven by Tools/ContentPackIterationUI.py.
 
   public static bool PrepareForPlayerBuild(bool logResult, bool failOnError) {
+    var inputFingerprint = ComputePlayerPrebuildInputFingerprint();
+    if (IsPlayerPrebuildFingerprintCurrent(inputFingerprint)) {
+      if (logResult) {
+        Debug.Log(
+          "[SpriteIndexBuilder] [" + BuildContext.PlayerPrebuild + "] Skipped content staging and runtime-index rebuild because the player-prebuild inputs are unchanged."
+        );
+      }
+      return true;
+    }
+
     if (logResult) {
       Debug.Log(
-        "[SpriteIndexBuilder] [" + BuildContext.PlayerPrebuild + "] Preparing staged active packs, auditing staged content, and rebuilding the runtime index for player build. Addressables content build is handled by Unity's build pipeline."
+        "[SpriteIndexBuilder] [" + BuildContext.PlayerPrebuild + "] Preparing staged active packs and rebuilding the runtime index for player build. Addressables content build is handled by Unity's build pipeline."
       );
     }
-    return RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.PlayerPrebuild, prepareSelectedPacks: false);
+    var prepared = RebuildRuntimeIndexInternal(logResult, failOnError, BuildContext.PlayerPrebuild, prepareSelectedPacks: false);
+    if (prepared) {
+      WritePlayerPrebuildFingerprint(inputFingerprint);
+    }
+    return prepared;
+  }
+
+  static string ComputePlayerPrebuildInputFingerprint() {
+    var inputPaths = new[] {
+      "Assets/AddressableAssetsData",
+      ContentPackPipeline.SelectionAssetPath,
+      "Assets/Editor/ContentPackPipeline",
+      "Assets/Editor/SpriteAddressCatalogBuilder",
+      "Assets/Prefabs",
+      "Assets/Resources/ActiveContentRegistry.asset",
+      "Assets/Scenes",
+      "Assets/Scripts/Fonts",
+      "Assets/Scripts/Util/Game",
+      "Assets/Sprites"
+    };
+
+    var content = new StringBuilder();
+    content.Append("version=").Append(PlayerPrebuildFingerprintVersion).Append('\n');
+    for (var i = 0; i < inputPaths.Length; i++) {
+      var inputPath = inputPaths[i];
+      content.Append(inputPath).Append('=').Append(AssetDatabase.GetAssetDependencyHash(inputPath)).Append('\n');
+    }
+    return ComputeHash(content.ToString());
+  }
+
+  static bool IsPlayerPrebuildFingerprintCurrent(string inputFingerprint) {
+    if (string.IsNullOrWhiteSpace(inputFingerprint) || !File.Exists(PlayerPrebuildFingerprintPath)) {
+      return false;
+    }
+
+    return string.Equals(
+      File.ReadAllText(PlayerPrebuildFingerprintPath).Trim(),
+      inputFingerprint,
+      StringComparison.OrdinalIgnoreCase
+    );
+  }
+
+  static void WritePlayerPrebuildFingerprint(string inputFingerprint) {
+    if (string.IsNullOrWhiteSpace(inputFingerprint)) return;
+
+    var directory = Path.GetDirectoryName(PlayerPrebuildFingerprintPath);
+    if (!string.IsNullOrWhiteSpace(directory)) {
+      Directory.CreateDirectory(directory);
+    }
+    File.WriteAllText(PlayerPrebuildFingerprintPath, inputFingerprint + Environment.NewLine);
   }
 
   /// <summary>

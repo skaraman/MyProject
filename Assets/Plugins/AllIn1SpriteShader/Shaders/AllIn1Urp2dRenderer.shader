@@ -233,7 +233,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
     	_OverlayTextureScrollXSpeed("Speed X Axis", Range(-5, 5)) = 0.25 //170
 		_OverlayTextureScrollYSpeed("Speed Y Axis", Range(-5, 5)) = 0.25 //171
     	
-    	_MaskTex("Lighting Mask", 2D) = "white" {} //172
+		_MaskTex("Lighting Mask", 2D) = "white" {} //172
 		_LitAmount("Lit Amount",  Range(0,1)) = 1 //173
 		_NormalMap("Normal Map", 2D) = "bump" {} //174
 		_NormalStrength("Normal Strength",  Range(0,10)) = 1 //175
@@ -265,13 +265,10 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 		[HideInInspector] [PerRendererData] _FadeUseSpriteUvRect("Fade Uses Sprite UV Rect", Float) = 0
     	_EditorDrawers("Editor Drawers", Int) = 14
 		[HideInInspector] [PerRendererData] _NormalMapIsSrgb("Normal Map Is sRGB", Float) = 0
-		[Toggle(STYLIZEDRIM_ON)] _StylizedRimEnabled("Fake Top-Right Rim", Float) = 0
-		[HDR] _StylizedRimColor("Stylized Rim Color", Color) = (1, 0.9, 0.7, 1)
-		_StylizedRimIntensity("Stylized Rim Intensity", Range(0, 4)) = 0.1
-		_StylizedRimPower("Stylized Rim Width (Screen Pixels)", Range(0.5, 8)) = 1
-		_StylizedRimNormalWidth("Normal-Directed Extra Width", Range(0, 8)) = 3
-		_StylizedRimEnvironmentInfluence("Day/Night Color Influence", Range(0, 1)) = 0.65
-		_StylizedRimLightResponse("Nearby Light Rim Boost", Range(0, 4)) = 1.5
+		[NoScaleOffset] _SpecularMap("Specular Map", 2D) = "black" {}
+		[HDR] _SpecularColor("Specular Color", Color) = (1, 1, 1, 1)
+		_SpecularIntensity("Specular Intensity", Range(0, 8)) = 1
+		_SpecularSmoothness("Specular Smoothness", Range(0, 1)) = 0.7
     }
 
 

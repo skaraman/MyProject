@@ -477,6 +477,7 @@ public sealed partial class StreamingWarmOrchestrator : MonoBehaviour, IStreamin
   void AddPairAddresses(SpriteAddressPair pair, bool markCritical) {
     if (!AddReadyAddress(pair.StreamingColorAddress, markCritical, markCritical)) return;
     AddWarmAddress(pair.StreamingNormalAddress, markHighPriority: false);
+    AddWarmAddress(pair.StreamingSpecularAddress, markHighPriority: false);
   }
 
   bool AddReadyAddress(string address, bool markCritical, bool markHighPriority) {

@@ -36,7 +36,9 @@ public partial class SingleSceneManager {
       }
     }
     LogStartGameRequest(isNewGame, loadedSlot);
-    autoSaver.enableTimeTracking = true;
+    // Gameplay time begins at the reveal-complete boundary, after the loading
+    // blackscreen has fully faded away.
+    autoSaver.enableTimeTracking = false;
     _SwitchMap("none");
     if (resumeGameplayRoutine != null) {
       StopCoroutine(resumeGameplayRoutine);

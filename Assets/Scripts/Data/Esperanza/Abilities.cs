@@ -714,3 +714,153 @@ public static class EsperanzaAbilityLoadouts {
     }
   }
 }
+
+[Serializable]
+public sealed class EsperanzaComboState {
+  public List<string> moves = new();
+}
+
+public static class EsperanzaComboLoadouts {
+  public const int ComboCount = 2;
+  public const int MovesPerCombo = 3;
+
+  static Dictionary<string, List<EsperanzaComboState>> combosByForm = CreateDefaultLoadouts();
+
+  public static void ResetRuntimeState() {
+    combosByForm = CreateDefaultLoadouts();
+  }
+
+  public static string GetMove(string formName, int comboIndex, int moveIndex) {
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) ||
+        comboIndex < 0 || comboIndex >= ComboCount ||
+        moveIndex < 0 || moveIndex >= MovesPerCombo) {
+      return "";
+    }
+
+    EnsureForm(resolvedForm);
+    var move = combosByForm[resolvedForm][comboIndex].moves[moveIndex];
+    if (!EsperanzaAbilities.TryResolveAbilityAnimation(move, out var resolvedMove)) {
+      return "";
+    }
+
+    var equipped = EsperanzaAbilityLoadouts.GetAbilitiesView(resolvedForm);
+    for (var i = 0; i < equipped.Count; i++) {
+      if (string.Equals(equipped[i], resolvedMove, StringComparison.OrdinalIgnoreCase)) {
+        return resolvedMove;
+      }
+    }
+    return "";
+  }
+
+  public static bool SetMove(string formName, int comboIndex, int moveIndex, string abilityName) {
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) ||
+        comboIndex < 0 || comboIndex >= ComboCount ||
+        moveIndex < 0 || moveIndex >= MovesPerCombo ||
+        !EsperanzaAbilities.TryResolveAbilityAnimation(abilityName, out var resolvedAbility)) {
+      return false;
+    }
+
+    var equipped = EsperanzaAbilityLoadouts.GetAbilitiesView(resolvedForm);
+    var isEquipped = false;
+    for (var i = 0; i < equipped.Count; i++) {
+      if (!string.Equals(equipped[i], resolvedAbility, StringComparison.OrdinalIgnoreCase)) continue;
+      isEquipped = true;
+      break;
+    }
+    if (!isEquipped) return false;
+
+    EnsureForm(resolvedForm);
+    combosByForm[resolvedForm][comboIndex].moves[moveIndex] = resolvedAbility;
+    return true;
+  }
+
+  public static Dictionary<string, List<EsperanzaComboState>> GetSnapshot() {
+    EnsureKnownForms();
+    var snapshot = new Dictionary<string, List<EsperanzaComboState>>(StringComparer.OrdinalIgnoreCase);
+    foreach (var form in combosByForm) {
+      var combos = new List<EsperanzaComboState>(ComboCount);
+      for (var comboIndex = 0; comboIndex < form.Value.Count; comboIndex++) {
+        combos.Add(new EsperanzaComboState { moves = new List<string>(form.Value[comboIndex].moves) });
+      }
+      snapshot[form.Key] = combos;
+    }
+    return snapshot;
+  }
+
+  public static void ApplyLoadedState(Dictionary<string, List<EsperanzaComboState>> loadedLoadouts) {
+    combosByForm = CreateDefaultLoadouts();
+    if (loadedLoadouts == null) return;
+
+    foreach (var form in loadedLoadouts) {
+      var resolvedForm = EsperanzaForms.ResolveFormKey(form.Key);
+      if (string.IsNullOrWhiteSpace(resolvedForm) || form.Value == null) continue;
+      combosByForm[resolvedForm] = NormalizeCombos(resolvedForm, form.Value);
+    }
+  }
+
+  static Dictionary<string, List<EsperanzaComboState>> CreateDefaultLoadouts() {
+    var defaults = new Dictionary<string, List<EsperanzaComboState>>(StringComparer.OrdinalIgnoreCase);
+    foreach (var formName in EsperanzaForms.KnownForms) {
+      defaults[formName] = CreateDefaultFormLoadout(formName);
+    }
+    return defaults;
+  }
+
+  static List<EsperanzaComboState> CreateDefaultFormLoadout(string formName) {
+    var abilities = EsperanzaAbilityLoadouts.GetAbilitiesView(formName);
+    var combos = new List<EsperanzaComboState>(ComboCount);
+    for (var comboIndex = 0; comboIndex < ComboCount; comboIndex++) {
+      var combo = new EsperanzaComboState();
+      for (var moveIndex = 0; moveIndex < MovesPerCombo; moveIndex++) {
+        var abilityIndex = comboIndex * MovesPerCombo + moveIndex;
+        combo.moves.Add(abilities.Count > 0 ? abilities[abilityIndex % abilities.Count] : "");
+      }
+      combos.Add(combo);
+    }
+    return combos;
+  }
+
+  static List<EsperanzaComboState> NormalizeCombos(
+    string formName,
+    IList<EsperanzaComboState> loadedCombos
+  ) {
+    var normalized = CreateDefaultFormLoadout(formName);
+    for (var comboIndex = 0; comboIndex < Mathf.Min(loadedCombos.Count, ComboCount); comboIndex++) {
+      var loadedMoves = loadedCombos[comboIndex]?.moves;
+      if (loadedMoves == null) continue;
+      for (var moveIndex = 0; moveIndex < Mathf.Min(loadedMoves.Count, MovesPerCombo); moveIndex++) {
+        if (SetMoveOnList(formName, normalized, comboIndex, moveIndex, loadedMoves[moveIndex])) continue;
+      }
+    }
+    return normalized;
+  }
+
+  static bool SetMoveOnList(
+    string formName,
+    List<EsperanzaComboState> combos,
+    int comboIndex,
+    int moveIndex,
+    string abilityName
+  ) {
+    if (!EsperanzaAbilities.TryResolveAbilityAnimation(abilityName, out var resolvedAbility)) return false;
+    var equipped = EsperanzaAbilityLoadouts.GetAbilitiesView(formName);
+    for (var i = 0; i < equipped.Count; i++) {
+      if (!string.Equals(equipped[i], resolvedAbility, StringComparison.OrdinalIgnoreCase)) continue;
+      combos[comboIndex].moves[moveIndex] = resolvedAbility;
+      return true;
+    }
+    return false;
+  }
+
+  static void EnsureKnownForms() {
+    foreach (var formName in EsperanzaForms.KnownForms) EnsureForm(formName);
+  }
+
+  static void EnsureForm(string formName) {
+    if (!combosByForm.ContainsKey(formName)) {
+      combosByForm[formName] = CreateDefaultFormLoadout(formName);
+    }
+  }
+}

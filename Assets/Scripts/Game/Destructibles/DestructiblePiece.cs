@@ -1,5 +1,6 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class DestructiblePiece : MonoBehaviour
 {
@@ -45,6 +46,9 @@ public class DestructiblePiece : MonoBehaviour
     // Rigidbody2D angular velocity is degrees per second. Keep fragments
     // below one rotation per second for a readable cinematic scatter.
     private const float MaximumCinematicAngularVelocity = 240f;
+    private const float GroundKickHorizontalSpeed = 1.4f;
+    private const float GroundKickVerticalSpeed = 1.1f;
+    private const float GroundKickRandomness = 0.45f;
     private const string FadeKeyword = "FADE_ON";
     private const float FadeVisibleAmount = -0.1f;
     private const float FadeHiddenAmount = 1f;
@@ -88,7 +92,7 @@ public class DestructiblePiece : MonoBehaviour
             shadowPrefab.SetActive(false);
             var sr = shadowPrefab.AddComponent<SpriteRenderer>();
             sr.color = new Color(0, 0, 0, 0.4f);
-            Object.DontDestroyOnLoad(shadowPrefab);
+            UnityEngine.Object.DontDestroyOnLoad(shadowPrefab);
         }
 
         if (shadowPool == null)
@@ -173,8 +177,8 @@ public class DestructiblePiece : MonoBehaviour
         }
 
         // Set the fake floor position based on the ground level
-        floorY = groundY - Random.Range(fallDistance * 0.5f, fallDistance * 1.5f);
-        sortingOrderJitter = Random.Range(-SortingOrderJitter, SortingOrderJitter + 1);
+        floorY = groundY - UnityEngine.Random.Range(fallDistance * 0.5f, fallDistance * 1.5f);
+        sortingOrderJitter = UnityEngine.Random.Range(-SortingOrderJitter, SortingOrderJitter + 1);
         lastSortedDepthY = float.MinValue;
 
         CreateShadow();
@@ -281,6 +285,64 @@ public class DestructiblePiece : MonoBehaviour
             -MaximumCinematicAngularVelocity,
             MaximumCinematicAngularVelocity
         );
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (!hasSettled || !flightActive || collision == null ||
+            !IsPlayerFootCollider(collision.collider))
+        {
+            return;
+        }
+
+        Vector2 contactPoint = collision.contactCount > 0
+            ? collision.GetContact(0).point
+            : transform.position;
+        KickFromGround(contactPoint, collision.collider.transform.position);
+    }
+
+    void OnTriggerEnter2D(Collider2D collider)
+    {
+        if (!hasSettled || !flightActive || !IsPlayerFootCollider(collider))
+        {
+            return;
+        }
+
+        KickFromGround(collider.ClosestPoint(transform.position), collider.transform.position);
+    }
+
+    static bool IsPlayerFootCollider(Collider2D collider)
+    {
+        return collider != null &&
+            string.Equals(collider.gameObject.name, "foottouch", StringComparison.OrdinalIgnoreCase) &&
+            collider.GetComponentInParent<GearController>() != null;
+    }
+
+    void KickFromGround(Vector2 contactPoint, Vector3 sourcePosition)
+    {
+        if (rb == null || !rb.simulated)
+        {
+            return;
+        }
+
+        hasSettled = false;
+        rb.gravityScale = 1f;
+        rb.linearDamping = 0f;
+        rb.angularDamping = 0f;
+
+        float horizontalDirection = Mathf.Sign(transform.position.x - sourcePosition.x);
+        if (Mathf.Abs(horizontalDirection) < 0.01f)
+        {
+            horizontalDirection = UnityEngine.Random.value < 0.5f ? -1f : 1f;
+        }
+
+        float horizontalSpeed = GroundKickHorizontalSpeed *
+            UnityEngine.Random.Range(1f - GroundKickRandomness, 1f + GroundKickRandomness);
+        float verticalSpeed = GroundKickVerticalSpeed *
+            UnityEngine.Random.Range(1f - GroundKickRandomness, 1f + GroundKickRandomness);
+        rb.linearVelocity = new Vector2(horizontalDirection * horizontalSpeed, verticalSpeed);
+        rb.angularVelocity = UnityEngine.Random.Range(-MaximumCinematicAngularVelocity, MaximumCinematicAngularVelocity);
+        transform.position = new Vector3(contactPoint.x, transform.position.y, transform.position.z);
     }
 
     void UpdateCleanup()

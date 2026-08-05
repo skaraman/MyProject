@@ -95,6 +95,11 @@ public static partial class ContentPackPipeline {
   };
 
   [Serializable]
+  sealed class ExternalPackageManifestJson {
+    public string name;
+  }
+
+  [Serializable]
   sealed class ContentManifestJson {
     public List<ContentManifestSliceJson> slices = new();
     public List<ContentManifestEpisodeJson> episodes = new();
@@ -149,6 +154,7 @@ public static partial class ContentPackPipeline {
     public string category;
     public string labelPrefix;
     public string normalAssetPath;
+    public string specularAssetPath;
   }
 
   [Serializable]
@@ -273,6 +279,7 @@ public static partial class ContentPackPipeline {
   }
 
   sealed class ExportSyncStats {
+    public int destinationEntriesDeleted;
     public int packDirectoriesCreated;
     public int packDirectoriesRecreated;
     public int assetPayloadsWritten;

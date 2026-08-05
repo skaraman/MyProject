@@ -52,6 +52,17 @@ public static partial class ContentPackPipeline {
     ApplyAssignedRuntimeAddressMetadata(packDefinitions, assignedAssets);
 
     try {
+      if (mode == TransitionPipelineMode.Clean) {
+        var deletedEntryCount = CleanExternalPackDestination(externalRoot, stats);
+        if (logResult) {
+          Debug.Log(
+            "[ContentPackPipeline] Cleaned external pack destination before export." +
+            " external_root='" + externalRoot + "'" +
+            " deleted_entries=" + deletedEntryCount
+          );
+        }
+      }
+
       for (var i = 0; i < packDefinitions.Count; i++) {
         PreparePackDirectory(packDefinitions[i].externalRootPath, externalRoot, mode, stats);
       }

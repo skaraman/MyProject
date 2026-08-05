@@ -82,7 +82,6 @@ namespace AllIn1SpriteShader {
         MaterialProperty glowLight = properties[176];
         if (glowLight.floatValue == 1) targetMat.EnableKeyword("GLOWLIGHT_ON");
         else targetMat.DisableKeyword("GLOWLIGHT_ON");
-        DrawStylizedRim();
       }
 
       EditorGUILayout.Separator();
@@ -157,35 +156,6 @@ namespace AllIn1SpriteShader {
       }
 
       if (iniDrawers != currDrawers) ShaderGUI.FindProperty("_EditorDrawers", matProperties).floatValue = currDrawers;
-    }
-
-    private void DrawStylizedRim() {
-      var enabledProperty = FindProperty("_StylizedRimEnabled", matProperties, false);
-      if (enabledProperty == null) return;
-
-      var enabled = targetMat.IsKeywordEnabled("STYLIZEDRIM_ON");
-      var nextEnabled = EditorGUILayout.Toggle(new GUIContent("Fake Top-Right Rim"), enabled);
-      if (nextEnabled != enabled) {
-        enabledProperty.floatValue = nextEnabled ? 1f : 0f;
-        if (nextEnabled) targetMat.EnableKeyword("STYLIZEDRIM_ON");
-        else targetMat.DisableKeyword("STYLIZEDRIM_ON");
-        Save();
-      }
-
-      if (!nextEnabled) return;
-      DrawNamedProperty("_StylizedRimColor");
-      DrawNamedProperty("_StylizedRimIntensity");
-      DrawNamedProperty("_StylizedRimPower");
-      DrawNamedProperty("_StylizedRimNormalWidth");
-      DrawNamedProperty("_StylizedRimEnvironmentInfluence");
-      DrawNamedProperty("_StylizedRimLightResponse");
-    }
-
-    private void DrawNamedProperty(string propertyName) {
-      var property = FindProperty(propertyName, matProperties, false);
-      if (property != null) {
-        matEditor.ShaderProperty(property, property.displayName);
-      }
     }
 
     private void Blending() {

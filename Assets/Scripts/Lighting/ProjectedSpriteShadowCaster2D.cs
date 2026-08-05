@@ -27,7 +27,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     public Vector3 LastScale;
     public Vector2 LastGroundPosition;
     public float LastVerticalDisplacement;
-    public SceneLighting2D.ShadowProjection LastProjection;
+    public DayNightCycle2D.ShadowProjection LastProjection;
   }
 
   const string ShadowShaderResourcePath = "Shaders/ProjectedSpriteShadow";
@@ -63,7 +63,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   readonly List<ProxyBinding> sunBindings = new();
   readonly List<ProxyBinding> localBindings = new();
 
-  SceneLighting2D boundLightingManager;
+  DayNightCycle2D boundLightingManager;
   GameObject shadowRootObject;
   Transform sunSlotRoot;
   Transform localSlotRoot;
@@ -159,7 +159,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   public bool PrepareProxyHierarchyForActivation() {
-    if (!Application.isPlaying || isActiveAndEnabled || SceneLighting2D.Current == null) {
+    if (!Application.isPlaying || isActiveAndEnabled || DayNightCycle2D.Instance == null) {
       return false;
     }
 
@@ -224,7 +224,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void LateUpdate() {
-    var lightingManager = SceneLighting2D.Current;
+    var lightingManager = DayNightCycle2D.Instance;
     if (lightingManager == null) {
       SetBindingsEnabled(sunBindings, false);
       SetBindingsEnabled(localBindings, false);
@@ -267,7 +267,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void SyncCelestialShadow(
-    SceneLighting2D lightingManager,
+    DayNightCycle2D lightingManager,
     Vector2 groundPosition,
     float verticalDisplacement,
     int casterSortingLayerId
@@ -296,7 +296,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void SyncLocalShadow(
-    SceneLighting2D lightingManager,
+    DayNightCycle2D lightingManager,
     Vector2 receiverPosition,
     Vector2 groundPosition,
     float verticalDisplacement,
@@ -344,7 +344,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       return;
     }
 
-    var lightingManager = SceneLighting2D.Current;
+    var lightingManager = DayNightCycle2D.Instance;
     if (lightingManager == null) {
       return;
     }
@@ -404,7 +404,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     }
   }
 
-  void CreateShadowRoot(SceneLighting2D lightingManager) {
+  void CreateShadowRoot(DayNightCycle2D lightingManager) {
     shadowRootObject = new GameObject("__ProjectedShadow_" + gameObject.name);
     shadowRootObject.hideFlags = HideFlags.DontSave;
     shadowRootObject.transform.SetParent(lightingManager.ShadowRoot, false);
@@ -415,7 +415,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   SortingGroup CreateShadowSlot(
-    SceneLighting2D lightingManager,
+    DayNightCycle2D lightingManager,
     string slotName,
     out Transform slotRoot
   ) {
@@ -480,7 +480,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
         return;
       }
 
-      SceneLighting2D.ReleaseShadowStencilReference(stencilReference);
+      DayNightCycle2D.ReleaseShadowStencilReference(stencilReference);
       stencilReference = 0;
       ApplyStencilReference(material, stencilReference);
       return;
@@ -489,7 +489,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
       return;
     }
 
-    stencilReference = SceneLighting2D.ReserveShadowStencilReference();
+    stencilReference = DayNightCycle2D.ReserveShadowStencilReference();
     ApplyStencilReference(material, stencilReference);
   }
 
@@ -531,7 +531,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     bool layerEnabled,
     Vector2 groundPosition,
     float verticalDisplacement,
-    SceneLighting2D.ShadowProjection projection
+    DayNightCycle2D.ShadowProjection projection
   ) {
     for (var i = 0; i < bindings.Count; i++) {
       SyncBinding(
@@ -549,7 +549,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     bool layerEnabled,
     Vector2 groundPosition,
     float verticalDisplacement,
-    SceneLighting2D.ShadowProjection projection
+    DayNightCycle2D.ShadowProjection projection
   ) {
     var sourceComponent = binding.SourceComponent;
     var sourceRenderer = binding.SourceRenderer;
@@ -705,7 +705,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     Transform proxyTransform,
     Bounds sourceWorldBounds,
     Vector2 groundPosition,
-    SceneLighting2D.ShadowProjection projection
+    DayNightCycle2D.ShadowProjection projection
   ) {
     var inverseTransform = proxyTransform.worldToLocalMatrix;
     var minimum = sourceWorldBounds.min;
@@ -793,7 +793,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     Matrix4x4 inverseTransform,
     Vector3 worldPoint,
     Vector2 groundPosition,
-    SceneLighting2D.ShadowProjection projection
+    DayNightCycle2D.ShadowProjection projection
   ) {
     var projectedWorldPoint = ProjectWorldPoint(
       worldPoint,
@@ -807,7 +807,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   static Vector3 ProjectWorldPoint(
     Vector3 worldPoint,
     Vector2 groundPosition,
-    SceneLighting2D.ShadowProjection projection
+    DayNightCycle2D.ShadowProjection projection
   ) {
     var height = Mathf.Max(worldPoint.y - groundPosition.y, 0f);
     var projectedPoint = worldPoint;
@@ -833,7 +833,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   void ApplyProjection(
     Material material,
     Vector2 groundPosition,
-    SceneLighting2D.ShadowProjection projection,
+    DayNightCycle2D.ShadowProjection projection,
     Color currentTint
   ) {
     if (material == null) {

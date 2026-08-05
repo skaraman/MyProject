@@ -176,6 +176,9 @@ public partial class SpriteWithNormals {
     s_ConventionNormalAddressCache.Clear();
     s_ConventionNormalAddressCacheInsertionOrder.Clear();
     s_ConventionNormalAtlasSpriteMetadata.Clear();
+    s_ConventionSpecularAddressCache.Clear();
+    s_ConventionSpecularAddressCacheInsertionOrder.Clear();
+    s_ConventionSpecularAtlasSpriteMetadata.Clear();
   }
 
   static bool IsEditorRuntimeAtlasAddressAvailable(string runtimeAddress) {
@@ -231,7 +234,13 @@ public partial class SpriteWithNormals {
         _editorPreviewNormalMissWarnings.Add(pair.normalAddress)) {
       Debug.LogWarning($"[SpriteWithNormals] Editor preview normal sprite not found for '{pair.normalAddress}' ({lookupKey})");
     }
-    ApplySprites(colorSprite, normalSprite, pair.colorAddress);
+    SpriteAddressResolver.TryLoadEditorSprite(pair.specularAddress, out var specularSprite);
+    if (!string.IsNullOrWhiteSpace(pair.specularAddress) &&
+        specularSprite == null &&
+        _editorPreviewSpecularMissWarnings.Add(pair.specularAddress)) {
+      Debug.LogWarning($"[SpriteWithNormals] Editor preview specular sprite not found for '{pair.specularAddress}' ({lookupKey})");
+    }
+    ApplySprites(colorSprite, normalSprite, specularSprite, pair.colorAddress);
   }
 #endif
 }

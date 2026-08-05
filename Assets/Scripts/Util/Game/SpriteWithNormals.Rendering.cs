@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Sprites;
 
 public partial class SpriteWithNormals {
-  void ApplySprites(Sprite colorSprite, Sprite normalSprite, string colorSliceAddress) {
+  void ApplySprites(Sprite colorSprite, Sprite normalSprite, Sprite specularSprite, string colorSliceAddress) {
     RenderApplyProfilerMarker.Begin();
     var renderedColorSprite = ResolveRenderedSprite(colorSprite, useNormalFill: false);
     var spriteChanged = _renderer.sprite != renderedColorSprite;
@@ -15,11 +15,15 @@ public partial class SpriteWithNormals {
     var normalTexture = renderedNormalSprite != null ? renderedNormalSprite.texture : GetFallbackNormalTexture();
     var normalChanged = !_hasAppliedNormalTexture || !ReferenceEquals(normalTexture, _lastAppliedNormalTexture);
 
+    var renderedSpecularSprite = ResolveRenderedSprite(specularSprite, useNormalFill: false);
+    var specularTexture = renderedSpecularSprite != null ? renderedSpecularSprite.texture : GetFallbackSpecularTexture();
+    var specularChanged = !_hasAppliedSpecularTexture || !ReferenceEquals(specularTexture, _lastAppliedSpecularTexture);
+
     var spriteUvRect = GetSpriteUvRect(renderedColorSprite);
     var spriteEffectActive = GetSpriteEffectActive(colorSprite, colorSliceAddress);
     var actualUvRectChanged = !_hasAppliedSpriteUvRect || _lastSpriteUvRect != spriteUvRect || _lastSpriteEffectActive != spriteEffectActive;
 
-    if (!actualUvRectChanged && !normalChanged) {
+    if (!actualUvRectChanged && !normalChanged && !specularChanged) {
       RenderApplyProfilerMarker.End();
       return;
     }
@@ -40,9 +44,14 @@ public partial class SpriteWithNormals {
         UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(normalTexture.graphicsFormat) ? 1f : 0f
       );
     }
+    if (specularChanged && specularTexture != null) {
+      _mpb.SetTexture(SpecularMapPropertyId, specularTexture);
+    }
     _renderer.SetPropertyBlock(_mpb);
     _lastAppliedNormalTexture = normalTexture;
     _hasAppliedNormalTexture = true;
+    _lastAppliedSpecularTexture = specularTexture;
+    _hasAppliedSpecularTexture = true;
     RenderApplyProfilerMarker.End();
   }
 
@@ -84,14 +93,15 @@ public partial class SpriteWithNormals {
 
   void ClearRenderedSprites() {
     if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
-    if (_renderer != null) ApplySprites(null, null, "");
+    if (_renderer != null) ApplySprites(null, null, null, "");
   }
 
   void CompleteColorResolveFailure(
     string reason,
     string colorSliceAddress,
     ref TextureResidencyCache.Lease colorLease,
-    ref TextureResidencyCache.Lease normalLease
+    ref TextureResidencyCache.Lease normalLease,
+    ref TextureResidencyCache.Lease specularLease
   ) {
     var keepCurrent = HasRenderedSprite();
     ClearPendingState();
@@ -104,6 +114,7 @@ public partial class SpriteWithNormals {
     }
     ReleaseLease(ref colorLease);
     ReleaseLease(ref normalLease);
+    ReleaseLease(ref specularLease);
     TryStartDeferredRequest();
   }
 

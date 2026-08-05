@@ -5,25 +5,33 @@ using UnityEngine;
 public struct SpriteAddressPair {
   public string colorAddress;
   public string normalAddress;
+  public string specularAddress;
   public string colorAtlasAddress;
   public string colorSpriteName;
   public string normalAtlasAddress;
   public string normalSpriteName;
+  public string specularAtlasAddress;
+  public string specularSpriteName;
 
   public bool HasColor => !string.IsNullOrWhiteSpace(RuntimeColorAddress);
   public bool HasNormal => !string.IsNullOrWhiteSpace(RuntimeNormalAddress);
+  public bool HasSpecular => !string.IsNullOrWhiteSpace(RuntimeSpecularAddress);
   public string StreamingColorAddress => !string.IsNullOrWhiteSpace(colorAddress) ? colorAddress : RuntimeColorAddress;
   public string StreamingNormalAddress => !string.IsNullOrWhiteSpace(normalAddress) ? normalAddress : RuntimeNormalAddress;
+  public string StreamingSpecularAddress => !string.IsNullOrWhiteSpace(specularAddress) ? specularAddress : RuntimeSpecularAddress;
   public string RuntimeColorAddress => !string.IsNullOrWhiteSpace(colorAtlasAddress) ? colorAtlasAddress : Normalize(colorAddress);
   public string RuntimeNormalAddress => !string.IsNullOrWhiteSpace(normalAtlasAddress) ? normalAtlasAddress : Normalize(normalAddress);
+  public string RuntimeSpecularAddress => !string.IsNullOrWhiteSpace(specularAtlasAddress) ? specularAtlasAddress : Normalize(specularAddress);
 
-  public static SpriteAddressPair Create(string colorAddress, string normalAddress) {
+  public static SpriteAddressPair Create(string colorAddress, string normalAddress, string specularAddress = "") {
     var pair = new SpriteAddressPair {
       colorAddress = Normalize(colorAddress),
-      normalAddress = Normalize(normalAddress)
+      normalAddress = Normalize(normalAddress),
+      specularAddress = Normalize(specularAddress)
     };
     PopulateRuntimeRef(pair.colorAddress, out pair.colorAtlasAddress, out pair.colorSpriteName);
     PopulateRuntimeRef(pair.normalAddress, out pair.normalAtlasAddress, out pair.normalSpriteName);
+    PopulateRuntimeRef(pair.specularAddress, out pair.specularAtlasAddress, out pair.specularSpriteName);
     return pair;
   }
 

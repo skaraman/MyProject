@@ -83,6 +83,10 @@ namespace AllIn1SpriteShader
             if(currEnabledDrawers[lightingDrawer])
             {
                 for (int i = 172; i <= 175; i++) DrawProperty(i);
+                matEditor.ShaderProperty(ShaderGUI.FindProperty("_SpecularMap", matProperties), "Specular Map");
+                matEditor.ShaderProperty(ShaderGUI.FindProperty("_SpecularColor", matProperties), "Specular Color");
+                matEditor.ShaderProperty(ShaderGUI.FindProperty("_SpecularIntensity", matProperties), "Specular Intensity");
+                matEditor.ShaderProperty(ShaderGUI.FindProperty("_SpecularSmoothness", matProperties), "Specular Smoothness");
                 DrawProperty(176, true);
                 MaterialProperty glowLight = properties[176];
                 if (glowLight.floatValue == 1) targetMat.EnableKeyword("GLOWLIGHT_ON");

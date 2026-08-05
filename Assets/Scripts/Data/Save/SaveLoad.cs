@@ -455,6 +455,8 @@ public static class SaveKeys {
   public const string FormProgress = "formProgress";
   public const string AbilityProgress = "abilityProgress";
   public const string AbilityLoadouts = "abilityLoadouts";
+  public const string ComboLoadouts = "comboLoadouts";
+  public const string AvailableStatPoints = "availableStatPoints";
   public const string FormStats = "formStats";
   public const string EquippedGear = "equippedGear";
   public const string AllGear = "allGear";

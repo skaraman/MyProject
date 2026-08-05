@@ -2,7 +2,6 @@
 #define ALLIN1SPRITESHADER_2DRENDERER_SHADERFEATURES
 
 #pragma shader_feature_local GLOWLIGHT_ON
-#pragma shader_feature_local STYLIZEDRIM_ON
 #pragma shader_feature_local GLOW_ON
 #pragma multi_compile_local _ FADE_ON
 #pragma shader_feature_local OUTBASE_ON

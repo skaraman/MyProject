@@ -104,6 +104,7 @@ public class FontText : MonoBehaviour {
   public float marginY = 0;
   public float offsetX = 0;
   public float offsetY = 0;
+  [SerializeField] Material glyphMaterialOverride;
   [FixedValues("left", "center", "right")] public string justifyX = "left";
   [FixedValues("bottom", "center", "top")] public string justifyY = "bottom";
   [FixedValues("auto", "up", "down")] public string lineDirection = "auto";
@@ -344,6 +345,10 @@ public class FontText : MonoBehaviour {
     obj.transform.SetParent(transform, false);
     obj.transform.SetAsLastSibling();
     obj.SetActive(true);
+    var glyphRenderer = obj.GetComponent<SpriteRenderer>();
+    if (glyphMaterialOverride != null && glyphRenderer != null && glyphRenderer.sharedMaterial != glyphMaterialOverride) {
+      glyphRenderer.sharedMaterial = glyphMaterialOverride;
+    }
     ApplyShaderColors(obj.GetComponent<AllIn1AnimatorInspector>());
     activeCharsSet.Add(obj);
     return obj;

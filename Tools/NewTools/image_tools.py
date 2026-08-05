@@ -236,7 +236,7 @@ class ImageToolsMixin:
                     if not E or not os.path.isdir(E):messagebox.showerror(_AR,'Please select a valid root folder.');return
                     F,B,C=A._collect_slices_pairs(E)
                     if not F:
-                            D='No N-suffixed PNG targets matched PNG names.'
+                            D='No N- and S-suffixed PNG target triplets matched PNG names.'
                             if C>0 and B>0:D=f"No copies made. Missing .meta for {C} PNG file(s). Skipped {B} PNG file(s) without matches."
                             elif C>0:D=f"No copies made. Missing .meta for {C} PNG file(s)."
                             elif B>0:D=f"No copies made. Skipped {B} PNG file(s) without matches."
@@ -261,13 +261,13 @@ class ImageToolsMixin:
     def _collect_slices_pairs(a,root_folder):
             K=[];F=0;L=set()
             for(M,b,N)in os.walk(root_folder):
-                    V={A.lower():A for A in N};D=[A for A in N if os.path.splitext(A)[1].lower()==_U];D=[A for A in D if not (os.path.splitext(A)[0].lower().endswith('n') and f"{os.path.splitext(A)[0][:-1]}{os.path.splitext(A)[1]}".lower()in V)]
+                    V={A.lower():A for A in N};D=[A for A in N if os.path.splitext(A)[1].lower()==_U];D=[A for A in D if not (os.path.splitext(A)[0].lower().endswith(('n','s')) and f"{os.path.splitext(A)[0][:-1]}{os.path.splitext(A)[1]}".lower()in V)]
                     if not D:continue
                     for I in D:
-                            W,O=os.path.splitext(I);T=V.get(f"{W}N{O}".lower());R=V.get(f"{I}.meta".lower())
-                            if not T:F+=1;continue
+                            W,O=os.path.splitext(I);T=[V.get(f"{W}{A}{O}".lower())for A in('N','S')];R=V.get(f"{I}.meta".lower())
+                            if not all(T):F+=1;continue
                             if not R:L.add(os.path.join(M,f"{I}.meta"));continue
-                            K.append((os.path.join(M,R),os.path.join(M,f"{T}.meta")))
+                            K.extend((os.path.join(M,R),os.path.join(M,f"{A}.meta"))for A in T)
             return K,F,len(L)
     def _rename_files(A):
             C=A._tab('Rename Files');A.rename_folder=tk.StringVar(A.r);A.rename_match=tk.StringVar(A.r);A.rename_replace=tk.StringVar(A.r);A.rename_status=tk.StringVar(A.r,_O);B=0;A._entry_with_button(C,B,A.rename_folder,label='Folder:');B+=1;ttk.Label(C,text='Exact name to match (no extension):').grid(row=B,column=0,sticky=_D);ttk.Entry(C,textvariable=A.rename_match,width=30).grid(row=B,column=1,sticky=_D);B+=1;ttk.Label(C,text='Replacement name (no extension):').grid(row=B,column=0,sticky=_D);ttk.Entry(C,textvariable=A.rename_replace,width=30).grid(row=B,column=1,sticky=_D);B+=1;ttk.Label(C,text='Matches file name without extension; keeps the extension.').grid(row=B,column=0,columnspan=3,sticky=_D);B+=1

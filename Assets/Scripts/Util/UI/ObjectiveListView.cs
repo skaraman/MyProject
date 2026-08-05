@@ -87,7 +87,7 @@ public sealed class ObjectiveListView : MonoBehaviour {
 
     var text = entry.GetComponentInChildren<FontText>(includeInactive: true);
     if (text != null) {
-      var content = isComplete ? "Complete!" : objective.description ?? "";
+      var content = ResolveObjectiveText(objective, isComplete);
       var contentChanged = text.content != content;
       text.content = content;
       if (entry.activeSelf && contentChanged) {
@@ -97,5 +97,20 @@ public sealed class ObjectiveListView : MonoBehaviour {
     if (!entry.activeSelf) {
       entry.SetActive(true);
     }
+  }
+
+  static string ResolveObjectiveText(ContentObjectiveDefinition objective, bool isComplete) {
+    if (isComplete) return "Complete!";
+
+    var description = objective.description ?? "";
+    if (!ContentEpisodeProgression.TryGetCurrentEpisodeObjectiveProgress(
+          objective,
+          out var currentCount,
+          out var requiredCount
+        )) {
+      return description;
+    }
+
+    return description + " " + currentCount + "/" + requiredCount;
   }
 }

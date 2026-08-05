@@ -15,6 +15,87 @@ using Process = System.Diagnostics.Process;
 using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 public static partial class ContentPackPipeline {
+  static int CleanExternalPackDestination(string externalRoot, ExportSyncStats stats) {
+    var normalizedExternalRoot = NormalizeFullPath(externalRoot);
+    if (string.IsNullOrWhiteSpace(normalizedExternalRoot)) {
+      throw new InvalidOperationException("Cannot clean an empty external content root.");
+    }
+
+    var projectRoot = NormalizeFullPath(GetProjectRoot());
+    if (string.Equals(normalizedExternalRoot, projectRoot, StringComparison.OrdinalIgnoreCase) ||
+        projectRoot.StartsWith(normalizedExternalRoot + "/", StringComparison.OrdinalIgnoreCase)) {
+      throw new InvalidOperationException(
+        "Refusing to clean the project root or one of its parents. external_root='" + normalizedExternalRoot + "'"
+      );
+    }
+
+    var volumeRoot = NormalizeFullPath(Path.GetPathRoot(normalizedExternalRoot));
+    if (string.Equals(normalizedExternalRoot, volumeRoot, StringComparison.OrdinalIgnoreCase)) {
+      throw new InvalidOperationException(
+        "Refusing to clean a volume root. external_root='" + normalizedExternalRoot + "'"
+      );
+    }
+
+    var packageManifestPath = Path.Combine(normalizedExternalRoot, "package.json");
+    if (!File.Exists(packageManifestPath)) {
+      throw new InvalidOperationException(
+        "Refusing to clean a destination without package.json. external_root='" + normalizedExternalRoot + "'"
+      );
+    }
+
+    ExternalPackageManifestJson packageManifest;
+    try {
+      packageManifest = JsonUtility.FromJson<ExternalPackageManifestJson>(File.ReadAllText(packageManifestPath));
+    }
+    catch (Exception ex) {
+      throw new InvalidOperationException(
+        "Refusing to clean a destination with an unreadable package.json. path='" + packageManifestPath + "'",
+        ex
+      );
+    }
+
+    if (packageManifest == null ||
+        !string.Equals(packageManifest.name, ContentPackageName, StringComparison.OrdinalIgnoreCase)) {
+      throw new InvalidOperationException(
+        "Refusing to clean a destination for a different Unity package." +
+        " expected='" + ContentPackageName + "'" +
+        " actual='" + (packageManifest != null ? packageManifest.name : "") + "'" +
+        " external_root='" + normalizedExternalRoot + "'"
+      );
+    }
+
+    var deletedEntryCount = 0;
+    var entries = Directory.GetFileSystemEntries(normalizedExternalRoot);
+    for (var i = 0; i < entries.Length; i++) {
+      var entryPath = entries[i];
+      var entryName = Path.GetFileName(entryPath);
+      if (ShouldPreserveCleanDestinationEntry(entryName)) continue;
+
+      var attributes = File.GetAttributes(entryPath);
+      if ((attributes & FileAttributes.Directory) != 0) {
+        var isReparsePoint = (attributes & FileAttributes.ReparsePoint) != 0;
+        Directory.Delete(entryPath, recursive: !isReparsePoint);
+      }
+      else {
+        File.Delete(entryPath);
+      }
+
+      deletedEntryCount++;
+    }
+
+    if (stats != null) {
+      stats.destinationEntriesDeleted += deletedEntryCount;
+    }
+    return deletedEntryCount;
+  }
+
+  static bool ShouldPreserveCleanDestinationEntry(string entryName) {
+    if (string.IsNullOrWhiteSpace(entryName)) return true;
+    if (entryName.StartsWith(".", StringComparison.Ordinal)) return true;
+    return string.Equals(entryName, "package.json", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(entryName, "package.json.meta", StringComparison.OrdinalIgnoreCase);
+  }
+
   static void PreparePackDirectory(string packRootPath, string externalRoot, TransitionPipelineMode mode, ExportSyncStats stats) {
     var normalizedPackRoot = NormalizeFullPath(packRootPath);
     var normalizedExternalRoot = NormalizeFullPath(externalRoot);
@@ -241,6 +322,7 @@ public static partial class ContentPackPipeline {
         if (source == null) continue;
         if (IsGameplayRoot(source.assetPath)) return true;
         if (IsGameplayRoot(source.normalAssetPath)) return true;
+        if (IsGameplayRoot(source.specularAssetPath)) return true;
       }
     }
 
@@ -439,6 +521,7 @@ public static partial class ContentPackPipeline {
   static string FormatExportStats(ExportSyncStats stats) {
     if (stats == null) return "";
     return
+      " destination_entries_deleted=" + stats.destinationEntriesDeleted +
       " pack_dirs_created=" + stats.packDirectoriesCreated +
       " pack_dirs_recreated=" + stats.packDirectoriesRecreated +
       " asset_writes=" + stats.assetPayloadsWritten +

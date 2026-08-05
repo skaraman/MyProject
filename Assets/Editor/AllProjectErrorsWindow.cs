@@ -10,7 +10,6 @@ namespace AllErrorsWindow
 {
     public class AllProjectErrorsWindow : EditorWindow
     {
-        private string[] allScriptFiles;
         private Dictionary<string, List<ErrorInfo>> fileErrors = new Dictionary<string, List<ErrorInfo>>();
         private bool showAllErrors = true;
         private int currentFilterIndex = 0;
@@ -40,7 +39,7 @@ namespace AllErrorsWindow
         {
             GUILayout.BeginHorizontal();
             showAllErrors = EditorGUILayout.Toggle("Show All Errors", showAllErrors);
-            currentFilterIndex = EditorGUILayout.Popup(currentFilterIndex, new[] { "All Files", "Scripts Only", "Open Files" });
+            currentFilterIndex = EditorGUILayout.Popup(currentFilterIndex, new[] { "All Scripts", "Open Scripts" });
             GUILayout.EndHorizontal();
 
             if (showAllErrors)
@@ -63,10 +62,6 @@ namespace AllErrorsWindow
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Where(p => Path.GetExtension(p).ToLower() == ".cs")
                 .ToList();
-            
-            // Get all open file GUIDs
-            var openFiles = EditorWindow.focusedWindow != null ? 
-                EditorWindow.focusedWindow.GetType().GetField("m_UnityEditor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(EditorWindow.focusedWindow) as object : null;
             
             foreach (var scriptPath in scripts)
             {
@@ -158,7 +153,7 @@ namespace AllErrorsWindow
             }
 
             // Filter files based on selection
-            var filteredFiles = sortedFiles.Where(f => currentFilterIndex == 2 ? IsFileOpenInUnity(f) : true).ToArray();
+            var filteredFiles = sortedFiles.Where(f => currentFilterIndex == 1 ? IsFileOpenInUnity(f) : true).ToArray();
             
             EditorGUILayout.BeginVertical("box");
             EditorGUILayout.LabelField($"Total Errors: {fileErrors.Values.Sum(e => e.Count)}", EditorStyles.boldLabel);
@@ -188,8 +183,6 @@ namespace AllErrorsWindow
     // Helper class to get compilation errors from a script file
     public static class ScriptCompilation
     {
-        private const string CompilationErrorsPath = "C:\\Program Files\\Unity\\Hub\\Editor\\6000.4.1f1\\Editor\\Data\\Logs\\ScriptCompilation.log";
-        
         public struct CompilationError
         {
             public int line;
@@ -205,16 +198,23 @@ namespace AllErrorsWindow
             
             try
             {
-                // Read the compilation log file
-                if (System.IO.File.Exists(CompilationErrorsPath))
+                var compilationLogPath = GetCompilationLogPath();
+                if (!string.IsNullOrEmpty(compilationLogPath) && System.IO.File.Exists(compilationLogPath))
                 {
-                    var lines = System.IO.File.ReadAllLines(CompilationErrorsPath);
+                    var normalizedScriptPath = NormalizeAssetPath(scriptPath);
+                    var lines = System.IO.File.ReadAllLines(compilationLogPath);
                     foreach (var line in lines)
                     {
-                        // Parse error lines: [ERROR] <script_path>:<line> <message>
-                        var match = System.Text.RegularExpressions.Regex.Match(line, @"\[ERROR\]\s+([^:]+):([0-9]+)\s+(.*)");
+                        var match = System.Text.RegularExpressions.Regex.Match(
+                            line,
+                            @"(?:\[ERROR\]\s+)?(.+?\.cs):([0-9]+)(?::[0-9]+)?\s+(.*)",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                         if (match.Success)
                         {
+                            var errorPath = NormalizeAssetPath(match.Groups[1].Value);
+                            if (!string.Equals(errorPath, normalizedScriptPath, StringComparison.OrdinalIgnoreCase))
+                                continue;
+
                             errors.Add(new CompilationError
                             {
                                 line = int.Parse(match.Groups[2].Value),
@@ -231,6 +231,29 @@ namespace AllErrorsWindow
             }
             
             return errors;
+        }
+
+        private static string GetCompilationLogPath()
+        {
+            var consoleLogPath = Application.consoleLogPath;
+            if (!string.IsNullOrEmpty(consoleLogPath) && System.IO.File.Exists(consoleLogPath))
+                return consoleLogPath;
+
+            var editorRoot = System.IO.Path.GetDirectoryName(EditorApplication.applicationPath);
+            if (string.IsNullOrEmpty(editorRoot))
+                return null;
+
+            return System.IO.Path.Combine(editorRoot, "Data", "Logs", "ScriptCompilation.log");
+        }
+
+        private static string NormalizeAssetPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            path = path.Replace('\\', '/').Trim();
+            var assetsIndex = path.IndexOf("Assets/", StringComparison.OrdinalIgnoreCase);
+            return assetsIndex >= 0 ? path.Substring(assetsIndex) : path;
         }
     }
 }

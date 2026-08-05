@@ -939,21 +939,22 @@ public sealed partial class GroupAtlasWindow : EditorWindow {
       return;
     }
 
-    if (!TryResolveLabelReplacement(replacementsByLabel, entryName, out var replacementSprite) &&
-        !TryResolveFolderFallbackReplacement(
-          folderFallbacksByLabel,
-          folderFallbackCursorByLabel,
-          entryName,
-          out replacementSprite)) {
-      if (!ShouldDeleteMissingRebindLabel(cleanupPlan, entryName)) {
+    if (!TryResolveLabelReplacement(replacementsByLabel, entryName, out var replacementSprite)) {
+      if (ShouldDeleteMissingRebindLabel(cleanupPlan, entryName)) {
+        libraryChanged = true;
+        libraryDeletedLabels++;
+        return;
+      }
+
+      if (!TryResolveFolderFallbackReplacement(
+            folderFallbacksByLabel,
+            folderFallbackCursorByLabel,
+            entryName,
+            out replacementSprite)) {
         retainedLabels?.Add(entryName);
         AppendLineRange(output, lines, startIndex, endIndex, lineEnding);
         return;
       }
-
-      libraryChanged = true;
-      libraryDeletedLabels++;
-      return;
     }
 
     var entryChanged = false;

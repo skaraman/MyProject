@@ -157,6 +157,7 @@ public static partial class SpriteIndexBuilder {
 
     var colorAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.assetPath);
     var normalAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.normalAssetPath);
+    var specularAssetPath = BuildStagedAuthoringSourceAssetPath(stageRoot, source.targetFolder, source.specularAssetPath);
     if (string.IsNullOrWhiteSpace(source.normalAssetPath) || IsLegacyJpegSpriteAddress(normalAssetPath)) {
       if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAssetPath, out var pairedNormalAssetPath) &&
           File.Exists(ContentPackPipeline.GetPhysicalPath(pairedNormalAssetPath))) {
@@ -164,6 +165,15 @@ public static partial class SpriteIndexBuilder {
       }
       else if (IsLegacyJpegSpriteAddress(normalAssetPath)) {
         normalAssetPath = "";
+      }
+    }
+    if (string.IsNullOrWhiteSpace(source.specularAssetPath) || IsLegacyJpegSpriteAddress(specularAssetPath)) {
+      if (SpriteStreamingTextureImportPolicy.TryGetPairedSpecularAtlasPath(colorAssetPath, out var pairedSpecularAssetPath) &&
+          File.Exists(ContentPackPipeline.GetPhysicalPath(pairedSpecularAssetPath))) {
+        specularAssetPath = pairedSpecularAssetPath;
+      }
+      else if (IsLegacyJpegSpriteAddress(specularAssetPath)) {
+        specularAssetPath = "";
       }
     }
     if (string.IsNullOrWhiteSpace(colorAssetPath) || !File.Exists(ContentPackPipeline.GetPhysicalPath(colorAssetPath))) {
@@ -191,6 +201,21 @@ public static partial class SpriteIndexBuilder {
       }
     }
 
+    var specularSpriteNames = new HashSet<string>(StringComparer.Ordinal);
+    if (!string.IsNullOrWhiteSpace(source.specularAssetPath) &&
+        (string.IsNullOrWhiteSpace(specularAssetPath) || !File.Exists(ContentPackPipeline.GetPhysicalPath(specularAssetPath)))) {
+      state?.errors.Add("Sprite sheet specular texture was not found. manifest='" + manifestPath + "' asset='" + specularAssetPath + "'");
+    }
+    else if (!string.IsNullOrWhiteSpace(specularAssetPath) && File.Exists(ContentPackPipeline.GetPhysicalPath(specularAssetPath))) {
+      var names = ReadSpriteNamesFromTextureMeta(specularAssetPath);
+      for (var i = 0; i < names.Count; i++) {
+        specularSpriteNames.Add(names[i]);
+      }
+      if (specularSpriteNames.Count <= 0) {
+        specularSpriteNames.Add(Path.GetFileNameWithoutExtension(specularAssetPath));
+      }
+    }
+
     if (!rowsByLibrary.TryGetValue(libraryName, out var rows)) {
       rows = new List<ShardRow>();
       rowsByLibrary[libraryName] = rows;
@@ -201,6 +226,9 @@ public static partial class SpriteIndexBuilder {
     }
     if (state != null && !string.IsNullOrWhiteSpace(normalAssetPath) && normalSpriteNames.Count > 0) {
       state.activeTextureAssetPaths.Add(normalAssetPath);
+    }
+    if (state != null && !string.IsNullOrWhiteSpace(specularAssetPath) && specularSpriteNames.Count > 0) {
+      state.activeTextureAssetPaths.Add(specularAssetPath);
     }
 
     for (var i = 0; i < colorSpriteNames.Count; i++) {
@@ -221,6 +249,17 @@ public static partial class SpriteIndexBuilder {
           normalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAssetPath, normalSpriteName);
         }
       }
+      var specularAddress = "";
+      if (!string.IsNullOrWhiteSpace(specularAssetPath)) {
+        var specularSpriteName = specularSpriteNames.Contains(spriteName)
+          ? spriteName
+          : colorSpriteNames.Count == 1 && specularSpriteNames.Count == 1
+            ? specularSpriteNames.First()
+            : "";
+        if (!string.IsNullOrWhiteSpace(specularSpriteName)) {
+          specularAddress = SpriteSliceAddressUtility.BuildSliceAddress(specularAssetPath, specularSpriteName);
+        }
+      }
 
       if (!ValidateRuntimeAtlasAddress(state, colorAddress, libraryName + "/" + category + ":" + spriteName + " (sheet color)", recordError: true)) {
         continue;
@@ -229,8 +268,12 @@ public static partial class SpriteIndexBuilder {
           !ValidateRuntimeAtlasAddress(state, normalAddress, libraryName + "/" + category + ":" + spriteName + " (sheet normal)", recordError: false)) {
         normalAddress = "";
       }
+      if (!string.IsNullOrWhiteSpace(specularAddress) &&
+          !ValidateRuntimeAtlasAddress(state, specularAddress, libraryName + "/" + category + ":" + spriteName + " (sheet specular)", recordError: false)) {
+        specularAddress = "";
+      }
 
-      rows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress));
+      rows.Add(new ShardRow(labelPrefix, category, frame, colorAddress, normalAddress, specularAddress));
     }
   }
 
@@ -288,6 +331,50 @@ public static partial class SpriteIndexBuilder {
     }
     result.Sort(SpriteSliceAddressUtility.NaturalStringComparer);
     return result;
+  }
+
+  static HashSet<string> GetCachedSpriteNamesFromTextureMeta(BuildState state, string assetPath) {
+    var normalizedAssetPath = NormalizePath(assetPath);
+    if (state == null || string.IsNullOrWhiteSpace(normalizedAssetPath)) {
+      return new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    if (state.spriteNamesByTextureAssetPath.TryGetValue(normalizedAssetPath, out var cachedNames)) {
+      return cachedNames;
+    }
+
+    var names = ReadSpriteNamesFromTextureMeta(normalizedAssetPath);
+    cachedNames = new HashSet<string>(names, StringComparer.Ordinal);
+    state.spriteNamesByTextureAssetPath[normalizedAssetPath] = cachedNames;
+    return cachedNames;
+  }
+
+  static bool TryResolveCompanionSpriteName(
+    BuildState state,
+    string companionAtlasPath,
+    string colorSpriteName,
+    out string companionSpriteName
+  ) {
+    companionSpriteName = "";
+    var normalizedAtlasPath = NormalizePath(companionAtlasPath);
+    if (string.IsNullOrWhiteSpace(normalizedAtlasPath) || string.IsNullOrWhiteSpace(colorSpriteName)) {
+      return false;
+    }
+
+    var companionSpriteNames = GetCachedSpriteNamesFromTextureMeta(state, normalizedAtlasPath);
+    if (companionSpriteNames.Contains(colorSpriteName)) {
+      companionSpriteName = colorSpriteName;
+      return true;
+    }
+
+    var singleSpriteName = Path.GetFileNameWithoutExtension(normalizedAtlasPath);
+    if (companionSpriteNames.Count == 0 ||
+        (companionSpriteNames.Count == 1 && companionSpriteNames.Contains(singleSpriteName))) {
+      companionSpriteName = singleSpriteName;
+      return true;
+    }
+
+    return false;
   }
 
   static string ResolveSpriteAddress(BuildState state, SpriteRef spriteRef, string context, bool recordError = true) {
@@ -671,35 +758,24 @@ public static partial class SpriteIndexBuilder {
     normalAddress = "";
     if (string.IsNullOrWhiteSpace(colorAddress)) return false;
 
-    if (state.derivedNormalAtlasPathByColorAtlas.TryGetValue(colorAddress, out var derivedNormal)) {
-      if (!string.IsNullOrWhiteSpace(derivedNormal)) {
-        normalAddress = derivedNormal;
-        return true;
-      }
-      return false;
-    }
-
-    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorAddress, out var colorAtlasPath, out var spriteName) &&
-        SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAtlasPath, out var normalAtlasPath)) {
-      normalAtlasPath = NormalizePath(normalAtlasPath);
-      if (state.activeTextureAssetPaths.Contains(normalAtlasPath)) {
-        var normalSpriteNames = ReadSpriteNamesFromTextureMeta(normalAtlasPath);
-        var normalSpriteName = spriteName;
-        if (!normalSpriteNames.Contains(normalSpriteName, StringComparer.Ordinal)) {
-          var singleSpriteName = Path.GetFileNameWithoutExtension(normalAtlasPath);
-          if (normalSpriteNames.Count == 0 ||
-              (normalSpriteNames.Count == 1 && string.Equals(normalSpriteNames[0], singleSpriteName, StringComparison.Ordinal))) {
-            normalSpriteName = singleSpriteName;
-          }
-          else {
-            state.derivedNormalAtlasPathByColorAtlas[colorAddress] = "";
-            return false;
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorAddress, out var colorAtlasPath, out var spriteName)) {
+      colorAtlasPath = NormalizePath(colorAtlasPath);
+      if (!state.pairedNormalAtlasPathByColorAtlasPath.TryGetValue(colorAtlasPath, out var normalAtlasPath)) {
+        normalAtlasPath = "";
+        if (SpriteStreamingTextureImportPolicy.TryGetPairedNormalAtlasPath(colorAtlasPath, out var candidateNormalAtlasPath)) {
+          candidateNormalAtlasPath = NormalizePath(candidateNormalAtlasPath);
+          if (state.activeTextureAssetPaths.Contains(candidateNormalAtlasPath)) {
+            normalAtlasPath = candidateNormalAtlasPath;
           }
         }
+        state.pairedNormalAtlasPathByColorAtlasPath[colorAtlasPath] = normalAtlasPath;
+      }
 
-        var conventionNormalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAtlasPath, normalSpriteName);
-        state.derivedNormalAtlasPathByColorAtlas[colorAddress] = conventionNormalAddress;
-        normalAddress = conventionNormalAddress;
+      if (!string.IsNullOrWhiteSpace(normalAtlasPath)) {
+        if (!TryResolveCompanionSpriteName(state, normalAtlasPath, spriteName, out var normalSpriteName)) {
+          return false;
+        }
+        normalAddress = SpriteSliceAddressUtility.BuildSliceAddress(normalAtlasPath, normalSpriteName);
         return true;
       }
     }
@@ -717,7 +793,6 @@ public static partial class SpriteIndexBuilder {
       foreach (var guidEntry in state.addressCacheByGuid) {
         foreach (var pair in guidEntry.Value) {
           if (string.Equals(pair.Value, candidate, StringComparison.OrdinalIgnoreCase)) {
-            state.derivedNormalAtlasPathByColorAtlas[colorAddress] = candidate;
             normalAddress = candidate;
             return true;
           }
@@ -725,7 +800,54 @@ public static partial class SpriteIndexBuilder {
       }
     }
 
-    state.derivedNormalAtlasPathByColorAtlas[colorAddress] = "";
+    return false;
+  }
+
+  static bool TryResolveDerivedSpecularAddress(BuildState state, string colorAddress, out string specularAddress) {
+    specularAddress = "";
+    if (string.IsNullOrWhiteSpace(colorAddress)) return false;
+
+    if (SpriteSliceAddressUtility.TryParseSliceAddress(colorAddress, out var colorAtlasPath, out var spriteName)) {
+      colorAtlasPath = NormalizePath(colorAtlasPath);
+      if (!state.pairedSpecularAtlasPathByColorAtlasPath.TryGetValue(colorAtlasPath, out var specularAtlasPath)) {
+        specularAtlasPath = "";
+        if (SpriteStreamingTextureImportPolicy.TryGetPairedSpecularAtlasPath(colorAtlasPath, out var candidateSpecularAtlasPath)) {
+          candidateSpecularAtlasPath = NormalizePath(candidateSpecularAtlasPath);
+          if (state.activeTextureAssetPaths.Contains(candidateSpecularAtlasPath)) {
+            specularAtlasPath = candidateSpecularAtlasPath;
+          }
+        }
+        state.pairedSpecularAtlasPathByColorAtlasPath[colorAtlasPath] = specularAtlasPath;
+      }
+
+      if (!string.IsNullOrWhiteSpace(specularAtlasPath)) {
+        if (!TryResolveCompanionSpriteName(state, specularAtlasPath, spriteName, out var specularSpriteName)) {
+          return false;
+        }
+        specularAddress = SpriteSliceAddressUtility.BuildSliceAddress(specularAtlasPath, specularSpriteName);
+        return true;
+      }
+    }
+
+    string candidate = null;
+    if (colorAddress.Contains("/Color/", StringComparison.OrdinalIgnoreCase)) {
+      candidate = colorAddress.Replace("/Color/", "/Specular/");
+    }
+    else if (colorAddress.EndsWith("_Color", StringComparison.OrdinalIgnoreCase)) {
+      candidate = colorAddress.Substring(0, colorAddress.Length - "_Color".Length) + "_Specular";
+    }
+
+    if (!string.IsNullOrWhiteSpace(candidate)) {
+      foreach (var guidEntry in state.addressCacheByGuid) {
+        foreach (var pair in guidEntry.Value) {
+          if (string.Equals(pair.Value, candidate, StringComparison.OrdinalIgnoreCase)) {
+            specularAddress = candidate;
+            return true;
+          }
+        }
+      }
+    }
+
     return false;
   }
 

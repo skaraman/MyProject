@@ -196,6 +196,12 @@ public static partial class SpriteRuntimeResolver {
         pair.normalAtlasAddress,
         pair.normalAddress
       );
+      AddAddressToAtlasLookup(
+        atlasMap,
+        seenByAtlasPath,
+        pair.specularAtlasAddress,
+        pair.specularAddress
+      );
     }
     return atlasMap;
   }
@@ -257,9 +263,11 @@ public static partial class SpriteRuntimeResolver {
           "[SpriteRuntimeResolver] Duplicate shard row for key '" + key + "'. Last row wins."
         );
       }
+      var specularAddress = cols.Length >= 6 ? NormalizeTokenUncached(Unescape(cols[5])) : "";
       var spritePair = SpriteAddressPair.Create(
         NormalizeTokenUncached(Unescape(cols[3])),
-        NormalizeTokenUncached(Unescape(cols[4]))
+        NormalizeTokenUncached(Unescape(cols[4])),
+        specularAddress
       );
       var lookupKey = new RowLookupKey(form, animation, frame);
       parsedShard.rows[key] = spritePair;

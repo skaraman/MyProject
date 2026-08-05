@@ -1,21 +1,44 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
 /// <summary>
-/// Controls a 24-hour Day/Night cycle drive for 2D Global Lights (Sun/Moon and Ambient).
-/// Default duration is 24 real-time minutes (1 minute per in-game hour).
+/// Owns the 24-hour 2D light cycle and projected character-shadow lighting.
+/// Default duration is 12 real-time minutes (30 seconds per in-game hour).
 /// </summary>
 [ExecuteAlways]
+[DefaultExecutionOrder(-900)]
 [DisallowMultipleComponent]
-public class DayNightCycle2D : MonoBehaviour {
-  static readonly int EnvironmentKeyLightColorId = Shader.PropertyToID("_EnvironmentKeyLightColor");
-  static readonly int EnvironmentKeyLightStrengthId = Shader.PropertyToID("_EnvironmentKeyLightStrength");
-  static readonly int EnvironmentBaseLightStrengthId = Shader.PropertyToID("_EnvironmentBaseLightStrength");
+public sealed class DayNightCycle2D : MonoBehaviour {
+  public readonly struct ShadowProjection {
+    public readonly Vector2 Direction;
+    public readonly float Length;
+    public readonly float Opacity;
+
+    public ShadowProjection(Vector2 direction, float length, float opacity) {
+      Direction = direction;
+      Length = length;
+      Opacity = opacity;
+    }
+  }
+
+  const float MinimumLightIntensity = 0.001f;
+  const int ShadowStencilReferenceCapacity = 64;
+  const string DefaultShadowSortingLayer = "GameMG";
+
+  static readonly int GlobalSunLightColorId = Shader.PropertyToID("_GlobalSunLightColor");
+  static readonly int GlobalMoonLightColorId = Shader.PropertyToID("_GlobalMoonLightColor");
+  static readonly int GlobalSunLightDirectionId = Shader.PropertyToID("_GlobalSunLightDirection");
+  static readonly int GlobalMoonLightDirectionId = Shader.PropertyToID("_GlobalMoonLightDirection");
+  static readonly Dictionary<ulong, ProjectedShadowLight2D> registeredLights = new();
+  static readonly List<ulong> staleLightIds = new();
+  static readonly bool[] reservedStencilReferences =
+    new bool[ShadowStencilReferenceCapacity];
 
   [Header("Cycle Configuration")]
-  [Tooltip("Total real-time minutes for a full 24-hour cycle. 24 minutes = 1 minute per in-game hour.")]
-  [SerializeField, Min(0.1f)] float cycleDurationMinutes = 24f;
+  [Tooltip("Total real-time minutes for a full 24-hour cycle. 12 minutes = 30 seconds per in-game hour.")]
+  [SerializeField, Min(0.1f)] float cycleDurationMinutes = 12f;
 
   [Tooltip("Initial time of day in hours (0.0 = Midnight, 6.0 = Dawn, 12.0 = Noon, 18.0 = Dusk).")]
   [SerializeField, Range(0f, 24f)] float currentHour = 12f;
@@ -28,15 +51,14 @@ public class DayNightCycle2D : MonoBehaviour {
   [Header("Light Targets")]
   [Tooltip("Primary celestial light (Sun). Handles both Sun & Moon if Moon Global Light is not assigned.")]
   [SerializeField] Light2D sunGlobalLight;
-  [Tooltip("Optional separate Moon light. If assigned, Sun and Moon lights cross-fade at Dawn/Dusk.")]
+  [Tooltip("Optional separate Moon light. Moon contribution is kept outside daytime (06:00-18:00).")]
   [SerializeField] Light2D moonGlobalLight;
   [SerializeField] Light2D ambientGlobalLight;
-  [SerializeField] SceneLighting2D sceneLighting;
 
   [Header("Sun & Moon Settings")]
   [Tooltip("Color of the Sun during peak daytime (Noon).")]
-  [SerializeField] Color daySunColor = new(1f, 0.96f, 0.88f, 1f);
-  [SerializeField, Min(0f)] float daySunIntensity = 1.6f;
+  [SerializeField] Color daySunColor = new(1f, 0.93f, 0.8f, 1f);
+  [SerializeField, Min(0f)] float daySunIntensity = 1.2f;
 
   [Tooltip("Cool blue moonlight used to keep nighttime readable.")]
   [SerializeField] Color nightMoonColor = new(0.42f, 0.56f, 0.88f, 1f);
@@ -48,7 +70,7 @@ public class DayNightCycle2D : MonoBehaviour {
   [Header("Ambient Light Settings")]
   [Tooltip("Ambient light color during peak daytime.")]
   [SerializeField] Color dayAmbientColor = new(0.95f, 0.95f, 1f, 1f);
-  [SerializeField, Min(0f)] float dayAmbientIntensity = 0.55f;
+  [SerializeField, Min(0f)] float dayAmbientIntensity = 0.48f;
 
   [Tooltip("Readable blue ambient light during nighttime.")]
   [SerializeField] Color nightAmbientColor = new(0.24f, 0.34f, 0.58f, 1f);
@@ -63,6 +85,14 @@ public class DayNightCycle2D : MonoBehaviour {
   [SerializeField] Vector2 noonShadowDir = new(0f, -1f);
   [SerializeField] Vector2 eveningShadowDir = new(-1f, -0.4f);
   [SerializeField] Vector2 nightMoonShadowDir = new(-0.5f, -0.8f);
+
+  [Header("Projected Ground Shadows")]
+  [SerializeField] string shadowSortingLayer = DefaultShadowSortingLayer;
+  [SerializeField] int shadowSortingOrder = 1000;
+  [SerializeField, Range(0f, 1f)] float sunShadowOpacity = 0.28f;
+  [SerializeField, Range(0f, 1f)] float moonShadowOpacity = 0.1f;
+  [SerializeField, Range(0f, 1f)] float localShadowOpacity = 0.24f;
+  [SerializeField, Range(0f, 0.5f)] float localLightSwitchHysteresis = 0.15f;
 
   [Header("Celestial Movement")]
   [Tooltip("Enable Sun and Moon moving across the sky based on time.")]
@@ -84,6 +114,11 @@ public class DayNightCycle2D : MonoBehaviour {
   int lastNotifiedHour = -1;
   int lastNotifiedMinute = -1;
   Action unsubscribeLocationUpdates;
+  Transform shadowRoot;
+  float daylightFactor;
+  float moonlightFactor;
+  Vector2 currentSunShadowDirection = Vector2.down;
+  int shadowSortingLayerId;
 
   [SerializeField, Min(1)] int dayCount = 1;
 
@@ -112,6 +147,24 @@ public class DayNightCycle2D : MonoBehaviour {
   public int Minute => Mathf.FloorToInt((currentHour - Mathf.Floor(currentHour)) * 60f) % 60;
   public bool IsDay => currentHour >= 6f && currentHour < 18f;
   public bool IsNight => !IsDay;
+
+  public Transform ShadowRoot {
+    get {
+      EnsureShadowRoot();
+      return shadowRoot;
+    }
+  }
+
+  public int ShadowSortingLayerId {
+    get {
+      if (shadowSortingLayerId == 0) {
+        ResolveShadowSortingLayer();
+      }
+      return shadowSortingLayerId;
+    }
+  }
+
+  public int ShadowSortingOrder => shadowSortingOrder;
   public bool IsPaused {
     get => pauseTime;
     set => pauseTime = value;
@@ -161,6 +214,60 @@ public class DayNightCycle2D : MonoBehaviour {
     return $"{displayHour}:{m:D2} {suffix}";
   }
 
+  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetStatics() {
+    registeredLights.Clear();
+    staleLightIds.Clear();
+    Array.Clear(reservedStencilReferences, 0, reservedStencilReferences.Length);
+    Instance = null;
+  }
+
+  public static int ReserveShadowStencilReference() {
+    for (var stencilReference = 1;
+         stencilReference < reservedStencilReferences.Length;
+         stencilReference++) {
+      if (reservedStencilReferences[stencilReference]) {
+        continue;
+      }
+
+      reservedStencilReferences[stencilReference] = true;
+      return stencilReference;
+    }
+
+    return 0;
+  }
+
+  public static void ReleaseShadowStencilReference(int stencilReference) {
+    if (stencilReference <= 0 ||
+        stencilReference >= reservedStencilReferences.Length) {
+      return;
+    }
+
+    reservedStencilReferences[stencilReference] = false;
+  }
+
+  public static void RegisterLight(ProjectedShadowLight2D source) {
+    if (source == null) {
+      return;
+    }
+
+    registeredLights[ObjectEntityId.GetRawValue(source)] = source;
+  }
+
+  public static void UnregisterLight(ProjectedShadowLight2D source) {
+    if (source == null) {
+      return;
+    }
+
+    var sourceId = ObjectEntityId.GetRawValue(source);
+    if (!registeredLights.TryGetValue(sourceId, out var registeredSource) ||
+        registeredSource != source) {
+      return;
+    }
+
+    registeredLights.Remove(sourceId);
+  }
+
   void Awake() {
     if (Application.isPlaying) {
       if (Instance != null && Instance != this) {
@@ -171,6 +278,8 @@ public class DayNightCycle2D : MonoBehaviour {
     }
 
     AutoResolveReferences();
+    ResolveShadowSortingLayer();
+    EnsureShadowRoot();
     ApplyLightingForCurrentTime();
   }
 
@@ -192,17 +301,18 @@ public class DayNightCycle2D : MonoBehaviour {
       unsubscribeLocationUpdates = MessageBus.On("LocationUpdated", OnLocationUpdated);
     }
     AutoResolveReferences();
+    ResolveShadowSortingLayer();
+    SetShadowRootActive(true);
     ApplyLightingForCurrentTime();
   }
 
   void OnDisable() {
     unsubscribeLocationUpdates?.Invoke();
     unsubscribeLocationUpdates = null;
+    SetShadowRootActive(false);
     if (Instance == this) {
       Instance = null;
-      Shader.SetGlobalColor(EnvironmentKeyLightColorId, Color.white);
-      Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, 0f);
-      Shader.SetGlobalFloat(EnvironmentBaseLightStrengthId, 0f);
+      ClearCelestialSpecularGlobals();
     }
   }
 
@@ -211,9 +321,7 @@ public class DayNightCycle2D : MonoBehaviour {
     unsubscribeLocationUpdates = null;
     if (Instance == this) {
       Instance = null;
-      Shader.SetGlobalColor(EnvironmentKeyLightColorId, Color.white);
-      Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, 0f);
-      Shader.SetGlobalFloat(EnvironmentBaseLightStrengthId, 0f);
+      ClearCelestialSpecularGlobals();
     }
   }
 
@@ -247,6 +355,11 @@ public class DayNightCycle2D : MonoBehaviour {
     currentHour = Mathf.Repeat(currentHour, 24f);
     cycleDurationMinutes = Mathf.Max(0.1f, cycleDurationMinutes);
     timeSpeedMultiplier = Mathf.Max(0f, timeSpeedMultiplier);
+    sunShadowOpacity = Mathf.Clamp01(sunShadowOpacity);
+    moonShadowOpacity = Mathf.Clamp01(moonShadowOpacity);
+    localShadowOpacity = Mathf.Clamp01(localShadowOpacity);
+    localLightSwitchHysteresis = Mathf.Clamp(localLightSwitchHysteresis, 0f, 0.5f);
+    shadowSortingLayerId = 0;
 
     AutoResolveReferences();
     ApplyLightingForCurrentTime();
@@ -285,11 +398,9 @@ public class DayNightCycle2D : MonoBehaviour {
   }
 
   void AutoResolveReferences() {
-    if (sceneLighting == null) {
-      sceneLighting = SceneLighting2D.Current ?? FindAnyObjectByType<SceneLighting2D>();
-    }
-
-    if (sunGlobalLight == null || ambientGlobalLight == null) {
+    if (sunGlobalLight == null ||
+        moonGlobalLight == null ||
+        ambientGlobalLight == null) {
       var lights = FindObjectsByType<Light2D>();
       foreach (var light in lights) {
         if (light == null) continue;
@@ -309,8 +420,8 @@ public class DayNightCycle2D : MonoBehaviour {
     float targetSunIntensity;
     Color targetAmbientColor;
     float targetAmbientIntensity;
-    float moonIntensityFactor = 0f;
-    float nightFactor;
+
+    EvaluateCelestialFactors(currentHour, out daylightFactor, out moonlightFactor);
 
     // Time ranges:
     // 00:00 - 05:00: Deep Night
@@ -323,70 +434,66 @@ public class DayNightCycle2D : MonoBehaviour {
       // Night
       targetSunColor = nightMoonColor;
       targetSunIntensity = moonGlobalLight != null ? 0f : nightMoonIntensity;
-      moonIntensityFactor = 1f;
 
       targetAmbientColor = nightAmbientColor;
       targetAmbientIntensity = nightAmbientIntensity;
-      nightFactor = 1f;
     } else if (currentHour >= 5f && currentHour < 7f) {
       // Dawn (Sunrise)
       var t = (currentHour - 5f) / 2f; // 0 -> 1
       var e = SmoothStep(t);
 
-      if (t < 0.5f) {
-        var subT = t * 2f;
-        targetSunColor = Color.Lerp(nightMoonColor, transitionSunColor, subT);
-        targetAmbientColor = Color.Lerp(nightAmbientColor, transitionAmbientColor, subT);
-      } else {
-        var subT = (t - 0.5f) * 2f;
-        targetSunColor = Color.Lerp(transitionSunColor, daySunColor, subT);
-        targetAmbientColor = Color.Lerp(transitionAmbientColor, dayAmbientColor, subT);
-      }
+      targetSunColor = BlendThreeColors(
+        nightMoonColor,
+        transitionSunColor,
+        daySunColor,
+        t
+      );
+      targetAmbientColor = BlendThreeColors(
+        nightAmbientColor,
+        transitionAmbientColor,
+        dayAmbientColor,
+        t
+      );
 
       if (moonGlobalLight != null) {
-        targetSunIntensity = Mathf.Lerp(0f, daySunIntensity, e);
-        moonIntensityFactor = 1f - e;
+        targetSunIntensity = daySunIntensity * daylightFactor;
       } else {
         targetSunIntensity = Mathf.Lerp(nightMoonIntensity, daySunIntensity, e);
-        moonIntensityFactor = 0f;
       }
 
       targetAmbientIntensity = Mathf.Lerp(nightAmbientIntensity, dayAmbientIntensity, e);
-      nightFactor = 1f - e;
     } else if (currentHour >= 7f && currentHour < 17f) {
       // Day
       targetSunColor = daySunColor;
       targetSunIntensity = daySunIntensity;
-      moonIntensityFactor = 0f;
 
       targetAmbientColor = dayAmbientColor;
       targetAmbientIntensity = dayAmbientIntensity;
-      nightFactor = 0f;
     } else {
       // Dusk (17:00 - 19:00 Sunset)
       var t = (currentHour - 17f) / 2f; // 0 -> 1
       var e = SmoothStep(t);
 
-      if (t < 0.5f) {
-        var subT = t * 2f;
-        targetSunColor = Color.Lerp(daySunColor, transitionSunColor, subT);
-        targetAmbientColor = Color.Lerp(dayAmbientColor, transitionAmbientColor, subT);
-      } else {
-        var subT = (t - 0.5f) * 2f;
-        targetSunColor = Color.Lerp(transitionSunColor, nightMoonColor, subT);
-        targetAmbientColor = Color.Lerp(transitionAmbientColor, nightAmbientColor, subT);
-      }
+      targetSunColor = BlendThreeColors(
+        daySunColor,
+        transitionSunColor,
+        nightMoonColor,
+        t
+      );
+      targetAmbientColor = BlendThreeColors(
+        dayAmbientColor,
+        transitionAmbientColor,
+        nightAmbientColor,
+        t
+      );
 
       if (moonGlobalLight != null) {
-        targetSunIntensity = Mathf.Lerp(daySunIntensity, 0f, e);
-        moonIntensityFactor = e;
+        targetSunIntensity = daySunIntensity * daylightFactor;
       } else {
         targetSunIntensity = Mathf.Lerp(daySunIntensity, nightMoonIntensity, e);
-        moonIntensityFactor = 0f;
       }
 
       targetAmbientIntensity = Mathf.Lerp(dayAmbientIntensity, nightAmbientIntensity, e);
-      nightFactor = e;
     }
 
     // Apply to Sun Global Light
@@ -395,7 +502,7 @@ public class DayNightCycle2D : MonoBehaviour {
       sunGlobalLight.intensity = targetSunIntensity;
     }
 
-    var appliedMoonIntensity = nightMoonIntensity * moonIntensityFactor;
+    var appliedMoonIntensity = nightMoonIntensity * moonlightFactor;
 
     // Apply to Moon Global Light (if separate light object exists)
     if (moonGlobalLight != null) {
@@ -409,27 +516,54 @@ public class DayNightCycle2D : MonoBehaviour {
       ambientGlobalLight.intensity = targetAmbientIntensity;
     }
 
-    var moonIsKeyLight = appliedMoonIntensity > targetSunIntensity;
-    var environmentKeyColor = moonIsKeyLight ? nightMoonColor : targetSunColor;
-    var environmentKeyIntensity = Mathf.Max(targetSunIntensity, appliedMoonIntensity);
-    var normalizedKeyStrength = environmentKeyIntensity / Mathf.Max(daySunIntensity, 0.0001f);
-    Shader.SetGlobalColor(EnvironmentKeyLightColorId, environmentKeyColor);
-    Shader.SetGlobalFloat(EnvironmentKeyLightStrengthId, normalizedKeyStrength);
-    Shader.SetGlobalFloat(
-      EnvironmentBaseLightStrengthId,
-      targetSunIntensity + appliedMoonIntensity + targetAmbientIntensity
+    // Dynamic celestial shadow direction.
+    currentSunShadowDirection = CalculateSunShadowDirection(currentHour);
+    SetCelestialSpecularGlobals(
+      targetSunColor,
+      targetSunIntensity,
+      appliedMoonIntensity,
+      currentSunShadowDirection
     );
 
-    // Dynamic 2D Sun Shadow Vector calculation
-    Vector2 shadowDir = CalculateSunShadowDirection(currentHour);
+    UpdateCelestialPositions();
+  }
 
-    // Synchronize with SceneLighting2D manager if present
-    if (sceneLighting != null) {
-      sceneLighting.SunShadowDirection = shadowDir;
-      sceneLighting.SetNightAmountDirect(nightFactor);
+  static void EvaluateCelestialFactors(
+    float hour,
+    out float sunFactor,
+    out float moonFactor
+  ) {
+    if (hour < 5f || hour >= 19f) {
+      sunFactor = 0f;
+      moonFactor = 1f;
+      return;
     }
 
-    UpdateCelestialPositions();
+    if (hour < 7f) {
+      sunFactor = SmoothStep((hour - 5f) / 2f);
+    } else if (hour < 17f) {
+      sunFactor = 1f;
+    } else {
+      sunFactor = 1f - SmoothStep((hour - 17f) / 2f);
+    }
+
+    // Keep moonlight completely out of the authored daytime window. It fades
+    // out during 05:00-06:00 and only starts fading in after 18:00.
+    if (hour < 6f) {
+      moonFactor = 1f - SmoothStep(hour - 5f);
+    } else if (hour < 18f) {
+      moonFactor = 0f;
+    } else {
+      moonFactor = SmoothStep(hour - 18f);
+    }
+  }
+
+  static Color BlendThreeColors(Color start, Color middle, Color end, float t) {
+    if (t < 0.5f) {
+      return Color.Lerp(start, middle, SmoothStep(t * 2f));
+    }
+
+    return Color.Lerp(middle, end, SmoothStep((t - 0.5f) * 2f));
   }
 
   Vector2 CalculateSunShadowDirection(float hour) {
@@ -451,6 +585,30 @@ public class DayNightCycle2D : MonoBehaviour {
       // Night hours - Moon shadow direction
       return nightMoonShadowDir.normalized;
     }
+  }
+
+  void SetCelestialSpecularGlobals(
+    Color sunColor,
+    float sunIntensity,
+    float moonIntensity,
+    Vector2 sunShadowDirection
+  ) {
+    // Projected shadows travel away from their light source, so negate the shadow
+    // direction to get the surface-to-light direction used by the BRDF.
+    var sunDirection = new Vector3(-sunShadowDirection.x, -sunShadowDirection.y, 1f).normalized;
+    var moonDirection2D = -nightMoonShadowDir.normalized;
+    var moonDirection = new Vector3(moonDirection2D.x, moonDirection2D.y, 1f).normalized;
+    Shader.SetGlobalColor(GlobalSunLightColorId, sunColor * Mathf.Max(0f, sunIntensity));
+    Shader.SetGlobalColor(GlobalMoonLightColorId, nightMoonColor * Mathf.Max(0f, moonIntensity));
+    Shader.SetGlobalVector(GlobalSunLightDirectionId, sunDirection);
+    Shader.SetGlobalVector(GlobalMoonLightDirectionId, moonDirection);
+  }
+
+  static void ClearCelestialSpecularGlobals() {
+    Shader.SetGlobalColor(GlobalSunLightColorId, Color.black);
+    Shader.SetGlobalColor(GlobalMoonLightColorId, Color.black);
+    Shader.SetGlobalVector(GlobalSunLightDirectionId, Vector3.forward);
+    Shader.SetGlobalVector(GlobalMoonLightDirectionId, Vector3.forward);
   }
 
   void UpdateCelestialPositions() {
@@ -491,6 +649,316 @@ public class DayNightCycle2D : MonoBehaviour {
       float moonAngle = Mathf.Lerp(moonRiseAngle, moonSetAngle, moonT) * Mathf.Deg2Rad;
       Vector3 moonOffset = new Vector3(Mathf.Cos(moonAngle), Mathf.Sin(moonAngle), 0f) * celestialRadius;
       moonGlobalLight.transform.position = centerPos + moonOffset;
+    }
+  }
+
+  public bool TryGetCelestialShadow(
+    Vector2 groundPosition,
+    int casterSortingLayerId,
+    out ShadowProjection projection
+  ) {
+    projection = default;
+    var sunSource = ResolveStrongestCelestial(
+      ProjectedShadowLightRole.Sun,
+      casterSortingLayerId
+    );
+    var moonSource = ResolveStrongestCelestial(
+      ProjectedShadowLightRole.Moon,
+      casterSortingLayerId
+    );
+    var sunOpacity = sunSource != null
+      ? sunShadowOpacity * sunSource.ShadowStrength * daylightFactor
+      : 0f;
+    var moonOpacity = moonSource != null
+      ? moonShadowOpacity * moonSource.ShadowStrength * moonlightFactor
+      : 0f;
+    if (sunOpacity <= MinimumLightIntensity &&
+        moonOpacity <= MinimumLightIntensity) {
+      return false;
+    }
+
+    if (sunOpacity <= MinimumLightIntensity) {
+      projection = CreateCelestialProjection(
+        moonSource,
+        moonOpacity,
+        true,
+        groundPosition
+      );
+      return true;
+    }
+    if (moonOpacity <= MinimumLightIntensity) {
+      projection = CreateCelestialProjection(
+        sunSource,
+        sunOpacity,
+        false,
+        groundPosition
+      );
+      return true;
+    }
+
+    var totalOpacity = sunOpacity + moonOpacity;
+    var moonWeight = moonOpacity / totalOpacity;
+    var sunDirection = ResolveCelestialShadowDirection(
+      sunSource,
+      false,
+      groundPosition
+    );
+    var moonDirection = ResolveCelestialShadowDirection(
+      moonSource,
+      true,
+      groundPosition
+    );
+    var blendedDirection = Vector2.Lerp(sunDirection, moonDirection, moonWeight);
+    if (blendedDirection.sqrMagnitude <= 0.0001f) {
+      blendedDirection = moonWeight >= 0.5f ? moonDirection : sunDirection;
+    }
+
+    projection = new ShadowProjection(
+      blendedDirection.normalized,
+      Mathf.Lerp(sunSource.ProjectionLength, moonSource.ProjectionLength, moonWeight),
+      Mathf.Lerp(sunOpacity, moonOpacity, moonWeight)
+    );
+    return true;
+  }
+
+  ShadowProjection CreateCelestialProjection(
+    ProjectedShadowLight2D source,
+    float opacity,
+    bool useMoon,
+    Vector2 groundPosition
+  ) {
+    var direction = ResolveCelestialShadowDirection(source, useMoon, groundPosition);
+    return new ShadowProjection(direction, source.ProjectionLength, opacity);
+  }
+
+  Vector2 ResolveCelestialShadowDirection(
+    ProjectedShadowLight2D source,
+    bool useMoon,
+    Vector2 groundPosition
+  ) {
+    if (!source.TryGetDirectionOverride(out var direction)) {
+      direction = useMoon
+        ? groundPosition - (Vector2)source.SourceLight.transform.position
+        : currentSunShadowDirection;
+    }
+    if (direction.sqrMagnitude <= 0.0001f) {
+      direction = Vector2.down;
+    }
+
+    return direction.normalized;
+  }
+
+  public ulong SelectNearestLocalLight(
+    Vector2 receiverPosition,
+    int casterSortingLayerId,
+    ulong currentLightId
+  ) {
+    PurgeStaleLights();
+
+    var bestLightId = 0UL;
+    var bestDistanceSquared = float.MaxValue;
+    foreach (var pair in registeredLights) {
+      var source = pair.Value;
+      if (!TryGetLocalDistanceSquared(
+        source,
+        receiverPosition,
+        casterSortingLayerId,
+        out var distanceSquared)) {
+        continue;
+      }
+      if (distanceSquared >= bestDistanceSquared) {
+        continue;
+      }
+
+      bestLightId = pair.Key;
+      bestDistanceSquared = distanceSquared;
+    }
+
+    if (bestLightId == 0 || currentLightId == 0 || bestLightId == currentLightId) {
+      return bestLightId;
+    }
+    if (!registeredLights.TryGetValue(currentLightId, out var currentSource)) {
+      return bestLightId;
+    }
+    if (!TryGetLocalDistanceSquared(
+      currentSource,
+      receiverPosition,
+      casterSortingLayerId,
+      out var currentDistanceSquared)) {
+      return bestLightId;
+    }
+
+    var switchFactor = 1f - localLightSwitchHysteresis;
+    var switchThresholdSquared = currentDistanceSquared * switchFactor * switchFactor;
+    return bestDistanceSquared < switchThresholdSquared
+      ? bestLightId
+      : currentLightId;
+  }
+
+  public bool TryGetLocalShadow(
+    ulong lightId,
+    Vector2 receiverPosition,
+    Vector2 groundPosition,
+    int casterSortingLayerId,
+    out ShadowProjection projection
+  ) {
+    projection = default;
+    if (lightId == 0 || !registeredLights.TryGetValue(lightId, out var source)) {
+      return false;
+    }
+    if (!TryGetLocalDistanceSquared(
+      source,
+      receiverPosition,
+      casterSortingLayerId,
+      out var distanceSquared)) {
+      return false;
+    }
+
+    var sourceLight = source.SourceLight;
+    var range = source.ResolveWorldRange();
+    var distance = Mathf.Sqrt(distanceSquared);
+    var normalizedDistance = range > 0f ? distance / range : 1f;
+    var attenuation = Mathf.SmoothStep(1f, 0f, normalizedDistance);
+    var intensity = Mathf.Clamp01(sourceLight.intensity);
+    var opacity = localShadowOpacity * source.ShadowStrength * intensity * attenuation;
+    if (opacity <= MinimumLightIntensity) {
+      return false;
+    }
+
+    Vector2 direction;
+    if (!source.TryGetDirectionOverride(out direction)) {
+      direction = groundPosition - (Vector2)sourceLight.transform.position;
+    }
+    if (direction.sqrMagnitude <= 0.0001f) {
+      direction = Vector2.down;
+    }
+
+    direction.Normalize();
+    projection = new ShadowProjection(direction, source.ProjectionLength, opacity);
+    return true;
+  }
+
+  ProjectedShadowLight2D ResolveStrongestCelestial(
+    ProjectedShadowLightRole lightRole,
+    int casterSortingLayerId
+  ) {
+    PurgeStaleLights();
+
+    Light2D preferredLight = null;
+    if (lightRole == ProjectedShadowLightRole.Sun) {
+      preferredLight = sunGlobalLight;
+    } else if (lightRole == ProjectedShadowLightRole.Moon) {
+      preferredLight = moonGlobalLight;
+    }
+
+    var preferredSource = preferredLight != null
+      ? preferredLight.GetComponent<ProjectedShadowLight2D>()
+      : null;
+    if (IsEligibleSource(preferredSource, lightRole, casterSortingLayerId)) {
+      return preferredSource;
+    }
+
+    ProjectedShadowLight2D strongestSource = null;
+    var strongestIntensity = MinimumLightIntensity;
+    foreach (var pair in registeredLights) {
+      var source = pair.Value;
+      if (!IsEligibleSource(source, lightRole, casterSortingLayerId)) {
+        continue;
+      }
+
+      var intensity = source.SourceLight.intensity * source.ShadowStrength;
+      if (intensity <= strongestIntensity) {
+        continue;
+      }
+
+      strongestSource = source;
+      strongestIntensity = intensity;
+    }
+
+    return strongestSource;
+  }
+
+  static bool TryGetLocalDistanceSquared(
+    ProjectedShadowLight2D source,
+    Vector2 receiverPosition,
+    int casterSortingLayerId,
+    out float distanceSquared
+  ) {
+    distanceSquared = float.MaxValue;
+    if (!IsEligibleSource(source, ProjectedShadowLightRole.Local, casterSortingLayerId)) {
+      return false;
+    }
+
+    var range = source.ResolveWorldRange();
+    if (range <= 0f) {
+      return false;
+    }
+
+    var difference = receiverPosition - (Vector2)source.SourceLight.transform.position;
+    distanceSquared = difference.sqrMagnitude;
+    return distanceSquared <= range * range;
+  }
+
+  static bool IsEligibleSource(
+    ProjectedShadowLight2D source,
+    ProjectedShadowLightRole requiredRole,
+    int casterSortingLayerId
+  ) {
+    if (source == null || !source.isActiveAndEnabled) {
+      return false;
+    }
+    if (!source.CastsCharacterShadows || source.LightRole != requiredRole) {
+      return false;
+    }
+
+    var sourceLight = source.SourceLight;
+    if (sourceLight == null ||
+        !sourceLight.isActiveAndEnabled ||
+        sourceLight.intensity <= MinimumLightIntensity) {
+      return false;
+    }
+
+    return source.AffectsSortingLayer(casterSortingLayerId);
+  }
+
+  static void PurgeStaleLights() {
+    staleLightIds.Clear();
+    foreach (var pair in registeredLights) {
+      if (pair.Value == null) {
+        staleLightIds.Add(pair.Key);
+      }
+    }
+
+    for (var i = 0; i < staleLightIds.Count; i++) {
+      registeredLights.Remove(staleLightIds[i]);
+    }
+    staleLightIds.Clear();
+  }
+
+  void ResolveShadowSortingLayer() {
+    var layerName = string.IsNullOrWhiteSpace(shadowSortingLayer)
+      ? DefaultShadowSortingLayer
+      : shadowSortingLayer.Trim();
+    shadowSortingLayerId = SortingLayer.NameToID(layerName);
+  }
+
+  void EnsureShadowRoot() {
+    if (shadowRoot != null) {
+      return;
+    }
+
+    var rootObject = new GameObject("__ProjectedCharacterShadows");
+    rootObject.hideFlags = HideFlags.DontSave;
+    shadowRoot = rootObject.transform;
+    shadowRoot.SetParent(transform, false);
+  }
+
+  void SetShadowRootActive(bool active) {
+    if (active) {
+      EnsureShadowRoot();
+    }
+    if (shadowRoot != null) {
+      shadowRoot.gameObject.SetActive(active);
     }
   }
 

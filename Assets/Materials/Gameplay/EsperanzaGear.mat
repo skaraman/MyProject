@@ -15,7 +15,6 @@ Material:
   - FADE_ON
   - GLOWLIGHT_ON
   - GLOW_ON
-  - STYLIZEDRIM_ON
   m_InvalidKeywords:
   - _GLOWAFFECTLIGHT_ON
   - _Glow
@@ -135,7 +134,7 @@ Material:
     - _GlitchAmount: 3
     - _GlitchSize: 1
     - _GlitchSpeed: 20
-    - _Glow: 1
+    - _Glow: 0.25
     - _GlowAffectLight: 1
     - _GlowGlobal: 1
     - _GradBlend: 1
@@ -176,7 +175,7 @@ Material:
     - _MyDstMode: 10
     - _MySrcMode: 5
     - _NegativeAmount: 1
-    - _NormalStrength: 1
+    - _NormalStrength: 0.8
     - _OffsetUvX: 0
     - _OffsetUvY: 0
     - _OnlyInnerOutline: 0
@@ -234,12 +233,6 @@ Material:
     - _ZTestMode: 4
     - _ZWrite: 0
     - _ZoomUvAmount: 0.5
-    - _StylizedRimEnabled: 1
-    - _StylizedRimEnvironmentInfluence: 1
-    - _StylizedRimIntensity: 0.1
-    - _StylizedRimLightResponse: 1.5
-    - _StylizedRimNormalWidth: 3
-    - _StylizedRimPower: 1
     m_Colors:
     - _AlphaOutlineColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
@@ -273,6 +266,5 @@ Material:
     - _OverlayTex_ScaleAndTiling: {r: 1, g: 1, b: 0, a: 0}
     - _ShadowColor: {r: 0, g: 0, b: 0, a: 1}
     - _ShineColor: {r: 1, g: 1, b: 1, a: 1}
-    - _StylizedRimColor: {r: 1.4, g: 1.25, b: 1.05, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -118,13 +118,15 @@ public static partial class SpriteIndexBuilder {
     public readonly int frame;
     public readonly string colorAddress;
     public readonly string normalAddress;
+    public readonly string specularAddress;
 
-    public ShardRow(string labelPrefix, string category, int frame, string colorAddress, string normalAddress) {
+    public ShardRow(string labelPrefix, string category, int frame, string colorAddress, string normalAddress, string specularAddress = "") {
       this.labelPrefix = labelPrefix;
       this.category = category;
       this.frame = frame;
       this.colorAddress = colorAddress;
       this.normalAddress = normalAddress;
+      this.specularAddress = specularAddress;
     }
   }
 
@@ -141,6 +143,7 @@ public static partial class SpriteIndexBuilder {
     public string category;
     public string labelPrefix;
     public string normalAssetPath;
+    public string specularAssetPath;
   }
 
   readonly struct ManifestRow {
@@ -190,13 +193,17 @@ public static partial class SpriteIndexBuilder {
     public readonly Dictionary<string, Dictionary<long, string>> addressCacheByGuid = new(StringComparer.OrdinalIgnoreCase);
     public readonly HashSet<string> addressCacheBuiltSilentlyByGuid = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, Dictionary<string, string>> spriteAddressByNameCacheByGuid = new(StringComparer.OrdinalIgnoreCase);
-    public readonly Dictionary<string, string> derivedNormalAtlasPathByColorAtlas = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, string> pairedNormalAtlasPathByColorAtlasPath = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, string> pairedSpecularAtlasPathByColorAtlasPath = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, string> runtimeTextureAssetPathBySourceAssetPath = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, bool> assetExistsByPath = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, string> atlasMetadataAssetPathByAtlasPath = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, AtlasMetadataKind> atlasMetadataKindByPath = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, AddressableAssetGroup> textureGroupsByName = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, string> activeTextureAssetPathByGuid = new(StringComparer.OrdinalIgnoreCase);
+    public readonly HashSet<string> indexedActiveTextureAssetPaths = new(StringComparer.OrdinalIgnoreCase);
+    public readonly Dictionary<string, HashSet<string>> spriteNamesByTextureAssetPath = new(StringComparer.OrdinalIgnoreCase);
+    public readonly HashSet<string> pairedAtlasDiscoveryCompleted = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<string, Dictionary<long, string>> activeSpriteAddressByFileIdByGuid = new(StringComparer.OrdinalIgnoreCase);
     public readonly Dictionary<long, List<string>> activeSpriteAddressesByFileId = new();
     public int schemaRepairs;

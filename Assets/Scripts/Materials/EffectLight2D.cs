@@ -18,6 +18,11 @@ public sealed class EffectLight2D : MonoBehaviour {
   [SerializeField] float flickerSeed = 0.37f;
   [SerializeField] string[] targetSortingLayers = { "GameBG", "GameMG", "GameFG" };
 
+  [Header("Lingering Light")]
+  [SerializeField] bool leaveLingeringLightOnDespawn;
+  [SerializeField, Min(0f)] float minimumLingeringLifetime = 0.25f;
+  [SerializeField, Min(0f)] float maximumLingeringLifetime = 0.5f;
+
   void Reset() {
     CacheLight();
     ApplyStaticSettings();
@@ -37,6 +42,11 @@ public sealed class EffectLight2D : MonoBehaviour {
     radiusPulseFrequency = Mathf.Max(0f, radiusPulseFrequency);
     outerRadius = Mathf.Max(0.01f, outerRadius);
     innerRadius = Mathf.Clamp(innerRadius, 0f, outerRadius);
+    minimumLingeringLifetime = Mathf.Max(0f, minimumLingeringLifetime);
+    maximumLingeringLifetime = Mathf.Max(
+      minimumLingeringLifetime,
+      maximumLingeringLifetime
+    );
     CacheLight();
     ApplyStaticSettings();
   }
@@ -56,6 +66,43 @@ public sealed class EffectLight2D : MonoBehaviour {
     effectLight.intensity = Mathf.Lerp(minimumIntensity, maximumIntensity, flicker);
 
     ApplyWorldRadii(GetRadiusScale(now));
+  }
+
+  public void LeaveLingeringLight() {
+    if (!leaveLingeringLightOnDespawn) return;
+
+    CacheLight();
+    if (effectLight == null || maximumLingeringLifetime <= 0f) return;
+
+    var lifetime = UnityEngine.Random.Range(
+      minimumLingeringLifetime,
+      maximumLingeringLifetime
+    );
+    if (lifetime <= 0f) return;
+
+    var lingeringObject = new GameObject($"{name} Lingering Light");
+    lingeringObject.layer = gameObject.layer;
+    lingeringObject.transform.SetPositionAndRotation(transform.position, transform.rotation);
+
+    var lingeringLight = lingeringObject.AddComponent<Light2D>();
+    lingeringLight.lightType = Light2D.LightType.Point;
+    lingeringLight.color = effectLight.color;
+    lingeringLight.intensity = Mathf.Max(effectLight.intensity, baseIntensity * 0.65f);
+    lingeringLight.falloffIntensity = effectLight.falloffIntensity;
+    lingeringLight.pointLightInnerAngle = effectLight.pointLightInnerAngle;
+    lingeringLight.pointLightOuterAngle = effectLight.pointLightOuterAngle;
+    // The source light pulses its outer radius. Lingering lights must begin at
+    // the same authored size regardless of the pulse phase at despawn.
+    lingeringLight.pointLightInnerRadius = innerRadius;
+    lingeringLight.pointLightOuterRadius = outerRadius;
+    lingeringLight.overlapOperation = effectLight.overlapOperation;
+    lingeringLight.shadowsEnabled = false;
+    lingeringLight.targetSortingLayers = effectLight.targetSortingLayers;
+
+    lingeringObject.AddComponent<LingeringLightFade2D>().Initialize(
+      lingeringLight,
+      lifetime
+    );
   }
 
   void CacheLight() {
@@ -121,5 +168,30 @@ public sealed class EffectLight2D : MonoBehaviour {
     }
 
     return resolvedIds.ToArray();
+  }
+}
+
+sealed class LingeringLightFade2D : MonoBehaviour {
+  Light2D targetLight;
+  float initialIntensity;
+  float lifetime;
+  float elapsed;
+
+  public void Initialize(Light2D light, float duration) {
+    targetLight = light;
+    initialIntensity = light != null ? light.intensity : 0f;
+    lifetime = Mathf.Max(0.01f, duration);
+  }
+
+  void Update() {
+    elapsed += TimeScale.GetDeltaTime(this);
+    var progress = Mathf.Clamp01(elapsed / lifetime);
+    if (targetLight != null) {
+      targetLight.intensity = Mathf.SmoothStep(initialIntensity, 0f, progress);
+    }
+
+    if (progress >= 1f) {
+      Destroy(gameObject);
+    }
   }
 }

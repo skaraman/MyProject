@@ -457,6 +457,29 @@ public class CharacterState : MonoBehaviour {
     return true;
   }
 
+  public bool SetComboMove(
+    string formName,
+    int comboIndex,
+    int moveIndex,
+    string abilityName,
+    string source = "runtime"
+  ) {
+    if (!EsperanzaComboLoadouts.SetMove(formName, comboIndex, moveIndex, abilityName)) {
+      return false;
+    }
+
+    var saved = SaveFormsState();
+    RuntimeLog.Log(
+      "[CharacterState][SetComboMove] form='" + EsperanzaForms.ResolveFormKey(formName) +
+      "' combo=" + (comboIndex + 1) +
+      " move=" + (moveIndex + 1) +
+      " ability='" + abilityName +
+      "' source='" + (source ?? "") +
+      "' saved=" + (saved ? 1 : 0)
+    );
+    return true;
+  }
+
   public bool MoveAbilityToForm(
     string abilityName,
     string targetFormName,
@@ -517,6 +540,7 @@ public class CharacterState : MonoBehaviour {
 
     var previousValue = FormStatsValues.GetValue(resolvedForm, resolvedStat);
     AddStats(resolvedForm, resolvedStat, 1, source);
+    SaveFormsState();
     var nextValue = FormStatsValues.GetValue(resolvedForm, resolvedStat);
     var remainingPoints = GetAvailableStatPoints();
 
@@ -636,6 +660,7 @@ public class CharacterState : MonoBehaviour {
     EsperanzaForms.ResetRuntimeState();
     EsperanzaAbilities.ResetRuntimeState();
     EsperanzaAbilityLoadouts.ResetRuntimeState();
+    EsperanzaComboLoadouts.ResetRuntimeState();
     FormStatsValues.ResetToDefaults();
     EquippedItems.ResetToDefaults();
     DialogController.ResetRuntimeState("character_reset");
@@ -708,6 +733,13 @@ public class CharacterState : MonoBehaviour {
       EsperanzaAbilityLoadouts.ApplyLoadedState(null);
     }
 
+    if (loadedForms.HasPrefix(SaveKeys.ComboLoadouts)) {
+      var comboLoadouts = loadedForms.GetComplex<Dictionary<string, List<EsperanzaComboState>>>(SaveKeys.ComboLoadouts);
+      EsperanzaComboLoadouts.ApplyLoadedState(comboLoadouts);
+    } else {
+      EsperanzaComboLoadouts.ApplyLoadedState(null);
+    }
+
     var requestedActiveForm = loadedForms.ContainsKey(SaveKeys.ActiveForm)
       ? Convert.ToString(loadedForms[SaveKeys.ActiveForm])
       : EsperanzaForms.GetActive();
@@ -761,6 +793,8 @@ public class CharacterState : MonoBehaviour {
       formsSave.SetComplex(SaveKeys.FormProgress, EsperanzaForms.GetProgressSnapshot());
       formsSave.SetComplex(SaveKeys.AbilityProgress, EsperanzaAbilities.GetProgressSnapshot());
       formsSave.SetComplex(SaveKeys.AbilityLoadouts, EsperanzaAbilityLoadouts.GetSnapshot());
+      formsSave.SetComplex(SaveKeys.ComboLoadouts, EsperanzaComboLoadouts.GetSnapshot());
+      formsSave[SaveKeys.AvailableStatPoints] = GetAvailableStatPoints();
       SaveSlotManager.Save(SaveKeys.Forms, formsSave);
       formsSavePending = false;
       formsSaveSlot = -1;

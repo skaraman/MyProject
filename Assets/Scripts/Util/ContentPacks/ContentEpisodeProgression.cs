@@ -95,7 +95,6 @@ public static class ContentEpisodeProgression {
     }
 
     EnsureSavedState("load_game:" + (source ?? ""));
-    RestartIncompleteCurrentEpisodePart("load_game:" + (source ?? ""));
   }
 
   public static void ConfigureForCurrentRuntimeState(string source) {
@@ -169,6 +168,29 @@ public static class ContentEpisodeProgression {
     for (var i = 0; i < count; i++) {
       if (!ReferenceEquals(definitions[i], definition)) continue;
       return runtimeObjectives[i].currentCount >= runtimeObjectives[i].requiredCount;
+    }
+
+    return false;
+  }
+
+  public static bool TryGetCurrentEpisodeObjectiveProgress(
+    ContentObjectiveDefinition definition,
+    out int currentCount,
+    out int requiredCount
+  ) {
+    currentCount = 0;
+    requiredCount = 0;
+    if (definition == null) return false;
+
+    var definitions = ResolveCurrentEpisodeObjectiveDefinitions();
+    var count = Mathf.Min(definitions.Count, runtimeObjectives.Count);
+    for (var i = 0; i < count; i++) {
+      if (!ReferenceEquals(definitions[i], definition)) continue;
+
+      var objective = runtimeObjectives[i];
+      requiredCount = objective.requiredCount;
+      currentCount = Mathf.Clamp(objective.currentCount, 0, requiredCount);
+      return requiredCount > 0;
     }
 
     return false;
@@ -741,33 +763,6 @@ public static class ContentEpisodeProgression {
     var data = new SaveData();
     data[CompletedPartCountKey] = 0;
     SaveState(data, state, source);
-  }
-
-  static void RestartIncompleteCurrentEpisodePart(string source) {
-    var state = ResolveSavedOrInitialState();
-    EnsureRuntimeObjectiveCache(state);
-    if (runtimeObjectives.Count <= 0) return;
-
-    if (AreObjectivesComplete(runtimeObjectives)) return;
-
-    var changed = false;
-    for (var i = 0; i < runtimeObjectives.Count; i++) {
-      var objective = runtimeObjectives[i];
-      if (objective.currentCount <= 0) continue;
-      objective.currentCount = 0;
-      runtimeObjectives[i] = objective;
-      changed = true;
-    }
-
-    if (!changed) return;
-    QueueRuntimeObjectiveSave();
-
-    RuntimeLog.Log(
-      "[ContentEpisodeProgression] episode_part_restarted" +
-      " source='" + (source ?? "") + "'" +
-      " episode='" + NormalizeToken(state.episodeId) + "'" +
-      " slice='" + NormalizeToken(state.sliceId) + "'"
-    );
   }
 
   static void SaveState(EpisodeProgressState state, string source) {

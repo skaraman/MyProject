@@ -173,6 +173,7 @@ public static class SpriteUiPinService {
     else if (target.TryGetFrameAddressPair(0, out var pair)) {
       AddAddress(addressBuffer, pair.StreamingColorAddress, addressSetBuffer);
       AddAddress(addressBuffer, pair.StreamingNormalAddress, addressSetBuffer);
+      AddAddress(addressBuffer, pair.StreamingSpecularAddress, addressSetBuffer);
     }
 
     if (addressBuffer.Count <= 0) {
