@@ -107,19 +107,6 @@ public class CharacterState : MonoBehaviour {
   void Start() {
     offLoadGame = MessageBus.On(CharacterMessageTopics.LoadGame, LoadState);
     EnsureRuntimeReferences();
-
-    var lightObj = new GameObject("EsperLocalLight");
-    lightObj.transform.SetParent(this.transform);
-    lightObj.transform.localPosition = new Vector3(0, -1.78f, 0);
-    var light2D = lightObj.AddComponent<UnityEngine.Rendering.Universal.Light2D>();
-    light2D.lightType = UnityEngine.Rendering.Universal.Light2D.LightType.Point;
-    light2D.intensity = 0.36f;
-    light2D.pointLightOuterRadius = 2.87f;
-    light2D.pointLightInnerRadius = 0f;
-    light2D.pointLightOuterAngle = 360f;
-    light2D.pointLightInnerAngle = 0f;
-    light2D.falloffIntensity = 0.572f;
-    light2D.color = new Color(1f, 0.95f, 0.85f);
   }
 
   void OnDestroy() {

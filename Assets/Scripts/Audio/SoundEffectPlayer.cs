@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.Audio;
 using UnityEngine.ResourceManagement.AsyncOperations;
 
 [Serializable]
@@ -25,6 +26,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     public float requestedVolume;
     public float pitch;
     public bool canPlayDuringPauseMenu;
+    public string mixerGroup;
   }
 
   sealed class PendingLoop {
@@ -43,6 +45,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
   sealed class LoopState {
     public string soundId;
     public string address;
+    public string mixerGroup;
     public float effectVolume;
     public float requestedVolume;
     public float pitch;
@@ -87,6 +90,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
   static SoundEffectPlayer runtimeInstance;
 
   [SerializeField] TextAsset manifestAsset;
+  [SerializeField] AudioMixer mainMixer;
   [SerializeField, Range(0f, 1f)] float masterVolume = 1f;
   [SerializeField, Min(0f)] float fadeDuration = 0.1f;
   [SerializeField, Min(1)] int maxVoices = 16;
@@ -459,7 +463,8 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
       effectVolume = definition.volume,
       requestedVolume = Mathf.Max(request.volume, 0f),
       pitch = Mathf.Clamp(request.pitch, 0.1f, 3f),
-      canPlayDuringPauseMenu = canPlayDuringPauseMenu
+      canPlayDuringPauseMenu = canPlayDuringPauseMenu,
+      mixerGroup = definition.mixerGroup
     };
 
     RequestClip(definition.clipAddress, pending);
@@ -645,6 +650,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     voice.source.Stop();
     voice.source.clip = clip;
     voice.source.pitch = pending.pitch;
+    AssignMixerGroup(voice.source, pending.mixerGroup);
     if (pauseMenuOpen && pending.canPlayDuringPauseMenu) {
       voice.source.volume = ResolveVolume(voice.effectVolume, voice.requestedVolume);
     }
@@ -683,6 +689,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
     loop.effectVolume = definition.volume;
     loop.requestedVolume = Mathf.Max(volume, 0f);
     loop.pitch = Mathf.Clamp(pitch, 0.1f, 3f);
+    loop.mixerGroup = definition.mixerGroup;
     ApplyLoopSettings(loop);
 
     var sameSound = string.Equals(
@@ -749,6 +756,7 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
   void PlayLoopClip(LoopState loop, AudioClip clip) {
     loop.source.clip = clip;
     loop.source.loop = Mathf.Approximately(loop.playChance, 1f);
+    AssignMixerGroup(loop.source, loop.mixerGroup);
     if (loop.source.loop) {
       BeginLoopPlayback(loop);
       return;
@@ -756,6 +764,19 @@ public sealed class SoundEffectPlayer : MonoBehaviour {
 
     loop.nextPlayTime = Time.unscaledTime;
     TryPlayIntermittentLoop(loop);
+  }
+
+  void AssignMixerGroup(AudioSource source, string mixerGroupName) {
+    if (mainMixer == null || string.IsNullOrWhiteSpace(mixerGroupName)) {
+      source.outputAudioMixerGroup = null;
+      return;
+    }
+    var groups = mainMixer.FindMatchingGroups(mixerGroupName);
+    if (groups != null && groups.Length > 0) {
+      source.outputAudioMixerGroup = groups[0];
+    } else {
+      source.outputAudioMixerGroup = null;
+    }
   }
 
   void TryPlayIntermittentLoop(LoopState loop) {

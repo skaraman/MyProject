@@ -69,7 +69,8 @@ public class EnemyAIController : MonoBehaviour {
     Move,
     Attack,
     Recover,
-    Hurt
+    Hurt,
+    Juggle
   }
 
   public Transform player;
@@ -91,6 +92,9 @@ public class EnemyAIController : MonoBehaviour {
   [Min(0f)] public float preferredEnemySpacing = 1.25f;
   [Range(0f, 1f)] public float separationInfluence = 0.75f;
   [Min(0f)] public float recoverySeparationSpeedMultiplier = 0.65f;
+
+  [Header("Combo Juggle")]
+  [Min(0f)] public float comboJuggleMoveSpeed = 16f;
 
   private float closingDistance;
   private float runtimeMoveSpeed;
@@ -115,6 +119,7 @@ public class EnemyAIController : MonoBehaviour {
   private float recoveryVerticalOffset;
   private float recoveryFacingSign = 1f;
   private float recoveryRepositionTimeRemaining;
+  private Vector2 juggleTargetPosition;
   private int sortedIndex = -1;
 
   static bool ShouldLogSpawnDebug() {
@@ -218,6 +223,9 @@ public class EnemyAIController : MonoBehaviour {
         break;
       case BehaviourState.Hurt:
         TickHurt();
+        break;
+      case BehaviourState.Juggle:
+        TickJuggle();
         break;
     }
   }
@@ -329,6 +337,35 @@ public class EnemyAIController : MonoBehaviour {
     return true;
   }
 
+  public bool TryBeginComboJuggle(
+    Transform attacker,
+    float horizontalOffset,
+    float verticalOffset,
+    float holdSeconds
+  ) {
+    if (!isActiveAndEnabled || enemyController == null || attacker == null) {
+      return false;
+    }
+
+    StopMovement();
+    ClearActiveAttack();
+    nextAttackTime = Mathf.Max(nextAttackTime, TimeScale.GetNow(this) + runtimeAttackCooldown);
+    if (!enemyController.PlayAnimation("Hurt", forceRestart: true)) {
+      return false;
+    }
+
+    var facingSign = ResolveAttackerFacingSign(attacker);
+    juggleTargetPosition = (Vector2)attacker.position + new Vector2(
+      facingSign * Mathf.Max(0f, horizontalOffset),
+      verticalOffset
+    );
+    enemyController.FaceDirection(-facingSign);
+    enemyController.PauseAnimation();
+    stateTimeRemaining = Mathf.Max(holdSeconds, 0.05f);
+    behaviourState = BehaviourState.Juggle;
+    return true;
+  }
+
   void TickHurt() {
     StopMovement();
     stateTimeRemaining -= TimeScale.GetDeltaTime(this);
@@ -344,6 +381,41 @@ public class EnemyAIController : MonoBehaviour {
     }
 
     behaviourState = BehaviourState.Decide;
+  }
+
+  void TickJuggle() {
+    StopMovement();
+    var deltaTime = TimeScale.GetDeltaTime(this);
+    var currentPosition = rb != null ? rb.position : (Vector2)transform.position;
+    var nextPosition = Vector2.MoveTowards(
+      currentPosition,
+      juggleTargetPosition,
+      Mathf.Max(comboJuggleMoveSpeed, 0f) * deltaTime
+    );
+    if (rb != null) {
+      rb.MovePosition(nextPosition);
+    } else {
+      transform.position = new Vector3(nextPosition.x, nextPosition.y, transform.position.z);
+    }
+
+    stateTimeRemaining -= deltaTime;
+    if (stateTimeRemaining > 0f) return;
+
+    enemyController.PlayAnimation(enemyController.defaultAnimation, forceRestart: true);
+    var recoveryTimeRemaining = Mathf.Max(0f, nextAttackTime - TimeScale.GetNow(this));
+    if (recoveryTimeRemaining > 0f) {
+      BeginAttackRecovery(recoveryTimeRemaining);
+      return;
+    }
+    behaviourState = BehaviourState.Decide;
+  }
+
+  float ResolveAttackerFacingSign(Transform attacker) {
+    var attackerController = attacker.GetComponentInParent<GearController>();
+    if (attackerController != null) {
+      return attackerController.IsFacingRight ? 1f : -1f;
+    }
+    return attacker.lossyScale.x < 0f ? -1f : 1f;
   }
 
   void BeginApproach() {

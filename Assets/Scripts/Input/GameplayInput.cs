@@ -11,6 +11,7 @@ public class GameplayInput : MonoBehaviour {
   const string EsperanzaPunchWoosh2SoundId = "esperanza.punchWoosh2";
   const string EsperanzaKickWoosh1SoundId = "esperanza.kickWoosh1";
   const string EsperanzaKickWoosh2SoundId = "esperanza.kickWoosh2";
+  const string EsperanzaChargeBlastSoundId = "esperanza.chargeBlast";
 
   private enum MoveMode {
     Run,
@@ -995,23 +996,25 @@ public class GameplayInput : MonoBehaviour {
       return;
     }
 
+    if (UnityEngine.Random.value < 0.6f) {
+      int attackSoundIndex = UnityEngine.Random.Range(1, 6);
+      SoundEffectPlayer.Play($"esperanza.attack{attackSoundIndex}");
+    }
+
     if (animationName.IndexOf("Punch", StringComparison.OrdinalIgnoreCase) >= 0) {
-      SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
-        ? EsperanzaAttackSound1Id
-        : EsperanzaAttackSound2Id);
       SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
         ? EsperanzaPunchWoosh1SoundId
         : EsperanzaPunchWoosh2SoundId);
-      return;
     }
 
     if (animationName.IndexOf("Kick", StringComparison.OrdinalIgnoreCase) >= 0) {
       SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
-        ? EsperanzaAttackSound1Id
-        : EsperanzaAttackSound2Id);
-      SoundEffectPlayer.Play(UnityEngine.Random.value < 0.5f
         ? EsperanzaKickWoosh1SoundId
         : EsperanzaKickWoosh2SoundId);
+    }
+
+    if (animationName.IndexOf("Blast", StringComparison.OrdinalIgnoreCase) >= 0) {
+      SoundEffectPlayer.Play(EsperanzaChargeBlastSoundId);
     }
   }
 
@@ -1149,3 +1152,4 @@ public class GameplayInput : MonoBehaviour {
     return TimeScale.GetNow(ResolveSceneTimeContextTransform());
   }
 }
+

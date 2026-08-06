@@ -1,104 +1,172 @@
 {
-  "effects": [
-    {
-      "id": "menu.move",
-      "clip": "Assets/SoundEffects/menumove.mp3",
-      "volume": 1
-    },
-    {
-      "id": "menu.select",
-      "clip": "Assets/SoundEffects/menuselect.mp3",
-      "volume": 1
-    },
-    {
-      "id": "menu.playGame",
-      "clip": "Assets/SoundEffects/playgame.mp3",
-      "volume": 1
-    },
-    {
-      "id": "footsteps_rocks",
-      "clip": "Assets/SoundEffects/footsteps_rocks.mp3",
-      "volume": 1
-    },
-    {
-      "id": "footrun_rocks",
-      "clip": "Assets/SoundEffects/footrun_rocks.mp3",
-      "volume": 1
-    },
-    {
-      "id": "idle_rocks",
-      "clip": "Assets/SoundEffects/idle_rocks.mp3",
-      "volume": 1
-    },
-    {
-      "id": "ambience.episode1.1",
-      "clip": "Assets/SoundEffects/episode1.1_ambience.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.hurt1",
-      "clip": "Assets/SoundEffects/hurt1.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.hurt2",
-      "clip": "Assets/SoundEffects/hurt2.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.attack1",
-      "clip": "Assets/SoundEffects/attack1.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.attack2",
-      "clip": "Assets/SoundEffects/attack2.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.punchWoosh1",
-      "clip": "Assets/SoundEffects/woosh1.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.punchWoosh2",
-      "clip": "Assets/SoundEffects/woosh2.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.kickWoosh1",
-      "clip": "Assets/SoundEffects/wooshkick.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.kickWoosh2",
-      "clip": "Assets/SoundEffects/wooshkick2.mp3",
-      "volume": 1
-    },
-    {
-      "id": "esperanza.blastHit",
-      "clip": "Assets/SoundEffects/BlastHit.mp3",
-      "volume": 1
-    },
-    {
-      "id": "enemy.imp.spawn",
-      "clip": "Assets/SoundEffects/impscream.mp3",
-      "volume": 1
-    },
-    {
-      "id": "enemy.imp.running_rocks",
-      "clip": "Assets/SoundEffects/imprunning_rocks.mp3",
-      "volume": 1
-    },
-    {
-      "id": "dialog.imp",
-      "clip": "Assets/SoundEffects/imp_dialog_ep1.1.mp3",
-      "volume": 1
-    },
-    {
-      "id": "dialog.esperanza",
-      "clip": "Assets/SoundEffects/dialog_esperanza_ep1.1.mp3",
-      "volume": 1
-    }
-  ]
+    "effects": [
+        {
+            "id": "menu.move",
+            "clip": "Assets/SoundEffects/UI/menumove.mp3",
+            "volume": 1.0,
+            "mixerGroup": "UI"
+        },
+        {
+            "id": "menu.select",
+            "clip": "Assets/SoundEffects/UI/menuselect.mp3",
+            "volume": 1.0,
+            "mixerGroup": "UI"
+        },
+        {
+            "id": "menu.playGame",
+            "clip": "Assets/SoundEffects/UI/playgame.mp3",
+            "volume": 1.0,
+            "mixerGroup": "UI"
+        },
+        {
+            "id": "footsteps_rocks",
+            "clip": "Assets/SoundEffects/Esperanza/footsteps_rocks.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "footrun_rocks",
+            "clip": "Assets/SoundEffects/Esperanza/footrun_rocks.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "idle_rocks",
+            "clip": "Assets/SoundEffects/Esperanza/idle_rocks.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "ambience.episode1.1",
+            "clip": "Assets/SoundEffects/Environment/episode1.1_ambience.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Environment"
+        },
+        {
+            "id": "esperanza.hurt1",
+            "clip": "Assets/SoundEffects/Esperanza/hurt1.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.hurt2",
+            "clip": "Assets/SoundEffects/Esperanza/hurt2.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.attack1",
+            "clip": "Assets/SoundEffects/Esperanza/attack1.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.attack2",
+            "clip": "Assets/SoundEffects/Esperanza/attack2.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.attack3",
+            "clip": "Assets/SoundEffects/Esperanza/attack3.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.attack4",
+            "clip": "Assets/SoundEffects/Esperanza/attack4.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.attack5",
+            "clip": "Assets/SoundEffects/Esperanza/attack5.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.punchWoosh1",
+            "clip": "Assets/SoundEffects/Esperanza/woosh1.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.punchWoosh2",
+            "clip": "Assets/SoundEffects/Esperanza/woosh2.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.kickWoosh1",
+            "clip": "Assets/SoundEffects/Esperanza/wooshkick.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.kickWoosh2",
+            "clip": "Assets/SoundEffects/Esperanza/wooshkick2.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.blastHit",
+            "clip": "Assets/SoundEffects/Esperanza/BlastHit.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "enemy.imp.spawn",
+            "clip": "Assets/SoundEffects/Imp/impscream.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Imp"
+        },
+        {
+            "id": "enemy.imp.running_rocks",
+            "clip": "Assets/SoundEffects/Imp/imprunning_rocks.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Imp"
+        },
+        {
+            "id": "dialog.imp",
+            "clip": "Assets/SoundEffects/Imp/imp_dialog_ep1.1.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Imp"
+        },
+        {
+            "id": "dialog.esperanza",
+            "clip": "Assets/SoundEffects/Esperanza/dialog_esperanza_ep1.1.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "enemy.imp.death",
+            "clip": "Assets/SoundEffects/Imp/impDeath.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Imp"
+        },
+        {
+            "id": "enemy.imp.hurt",
+            "clip": "Assets/SoundEffects/Imp/impHurt.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Imp"
+        },
+        {
+            "id": "esperanza.hit",
+            "clip": "Assets/SoundEffects/Esperanza/hit.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.combohit",
+            "clip": "Assets/SoundEffects/Esperanza/combohit.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        },
+        {
+            "id": "esperanza.chargeBlast",
+            "clip": "Assets/SoundEffects/Esperanza/chargeBlast.mp3",
+            "volume": 1.0,
+            "mixerGroup": "Esperanza"
+        }
+    ]
 }

@@ -33,6 +33,8 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
 
   static HitEmphasisBurst instance;
   static uint burstSequence;
+  static float lastEsperHitSoundTime;
+  static float lastEsperComboHitSoundTime;
 
   readonly List<SpriteRenderer> rendererScratch = new(64);
   BurstSlot[] slots;
@@ -45,7 +47,7 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
     burstSequence = 0;
   }
 
-  public static void Play(HurtBox2D hurtBox, HitBox2D hitBox) {
+  public static void Play(HurtBox2D hurtBox, HitBox2D hitBox, int comboHitNumber = 0) {
     if (!Application.isPlaying ||
         hurtBox == null ||
         hitBox == null ||
@@ -54,7 +56,7 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
     }
 
     var manager = ResolveOrCreate(hurtBox.transform);
-    manager?.Spawn(hurtBox, hitBox);
+    manager?.Spawn(hurtBox, hitBox, comboHitNumber);
   }
 
   static HitEmphasisBurst ResolveOrCreate(Transform timeContext) {
@@ -108,12 +110,15 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
     return sprite;
   }
 
-  void Spawn(HurtBox2D hurtBox, HitBox2D hitBox) {
+  void Spawn(HurtBox2D hurtBox, HitBox2D hitBox, int comboHitNumber) {
     if (!enabled || slots == null || whiteSprite == null) {
       return;
     }
 
     ResolveImpact(hurtBox, hitBox, out var origin, out var impactDirection, out var radius);
+    if (comboHitNumber > 0) {
+      radius *= Mathf.Min(1.6f, 1.2f + 0.1f * comboHitNumber);
+    }
     ResolveSorting(hurtBox.transform, origin, out var sortingLayerId, out var sortingOrder);
     var actor = ResolveActor(hurtBox.transform);
     var renderingLayer = actor != null ? actor.gameObject.layer : hurtBox.gameObject.layer;
@@ -128,6 +133,20 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
 
     var baseAngle = Mathf.Atan2(impactDirection.y, impactDirection.x) * Mathf.Rad2Deg;
     var accent = hitBox.IsEnemyOwned ? EsperHitAccent : EnemyHitAccent;
+    if (!hitBox.IsEnemyOwned) {
+      var now = Time.unscaledTime;
+      if (comboHitNumber > 0) {
+        if (now - lastEsperComboHitSoundTime > 0.035f) {
+          SoundEffectPlayer.Play("esperanza.combohit");
+          lastEsperComboHitSoundTime = now;
+        }
+      } else {
+        if (now - lastEsperHitSoundTime > 0.035f) {
+          SoundEffectPlayer.Play("esperanza.hit");
+          lastEsperHitSoundTime = now;
+        }
+      }
+    }
     var randomState = CreateRandomState(hurtBox, hitBox);
 
     for (var i = 0; i < LinesPerBurst; i++) {

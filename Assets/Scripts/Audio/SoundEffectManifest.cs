@@ -12,12 +12,14 @@ public sealed class SoundEffectManifestEntry {
   public string id;
   public string clip;
   public float volume = 1f;
+  public string mixerGroup;
 }
 
 public sealed class SoundEffectDefinition {
   public string id;
   public string clipAddress;
   public float volume;
+  public string mixerGroup;
 }
 
 public static class SoundEffectManifestCatalog {
@@ -83,7 +85,8 @@ public static class SoundEffectManifestCatalog {
     definition = new SoundEffectDefinition {
       id = entry.id.Trim(),
       clipAddress = entry.clip.Replace("\\", "/").Trim(),
-      volume = Mathf.Clamp01(entry.volume)
+      volume = Mathf.Clamp01(entry.volume),
+      mixerGroup = string.IsNullOrWhiteSpace(entry.mixerGroup) ? null : entry.mixerGroup.Trim()
     };
     return true;
   }

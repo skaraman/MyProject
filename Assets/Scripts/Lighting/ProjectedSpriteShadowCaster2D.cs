@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 
 [DefaultExecutionOrder(900)]
 [DisallowMultipleComponent]
@@ -45,7 +46,8 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   static bool missingShaderLogged;
 
   [SerializeField] Transform groundAnchor;
-  [SerializeField] bool castSunShadow = true;
+  [FormerlySerializedAs("castSunShadow")]
+  [SerializeField] bool castCelestialShadow = true;
   [SerializeField] bool castNearestLocalShadow = true;
   [SerializeField] Color shadowColor = Color.black;
   [SerializeField] int shadowGroupOrderOffset;
@@ -53,30 +55,33 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   [SerializeField, Min(0.05f)] float localLightReselectSeconds = 0.12f;
   [SerializeField] bool isGlowMode = false;
 
-  public bool CastSunShadow { get => castSunShadow; set => castSunShadow = value; }
+  public bool CastCelestialShadow {
+    get => castCelestialShadow;
+    set => castCelestialShadow = value;
+  }
   public bool CastNearestLocalShadow { get => castNearestLocalShadow; set => castNearestLocalShadow = value; }
   public bool IsGlowMode { get => isGlowMode; set => isGlowMode = value; }
 
   readonly List<SpriteWithNormals> configuredSources = new();
   readonly HashSet<SpriteWithNormals> configuredSourceSet = new();
   readonly List<SpriteWithNormals> supplementalSourceBuffer = new();
-  readonly List<ProxyBinding> sunBindings = new();
+  readonly List<ProxyBinding> celestialBindings = new();
   readonly List<ProxyBinding> localBindings = new();
 
   DayNightCycle2D boundLightingManager;
   GameObject shadowRootObject;
-  Transform sunSlotRoot;
+  Transform celestialSlotRoot;
   Transform localSlotRoot;
-  SortingGroup sunSortingGroup;
+  SortingGroup celestialSortingGroup;
   SortingGroup localSortingGroup;
   SortingGroup sourceSortingGroup;
-  Material sunMaterial;
+  Material celestialMaterial;
   Material localMaterial;
   bool started;
   bool proxiesDirty = true;
   bool groundYLocked;
   ulong selectedLocalLightId;
-  int sunStencilReference;
+  int celestialStencilReference;
   int localStencilReference;
   float lockedGroundY;
   float nextLocalLightSelectionTime;
@@ -120,7 +125,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void OnDisable() {
-    SetBindingsEnabled(sunBindings, false);
+    SetBindingsEnabled(celestialBindings, false);
     SetBindingsEnabled(localBindings, false);
     ReleaseStencilReferences();
     selectedLocalLightId = 0;
@@ -226,7 +231,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   void LateUpdate() {
     var lightingManager = DayNightCycle2D.Instance;
     if (lightingManager == null) {
-      SetBindingsEnabled(sunBindings, false);
+      SetBindingsEnabled(celestialBindings, false);
       SetBindingsEnabled(localBindings, false);
       ReleaseStencilReferences();
       return;
@@ -272,22 +277,21 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     float verticalDisplacement,
     int casterSortingLayerId
   ) {
-    if (!castSunShadow) {
-      SetBindingsEnabled(sunBindings, false);
+    if (!castCelestialShadow) {
+      SetBindingsEnabled(celestialBindings, false);
       return;
     }
     if (!lightingManager.TryGetCelestialShadow(
-      groundPosition,
       casterSortingLayerId,
       out var projection
     )) {
-      SetBindingsEnabled(sunBindings, false);
+      SetBindingsEnabled(celestialBindings, false);
       return;
     }
 
-    ApplyProjection(sunMaterial, groundPosition, projection, ResolveGlowTintColor());
+    ApplyProjection(celestialMaterial, groundPosition, projection, ResolveGlowTintColor());
     SyncBindings(
-      sunBindings,
+      celestialBindings,
       true,
       groundPosition,
       verticalDisplacement,
@@ -369,7 +373,11 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     }
 
     CreateShadowRoot(lightingManager);
-    sunMaterial = CreateShadowMaterial(shader, "Sun", out sunStencilReference);
+    celestialMaterial = CreateShadowMaterial(
+      shader,
+      "Celestial",
+      out celestialStencilReference
+    );
     localMaterial = CreateShadowMaterial(shader, "Local", out localStencilReference);
 
     for (var i = 0; i < configuredSources.Count; i++) {
@@ -383,12 +391,12 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
         continue;
       }
 
-      sunBindings.Add(CreateBinding(
+      celestialBindings.Add(CreateBinding(
         sourceComponent,
         sourceRenderer,
-        sunMaterial,
-        sunSlotRoot,
-        "Sun"
+        celestialMaterial,
+        celestialSlotRoot,
+        "Celestial"
       ));
       localBindings.Add(CreateBinding(
         sourceComponent,
@@ -409,7 +417,11 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     shadowRootObject.hideFlags = HideFlags.DontSave;
     shadowRootObject.transform.SetParent(lightingManager.ShadowRoot, false);
 
-    sunSortingGroup = CreateShadowSlot(lightingManager, "Sun", out sunSlotRoot);
+    celestialSortingGroup = CreateShadowSlot(
+      lightingManager,
+      "Celestial",
+      out celestialSlotRoot
+    );
     localSortingGroup = CreateShadowSlot(lightingManager, "Local", out localSlotRoot);
     SyncShadowSortingOrder();
   }
@@ -455,11 +467,11 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void AcquireStencilReferences() {
-    var sunNeedsStencil = castSunShadow && sunBindings.Count > 1;
+    var celestialNeedsStencil = castCelestialShadow && celestialBindings.Count > 1;
     SyncStencilReference(
-      sunMaterial,
-      sunNeedsStencil,
-      ref sunStencilReference
+      celestialMaterial,
+      celestialNeedsStencil,
+      ref celestialStencilReference
     );
 
     var localNeedsStencil = castNearestLocalShadow && localBindings.Count > 1;
@@ -494,7 +506,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void ReleaseStencilReferences() {
-    SyncStencilReference(sunMaterial, false, ref sunStencilReference);
+    SyncStencilReference(celestialMaterial, false, ref celestialStencilReference);
     SyncStencilReference(localMaterial, false, ref localStencilReference);
   }
 
@@ -858,7 +870,7 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     if (boundLightingManager == null) {
       return;
     }
-    if (sunSortingGroup == null || localSortingGroup == null) {
+    if (celestialSortingGroup == null || localSortingGroup == null) {
       return;
     }
 
@@ -866,14 +878,14 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
     baseOrder += shadowGroupOrderOffset;
     var sortingLayerId = boundLightingManager.ShadowSortingLayerId;
     var localOrder = baseOrder + localShadowOrderOffset;
-    if (sunSortingGroup.sortingLayerID != sortingLayerId) {
-      sunSortingGroup.sortingLayerID = sortingLayerId;
+    if (celestialSortingGroup.sortingLayerID != sortingLayerId) {
+      celestialSortingGroup.sortingLayerID = sortingLayerId;
     }
     if (localSortingGroup.sortingLayerID != sortingLayerId) {
       localSortingGroup.sortingLayerID = sortingLayerId;
     }
-    if (sunSortingGroup.sortingOrder != baseOrder) {
-      sunSortingGroup.sortingOrder = baseOrder;
+    if (celestialSortingGroup.sortingOrder != baseOrder) {
+      celestialSortingGroup.sortingOrder = baseOrder;
     }
     if (localSortingGroup.sortingOrder != localOrder) {
       localSortingGroup.sortingOrder = localOrder;
@@ -934,32 +946,32 @@ public sealed class ProjectedSpriteShadowCaster2D : MonoBehaviour {
   }
 
   void DestroyProxyState() {
-    SetBindingsEnabled(sunBindings, false);
+    SetBindingsEnabled(celestialBindings, false);
     SetBindingsEnabled(localBindings, false);
     if (shadowRootObject != null) {
       shadowRootObject.SetActive(false);
     }
 
-    sunBindings.Clear();
+    celestialBindings.Clear();
     localBindings.Clear();
     ReleaseStencilReferences();
 
     if (shadowRootObject != null) {
       Destroy(shadowRootObject);
     }
-    if (sunMaterial != null) {
-      Destroy(sunMaterial);
+    if (celestialMaterial != null) {
+      Destroy(celestialMaterial);
     }
     if (localMaterial != null) {
       Destroy(localMaterial);
     }
 
     shadowRootObject = null;
-    sunSlotRoot = null;
+    celestialSlotRoot = null;
     localSlotRoot = null;
-    sunSortingGroup = null;
+    celestialSortingGroup = null;
     localSortingGroup = null;
-    sunMaterial = null;
+    celestialMaterial = null;
     localMaterial = null;
     boundLightingManager = null;
     selectedLocalLightId = 0;

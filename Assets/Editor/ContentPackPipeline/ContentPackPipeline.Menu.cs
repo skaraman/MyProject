@@ -340,6 +340,25 @@ public static partial class ContentPackPipeline {
         return summary.auditCompleted;
       })) return false;
 
+      if (mode == TransitionPipelineMode.Smart) {
+        var anyExportChanges = summary.export != null && (
+          summary.export.assetPayloadsWritten > 0 ||
+          summary.export.metaPayloadsWritten > 0 ||
+          summary.export.generatedFilesWritten > 0 ||
+          summary.export.manifestsWritten > 0 ||
+          summary.export.destinationEntriesDeleted > 0 ||
+          summary.export.packDirectoriesCreated > 0 ||
+          summary.export.packDirectoriesRecreated > 0
+        );
+
+        if (!anyExportChanges) {
+          if (logResult) {
+            Debug.Log("[ContentPackPipeline] [" + pipelineLabel + "] mode='Smart' detected no exported pack changes. Skipping downstream Addressables/Runtime builds.");
+          }
+          return true;
+        }
+      }
+
       if (!RunStep("Apply unified import flow", () => {
         summary.unifiedImportCompleted = SpriteStreamingHotsetConfigurator.ApplyUnifiedImportFlow(saveAndRefreshAtEnd: false, logResult: logResult);
         return summary.unifiedImportCompleted;

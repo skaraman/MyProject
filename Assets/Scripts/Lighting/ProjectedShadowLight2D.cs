@@ -2,9 +2,8 @@ using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
 public enum ProjectedShadowLightRole {
-  Sun = 0,
-  Local = 1,
-  Moon = 2
+  Celestial = 0,
+  Local = 1
 }
 
 [DisallowMultipleComponent]

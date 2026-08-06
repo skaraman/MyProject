@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Owns the 24-hour 2D light cycle and projected character-shadow lighting.
@@ -49,10 +50,9 @@ public sealed class DayNightCycle2D : MonoBehaviour {
   [SerializeField] bool pauseTime;
 
   [Header("Light Targets")]
-  [Tooltip("Primary celestial light (Sun). Handles both Sun & Moon if Moon Global Light is not assigned.")]
-  [SerializeField] Light2D sunGlobalLight;
-  [Tooltip("Optional separate Moon light. Moon contribution is kept outside daytime (06:00-18:00).")]
-  [SerializeField] Light2D moonGlobalLight;
+  [Tooltip("Single spotlight that transitions between its Sun and Moon states.")]
+  [FormerlySerializedAs("sunGlobalLight")]
+  [SerializeField] Light2D celestialLight;
   [SerializeField] Light2D ambientGlobalLight;
 
   [Header("Sun & Moon Settings")]
@@ -90,7 +90,7 @@ public sealed class DayNightCycle2D : MonoBehaviour {
   [SerializeField] string shadowSortingLayer = DefaultShadowSortingLayer;
   [SerializeField] int shadowSortingOrder = 1000;
   [SerializeField, Range(0f, 1f)] float sunShadowOpacity = 0.28f;
-  [SerializeField, Range(0f, 1f)] float moonShadowOpacity = 0.1f;
+  [SerializeField, Range(0f, 1f)] float moonShadowOpacity = 0.08f;
   [SerializeField, Range(0f, 1f)] float localShadowOpacity = 0.24f;
   [SerializeField, Range(0f, 0.5f)] float localLightSwitchHysteresis = 0.15f;
 
@@ -101,23 +101,20 @@ public sealed class DayNightCycle2D : MonoBehaviour {
   [SerializeField] Transform skyCenter;
   [Tooltip("Radius of the Sun/Moon arc.")]
   [SerializeField, Min(0f)] float celestialRadius = 20f;
-  [Tooltip("Start angle of the Sun (Sunrise). 180 is left, 0 is right.")]
-  [SerializeField] float sunRiseAngle = 180f;
-  [Tooltip("End angle of the Sun (Sunset).")]
-  [SerializeField] float sunSetAngle = 0f;
-  [Tooltip("Start angle of the Moon (Dusk).")]
-  [SerializeField] float moonRiseAngle = 180f;
-  [Tooltip("End angle of the Moon (Dawn).")]
-  [SerializeField] float moonSetAngle = 0f;
+  [Tooltip("Celestial arc angle at the left horizon. 180 is left, 0 is right.")]
+  [FormerlySerializedAs("sunRiseAngle")]
+  [SerializeField] float leftHorizonAngle = 180f;
+  [Tooltip("Celestial arc angle at the right horizon.")]
+  [FormerlySerializedAs("sunSetAngle")]
+  [SerializeField] float rightHorizonAngle = 0f;
 
   // Time tracking
   int lastNotifiedHour = -1;
   int lastNotifiedMinute = -1;
   Action unsubscribeLocationUpdates;
   Transform shadowRoot;
-  float daylightFactor;
-  float moonlightFactor;
-  Vector2 currentSunShadowDirection = Vector2.down;
+  float moonBlend;
+  Vector2 currentCelestialShadowDirection = Vector2.down;
   int shadowSortingLayerId;
 
   [SerializeField, Min(1)] int dayCount = 1;
@@ -398,17 +395,19 @@ public sealed class DayNightCycle2D : MonoBehaviour {
   }
 
   void AutoResolveReferences() {
-    if (sunGlobalLight == null ||
-        moonGlobalLight == null ||
-        ambientGlobalLight == null) {
+    if (celestialLight == null || ambientGlobalLight == null) {
       var lights = FindObjectsByType<Light2D>();
       foreach (var light in lights) {
         if (light == null) continue;
-        if (sunGlobalLight == null && light.gameObject.name.IndexOf("Sun", StringComparison.OrdinalIgnoreCase) >= 0) {
-          sunGlobalLight = light;
-        } else if (moonGlobalLight == null && light.gameObject.name.IndexOf("Moon", StringComparison.OrdinalIgnoreCase) >= 0) {
-          moonGlobalLight = light;
-        } else if (ambientGlobalLight == null && light.lightType == Light2D.LightType.Global && light != sunGlobalLight && light != moonGlobalLight) {
+        var marker = light.GetComponent<ProjectedShadowLight2D>();
+        if (celestialLight == null &&
+            ((marker != null && marker.LightRole == ProjectedShadowLightRole.Celestial) ||
+             light.gameObject.name.IndexOf("Sun", StringComparison.OrdinalIgnoreCase) >= 0 ||
+             light.gameObject.name.IndexOf("Celestial", StringComparison.OrdinalIgnoreCase) >= 0)) {
+          celestialLight = light;
+        } else if (ambientGlobalLight == null &&
+                   light.lightType == Light2D.LightType.Global &&
+                   light != celestialLight) {
           ambientGlobalLight = light;
         }
       }
@@ -416,12 +415,12 @@ public sealed class DayNightCycle2D : MonoBehaviour {
   }
 
   public void ApplyLightingForCurrentTime() {
-    Color targetSunColor;
-    float targetSunIntensity;
+    Color targetCelestialColor;
+    float targetCelestialIntensity;
     Color targetAmbientColor;
     float targetAmbientIntensity;
 
-    EvaluateCelestialFactors(currentHour, out daylightFactor, out moonlightFactor);
+    moonBlend = EvaluateMoonBlend(currentHour);
 
     // Time ranges:
     // 00:00 - 05:00: Deep Night
@@ -432,8 +431,8 @@ public sealed class DayNightCycle2D : MonoBehaviour {
 
     if (currentHour < 5f || currentHour >= 19f) {
       // Night
-      targetSunColor = nightMoonColor;
-      targetSunIntensity = moonGlobalLight != null ? 0f : nightMoonIntensity;
+      targetCelestialColor = nightMoonColor;
+      targetCelestialIntensity = nightMoonIntensity;
 
       targetAmbientColor = nightAmbientColor;
       targetAmbientIntensity = nightAmbientIntensity;
@@ -442,7 +441,7 @@ public sealed class DayNightCycle2D : MonoBehaviour {
       var t = (currentHour - 5f) / 2f; // 0 -> 1
       var e = SmoothStep(t);
 
-      targetSunColor = BlendThreeColors(
+      targetCelestialColor = BlendThreeColors(
         nightMoonColor,
         transitionSunColor,
         daySunColor,
@@ -455,17 +454,12 @@ public sealed class DayNightCycle2D : MonoBehaviour {
         t
       );
 
-      if (moonGlobalLight != null) {
-        targetSunIntensity = daySunIntensity * daylightFactor;
-      } else {
-        targetSunIntensity = Mathf.Lerp(nightMoonIntensity, daySunIntensity, e);
-      }
-
+      targetCelestialIntensity = Mathf.Lerp(nightMoonIntensity, daySunIntensity, e);
       targetAmbientIntensity = Mathf.Lerp(nightAmbientIntensity, dayAmbientIntensity, e);
     } else if (currentHour >= 7f && currentHour < 17f) {
       // Day
-      targetSunColor = daySunColor;
-      targetSunIntensity = daySunIntensity;
+      targetCelestialColor = daySunColor;
+      targetCelestialIntensity = daySunIntensity;
 
       targetAmbientColor = dayAmbientColor;
       targetAmbientIntensity = dayAmbientIntensity;
@@ -474,7 +468,7 @@ public sealed class DayNightCycle2D : MonoBehaviour {
       var t = (currentHour - 17f) / 2f; // 0 -> 1
       var e = SmoothStep(t);
 
-      targetSunColor = BlendThreeColors(
+      targetCelestialColor = BlendThreeColors(
         daySunColor,
         transitionSunColor,
         nightMoonColor,
@@ -487,27 +481,13 @@ public sealed class DayNightCycle2D : MonoBehaviour {
         t
       );
 
-      if (moonGlobalLight != null) {
-        targetSunIntensity = daySunIntensity * daylightFactor;
-      } else {
-        targetSunIntensity = Mathf.Lerp(daySunIntensity, nightMoonIntensity, e);
-      }
-
+      targetCelestialIntensity = Mathf.Lerp(daySunIntensity, nightMoonIntensity, e);
       targetAmbientIntensity = Mathf.Lerp(dayAmbientIntensity, nightAmbientIntensity, e);
     }
 
-    // Apply to Sun Global Light
-    if (sunGlobalLight != null) {
-      sunGlobalLight.color = targetSunColor;
-      sunGlobalLight.intensity = targetSunIntensity;
-    }
-
-    var appliedMoonIntensity = nightMoonIntensity * moonlightFactor;
-
-    // Apply to Moon Global Light (if separate light object exists)
-    if (moonGlobalLight != null) {
-      moonGlobalLight.color = nightMoonColor;
-      moonGlobalLight.intensity = appliedMoonIntensity;
+    if (celestialLight != null) {
+      celestialLight.color = targetCelestialColor;
+      celestialLight.intensity = targetCelestialIntensity;
     }
 
     // Apply to Ambient Global Light
@@ -517,45 +497,30 @@ public sealed class DayNightCycle2D : MonoBehaviour {
     }
 
     // Dynamic celestial shadow direction.
-    currentSunShadowDirection = CalculateSunShadowDirection(currentHour);
+    currentCelestialShadowDirection = CalculateCelestialShadowDirection(currentHour);
     SetCelestialSpecularGlobals(
-      targetSunColor,
-      targetSunIntensity,
-      appliedMoonIntensity,
-      currentSunShadowDirection
+      targetCelestialColor,
+      targetCelestialIntensity,
+      moonBlend,
+      currentCelestialShadowDirection
     );
 
     UpdateCelestialPositions();
   }
 
-  static void EvaluateCelestialFactors(
-    float hour,
-    out float sunFactor,
-    out float moonFactor
-  ) {
+  static float EvaluateMoonBlend(float hour) {
     if (hour < 5f || hour >= 19f) {
-      sunFactor = 0f;
-      moonFactor = 1f;
-      return;
+      return 1f;
     }
 
     if (hour < 7f) {
-      sunFactor = SmoothStep((hour - 5f) / 2f);
-    } else if (hour < 17f) {
-      sunFactor = 1f;
-    } else {
-      sunFactor = 1f - SmoothStep((hour - 17f) / 2f);
+      return 1f - SmoothStep((hour - 5f) / 2f);
+    }
+    if (hour < 17f) {
+      return 0f;
     }
 
-    // Keep moonlight completely out of the authored daytime window. It fades
-    // out during 05:00-06:00 and only starts fading in after 18:00.
-    if (hour < 6f) {
-      moonFactor = 1f - SmoothStep(hour - 5f);
-    } else if (hour < 18f) {
-      moonFactor = 0f;
-    } else {
-      moonFactor = SmoothStep(hour - 18f);
-    }
+    return SmoothStep((hour - 17f) / 2f);
   }
 
   static Color BlendThreeColors(Color start, Color middle, Color end, float t) {
@@ -566,7 +531,7 @@ public sealed class DayNightCycle2D : MonoBehaviour {
     return Color.Lerp(middle, end, SmoothStep((t - 0.5f) * 2f));
   }
 
-  Vector2 CalculateSunShadowDirection(float hour) {
+  Vector2 CalculateCelestialShadowDirection(float hour) {
     if (!updateShadowDirection) {
       return noonShadowDir;
     }
@@ -581,27 +546,51 @@ public sealed class DayNightCycle2D : MonoBehaviour {
         var t = (dayProgress - 0.5f) * 2f;
         return Vector2.Lerp(noonShadowDir, eveningShadowDir, SmoothStep(t)).normalized;
       }
-    } else {
-      // Night hours - Moon shadow direction
-      return nightMoonShadowDir.normalized;
     }
+
+    var nightProgress = hour > 18f
+      ? (hour - 18f) / 12f
+      : (hour + 6f) / 12f;
+    if (nightProgress < 0.5f) {
+      return Vector2.Lerp(
+        eveningShadowDir,
+        nightMoonShadowDir,
+        SmoothStep(nightProgress * 2f)
+      ).normalized;
+    }
+
+    return Vector2.Lerp(
+      nightMoonShadowDir,
+      morningShadowDir,
+      SmoothStep((nightProgress - 0.5f) * 2f)
+    ).normalized;
   }
 
   void SetCelestialSpecularGlobals(
-    Color sunColor,
-    float sunIntensity,
-    float moonIntensity,
-    Vector2 sunShadowDirection
+    Color celestialColor,
+    float celestialIntensity,
+    float moonWeight,
+    Vector2 celestialShadowDirection
   ) {
     // Projected shadows travel away from their light source, so negate the shadow
     // direction to get the surface-to-light direction used by the BRDF.
-    var sunDirection = new Vector3(-sunShadowDirection.x, -sunShadowDirection.y, 1f).normalized;
-    var moonDirection2D = -nightMoonShadowDir.normalized;
-    var moonDirection = new Vector3(moonDirection2D.x, moonDirection2D.y, 1f).normalized;
-    Shader.SetGlobalColor(GlobalSunLightColorId, sunColor * Mathf.Max(0f, sunIntensity));
-    Shader.SetGlobalColor(GlobalMoonLightColorId, nightMoonColor * Mathf.Max(0f, moonIntensity));
-    Shader.SetGlobalVector(GlobalSunLightDirectionId, sunDirection);
-    Shader.SetGlobalVector(GlobalMoonLightDirectionId, moonDirection);
+    var direction = new Vector3(
+      -celestialShadowDirection.x,
+      -celestialShadowDirection.y,
+      1f
+    ).normalized;
+    var clampedMoonWeight = Mathf.Clamp01(moonWeight);
+    var lightColor = celestialColor * Mathf.Max(0f, celestialIntensity);
+    Shader.SetGlobalColor(
+      GlobalSunLightColorId,
+      lightColor * (1f - clampedMoonWeight)
+    );
+    Shader.SetGlobalColor(
+      GlobalMoonLightColorId,
+      lightColor * clampedMoonWeight
+    );
+    Shader.SetGlobalVector(GlobalSunLightDirectionId, direction);
+    Shader.SetGlobalVector(GlobalMoonLightDirectionId, direction);
   }
 
   static void ClearCelestialSpecularGlobals() {
@@ -612,7 +601,7 @@ public sealed class DayNightCycle2D : MonoBehaviour {
   }
 
   void UpdateCelestialPositions() {
-    if (!enableCelestialMovement) return;
+    if (!enableCelestialMovement || celestialLight == null) return;
 
     Vector3 centerPos = Vector3.zero;
     if (skyCenter != null) {
@@ -621,131 +610,49 @@ public sealed class DayNightCycle2D : MonoBehaviour {
       centerPos = Camera.main.transform.position;
     }
 
-    if (sunGlobalLight != null) {
-      float sunT = 0f;
-      if (currentHour >= 6f && currentHour <= 18f) {
-        sunT = (currentHour - 6f) / 12f;
-      } else if (currentHour > 18f) {
-        sunT = 1f;
-      } else {
-        sunT = 0f;
-      }
-
-      float sunAngle = Mathf.Lerp(sunRiseAngle, sunSetAngle, sunT) * Mathf.Deg2Rad;
-      Vector3 sunOffset = new Vector3(Mathf.Cos(sunAngle), Mathf.Sin(sunAngle), 0f) * celestialRadius;
-      sunGlobalLight.transform.position = centerPos + sunOffset;
-    }
-
-    if (moonGlobalLight != null) {
-      float moonT = 0f;
-      if (currentHour >= 18f) {
-        moonT = (currentHour - 18f) / 12f;
-      } else if (currentHour <= 6f) {
-        moonT = (currentHour + 6f) / 12f;
-      } else {
-        moonT = 1f;
-      }
-
-      float moonAngle = Mathf.Lerp(moonRiseAngle, moonSetAngle, moonT) * Mathf.Deg2Rad;
-      Vector3 moonOffset = new Vector3(Mathf.Cos(moonAngle), Mathf.Sin(moonAngle), 0f) * celestialRadius;
-      moonGlobalLight.transform.position = centerPos + moonOffset;
-    }
+    var isDayArc = currentHour >= 6f && currentHour <= 18f;
+    var arcProgress = isDayArc
+      ? (currentHour - 6f) / 12f
+      : currentHour > 18f
+        ? (currentHour - 18f) / 12f
+        : (currentHour + 6f) / 12f;
+    var startAngle = isDayArc ? leftHorizonAngle : rightHorizonAngle;
+    var endAngle = isDayArc ? rightHorizonAngle : leftHorizonAngle;
+    var angle = Mathf.Lerp(startAngle, endAngle, SmoothStep(arcProgress)) *
+      Mathf.Deg2Rad;
+    var offset = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * celestialRadius;
+    celestialLight.transform.position = centerPos + offset;
   }
 
   public bool TryGetCelestialShadow(
-    Vector2 groundPosition,
     int casterSortingLayerId,
     out ShadowProjection projection
   ) {
     projection = default;
-    var sunSource = ResolveStrongestCelestial(
-      ProjectedShadowLightRole.Sun,
-      casterSortingLayerId
-    );
-    var moonSource = ResolveStrongestCelestial(
-      ProjectedShadowLightRole.Moon,
-      casterSortingLayerId
-    );
-    var sunOpacity = sunSource != null
-      ? sunShadowOpacity * sunSource.ShadowStrength * daylightFactor
-      : 0f;
-    var moonOpacity = moonSource != null
-      ? moonShadowOpacity * moonSource.ShadowStrength * moonlightFactor
-      : 0f;
-    if (sunOpacity <= MinimumLightIntensity &&
-        moonOpacity <= MinimumLightIntensity) {
+    var source = ResolveStrongestCelestial(casterSortingLayerId);
+    if (source == null) {
       return false;
     }
 
-    if (sunOpacity <= MinimumLightIntensity) {
-      projection = CreateCelestialProjection(
-        moonSource,
-        moonOpacity,
-        true,
-        groundPosition
-      );
-      return true;
-    }
-    if (moonOpacity <= MinimumLightIntensity) {
-      projection = CreateCelestialProjection(
-        sunSource,
-        sunOpacity,
-        false,
-        groundPosition
-      );
-      return true;
+    var opacity = Mathf.Lerp(sunShadowOpacity, moonShadowOpacity, moonBlend) *
+      source.ShadowStrength;
+    if (opacity <= MinimumLightIntensity) {
+      return false;
     }
 
-    var totalOpacity = sunOpacity + moonOpacity;
-    var moonWeight = moonOpacity / totalOpacity;
-    var sunDirection = ResolveCelestialShadowDirection(
-      sunSource,
-      false,
-      groundPosition
-    );
-    var moonDirection = ResolveCelestialShadowDirection(
-      moonSource,
-      true,
-      groundPosition
-    );
-    var blendedDirection = Vector2.Lerp(sunDirection, moonDirection, moonWeight);
-    if (blendedDirection.sqrMagnitude <= 0.0001f) {
-      blendedDirection = moonWeight >= 0.5f ? moonDirection : sunDirection;
-    }
-
-    projection = new ShadowProjection(
-      blendedDirection.normalized,
-      Mathf.Lerp(sunSource.ProjectionLength, moonSource.ProjectionLength, moonWeight),
-      Mathf.Lerp(sunOpacity, moonOpacity, moonWeight)
-    );
-    return true;
-  }
-
-  ShadowProjection CreateCelestialProjection(
-    ProjectedShadowLight2D source,
-    float opacity,
-    bool useMoon,
-    Vector2 groundPosition
-  ) {
-    var direction = ResolveCelestialShadowDirection(source, useMoon, groundPosition);
-    return new ShadowProjection(direction, source.ProjectionLength, opacity);
-  }
-
-  Vector2 ResolveCelestialShadowDirection(
-    ProjectedShadowLight2D source,
-    bool useMoon,
-    Vector2 groundPosition
-  ) {
     if (!source.TryGetDirectionOverride(out var direction)) {
-      direction = useMoon
-        ? groundPosition - (Vector2)source.SourceLight.transform.position
-        : currentSunShadowDirection;
+      direction = currentCelestialShadowDirection;
     }
     if (direction.sqrMagnitude <= 0.0001f) {
       direction = Vector2.down;
     }
 
-    return direction.normalized;
+    projection = new ShadowProjection(
+      direction.normalized,
+      source.ProjectionLength,
+      opacity
+    );
+    return true;
   }
 
   public ulong SelectNearestLocalLight(
@@ -838,23 +745,17 @@ public sealed class DayNightCycle2D : MonoBehaviour {
     return true;
   }
 
-  ProjectedShadowLight2D ResolveStrongestCelestial(
-    ProjectedShadowLightRole lightRole,
-    int casterSortingLayerId
-  ) {
+  ProjectedShadowLight2D ResolveStrongestCelestial(int casterSortingLayerId) {
     PurgeStaleLights();
 
-    Light2D preferredLight = null;
-    if (lightRole == ProjectedShadowLightRole.Sun) {
-      preferredLight = sunGlobalLight;
-    } else if (lightRole == ProjectedShadowLightRole.Moon) {
-      preferredLight = moonGlobalLight;
-    }
-
-    var preferredSource = preferredLight != null
-      ? preferredLight.GetComponent<ProjectedShadowLight2D>()
+    var preferredSource = celestialLight != null
+      ? celestialLight.GetComponent<ProjectedShadowLight2D>()
       : null;
-    if (IsEligibleSource(preferredSource, lightRole, casterSortingLayerId)) {
+    if (IsEligibleSource(
+      preferredSource,
+      ProjectedShadowLightRole.Celestial,
+      casterSortingLayerId
+    )) {
       return preferredSource;
     }
 
@@ -862,7 +763,11 @@ public sealed class DayNightCycle2D : MonoBehaviour {
     var strongestIntensity = MinimumLightIntensity;
     foreach (var pair in registeredLights) {
       var source = pair.Value;
-      if (!IsEligibleSource(source, lightRole, casterSortingLayerId)) {
+      if (!IsEligibleSource(
+        source,
+        ProjectedShadowLightRole.Celestial,
+        casterSortingLayerId
+      )) {
         continue;
       }
 

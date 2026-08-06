@@ -1767,7 +1767,6 @@ Transform:
   m_Children:
   - {fileID: 2079573732}
   - {fileID: 825027688}
-  - {fileID: 2148000101}
   - {fileID: 835998867}
   m_Father: {fileID: 1661627307}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -1800,8 +1799,7 @@ MonoBehaviour:
   currentHour: 12
   timeSpeedMultiplier: 1
   pauseTime: 0
-  sunGlobalLight: {fileID: 825027689}
-  moonGlobalLight: {fileID: 2148000102}
+  celestialLight: {fileID: 825027689}
   ambientGlobalLight: {fileID: 2079573733}
   daySunColor: {r: 1, g: 0.93, b: 0.8, a: 1}
   daySunIntensity: 1.2
@@ -1821,16 +1819,14 @@ MonoBehaviour:
   shadowSortingLayer: GameMG
   shadowSortingOrder: 1000
   sunShadowOpacity: 0.28
-  moonShadowOpacity: 0.1
+  moonShadowOpacity: 0.08
   localShadowOpacity: 0.24
   localLightSwitchHysteresis: 0.15
   enableCelestialMovement: 1
   skyCenter: {fileID: 0}
   celestialRadius: 20
-  sunRiseAngle: 180
-  sunSetAngle: 0
-  moonRiseAngle: 180
-  moonSetAngle: 0
+  leftHorizonAngle: 180
+  rightHorizonAngle: 0
   dayCount: 1
 --- !u!1 &421031839
 GameObject:
@@ -2696,7 +2692,7 @@ GameObject:
   - component: {fileID: 825027689}
   - component: {fileID: 825027690}
   m_Layer: 6
-  m_Name: Sun?
+  m_Name: Celestial Light
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6916,111 +6912,6 @@ MonoBehaviour:
   environmentRoot: {fileID: 421031840}
   loadFromTrackerOnStart: 1
   logLoads: 1
---- !u!1 &2148000100
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2148000101}
-  - component: {fileID: 2148000102}
-  - component: {fileID: 2148000103}
-  m_Layer: 6
-  m_Name: Moon
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2148000101
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2148000100}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 20, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 414472903}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2148000102
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2148000100}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
-  m_ComponentVersion: 2
-  m_LightType: 0
-  m_BlendStyleIndex: 0
-  m_FalloffIntensity: 0.808
-  m_Color: {r: 0.42, g: 0.56, b: 0.88, a: 1}
-  m_Intensity: 0
-  m_LightVolumeIntensity: 0
-  m_LightVolumeEnabled: 0
-  m_ApplyToSortingLayers: 0fd32e51cbb7f124d92f446e
-  m_LightCookieSprite: {fileID: 0}
-  m_DeprecatedPointLightCookieSprite: {fileID: 0}
-  m_LightOrder: 0
-  m_AlphaBlendOnOverlap: 0
-  m_OverlapOperation: 0
-  m_NormalMapDistance: 100
-  m_NormalMapQuality: 1
-  m_UseNormalMap: 1
-  m_ShadowsEnabled: 0
-  m_ShadowIntensity: 0
-  m_ShadowSoftness: 0
-  m_ShadowSoftnessFalloffIntensity: 0.5
-  m_ShadowVolumeIntensityEnabled: 0
-  m_ShadowVolumeIntensity: 0
-  m_LocalBounds:
-    m_Center: {x: 0, y: -0.00000011920929, z: 0}
-    m_Extent: {x: 0.9985302, y: 0.99853027, z: 0}
-  m_PointLightInnerAngle: 360
-  m_PointLightOuterAngle: 360
-  m_PointLightInnerRadius: 0.1
-  m_PointLightOuterRadius: 124.71
-  m_ShapeLightParametricSides: 5
-  m_ShapeLightParametricAngleOffset: 0
-  m_ShapeLightParametricRadius: 1
-  m_ShapeLightFalloffSize: 0.5
-  m_ShapeLightFalloffOffset: {x: 0, y: 0}
-  m_ShapePath:
-  - {x: -0.5, y: -0.5, z: 0}
-  - {x: 0.5, y: -0.5, z: 0}
-  - {x: 0.5, y: 0.5, z: 0}
-  - {x: -0.5, y: 0.5, z: 0}
---- !u!114 &2148000103
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2148000100}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8e5f2c61d7b34a55a8c9ef10b4d26a73, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Project.Internal::ProjectedShadowLight2D
-  sourceLight: {fileID: 2148000102}
-  lightRole: 2
-  castsCharacterShadows: 1
-  rangeOverride: 0
-  shadowStrength: 0.8
-  projectionLength: 0.65
-  useDirectionOverride: 0
-  directionOverride: {x: -0.5, y: -0.8}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -6,6 +6,7 @@ public class PauseMenuInput : MonoBehaviour {
   private int activeHoverIndex = -1;
   private int activeSelectedIndex = 2;
   private int formHoverIndex = -1;
+  private GameObject optionsHoverTarget;
   private readonly List<Action> actions = new();
   private bool sectionsInitialized;
   private bool hasLoggedFormsListVisibility;
@@ -291,11 +292,40 @@ public class PauseMenuInput : MonoBehaviour {
     }
     if (formHoverIndex != -1) {
       SelectFormIndex(formHoverIndex);
+      return;
+    }
+    if (OptionsMenu != null && OptionsMenu.activeSelf && !topMenuFocused) {
+      if (optionsHoverTarget == null || optionsHoverTarget.name.Equals("Settings", StringComparison.OrdinalIgnoreCase)) {
+        MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
+        MessageBus.Send("openSettingsMenu");
+        return;
+      }
     }
   }
 
   void hover(object target) {
     var targetObject = target as GameObject;
+
+    if (OptionsMenu != null && OptionsMenu.activeSelf) {
+      if (optionsHoverTarget != null && optionsHoverTarget != targetObject) {
+        var shader = optionsHoverTarget.GetComponent<ReferenceListAllIn1AnimatorInspector>()?.Get(0);
+        if (shader != null) {
+          shader.SetKeyword("OUTBASE_ON", false);
+          shader.SetKeyword("SHINE_ON", false);
+        }
+        optionsHoverTarget = null;
+      }
+
+      if (targetObject != null && targetObject.transform.IsChildOf(OptionsMenu.transform)) {
+        optionsHoverTarget = targetObject;
+        topMenuFocused = false;
+        var shader = optionsHoverTarget.GetComponent<ReferenceListAllIn1AnimatorInspector>()?.Get(0);
+        if (shader != null) {
+          shader.SetKeyword("OUTBASE_ON", true);
+          shader.SetKeyword("SHINE_ON", true);
+        }
+      }
+    }
 
     activeHoverIndex = ResolveButtonIndex(menuButtons, targetObject);
     if (activeHoverIndex >= 0) {
@@ -332,6 +362,16 @@ public class PauseMenuInput : MonoBehaviour {
   void unhover() {
     activeHoverIndex = -1;
     formHoverIndex = -1;
+    
+    if (optionsHoverTarget != null) {
+      var shader = optionsHoverTarget.GetComponent<ReferenceListAllIn1AnimatorInspector>()?.Get(0);
+      if (shader != null) {
+        shader.SetKeyword("OUTBASE_ON", false);
+        shader.SetKeyword("SHINE_ON", false);
+      }
+      optionsHoverTarget = null;
+    }
+
     if (menuButtons != null) {
       menuButtons.SetHoverIndex(-1);
     }
@@ -343,6 +383,14 @@ public class PauseMenuInput : MonoBehaviour {
   void click(object target) {
     var targetObject = target as GameObject;
     if (targetObject == null) return;
+
+    if (OptionsMenu != null && OptionsMenu.activeSelf) {
+      if (targetObject.transform.IsChildOf(OptionsMenu.transform) && targetObject.name.Equals("Settings", StringComparison.OrdinalIgnoreCase)) {
+        MessageBus.Send(SoundEffectPlayer.PlayMessage, SoundEffectPlayer.MenuSelectSoundId);
+        MessageBus.Send("openSettingsMenu");
+        return;
+      }
+    }
 
     activeHoverIndex = ResolveButtonIndex(menuButtons, targetObject);
     if (activeHoverIndex >= 0) {
@@ -585,10 +633,39 @@ public class PauseMenuInput : MonoBehaviour {
     }
   }
 
-  void up() { }
+  void up() {
+    if (OptionsMenu != null && OptionsMenu.activeSelf && !topMenuFocused) {
+      if (optionsHoverTarget != null && optionsHoverTarget.name.Equals("Settings", StringComparison.OrdinalIgnoreCase)) {
+        var beastsBtn = OptionsMenu.transform.Find("Beasts");
+        if (beastsBtn != null) {
+          hover(beastsBtn.gameObject);
+          return;
+        }
+      }
+
+      topMenuFocused = true;
+      if (optionsHoverTarget != null) {
+        var shader = optionsHoverTarget.GetComponent<ReferenceListAllIn1AnimatorInspector>()?.Get(0);
+        if (shader != null) {
+          shader.SetKeyword("OUTBASE_ON", false);
+          shader.SetKeyword("SHINE_ON", false);
+        }
+        optionsHoverTarget = null;
+      }
+      return;
+    }
+  }
 
   void down() {
     if (!topMenuFocused) {
+      if (OptionsMenu != null && OptionsMenu.activeSelf) {
+        if (optionsHoverTarget != null && optionsHoverTarget.name.Equals("Beasts", StringComparison.OrdinalIgnoreCase)) {
+          var settingsBtn = OptionsMenu.transform.Find("Settings");
+          if (settingsBtn != null) {
+            hover(settingsBtn.gameObject);
+          }
+        }
+      }
       return;
     }
 
@@ -599,6 +676,20 @@ public class PauseMenuInput : MonoBehaviour {
 
     if (AbilityMenu != null && AbilityMenu.activeSelf) {
       AbilityMenu.GetComponent<PauseMenuAbilitiesViewController>()?.FocusSwitch();
+      return;
+    }
+
+    if (OptionsMenu != null && OptionsMenu.activeSelf) {
+      topMenuFocused = false;
+      var beastsBtn = OptionsMenu.transform.Find("Beasts");
+      if (beastsBtn != null) {
+        hover(beastsBtn.gameObject);
+      } else {
+        var settingsBtn = OptionsMenu.transform.Find("Settings");
+        if (settingsBtn != null) {
+          hover(settingsBtn.gameObject);
+        }
+      }
     }
   }
 

@@ -198,7 +198,7 @@ public static partial class ContentPackPipeline {
 
     if (mode == TransitionPipelineMode.Smart &&
         File.Exists(targetFullPath) &&
-        FilesHaveSameBinaryHash(sourceFullPath, targetFullPath)) {
+        FilesAreIdentical(sourceFullPath, targetFullPath)) {
       if (stats != null) {
         stats.assetPayloadsSkipped++;
       }
@@ -211,28 +211,15 @@ public static partial class ContentPackPipeline {
     }
   }
 
-  static bool FilesHaveSameBinaryHash(string sourceFullPath, string targetFullPath) {
+  static bool FilesAreIdentical(string sourceFullPath, string targetFullPath) {
     var sourceInfo = new FileInfo(sourceFullPath);
     var targetInfo = new FileInfo(targetFullPath);
     if (sourceInfo.Length != targetInfo.Length) {
       return false;
     }
 
-    using var sourceStream = File.OpenRead(sourceFullPath);
-    using var targetStream = File.OpenRead(targetFullPath);
-    using var sourceHashAlgorithm = SHA256.Create();
-    using var targetHashAlgorithm = SHA256.Create();
-
-    var sourceHash = sourceHashAlgorithm.ComputeHash(sourceStream);
-    var targetHash = targetHashAlgorithm.ComputeHash(targetStream);
-    if (sourceHash.Length != targetHash.Length) {
+    if (sourceInfo.LastWriteTimeUtc > targetInfo.LastWriteTimeUtc) {
       return false;
-    }
-
-    for (var i = 0; i < sourceHash.Length; i++) {
-      if (sourceHash[i] != targetHash[i]) {
-        return false;
-      }
     }
 
     return true;

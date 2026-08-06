@@ -46,6 +46,9 @@ public class EnemyHealth : MonoBehaviour {
   UnityEngine.Events.UnityAction<HitBox2D> hurtListener;
   Transform facingInvariantHealthUiRoot;
   bool healthUiHierarchyResolved;
+  int activeComboIndex = -1;
+  int nextComboMoveIndex;
+  float comboExpiresAt;
 
   [Header("Visual Feedback")]
   [Tooltip("Prefab to spawn for showing damage numbers")]
@@ -59,6 +62,11 @@ public class EnemyHealth : MonoBehaviour {
 
   [SerializeField, Min(0f), Tooltip("Camera displacement when one hit removes 100% of this enemy's max health. Actual shake scales with the percentage removed.")]
   float screenShakeFactor = 0.65f;
+
+  [Header("Combo Juggle")]
+  [SerializeField, Min(0.1f)] float comboContinuationSeconds = 1.25f;
+  [SerializeField, Min(0f)] float comboJuggleHorizontalOffset = 1.45f;
+  [SerializeField] float comboJuggleVerticalOffset = 0.35f;
 
   FontText maxHealthText;
 
@@ -95,6 +103,7 @@ public class EnemyHealth : MonoBehaviour {
     if (hurtBox != null && hurtListener != null) {
       hurtBox.OnHit.RemoveListener(hurtListener);
     }
+    ResetComboProgress();
   }
 
   public void RefreshFromEnemyInfo(string source) {
@@ -160,16 +169,99 @@ public class EnemyHealth : MonoBehaviour {
     var defenderStats = enemyInfo != null ? enemyInfo.ResolvedStats : null;
     var abilityRawDamage = EsperanzaAbilities.GetRawDamage(hitBox.hitId);
     var abilityDamageMultiplier = EsperanzaAbilities.GetDamageMultiplier(hitBox.hitId);
+    var isComboHit = TryResolveComboHit(
+      hitBox.hitId,
+      out var comboIndex,
+      out var comboHitNumber,
+      out var comboContinues
+    );
+    var comboDamageMultiplier = isComboHit ? comboHitNumber : 1;
     var damageResult = CombatDamageResolver.ResolveEsperanzaHit(
       AllStatValues.Esperanza,
       defenderStats,
       abilityRawDamage,
-      abilityDamageMultiplier
+      abilityDamageMultiplier * comboDamageMultiplier
     );
     if (damageResult.amount != null && damageResult.amount.IsPositive) {
-      HitEmphasisBurst.Play(hurtBox, hitBox);
+      if (isComboHit) {
+        CommitComboHit(comboIndex, comboHitNumber, comboContinues);
+        ComboHitCameraZoom.Play(comboHitNumber);
+      }
+      HitEmphasisBurst.Play(hurtBox, hitBox, isComboHit ? comboHitNumber : 0);
     }
-    ApplyDamage(damageResult, hitBox.hitId, abilityRawDamage);
+    ApplyDamage(
+      damageResult,
+      hitBox,
+      abilityRawDamage,
+      isComboHit ? comboHitNumber : 0,
+      comboContinues
+    );
+  }
+
+  bool TryResolveComboHit(
+    string hitId,
+    out int comboIndex,
+    out int comboHitNumber,
+    out bool comboContinues
+  ) {
+    comboIndex = -1;
+    comboHitNumber = 0;
+    comboContinues = false;
+    if (!EsperanzaAbilities.TryResolveAbilityAnimation(hitId, out var abilityAnimation)) {
+      ResetComboProgress();
+      return false;
+    }
+
+    var formName = EsperanzaForms.GetActive();
+    var now = TimeScale.GetNow(this);
+    if (activeComboIndex >= 0 &&
+        now <= comboExpiresAt &&
+        nextComboMoveIndex > 0 &&
+        nextComboMoveIndex < EsperanzaComboLoadouts.MovesPerCombo &&
+        string.Equals(
+          EsperanzaComboLoadouts.GetMove(formName, activeComboIndex, nextComboMoveIndex),
+          abilityAnimation,
+          System.StringComparison.OrdinalIgnoreCase
+        )) {
+      comboIndex = activeComboIndex;
+      comboHitNumber = nextComboMoveIndex + 1;
+      comboContinues = comboHitNumber < EsperanzaComboLoadouts.MovesPerCombo;
+      return true;
+    }
+
+    ResetComboProgress();
+    for (var candidate = 0; candidate < EsperanzaComboLoadouts.ComboCount; candidate++) {
+      if (!string.Equals(
+            EsperanzaComboLoadouts.GetMove(formName, candidate, 0),
+            abilityAnimation,
+            System.StringComparison.OrdinalIgnoreCase
+          )) {
+        continue;
+      }
+
+      comboIndex = candidate;
+      comboHitNumber = 1;
+      comboContinues = EsperanzaComboLoadouts.MovesPerCombo > 1;
+      return true;
+    }
+    return false;
+  }
+
+  void CommitComboHit(int comboIndex, int comboHitNumber, bool comboContinues) {
+    if (!comboContinues) {
+      ResetComboProgress();
+      return;
+    }
+
+    activeComboIndex = comboIndex;
+    nextComboMoveIndex = comboHitNumber;
+    comboExpiresAt = TimeScale.GetNow(this) + Mathf.Max(comboContinuationSeconds, 0.1f);
+  }
+
+  void ResetComboProgress() {
+    activeComboIndex = -1;
+    nextComboMoveIndex = 0;
+    comboExpiresAt = 0f;
   }
 
   void GrantAbilityHitXp(string abilityName, EndlessNumber actualDamage) {
@@ -245,10 +337,18 @@ public class EnemyHealth : MonoBehaviour {
     RefreshFromEnemyInfo("spawn_context_changed");
   }
 
-  void ApplyDamage(CombatDamageResult damageResult, string hitId, int abilityRawDamage) {
+  void ApplyDamage(
+    CombatDamageResult damageResult,
+    HitBox2D hitBox,
+    int abilityRawDamage,
+    int comboHitNumber,
+    bool comboContinues
+  ) {
     if (enemyInfo == null) {
       return;
     }
+
+    var hitId = hitBox != null ? hitBox.hitId : "";
 
     var maxHp = enemyInfo.ResolveMaxHp();
     var hpBefore = EndlessNumber.Min(
@@ -272,6 +372,8 @@ public class EnemyHealth : MonoBehaviour {
         " enemy_type='" + enemyInfo.enemyType + "'" +
         " damage_kind='" + damageResult.kind + "'" +
         " hit_id='" + (hitId ?? "") + "'" +
+        " combo_hit=" + comboHitNumber +
+        " combo_multiplier=" + (comboHitNumber > 0 ? comboHitNumber : 1) +
         " ability_damage=" + abilityRawDamage +
         " flat_damage=" + damageResult.flatDamage.ToDisplayString() +
         " ability_multiplier=" + damageResult.abilityDamageMultiplier.ToString("0.###") +
@@ -295,15 +397,46 @@ public class EnemyHealth : MonoBehaviour {
       );
     }
 
+    if (enemyInfo != null && string.Equals(enemyInfo.enemyType, "Imp", System.StringComparison.OrdinalIgnoreCase)) {
+      Debug.Log("[EnemyHealth] Imp was hit! Calling SoundEffectPlayer.Play(\"enemy.imp.hurt\")");
+      if (enemyController == null || EnemyAudioLimiter.IsEligibleForAudio(enemyController)) {
+        SoundEffectPlayer.Play("enemy.imp.hurt");
+      } else {
+        Debug.Log("[EnemyHealth] Audio blocked by EnemyAudioLimiter.");
+      }
+    }
+
     if (enemyInfo.currentHp.IsPositive) {
       if (actualDamage.IsPositive) {
-        BeginHurtReaction();
+        if (comboHitNumber > 0 && comboContinues) {
+          BeginComboJuggle(hitBox);
+        } else {
+          BeginHurtReaction();
+        }
       }
       return;
     }
 
     GrantFormKillXp(maxHp);
     BeginDeath(hitId);
+  }
+
+  void BeginComboJuggle(HitBox2D hitBox) {
+    if (enemyAiController == null) {
+      enemyAiController = GetComponent<EnemyAIController>();
+    }
+    var attacker = hitBox != null ? hitBox.ActorOwner : null;
+    if (enemyAiController != null && enemyAiController.TryBeginComboJuggle(
+          attacker,
+          comboJuggleHorizontalOffset,
+          comboJuggleVerticalOffset,
+          comboContinuationSeconds
+        )) {
+      CancelFallbackHurtReaction();
+      return;
+    }
+
+    BeginHurtReaction();
   }
 
   void BeginHurtReaction() {
@@ -604,6 +737,7 @@ public class EnemyHealth : MonoBehaviour {
     }
 
     deathInProgress = true;
+    ResetComboProgress();
     CancelFallbackHurtReaction();
     DisableCombatForDeath();
 
@@ -662,6 +796,7 @@ public class EnemyHealth : MonoBehaviour {
 
   void ResetDeathState() {
     CancelFallbackHurtReaction();
+    ResetComboProgress();
     if (deathCoroutine != null) {
       StopCoroutine(deathCoroutine);
       deathCoroutine = null;
@@ -697,6 +832,14 @@ public class EnemyHealth : MonoBehaviour {
     }
 
     HurtBloodSplatter.PlayDeathDecals(transform);
+    
+    LootSpawner.DropLoot(transform.position, enemyInfo != null ? enemyInfo.ResolveMaxHp().ToInt32Clamped() : 10);
+
+    if (enemyInfo != null && string.Equals(enemyInfo.enemyType, "Imp", System.StringComparison.OrdinalIgnoreCase)) {
+      if (enemyController == null || EnemyAudioLimiter.IsEligibleForAudio(enemyController)) {
+        SoundEffectPlayer.Play("enemy.imp.death");
+      }
+    }
 
     if (ShouldLogDebug()) {
       RuntimeLog.Log(
