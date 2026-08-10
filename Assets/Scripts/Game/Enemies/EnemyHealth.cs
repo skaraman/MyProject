@@ -64,9 +64,7 @@ public class EnemyHealth : MonoBehaviour {
   float screenShakeFactor = 0.65f;
 
   [Header("Combo Juggle")]
-  [SerializeField, Min(0.1f)] float comboContinuationSeconds = 1.25f;
-  [SerializeField, Min(0f)] float comboJuggleHorizontalOffset = 1.45f;
-  [SerializeField] float comboJuggleVerticalOffset = 0.35f;
+  [SerializeField, Min(0.1f)] float comboContinuationSeconds = 2.0f;
 
   FontText maxHealthText;
 
@@ -76,6 +74,7 @@ public class EnemyHealth : MonoBehaviour {
   }
 
   void Awake() {
+    comboContinuationSeconds = Mathf.Max(comboContinuationSeconds, 2.0f);
     enemyInfo = GetComponent<EnemyInfo>();
     enemyController = GetComponent<EnemyController>();
     enemyAiController = GetComponent<EnemyAIController>();
@@ -175,6 +174,8 @@ public class EnemyHealth : MonoBehaviour {
       out var comboHitNumber,
       out var comboContinues
     );
+    Debug.Log($"[EnemyHealth] HandleHit hitId={hitBox.hitId} isComboHit={isComboHit} comboIndex={comboIndex} comboHitNumber={comboHitNumber} comboContinues={comboContinues}");
+    string nextComboMove = null;
     var comboDamageMultiplier = isComboHit ? comboHitNumber : 1;
     var damageResult = CombatDamageResolver.ResolveEsperanzaHit(
       AllStatValues.Esperanza,
@@ -184,8 +185,13 @@ public class EnemyHealth : MonoBehaviour {
     );
     if (damageResult.amount != null && damageResult.amount.IsPositive) {
       if (isComboHit) {
-        CommitComboHit(comboIndex, comboHitNumber, comboContinues);
+        CommitComboHit(hitBox.hitId, comboIndex, comboHitNumber, comboContinues);
         ComboHitCameraZoom.Play(comboHitNumber);
+        if (comboContinues) {
+          var formName = EsperanzaForms.GetActive();
+          nextComboMove = EsperanzaComboLoadouts.GetMove(formName, comboIndex, comboHitNumber);
+          MessageBus.Send("gameplay.comboHitLanded", nextComboMove);
+        }
       }
       HitEmphasisBurst.Play(hurtBox, hitBox, isComboHit ? comboHitNumber : 0);
     }
@@ -194,7 +200,7 @@ public class EnemyHealth : MonoBehaviour {
       hitBox,
       abilityRawDamage,
       isComboHit ? comboHitNumber : 0,
-      comboContinues
+      nextComboMove
     );
   }
 
@@ -247,7 +253,7 @@ public class EnemyHealth : MonoBehaviour {
     return false;
   }
 
-  void CommitComboHit(int comboIndex, int comboHitNumber, bool comboContinues) {
+  void CommitComboHit(string hitId, int comboIndex, int comboHitNumber, bool comboContinues) {
     if (!comboContinues) {
       ResetComboProgress();
       return;
@@ -255,7 +261,15 @@ public class EnemyHealth : MonoBehaviour {
 
     activeComboIndex = comboIndex;
     nextComboMoveIndex = comboHitNumber;
-    comboExpiresAt = TimeScale.GetNow(this) + Mathf.Max(comboContinuationSeconds, 0.1f);
+
+    var animationDuration = 0f;
+    if (EsperanzaAbilities.TryResolveAbilityAnimation(hitId, out var abilityAnimation)) {
+      if (Animations.Esperanza.TryGetValue(abilityAnimation, out var animData) && animData != null) {
+        animationDuration = animData.duration / 1000f;
+      }
+    }
+
+    comboExpiresAt = TimeScale.GetNow(this) + animationDuration + Mathf.Max(comboContinuationSeconds, 2.0f);
   }
 
   void ResetComboProgress() {
@@ -342,7 +356,7 @@ public class EnemyHealth : MonoBehaviour {
     HitBox2D hitBox,
     int abilityRawDamage,
     int comboHitNumber,
-    bool comboContinues
+    string nextComboMove
   ) {
     if (enemyInfo == null) {
       return;
@@ -398,18 +412,20 @@ public class EnemyHealth : MonoBehaviour {
     }
 
     if (enemyInfo != null && string.Equals(enemyInfo.enemyType, "Imp", System.StringComparison.OrdinalIgnoreCase)) {
-      Debug.Log("[EnemyHealth] Imp was hit! Calling SoundEffectPlayer.Play(\"enemy.imp.hurt\")");
       if (enemyController == null || EnemyAudioLimiter.IsEligibleForAudio(enemyController)) {
-        SoundEffectPlayer.Play("enemy.imp.hurt");
-      } else {
-        Debug.Log("[EnemyHealth] Audio blocked by EnemyAudioLimiter.");
+        int randomVal = UnityEngine.Random.Range(0, 3);
+        if (randomVal == 0) {
+          SoundEffectPlayer.Play("enemy.imp.hurt1");
+        } else if (randomVal == 1) {
+          SoundEffectPlayer.Play("enemy.imp.hurt2");
+        }
       }
     }
 
     if (enemyInfo.currentHp.IsPositive) {
       if (actualDamage.IsPositive) {
-        if (comboHitNumber > 0 && comboContinues) {
-          BeginComboJuggle(hitBox);
+        if (comboHitNumber > 0 && !string.IsNullOrEmpty(nextComboMove)) {
+          BeginComboJuggle(hitBox, nextComboMove);
         } else {
           BeginHurtReaction();
         }
@@ -421,15 +437,14 @@ public class EnemyHealth : MonoBehaviour {
     BeginDeath(hitId);
   }
 
-  void BeginComboJuggle(HitBox2D hitBox) {
+  void BeginComboJuggle(HitBox2D hitBox, string nextComboMove) {
     if (enemyAiController == null) {
       enemyAiController = GetComponent<EnemyAIController>();
     }
-    var attacker = hitBox != null ? hitBox.ActorOwner : null;
     if (enemyAiController != null && enemyAiController.TryBeginComboJuggle(
-          attacker,
-          comboJuggleHorizontalOffset,
-          comboJuggleVerticalOffset,
+          hitBox,
+          hurtBox,
+          nextComboMove,
           comboContinuationSeconds
         )) {
       CancelFallbackHurtReaction();

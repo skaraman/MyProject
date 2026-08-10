@@ -114,6 +114,20 @@ public partial class SpriteWithNormals {
     }
   }
 
+  readonly struct ConventionRuntimeRef {
+    public readonly string sliceAddress;
+    public readonly string atlasAddress;
+    public readonly string spriteName;
+
+    public ConventionRuntimeRef(string sliceAddress, string atlasAddress, string spriteName) {
+      this.sliceAddress = sliceAddress ?? "";
+      this.atlasAddress = atlasAddress ?? "";
+      this.spriteName = spriteName ?? "";
+    }
+
+    public bool IsValid => !string.IsNullOrWhiteSpace(sliceAddress);
+  }
+
   readonly struct PaddedSpriteCacheKey : IEquatable<PaddedSpriteCacheKey> {
     public readonly ulong sourceSpriteId;
     public readonly int marginX;

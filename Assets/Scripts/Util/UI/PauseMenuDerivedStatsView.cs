@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public sealed class PauseMenuDerivedStatsView : MonoBehaviour {
-  [SerializeField] FontText statNamesText;
-  [SerializeField] FontText statValuesText;
-  [SerializeField] FontText statDescriptionsText;
+  const float DefaultStatRowSpacing = 0.35f;
+
+  [FormerlySerializedAs("statHolderPrefab")]
+  [SerializeField] GameObject m_statHolderPrefab;
+  [SerializeField] Transform statsContainer;
+  [SerializeField] float statRowSpacing = DefaultStatRowSpacing;
 
   readonly List<Action> actions = new();
+  readonly List<GameObject> spawnedHolders = new();
 
   CharacterState characterState;
   SpriteWithNormals[] themedSprites = Array.Empty<SpriteWithNormals>();
@@ -28,20 +32,8 @@ public sealed class PauseMenuDerivedStatsView : MonoBehaviour {
     if (force || characterState == null) {
       characterState = SingleSceneManager.ResolveGameplayCharacterState();
     }
-    if (force || statNamesText == null) {
-      statNamesText = FindFontText(transform, "statNamesText") ??
-                      FindFontText(transform, "names") ??
-                      FindFontText(transform, "statNames");
-    }
-    if (force || statValuesText == null) {
-      statValuesText = FindFontText(transform, "statValuesText") ??
-                       FindFontText(transform, "values") ??
-                       FindFontText(transform, "numbers");
-    }
-    if (force || statDescriptionsText == null) {
-      statDescriptionsText = FindFontText(transform, "statDescriptionsText") ??
-                             FindFontText(transform, "description") ??
-                             FindFontText(transform, "statDescription");
+    if (statsContainer == null) {
+      statsContainer = transform;
     }
     if (force || themedSprites == null || themedSprites.Length == 0) {
       themedSprites = GetComponentsInChildren<SpriteWithNormals>(includeInactive: true);
@@ -85,40 +77,69 @@ public sealed class PauseMenuDerivedStatsView : MonoBehaviour {
       ? list
       : new List<string>();
 
-    var statNames = new List<string>();
-    var statValues = new List<string>();
-    var statDescriptions = new List<string>();
-
     var derivedStats = AllStatValues.Esperanza;
-    if (derivedStats != null) {
+    int statCount = 0;
+    int spawnIndex = 0;
+
+    if (derivedStats != null && m_statHolderPrefab != null) {
       for (var i = 0; i < minorStats.Count; i++) {
         var statKey = minorStats[i];
         if (string.IsNullOrWhiteSpace(statKey)) {
           continue;
         }
 
-        statNames.Add(statKey);
+        var statValStr = derivedStats.TryGetValue(statKey, out var statVal) && statVal != null
+          ? statVal.ToString()
+          : "0";
+        var holderObj = GetOrCreateHolder(spawnIndex);
+        ApplyText(FindFontText(holderObj.transform, "names"), statKey);
+        ApplyText(FindFontText(holderObj.transform, "values"), statValStr);
+        ApplyText(FindFontText(holderObj.transform, "description"), Abbreviations.GetDescription(statKey));
 
-        if (derivedStats.TryGetValue(statKey, out var statVal) && statVal != null) {
-          statValues.Add(statVal.ToString());
-        } else {
-          statValues.Add("0");
-        }
-
-        statDescriptions.Add(Abbreviations.GetDescription(statKey));
+        spawnIndex++;
+        statCount++;
       }
     }
 
+    for (var i = spawnIndex; i < spawnedHolders.Count; i++) {
+      if (spawnedHolders[i] != null) {
+        spawnedHolders[i].SetActive(false);
+      }
+    }
+
+    themedSprites = GetComponentsInChildren<SpriteWithNormals>(includeInactive: true);
+    selectedForm = null;
     ApplyTheme(activeForm);
-    ApplyText(statNamesText, string.Join("\n", statNames));
-    ApplyText(statValuesText, string.Join("\n", statValues));
-    ApplyText(statDescriptionsText, string.Join("\n", statDescriptions));
 
     RuntimeLog.Log(
       "[PauseMenuDerivedStatsView] Refreshed source='" + (source ?? "") +
       "' form='" + activeForm +
-      "' stat_count=" + statNames.Count
+      "' stat_count=" + statCount
     );
+  }
+
+  GameObject GetOrCreateHolder(int index) {
+    GameObject holderObj = index < spawnedHolders.Count ? spawnedHolders[index] : null;
+    if (holderObj == null) {
+      if (m_statHolderPrefab == null) {
+#if UNITY_EDITOR
+        m_statHolderPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/UI/StatHolder.prefab");
+#endif
+      }
+      holderObj = Instantiate(m_statHolderPrefab, statsContainer, false);
+      if (index < spawnedHolders.Count) {
+        spawnedHolders[index] = holderObj;
+      } else {
+        spawnedHolders.Add(holderObj);
+      }
+    }
+
+    holderObj.SetActive(true);
+    holderObj.transform.SetSiblingIndex(index);
+    var holderPosition = m_statHolderPrefab.transform.localPosition;
+    holderPosition.y -= index * Mathf.Max(0f, statRowSpacing);
+    holderObj.transform.localPosition = holderPosition;
+    return holderObj;
   }
 
   void ApplyTheme(string activeForm) {
@@ -133,7 +154,17 @@ public sealed class PauseMenuDerivedStatsView : MonoBehaviour {
       if (themedSprite == null) {
         continue;
       }
-      themedSprite.labelPrefix = themeName;
+      if (!string.Equals(themedSprite.libraryName, "UI/CharUI", StringComparison.OrdinalIgnoreCase)) {
+        continue;
+      }
+      if (string.IsNullOrWhiteSpace(themedSprite.category)) {
+        continue;
+      }
+
+      if (!string.Equals(themedSprite.labelPrefix, themeName, StringComparison.Ordinal)) {
+        themedSprite.SetLabelPrefix(themeName);
+        themedSprite.ForceUpdateSpriteAndNormal();
+      }
     }
   }
 

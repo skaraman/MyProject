@@ -118,6 +118,13 @@ public partial class SingleSceneManager {
   }
 
   void PrimePersistentFontAtlasPins(string source) {
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (persistentFontAtlasContentVersion == contentVersion &&
+        persistentFontAtlasPinCount > 0 &&
+        TextureResidencyCache.GetOwnerPinCount(PersistentFontAtlasPinOwnerId) >= persistentFontAtlasPinCount) {
+      return;
+    }
+
     persistentAtlasAddressScratch.Clear();
     persistentAtlasSeenAddressScratch.Clear();
 
@@ -128,6 +135,9 @@ public partial class SingleSceneManager {
     }
 
     if (persistentAtlasAddressScratch.Count <= 0) {
+      TextureResidencyCache.ReleaseOwnerPins(PersistentFontAtlasPinOwnerId);
+      persistentFontAtlasContentVersion = contentVersion;
+      persistentFontAtlasPinCount = 0;
       persistentAtlasSeenAddressScratch.Clear();
       return;
     }
@@ -139,6 +149,8 @@ public partial class SingleSceneManager {
       TextureResidencyCache.LoadPriority.Warmup
     );
     QueuePersistentAtlasMetadataWarmup(persistentAtlasAddressScratch);
+    persistentFontAtlasContentVersion = contentVersion;
+    persistentFontAtlasPinCount = persistentAtlasAddressScratch.Count;
 
     if (ShouldLogLoadingProgressDebug()) {
       RuntimeLog.Log(
@@ -393,103 +405,6 @@ public partial class SingleSceneManager {
     RefreshPersistentPlayerExpressionAtlasPins(source);
   }
 
-  int ResolveEnvironmentHotCacheAddressBudget() {
-    var ownerCap = Math.Max(SpriteStreamingRuntimeSettings.MaxPinnedAddressesPerOwner, 128);
-    return Math.Max(Math.Min(ownerCap, 4096), 128);
-  }
-
-  void CollectEnvironmentHotCacheSources(string locationId) {
-    // Environment hot cache removed per performance goal.
-  }
-
-  void ApplyEnvironmentHotCacheSlot(string ownerId, string slotName, string locationId, string source) {
-    if (!IsGameplayLocation(locationId)) {
-      TextureResidencyCache.ReleaseOwnerPins(ownerId);
-      return;
-    }
-
-    CollectEnvironmentHotCacheSources(locationId);
-    if (environmentCacheLibraryScratch.Count > 0) {
-      SpriteRuntimeResolver.WarmupLibraries(environmentCacheLibraryScratch);
-    }
-
-    if (environmentCacheAddressScratch.Count > 0) {
-      TextureResidencyCache.UpdateOwnerPins(
-        ownerId,
-        TextureResidencyCache.PinClass.WarmGate,
-        environmentCacheAddressScratch,
-        TextureResidencyCache.LoadPriority.Warmup
-      );
-      QueuePersistentAtlasMetadataWarmup(environmentCacheAddressScratch);
-    }
-    else {
-      TextureResidencyCache.ReleaseOwnerPins(ownerId);
-    }
-
-    if (!ShouldLogLoadingProgressDebug()) return;
-
-    RuntimeLog.Log(
-      "[SingleSceneManager][EnvironmentCache] stage=apply_slot" +
-      " source='" + (source ?? "") + "'" +
-      " slot=" + ResolveLoadFlowValue(slotName) +
-      " location=" + ResolveLoadFlowValue(locationId) +
-      " libraries=" + environmentCacheLibraryScratch.Count +
-      " addresses=" + environmentCacheAddressScratch.Count +
-      " asset_addresses=" + environmentCacheAssetAddressScratch.Count +
-      " asset_labels=" + environmentCacheAssetLabelScratch.Count +
-      " slot_budget=" + ResolveEnvironmentHotCacheAddressBudget()
-    );
-  }
-
-  void RefreshEnvironmentHotCacheSlots(string source) {
-    ApplyEnvironmentHotCacheSlot(
-      CurrentEnvironmentPinOwnerId,
-      "current",
-      currentEnvironmentCacheLocationId,
-      source
-    );
-    ApplyEnvironmentHotCacheSlot(
-      PreviousEnvironmentPinOwnerId,
-      "previous",
-      previousEnvironmentCacheLocationId,
-      source
-    );
-
-    if (!ShouldLogLoadingProgressDebug()) return;
-
-    RuntimeLog.Log(
-      "[SingleSceneManager][EnvironmentCache] stage=refresh_slots" +
-      " source='" + (source ?? "") + "'" +
-      " current=" + ResolveLoadFlowValue(currentEnvironmentCacheLocationId) +
-      " previous=" + ResolveLoadFlowValue(previousEnvironmentCacheLocationId) +
-      " slots=" + EnvironmentHotCacheSlotCount
-    );
-  }
-
-  void TrackEnvironmentHotCacheLocation(string locationId, string source) {
-    var normalized = LocationEnemyData.NormalizeLocationId(locationId);
-    if (!IsGameplayLocation(normalized)) {
-      return;
-    }
-
-    if (string.Equals(currentEnvironmentCacheLocationId, normalized, StringComparison.OrdinalIgnoreCase)) {
-      RefreshEnvironmentHotCacheSlots(source + "_refresh");
-      return;
-    }
-
-    if (string.Equals(previousEnvironmentCacheLocationId, normalized, StringComparison.OrdinalIgnoreCase)) {
-      var displacedCurrent = currentEnvironmentCacheLocationId;
-      currentEnvironmentCacheLocationId = normalized;
-      previousEnvironmentCacheLocationId = displacedCurrent;
-      RefreshEnvironmentHotCacheSlots(source + "_promote_previous");
-      return;
-    }
-
-    previousEnvironmentCacheLocationId = currentEnvironmentCacheLocationId;
-    currentEnvironmentCacheLocationId = normalized;
-    RefreshEnvironmentHotCacheSlots(source + "_rotate");
-  }
-
   string ResolveLoadingTextFontAtlasAddress() {
     if (loadingText == null) {
       return "";
@@ -553,6 +468,12 @@ public partial class SingleSceneManager {
     if (string.IsNullOrWhiteSpace(atlasAddress)) {
       return;
     }
+    var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    if (loadingTextFontContentVersion == contentVersion &&
+        string.Equals(loadingTextFontPinnedAddress, atlasAddress, StringComparison.OrdinalIgnoreCase) &&
+        TextureResidencyCache.GetOwnerPinCount(LoadingTextFontPinOwnerId) > 0) {
+      return;
+    }
 
     loadingTextRuntimeAddressScratch.Clear();
     loadingTextRuntimeAddressScratch.Add(atlasAddress);
@@ -568,6 +489,8 @@ public partial class SingleSceneManager {
       0,
       loadingTextRuntimeAddressScratch.Count
     );
+    loadingTextFontContentVersion = contentVersion;
+    loadingTextFontPinnedAddress = atlasAddress;
 
     if (ShouldLogLoadingProgressDebug()) {
       RuntimeLog.Log(

@@ -13,6 +13,8 @@ public class GearButtons : ButtonGroup {
   [Header("Gear Preview")]
   [SerializeField] ItemCard itemCard;
 
+  GearChoiceController choiceController;
+
   static bool ShouldLogRuntimeUiDebug() {
     if (!Application.isPlaying) return false;
     if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) return false;
@@ -20,11 +22,13 @@ public class GearButtons : ButtonGroup {
   }
 
   void OnEnable() {
+    EnsureChoiceController();
     RegisterHandlers();
     OnGearReady(EsperanzaForms.GetActive());
   }
 
   void OnDisable() {
+    choiceController?.Close(restoreSlotPreview: false);
     itemCard?.Hide();
     UnregisterHandlers();
   }
@@ -35,6 +39,10 @@ public class GearButtons : ButtonGroup {
     }
 
     actions.Add(MessageBus.On(CharacterMessageTopics.GearReady, OnGearReady));
+    actions.Add(MessageBus.On(
+      PauseMenuCharacterButtonsInput.ButtonSelectedMessage,
+      OnCharacterButtonSelected
+    ));
   }
 
   void UnregisterHandlers() {
@@ -74,6 +82,71 @@ public class GearButtons : ButtonGroup {
     itemCard.SetupGear(gearItem, button.GetComponent<SpriteWithNormals>());
   }
 
+  void EnsureChoiceController() {
+    if (choiceController == null) {
+      choiceController = GetComponentInChildren<GearChoiceController>(includeInactive: true);
+    }
+
+    var itemButtons = GetComponentInParent<PauseMenuInput>(includeInactive: true)
+      ?.GetComponentInChildren<ItemButtons>(includeInactive: true);
+    var itemPrefab = itemButtons != null ? itemButtons.itemPrefab : null;
+    if (choiceController == null) {
+      var choiceObject = new GameObject("GearChoiceWindow");
+      choiceObject.layer = itemPrefab != null ? itemPrefab.layer : gameObject.layer;
+      choiceObject.transform.SetParent(transform, worldPositionStays: false);
+      choiceObject.SetActive(false);
+      choiceController = choiceObject.AddComponent<GearChoiceController>();
+    }
+    choiceController.Initialize(this, itemPrefab, itemCard);
+  }
+
+  void OnCharacterButtonSelected(object payload) {
+    if (!isActiveAndEnabled || choiceController == null) {
+      return;
+    }
+
+    var button = payload as GameObject;
+    if (button == null || !buttons.Contains(button)) {
+      return;
+    }
+
+    choiceController.Open(button, button.name);
+  }
+
+  public bool IsChoiceWindowOpen => choiceController != null && choiceController.IsOpen;
+
+  public bool TryHandleChoiceHover(GameObject target) {
+    return choiceController != null && choiceController.TryHandleHover(target);
+  }
+
+  public bool TryHandleChoiceClick(GameObject target) {
+    return choiceController != null && choiceController.TryHandleClick(target);
+  }
+
+  public bool TryMoveChoice(Vector2 direction) {
+    return choiceController != null && choiceController.TryMove(direction);
+  }
+
+  public bool TrySelectChoice() {
+    return choiceController != null && choiceController.TrySelect();
+  }
+
+  public bool TryCancelChoice() {
+    return choiceController != null && choiceController.TryCancel();
+  }
+
+  public void ClearChoiceHover() {
+    choiceController?.ClearHover();
+  }
+
+  public void OnChoiceWindowClosed(GameObject sourceButton, bool restoreSlotPreview) {
+    if (restoreSlotPreview && isActiveAndEnabled && sourceButton != null) {
+      ShowItemCard(sourceButton);
+      return;
+    }
+    itemCard?.Hide();
+  }
+
   static void SetButtonVisualState(GameObject button, bool isActive) {
     if (button == null) {
       return;
@@ -111,6 +184,10 @@ public class GearButtons : ButtonGroup {
   }
 
   public void OnGearReady(string form = null) {
+    if (choiceController != null && choiceController.IsOpen) {
+      choiceController.Close(restoreSlotPreview: false);
+    }
+
     var resolvedForm = EsperanzaForms.ResolveFormKey(form) ?? EsperanzaForms.GetActive();
     EquippedItems.EnsureKnownForms();
     EquippedItems.EnsureForm(resolvedForm);
@@ -124,6 +201,10 @@ public class GearButtons : ButtonGroup {
 
       RefreshSlotButton(button, resolvedForm);
       refreshedSlots++;
+    }
+
+    if (GetActiveButton() != null) {
+      ShowItemCard(GetActiveButton());
     }
 
     if (ShouldLogRuntimeUiDebug()) {

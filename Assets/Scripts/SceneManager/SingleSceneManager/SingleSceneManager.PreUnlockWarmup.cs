@@ -104,8 +104,12 @@ public partial class SingleSceneManager {
   IEnumerator PreloadVisibleSpriteWindowsUnderBlack(List<AnimationController> enemyControllers = null) {
     if (!enablePreUnlockVisibleSpritePrefetch || !Application.isPlaying) yield break;
 
+    // Location activation and enemy spawning can change the hierarchy between
+    // pre-unlock passes. Refill the reusable list each pass without restoring
+    // the allocating global object search used previously.
+    InvalidatePreUnlockTargetCache();
     var targets = ResolvePreUnlockVisibleSpriteTargets();
-    if (targets == null || targets.Length <= 0) yield break;
+    if (targets == null || targets.Count <= 0) yield break;
 
     var queue = TextureResidencyCache.GetQueueSnapshot(pump: false);
     var maxAddresses = ResolvePreUnlockMaxAddresses(queue);
@@ -118,7 +122,7 @@ public partial class SingleSceneManager {
     var frameJumpClamp = Mathf.Max(preUnlockPrefetchFrameJumpClamp, 1);
     SortTargetsByPriority(targets);
 
-    for (var i = 0; i < targets.Length; i++) {
+    for (var i = 0; i < targets.Count; i++) {
       var target = targets[i];
       if (target == null) continue;
       if (!target.isActiveAndEnabled || target.DoNotRender) continue;
@@ -218,21 +222,23 @@ public partial class SingleSceneManager {
     yield return PreloadAnimationAddressBatch(addresses, resetLoadingProgress: false);
   }
 
-  void SortTargetsByPriority(SpriteWithNormals[] targets) {
-    if (targets == null || targets.Length <= 1) return;
+  void SortTargetsByPriority(List<SpriteWithNormals> targets) {
+    if (targets == null || targets.Count <= 1) return;
     var player = ResolvePlayerGearController();
-    var playerPos = player != null ? player.transform.position : Vector3.zero;
-    var hasPlayer = player != null;
+    preUnlockTargetSortPlayerPosition = player != null ? player.transform.position : Vector3.zero;
+    preUnlockTargetSortHasPlayer = player != null;
+    preUnlockTargetPriorityComparison ??= ComparePreUnlockTargetsByPriority;
+    targets.Sort(preUnlockTargetPriorityComparison);
+  }
 
-    Array.Sort(targets, (a, b) => {
-      if (a == null && b == null) return 0;
-      if (a == null) return 1;
-      if (b == null) return -1;
-      if (!hasPlayer) return 0;
-      var distA = (a.transform.position - playerPos).sqrMagnitude;
-      var distB = (b.transform.position - playerPos).sqrMagnitude;
-      return distA.CompareTo(distB);
-    });
+  int ComparePreUnlockTargetsByPriority(SpriteWithNormals a, SpriteWithNormals b) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    if (!preUnlockTargetSortHasPlayer) return 0;
+    var distA = (a.transform.position - preUnlockTargetSortPlayerPosition).sqrMagnitude;
+    var distB = (b.transform.position - preUnlockTargetSortPlayerPosition).sqrMagnitude;
+    return distA.CompareTo(distB);
   }
 
   IEnumerator WarmAnimationPlaybackBeforeUnlock(
@@ -522,27 +528,20 @@ public partial class SingleSceneManager {
     );
   }
 
-  SpriteWithNormals[] ResolvePreUnlockVisibleSpriteTargets() {
-    var now = Time.realtimeSinceStartup;
-    var refreshSeconds = Mathf.Max(preUnlockTargetCacheRefreshSeconds, 0f);
-    var hasCache = preUnlockVisibleSpriteTargetsCache != null && preUnlockVisibleSpriteTargetsCache.Length > 0;
-    var cacheExpired = refreshSeconds <= 0f ||
-      preUnlockVisibleSpriteTargetsCacheRefreshedAt < 0f ||
-      (now - preUnlockVisibleSpriteTargetsCacheRefreshedAt) >= refreshSeconds;
-    if (hasCache && !cacheExpired) {
-      return preUnlockVisibleSpriteTargetsCache;
-    }
+  List<SpriteWithNormals> ResolvePreUnlockVisibleSpriteTargets() {
+    if (preUnlockVisibleSpriteTargetsCacheValid) return preUnlockVisibleSpriteTargetsCache;
 
-    preUnlockVisibleSpriteTargetsCache =
-      FindObjectsByType<SpriteWithNormals>(FindObjectsInactive.Exclude) ??
-      Array.Empty<SpriteWithNormals>();
-    preUnlockVisibleSpriteTargetsCacheRefreshedAt = now;
+    preUnlockVisibleSpriteTargetsCache.Clear();
+    if (Scene == null || !Scene.activeInHierarchy) return preUnlockVisibleSpriteTargetsCache;
+
+    Scene.GetComponentsInChildren(false, preUnlockVisibleSpriteTargetsCache);
+    preUnlockVisibleSpriteTargetsCacheValid = true;
     return preUnlockVisibleSpriteTargetsCache;
   }
 
   void InvalidatePreUnlockTargetCache() {
-    preUnlockVisibleSpriteTargetsCache = Array.Empty<SpriteWithNormals>();
-    preUnlockVisibleSpriteTargetsCacheRefreshedAt = -1f;
+    preUnlockVisibleSpriteTargetsCache.Clear();
+    preUnlockVisibleSpriteTargetsCacheValid = false;
   }
 
   int ResolvePreUnlockMaxAddresses(TextureResidencyCache.QueueSnapshot queue) {

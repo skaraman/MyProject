@@ -9,7 +9,8 @@ public partial class GearController {
 
     // Ideal runtime behavior keeps this set tight: only currently visible or
     // imminent libraries. Oversized warmup sets increase startup queue pressure.
-    var libraries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var libraries = spriteWarmupLibraryScratch;
+    libraries.Clear();
     CollectLibraries(GearObjects, libraries);
     CollectLibraries(SkinObjects, libraries);
     if (effectNode != null && !string.IsNullOrWhiteSpace(effectNode.libraryName)) {
@@ -17,6 +18,7 @@ public partial class GearController {
     }
 
     SpriteRuntimeResolver.WarmupLibraries(libraries);
+    libraries.Clear();
   }
 
   private void PrimeControllerAnimationWarmup() {
@@ -802,9 +804,7 @@ public partial class GearController {
     if (!string.Equals(formName, activeForm, StringComparison.OrdinalIgnoreCase)) return;
 
     InvalidatePersistentWarmPlanCache();
-    QueueWarmupForEquippedCharacter(
-      new Dictionary<string, string>(equipPartPrefixScratch, StringComparer.OrdinalIgnoreCase)
-    );
+    QueueWarmupForEquippedCharacter(equipPartPrefixScratch);
   }
 
   void TryStartPendingEquipWarmup(string source) {
@@ -935,20 +935,7 @@ public partial class GearController {
       AddCharacterWarmAnimation(equippedAbilities[i], animationPlan, seenAnimations);
     }
 
-    var addedTransition = true;
-    while (addedTransition) {
-      addedTransition = false;
-      foreach (var source in Interrupts.Esperanza) {
-        if (!seenAnimations.Contains(source.Key)) continue;
-        if (source.Value == null) continue;
 
-        foreach (var transition in source.Value) {
-          if (!seenAnimations.Contains(transition.Key)) continue;
-          if (!AddCharacterWarmAnimation(transition.Value, animationPlan, seenAnimations)) continue;
-          addedTransition = true;
-        }
-      }
-    }
   }
 
   void EnsurePersistentWarmPlanCache() {

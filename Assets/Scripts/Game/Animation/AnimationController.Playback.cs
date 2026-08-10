@@ -3,12 +3,29 @@ using System;
 using UnityEngine;
 
 public partial class AnimationController {
-  public void PauseAnimation() {
+  public void PauseAnimation(bool applyCurrentFrame = false) {
     EndActivePunchTrace("paused", currentFrame);
     isPlaying = false;
     ClearPendingAnimationSwitch();
     ClearStartFrameHold();
     CancelAllTweens();
+    if (applyCurrentFrame) {
+      ApplyCurrentFrameImmediately();
+    }
+  }
+
+  void ApplyCurrentFrameImmediately() {
+    if (currentFrame == int.MinValue || spriteTargets == null) return;
+
+    lastAppliedSpriteFrame = currentFrame;
+    lastSpriteApplyTime = Application.isPlaying ? Time.unscaledTime : -1f;
+    SpriteApplyProfilerMarker.Begin();
+    for (var i = 0; i < spriteTargets.Count; i++) {
+      var target = spriteTargets[i];
+      if (!IsSpriteTargetEnabled(target)) continue;
+      target.ForceUpdateSpriteAndNormal(currentFrame);
+    }
+    SpriteApplyProfilerMarker.End();
   }
 
   public void ResumeAnimation() {
@@ -243,14 +260,9 @@ public partial class AnimationController {
     resolvedAnimation = requestedAnimation;
     queued = null;
     if (string.IsNullOrEmpty(currentAnimation)) return true;
-    if (interruptData != null && interruptData.TryGetValue(currentAnimation, out var nextMap)) {
-      if (!nextMap.TryGetValue(requestedAnimation, out var mappedAnimation)) return true;
-      if (!TryGetAnimationKey(mappedAnimation, out resolvedAnimation)) {
-        resolvedAnimation = requestedAnimation;
-        return true;
-      }
-      if (!string.Equals(resolvedAnimation, requestedAnimation, StringComparison.Ordinal)) {
-        queued = requestedAnimation;
+    if (interruptData != null && interruptData.TryGetValue(currentAnimation, out var allowedInterrupts)) {
+      if (System.Array.IndexOf(allowedInterrupts, requestedAnimation) < 0) {
+        return false;
       }
     }
     return true;

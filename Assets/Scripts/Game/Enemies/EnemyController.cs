@@ -6,7 +6,7 @@ using UnityEngine;
 [RequireComponent(typeof(EnemyInfo))]
 public partial class EnemyController : MonoBehaviour {
   const float PlayerTransformRefreshSeconds = 0.5f;
-  static readonly Dictionary<string, Dictionary<string, string>> EmptyInterruptData = new();
+  static readonly Dictionary<string, string[]> EmptyInterruptData = new();
   [Button(nameof(_TogglePause), label = "un/pause", size = Size.small)] public bool slowDown;
   [Button(nameof(ForceAnimation), label = "Play", size = Size.small)] public bool forceLoop;
 
@@ -45,7 +45,7 @@ public partial class EnemyController : MonoBehaviour {
   private bool effectControllerInitialized;
   private bool effectResetToEmptyPending;
   private Dictionary<string, AnimData> animationData;
-  private Dictionary<string, Dictionary<string, string>> interruptData;
+  private Dictionary<string, string[]> interruptData;
   private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData;
   private EnemyInfo enemyInfo;
   private string appearanceOwnerId;
@@ -391,8 +391,8 @@ public partial class EnemyController : MonoBehaviour {
     return animationNumber > 0;
   }
 
-  public void PauseAnimation() {
-    animationController?.PauseAnimation();
+  public void PauseAnimation(bool applyCurrentFrame = false) {
+    animationController?.PauseAnimation(applyCurrentFrame);
     if (effectControllerInitialized) {
       effectAnimationController.PauseAnimation();
     }
@@ -453,7 +453,7 @@ public partial class EnemyController : MonoBehaviour {
       null,
       null,
       effectAnimations,
-      new Dictionary<string, Dictionary<string, string>>(),
+      new Dictionary<string, string[]>(),
       null,
       new Dictionary<string, Dictionary<string, List<HBox>>>(),
       "",

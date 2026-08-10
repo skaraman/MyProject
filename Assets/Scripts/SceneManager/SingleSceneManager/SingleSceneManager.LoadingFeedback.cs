@@ -75,6 +75,9 @@ public partial class SingleSceneManager {
     loadingPercent = -1;
     loadingStatusDetail = "";
     loadingStatusOverride = "";
+    renderedLoadingPercent = -1;
+    renderedLoadingStatusDetail = "";
+    nextLoadingTextRenderAt = -1f;
     loadingPercentDisplayInitialized = false;
     loadingProgressUiArmCheckFrame = -1;
     loadingPercentDisplayValue = 0f;
@@ -154,6 +157,9 @@ public partial class SingleSceneManager {
       loadingPercent = -1;
       loadingStatusDetail = "";
       loadingStatusOverride = "";
+      renderedLoadingPercent = -1;
+      renderedLoadingStatusDetail = "";
+      nextLoadingTextRenderAt = -1f;
       loadingPercentDisplayInitialized = false;
       loadingProgressUiArmCheckFrame = -1;
       loadingPercentDisplayValue = 0f;
@@ -1074,19 +1080,28 @@ public partial class SingleSceneManager {
   }
 
   static string BuildLoadingDisplayText(int percent, string detail) {
+    var percentText = IntegerTextCache.Get(percent);
     if (string.IsNullOrWhiteSpace(detail)) {
-      return percent + "%";
+      return percentText + "%";
     }
-    return percent + "% - " + detail.Trim();
+    return percentText + "% - " + detail;
   }
 
   void UpdateLoadingScreenText(int percent, string detail) {
     var normalizedDetail = string.IsNullOrWhiteSpace(detail) ? "" : detail.Trim();
     var detailChanged = !string.Equals(loadingStatusDetail, normalizedDetail, StringComparison.Ordinal);
-    if (percent == loadingPercent && !detailChanged) return;
+    var stateChanged = percent != loadingPercent || detailChanged;
     loadingPercent = percent;
     loadingStatusDetail = normalizedDetail;
-    SetLoadingText(BuildLoadingDisplayText(percent, normalizedDetail));
+    var renderPending =
+      percent != renderedLoadingPercent ||
+      !string.Equals(normalizedDetail, renderedLoadingStatusDetail, StringComparison.Ordinal);
+    if (!stateChanged && !renderPending) return;
+
+    var now = Time.realtimeSinceStartup;
+    var renderImmediately = detailChanged || percent <= 0 || percent >= 100;
+    if (!renderImmediately && nextLoadingTextRenderAt >= 0f && now < nextLoadingTextRenderAt) return;
+    RenderLoadingScreenText(percent, normalizedDetail, now);
     if (!detailChanged || !ShouldLogLoadFlowWarnings()) return;
 
     var builder = BeginLoadFlowLog("[SingleSceneManager][LoadingStatus]");
@@ -1097,6 +1112,14 @@ public partial class SingleSceneManager {
     AppendLoadFlowField(builder, "current_location", ResolveLoadFlowValue(LocationManager.currentLocation));
     AppendGameplayLoadPipelineFields(builder);
     RuntimeLog.Log(builder.ToString());
+  }
+
+  void RenderLoadingScreenText(int percent, string normalizedDetail, float now = -1f) {
+    SetLoadingText(BuildLoadingDisplayText(percent, normalizedDetail));
+    renderedLoadingPercent = percent;
+    renderedLoadingStatusDetail = normalizedDetail ?? "";
+    var renderTime = now >= 0f ? now : Time.realtimeSinceStartup;
+    nextLoadingTextRenderAt = renderTime + loadingTextRenderIntervalSeconds;
   }
 
   void MaybeLogLoadingStageStall(int percent, string detail) {
@@ -1200,7 +1223,7 @@ public partial class SingleSceneManager {
     loadingStatusOverride = "";
     loadingPercentDisplayInitialized = true;
     loadingPercentDisplayValue = 0f;
-    SetLoadingText(BuildLoadingDisplayText(0, loadingStatusDetail));
+    RenderLoadingScreenText(0, loadingStatusDetail);
     loadingPercent = 0;
   }
 
@@ -1855,7 +1878,7 @@ public partial class SingleSceneManager {
     loadingPercent = 100;
     loadingStatusDetail = "Ready";
     loadingStatusOverride = "";
-    SetLoadingText(BuildLoadingDisplayText(100, loadingStatusDetail));
+    RenderLoadingScreenText(100, loadingStatusDetail);
   }
 
   void SetLoadingText(string value) {

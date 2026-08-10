@@ -198,7 +198,7 @@ public static partial class TextureResidencyCache {
           continue;
         }
 
-        if (entry.pendingAssetLoadLocations.Count <= 0) {
+        if (entry.pendingAssetLoadLocations == null || entry.pendingAssetLoadLocations.Count <= 0) {
           ClearPendingAssetLoadStart(entry);
           FinalizeLoadFailure(entry, diagnosticsEnabled: ShouldLogLoadCompletionDiagnostics(), completionStartedAt: Time.realtimeSinceStartup);
           ReleaseLocationHandle(entry);
@@ -421,6 +421,7 @@ public static partial class TextureResidencyCache {
     entry.loadStarted = false;
     entry.isDone = true;
     entry.isSuccess = false;
+    RecordTerminalLoadFailure(entry);
     SpriteStreamingDiagnostics.RecordAtlasLoadCompleted();
     entry.primarySprite = null;
     entry.spritesByName.Clear();

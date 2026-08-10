@@ -90,7 +90,6 @@ public partial class GearController : MonoBehaviour {
   [SerializeField, Min(50)] int equipWarmupEnqueueBudgetPerFrame = 96;
   [SerializeField] bool logEquipWarmupSummary;
   private GameObject[] combinedBounces;
-  private SaveData gameData = new();
   private AnimationController animationController = new();
   private AnimationController effectAnimationController = new();
   private readonly Dictionary<string, AnimData> effectAnimations = new();
@@ -107,6 +106,7 @@ public partial class GearController : MonoBehaviour {
   private readonly HashSet<string> startupAppearanceWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> coreEffectWarmupAddressScratch = new();
   private readonly HashSet<string> coreEffectWarmupSeenAddressScratch = new(StringComparer.OrdinalIgnoreCase);
+  private readonly HashSet<string> spriteWarmupLibraryScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> linkedEffectWarmKeyScratch = new();
   private readonly HashSet<string> linkedEffectWarmKeySeenScratch = new(StringComparer.OrdinalIgnoreCase);
   private readonly List<string> linkedProjectileWarmKeyScratch = new();

@@ -31,12 +31,42 @@ public partial class GearController {
   }
 
   public void SetGearIntoSlot(string slot, GearItem gearItem) {
-    EquippedItems.EnsureForm(EsperanzaForms.GetActive());
-    EquippedItems.AllGearForms[EsperanzaForms.GetActive()][slot] = gearItem;
-    gameData.SetComplex(SaveKeys.AllGear, EquippedItems.AllGearForms);
-    SaveSlotManager.Save(SaveKeys.EquippedGear, gameData);
-    RuntimeContentPackResolver.ConfigureForCurrentRuntimeState("gear_slot_change");
-    MarkAppearanceRevision();
+    var state = GetComponent<CharacterState>() ?? CharacterState.Current;
+    if (state == null) {
+      Debug.LogWarning(
+        "[GearController] Refused gear slot change because CharacterState is unavailable."
+      );
+      return;
+    }
+
+    if (gearItem == null) {
+      if (!state.TryUnequipGear(slot, "gear_controller")) {
+        Debug.LogWarning(
+          "[GearController] Refused gear removal" +
+          " slot='" + (slot ?? "") + "'"
+        );
+      }
+      return;
+    }
+
+    var inventoryIndex = -1;
+    var inventoryItems = Inventory.Gear;
+    for (var i = 0; inventoryItems != null && i < inventoryItems.Count; i++) {
+      var inventoryGear = inventoryItems[i];
+      if (ReferenceEquals(inventoryGear, gearItem)) {
+        inventoryIndex = i;
+        break;
+      }
+    }
+
+    if (inventoryIndex < 0 ||
+        !state.TryEquipInventoryGear(slot, inventoryIndex, "gear_controller")) {
+      Debug.LogWarning(
+        "[GearController] Refused gear that is not available in inventory" +
+        " slot='" + (slot ?? "") + "'" +
+        " gear='" + (gearItem.gearId ?? "") + "'"
+      );
+    }
   }
 
   public void RefreshGear() {
@@ -165,7 +195,7 @@ public partial class GearController {
       effectAnimationController?.InvalidateSpriteFrameCache();
     }
     RefreshGearDamageFadeAfterEquip();
-    QueueWarmupForEquippedCharacter(new Dictionary<string, string>(equipPartPrefixScratch, StringComparer.OrdinalIgnoreCase));
+    QueueWarmupForEquippedCharacter(equipPartPrefixScratch);
   }
 
   void ApplyActiveFormSkinColor() {

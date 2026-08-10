@@ -148,6 +148,12 @@ public static partial class TextureResidencyCache {
       entry.loadStarted = false;
       entry.isDone = true;
       entry.isSuccess = loadSucceeded;
+      if (loadSucceeded) {
+        ResetTerminalLoadFailure(entry);
+      }
+      else {
+        RecordTerminalLoadFailure(entry);
+      }
       CaptureEntryResolvedSprites(entry, loadedSprites);
       entry.atlasFallbackToDirect = false;
       if (loadSucceeded &&

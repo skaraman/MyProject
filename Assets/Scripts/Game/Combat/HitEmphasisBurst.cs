@@ -34,7 +34,6 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
   static HitEmphasisBurst instance;
   static uint burstSequence;
   static float lastEsperHitSoundTime;
-  static float lastEsperComboHitSoundTime;
 
   readonly List<SpriteRenderer> rendererScratch = new(64);
   BurstSlot[] slots;
@@ -135,16 +134,13 @@ public sealed class HitEmphasisBurst : MonoBehaviour {
     var accent = hitBox.IsEnemyOwned ? EsperHitAccent : EnemyHitAccent;
     if (!hitBox.IsEnemyOwned) {
       var now = Time.unscaledTime;
-      if (comboHitNumber > 0) {
-        if (now - lastEsperComboHitSoundTime > 0.035f) {
+      if (now - lastEsperHitSoundTime > 0.035f) {
+        if (comboHitNumber > 0) {
           SoundEffectPlayer.Play("esperanza.combohit");
-          lastEsperComboHitSoundTime = now;
-        }
-      } else {
-        if (now - lastEsperHitSoundTime > 0.035f) {
+        } else {
           SoundEffectPlayer.Play("esperanza.hit");
-          lastEsperHitSoundTime = now;
         }
+        lastEsperHitSoundTime = now;
       }
     }
     var randomState = CreateRandomState(hurtBox, hitBox);

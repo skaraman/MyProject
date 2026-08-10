@@ -35,7 +35,11 @@ public partial class SingleSceneManager {
   }
 
   void InvalidateCachedPlayerGearController(string reason = null) {
-    if (cachedPlayerGearController == null) return;
+    if (cachedPlayerGearController == null) {
+      cachedPlayerCharacterState = null;
+      lastPlayerResolveTime = -1f;
+      return;
+    }
     if (ShouldLogLoadFlowDebug()) {
       RuntimeLog.Log(
         "[SingleSceneManager][PlayerResolve] invalidate reason=" + (string.IsNullOrWhiteSpace(reason) ? "unspecified" : reason.Trim()) +
@@ -44,6 +48,7 @@ public partial class SingleSceneManager {
     }
     cachedPlayerGearController = null;
     cachedPlayerCharacterState = null;
+    lastPlayerResolveTime = -1f;
   }
 
   string DescribeGearController(GearController controller) {
@@ -71,37 +76,28 @@ public partial class SingleSceneManager {
   }
 
   GearController ResolveBestAvailablePlayerController() {
-    var activeControllers = FindObjectsByType<GearController>(FindObjectsInactive.Exclude);
-    for (var i = 0; i < activeControllers.Length; i++) {
-      var candidate = activeControllers[i];
+    var controllers = playerControllerResolveScratch;
+    controllers.Clear();
+    if (Scene != null) {
+      Scene.GetComponentsInChildren(true, controllers);
+    }
+
+    for (var i = 0; i < controllers.Count; i++) {
+      var candidate = controllers[i];
       if (IsPreferredGameplayPlayerController(candidate)) {
         return candidate;
       }
     }
 
-    for (var i = 0; i < activeControllers.Length; i++) {
-      var candidate = activeControllers[i];
+    for (var i = 0; i < controllers.Count; i++) {
+      var candidate = controllers[i];
       if (candidate == null) continue;
       var go = candidate.gameObject;
       if (go == null || !go.scene.IsValid()) continue;
       if ((go.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
       return candidate;
     }
-
-    var all = Resources.FindObjectsOfTypeAll<GearController>();
-    GearController fallback = null;
-    for (var i = 0; i < all.Length; i++) {
-      var candidate = all[i];
-      if (candidate == null) continue;
-      var go = candidate.gameObject;
-      if (go == null || !go.scene.IsValid()) continue;
-      if ((go.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
-      if (IsPreferredGameplayPlayerController(candidate)) {
-        return candidate;
-      }
-      fallback ??= candidate;
-    }
-    return fallback;
+    return null;
   }
 
   void EnsureGameplayPlayerBootstrap(string source) {
@@ -289,8 +285,10 @@ public partial class SingleSceneManager {
 
   GearController FindScenePlayerController() {
     if (Scene == null) return null;
-    var controllers = Scene.GetComponentsInChildren<GearController>(true);
-    for (var i = 0; i < controllers.Length; i++) {
+    var controllers = playerControllerResolveScratch;
+    controllers.Clear();
+    Scene.GetComponentsInChildren(true, controllers);
+    for (var i = 0; i < controllers.Count; i++) {
       var candidate = controllers[i];
       if (candidate == null) continue;
       var go = candidate.gameObject;
@@ -363,8 +361,10 @@ public partial class SingleSceneManager {
         gear.projectileManager = sharedProjectileManager;
       }
       cachedPlayerGearController = gear;
+      lastPlayerResolveTime = Time.realtimeSinceStartup;
     }
     cachedPlayerCharacterState = characterState;
+    InvalidatePreUnlockTargetCache();
 
     var gameplayInput = FindAnyObjectByType<GameplayInput>();
     if (gameplayInput != null) {

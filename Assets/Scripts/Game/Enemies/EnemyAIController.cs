@@ -4,6 +4,8 @@ using UnityEngine;
 public class EnemyAIController : MonoBehaviour {
   const float PlayerTargetRefreshSeconds = 0.5f;
   const float ExactOverlapThreshold = 0.0001f;
+  const float MaximumComboJuggleRepositionSeconds = 0.25f;
+  const float MinimumComboJuggleRepositionSeconds = 0.01f;
   static readonly System.Collections.Generic.List<EnemyAIController> activeEnemies = new();
   static int lastEnemySortFrame = -1;
   static bool s_UpdateRegistered;
@@ -93,12 +95,10 @@ public class EnemyAIController : MonoBehaviour {
   [Range(0f, 1f)] public float separationInfluence = 0.75f;
   [Min(0f)] public float recoverySeparationSpeedMultiplier = 0.65f;
 
-  [Header("Combo Juggle")]
-  [Min(0f)] public float comboJuggleMoveSpeed = 16f;
-
   private float closingDistance;
   private float runtimeMoveSpeed;
   private float runtimeAttackCooldown;
+  private float runtimeJuggleMoveSpeed;
   private float baselineMoveSpeed;
   private float baselineAttackCooldown;
   private Rigidbody2D rb;
@@ -120,6 +120,7 @@ public class EnemyAIController : MonoBehaviour {
   private float recoveryFacingSign = 1f;
   private float recoveryRepositionTimeRemaining;
   private Vector2 juggleTargetPosition;
+  private bool gameplayPursuitReleased;
   private int sortedIndex = -1;
 
   static bool ShouldLogSpawnDebug() {
@@ -155,6 +156,7 @@ public class EnemyAIController : MonoBehaviour {
     }
     EnsureUpdateRegistration();
     behaviourState = BehaviourState.Decide;
+    gameplayPursuitReleased = false;
     stateTimeRemaining = 0f;
     nextAttackTime = 0f;
     ClearActiveAttack();
@@ -168,6 +170,7 @@ public class EnemyAIController : MonoBehaviour {
     }
     ClearActiveAttack();
     StopMovement();
+    gameplayPursuitReleased = false;
   }
 
   private Vector2 cachedPosition;
@@ -200,12 +203,30 @@ public class EnemyAIController : MonoBehaviour {
       enemyController.isCulled = isCulled;
     }
 
-    if (enemyController == null || !TryResolvePlayer()) {
+    if (enemyController == null) {
       return;
     }
 
-    if (!SingleSceneManager.IsBlackscreenFullyTransparent) {
+    if (!SingleSceneManager.IsBlackscreenFullyTransparent ||
+        SingleSceneManager.IsGameplayDialogActive) {
+      if (gameplayPursuitReleased) {
+        StopMovement();
+      }
+      gameplayPursuitReleased = false;
       return;
+    }
+
+    if (!TryResolvePlayer(force: !gameplayPursuitReleased)) {
+      return;
+    }
+
+    if (!gameplayPursuitReleased) {
+      gameplayPursuitReleased = true;
+      StopMovement();
+      ClearActiveAttack();
+      behaviourState = BehaviourState.Decide;
+      stateTimeRemaining = 0f;
+      nextAttackTime = 0f;
     }
 
     switch (behaviourState) {
@@ -262,6 +283,12 @@ public class EnemyAIController : MonoBehaviour {
     StopMovement();
     if (!enemyController.PlayAnimation(attack.AnimationName, forceRestart: true)) {
       return;
+    }
+
+    if (string.Equals(ResolveEnemyType(), "Imp", System.StringComparison.OrdinalIgnoreCase)) {
+      if (UnityEngine.Random.value > 0.5f) {
+        SoundEffectPlayer.Play("enemy.imp.attack");
+      }
     }
 
     activeAttack = attack;
@@ -338,12 +365,25 @@ public class EnemyAIController : MonoBehaviour {
   }
 
   public bool TryBeginComboJuggle(
-    Transform attacker,
-    float horizontalOffset,
-    float verticalOffset,
+    HitBox2D hitBox,
+    HurtBox2D hurtBox,
+    string upcomingMove,
     float holdSeconds
   ) {
-    if (!isActiveAndEnabled || enemyController == null || attacker == null) {
+    var attacker = hitBox != null ? hitBox.ActorOwner : null;
+    if (!isActiveAndEnabled || enemyController == null || attacker == null || hurtBox == null) {
+      return false;
+    }
+
+    var hurtCollider = hurtBox.GetComponent<Collider2D>();
+    var hurtBoxCenter = hurtCollider != null
+      ? (Vector2)hurtCollider.bounds.center
+      : (Vector2)hurtBox.transform.position;
+    if (!TryResolveUpcomingHitBoxLocalCenter(
+          upcomingMove,
+          out var upcomingHitBoxCenter,
+          out var authoredStrikeSeconds
+        )) {
       return false;
     }
 
@@ -354,13 +394,28 @@ public class EnemyAIController : MonoBehaviour {
       return false;
     }
 
-    var facingSign = ResolveAttackerFacingSign(attacker);
-    juggleTargetPosition = (Vector2)attacker.position + new Vector2(
-      facingSign * Mathf.Max(0f, horizontalOffset),
-      verticalOffset
+    var enemySideSign = ResolveEnemySideSign(attacker, hurtBoxCenter.x);
+    var attackerScale = attacker.lossyScale;
+    // Offensive paths are authored to ESPER's right. Mirror the prediction to
+    // the enemy's current side so a combo never pulls it through the player.
+    var predictedHitPosition = new Vector2(
+      attacker.position.x + enemySideSign * Mathf.Abs(upcomingHitBoxCenter.x * attackerScale.x),
+      attacker.position.y + upcomingHitBoxCenter.y * Mathf.Abs(attackerScale.y)
     );
-    enemyController.FaceDirection(-facingSign);
-    enemyController.PauseAnimation();
+
+    var currentPosition = rb != null ? rb.position : (Vector2)transform.position;
+    var offsetToPredictedHit = predictedHitPosition - hurtBoxCenter;
+    juggleTargetPosition = currentPosition + offsetToPredictedHit;
+
+    var distance = Vector2.Distance(currentPosition, juggleTargetPosition);
+    var repositionSeconds = ResolveComboJuggleRepositionSeconds(
+      upcomingMove,
+      authoredStrikeSeconds
+    );
+    runtimeJuggleMoveSpeed = distance / repositionSeconds;
+
+    enemyController.FaceDirection(-enemySideSign);
+    enemyController.PauseAnimation(applyCurrentFrame: true);
     stateTimeRemaining = Mathf.Max(holdSeconds, 0.05f);
     behaviourState = BehaviourState.Juggle;
     return true;
@@ -390,7 +445,7 @@ public class EnemyAIController : MonoBehaviour {
     var nextPosition = Vector2.MoveTowards(
       currentPosition,
       juggleTargetPosition,
-      Mathf.Max(comboJuggleMoveSpeed, 0f) * deltaTime
+      runtimeJuggleMoveSpeed * deltaTime
     );
     if (rb != null) {
       rb.MovePosition(nextPosition);
@@ -410,12 +465,87 @@ public class EnemyAIController : MonoBehaviour {
     behaviourState = BehaviourState.Decide;
   }
 
-  float ResolveAttackerFacingSign(Transform attacker) {
+  float ResolveEnemySideSign(Transform attacker, float enemyCenterX) {
+    var horizontalDelta = enemyCenterX - attacker.position.x;
+    if (Mathf.Abs(horizontalDelta) > ExactOverlapThreshold) {
+      return Mathf.Sign(horizontalDelta);
+    }
+
     var attackerController = attacker.GetComponentInParent<GearController>();
     if (attackerController != null) {
       return attackerController.IsFacingRight ? 1f : -1f;
     }
     return attacker.lossyScale.x < 0f ? -1f : 1f;
+  }
+
+  static bool TryResolveUpcomingHitBoxLocalCenter(
+    string upcomingMove,
+    out Vector2 center,
+    out float authoredStrikeSeconds
+  ) {
+    center = default;
+    authoredStrikeSeconds = 0f;
+    if (!EsperanzaAbilities.TryResolveAbilityAnimation(upcomingMove, out var animationName) ||
+        !HBoxes.EsperanzaHit1.TryGetValue(animationName, out var sequence) ||
+        sequence == null) {
+      return false;
+    }
+
+    var foundStrike = false;
+    var furthestCenter = Vector2.zero;
+    var elapsedSeconds = 0f;
+    for (var frameIndex = 0; frameIndex < sequence.Count; frameIndex++) {
+      var frame = sequence[frameIndex];
+      elapsedSeconds += frame != null && frame.d > 0f ? frame.d : 0.2f;
+      var points = frame?.points;
+      if (points == null || points.Count == 0) continue;
+
+      var minimum = points[0];
+      var maximum = points[0];
+      for (var pointIndex = 1; pointIndex < points.Count; pointIndex++) {
+        minimum = Vector2.Min(minimum, points[pointIndex]);
+        maximum = Vector2.Max(maximum, points[pointIndex]);
+      }
+
+      if ((maximum - minimum).sqrMagnitude <= ExactOverlapThreshold) continue;
+
+      var candidate = (minimum + maximum) * 0.5f;
+      // Zero-area frames turn the hit box off. Use the farthest real strike so
+      // the correction does not pull the enemy unnecessarily close to ESPER.
+      if (!foundStrike || candidate.x > furthestCenter.x) {
+        foundStrike = true;
+        furthestCenter = candidate;
+        authoredStrikeSeconds = elapsedSeconds;
+      }
+    }
+
+    center = furthestCenter;
+    return foundStrike;
+  }
+
+  static float ResolveComboJuggleRepositionSeconds(
+    string upcomingMove,
+    float authoredStrikeSeconds
+  ) {
+    var durationScale = 1f;
+    if (EsperanzaAbilities.TryResolveAbilityAnimation(upcomingMove, out var animationName) &&
+        Animations.Esperanza.TryGetValue(animationName, out var animation) &&
+        animation != null &&
+        animation.duration > 0f) {
+      var baseDurationSeconds = animation.duration / 1000f;
+      var attackSpeedSeconds = AttackSpeedTiming.ResolveStatSeconds(AllStatValues.Esperanza);
+      var playbackDurationSeconds = AttackSpeedTiming.ResolveMoveDurationSeconds(
+        baseDurationSeconds,
+        attackSpeedSeconds
+      );
+      durationScale = playbackDurationSeconds / baseDurationSeconds;
+    }
+
+    return Mathf.Clamp(
+      authoredStrikeSeconds * durationScale,
+      MinimumComboJuggleRepositionSeconds,
+      MaximumComboJuggleRepositionSeconds
+    );
   }
 
   void BeginApproach() {
@@ -425,7 +555,12 @@ public class EnemyAIController : MonoBehaviour {
       return;
     }
 
-    if (!enemyController.PlayAnimation("Run")) {
+    var runAlreadyActive = string.Equals(
+      enemyController.CurrentAnimation,
+      "Run",
+      System.StringComparison.OrdinalIgnoreCase
+    );
+    if (!runAlreadyActive && !enemyController.PlayAnimation("Run")) {
       return;
     }
 

@@ -16,17 +16,19 @@ public static class Abbreviations {
     { "AFT", "After Effect" }, { "EVD", "Evade" }, { "CLN", "Cleanse" }, { "FEAR", "Fear" }, { "SPEC", "Spectral" }, { "PEN", "Penetration" },
     { "MVSP", "Movement Speed" }, 
 
+    { "BK", "Block" }, 
+
     { "RK", "Right Kick" }, { "LK", "Left Kick" }, { "RP", "Right Punch" }, { "LP", "Left Punch" }, { "SB", "Super Blast" }, { "SK", "Super Kick" }, 
-    { "BK", "Block" }, { "DO", "Dodge" }, { "JP", "Jump" }, { "DS", "Dash" },
+    { "JP", "Jump" }, { "DS", "Dash" },
 
     { "SH", "Shock" }, { "CL", "Chain Lighting" }, { "ST", "Static" }, { "LB", "Lightning Bolt" }, { "TB", "Thunder Bolt" }, { "OR", "Orbit" }, 
-    { "ID", "Instant Dodge" }, { "DD", "Double Dodge" }, { "DJ", "Double Jump" }, 
+    { "DJ", "Double Jump" }, { "ID", "Instant Dash" }, 
 
-    { "FT", "Flamethrower" }, { "BW", "Burning Wall" }, { "BZ", "Blaze" }, { "PL", "Pyre Light" }, { "FS", "Flame Shield" }, { "MT", "Meteor" }, { "FI", "Fissure" }, 
-    { "BD", "Burning Dash" }, { "FW", "Flame Wings" }, 
+    { "FT", "Flamethrower" }, { "BW", "Burning Wall" }, { "PL", "Pyre Light" }, { "FS", "Flame Shield" }, { "MT", "Meteor" }, { "FI", "Fissure" }, 
+    { "FW", "Flame Wings" },  { "BD", "Burning Dash" }, 
   
-    { "FC", "Frost Cloud" }, { "IB", "Ice Blast" }, { "IT", "Iceclitite" }, { "IM", "Iceclimite" }, { "IS", "Ice Shield" }, { "AV", "Avalanche" }, { "BL", "Blizzard" }, 
-    { "SL", "Slide" }, { "FF", "Frost Float" }, 
+    { "IT", "Iceclitite" }, { "IM", "Iceclimite" }, { "IB", "Ice Blast" }, { "IS", "Ice Shield" }, { "FC", "Frost Cloud" }, { "AV", "Avalanche" }, 
+    { "FF", "Frost Float" }, { "SL", "Slide" }, 
 
     { "WB", "Water Blast" }, { "CH", "Crushing Hydro" }, { "WS", "Water Sphere" }, { "PD", "Pressure Deluge" }, { "RN", "Rain Needles" }, { "TS", "Tsunami Strike" }, 
     { "BB", "Bubble" }, { "VD", "Vapor Dash" },

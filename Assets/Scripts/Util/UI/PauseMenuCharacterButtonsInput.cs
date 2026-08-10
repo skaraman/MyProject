@@ -18,13 +18,16 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
 
   ButtonEntry focusedButton;
   ButtonGroup hoveredGroup;
+  GearButtons gearButtons;
   bool topMenuFocused = true;
 
-  public bool HasFocusedButton => focusedButton != null;
+  public bool HasFocusedButton => focusedButton != null ||
+    (gearButtons != null && gearButtons.IsChoiceWindowOpen);
 
   void OnEnable() {
     EnsureViewsResolved(force: true);
     ShowAllStatsView(false);
+    RebuildButtons();
     RegisterHandlers();
     SetTopMenuFocused(focusedButton == null);
   }
@@ -95,6 +98,22 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
     focusedButton = ResolveButton(previousFocusedButton);
   }
 
+  public void RefreshButtons() {
+    EnsureViewsResolved();
+    RebuildButtons();
+    if (focusedButton != null) {
+      hoveredGroup = focusedButton.group;
+      focusedButton.group.SetHoverIndex(focusedButton.groupIndex);
+      focusedButton.group.SetActiveIndex(focusedButton.groupIndex);
+      return;
+    }
+
+    if (hoveredGroup != null) {
+      hoveredGroup.SetHoverIndex(-1);
+      hoveredGroup = null;
+    }
+  }
+
   bool ContainsButton(GameObject button) {
     for (var i = 0; i < buttons.Count; i++) {
       if (buttons[i].button == button) {
@@ -123,6 +142,11 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   }
 
   void OnHover(object payload) {
+    if (gearButtons != null && gearButtons.IsChoiceWindowOpen) {
+      gearButtons.TryHandleChoiceHover(payload as GameObject);
+      return;
+    }
+
     var entry = ResolveButton(payload as GameObject);
     if (entry == null) {
       ClearHover();
@@ -133,6 +157,11 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   }
 
   void OnClick(object payload) {
+    if (gearButtons != null && gearButtons.IsChoiceWindowOpen) {
+      gearButtons.TryHandleChoiceClick(payload as GameObject);
+      return;
+    }
+
     var entry = ResolveButton(payload as GameObject);
     if (entry == null) {
       return;
@@ -143,6 +172,11 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   }
 
   void MoveFocus(Vector2 direction) {
+    if (gearButtons != null && gearButtons.IsChoiceWindowOpen) {
+      gearButtons.TryMoveChoice(direction);
+      return;
+    }
+
     if (topMenuFocused) {
       return;
     }
@@ -172,14 +206,14 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
       return false;
     }
 
-    var currentY = current.button.transform.position.y;
+    var currentY = GetNavigationPosition(current.button).y;
     for (var i = 0; i < buttons.Count; i++) {
       var candidate = buttons[i];
       if (candidate == null || candidate.button == null || candidate == current) {
         continue;
       }
 
-      if (candidate.button.transform.position.y > currentY + 0.01f) {
+      if (GetNavigationPosition(candidate.button).y > currentY + 0.01f) {
         return false;
       }
     }
@@ -192,7 +226,7 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
     var bestScore = float.NegativeInfinity;
     for (var i = 0; i < buttons.Count; i++) {
       var candidate = buttons[i];
-      var score = -Vector2.Dot(candidate.button.transform.position, direction);
+      var score = -Vector2.Dot(GetNavigationPosition(candidate.button), direction);
       if (score <= bestScore) {
         continue;
       }
@@ -207,14 +241,14 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   ButtonEntry FindNearestButtonInDirection(ButtonEntry current, Vector2 direction) {
     ButtonEntry best = null;
     var bestScore = float.NegativeInfinity;
-    var currentPosition = (Vector2)current.button.transform.position;
+    var currentPosition = GetNavigationPosition(current.button);
     for (var i = 0; i < buttons.Count; i++) {
       var candidate = buttons[i];
       if (candidate == current) {
         continue;
       }
 
-      var offset = (Vector2)candidate.button.transform.position - currentPosition;
+      var offset = GetNavigationPosition(candidate.button) - currentPosition;
       var distance = offset.magnitude;
       if (distance <= 0.001f) {
         continue;
@@ -237,6 +271,21 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
     return best;
   }
 
+  static Vector2 GetNavigationPosition(GameObject button) {
+    if (button == null) {
+      return Vector2.zero;
+    }
+
+    var collider = button.GetComponent<Collider2D>();
+    if (collider != null) {
+      return collider.bounds.center;
+    }
+
+    var renderer = button.GetComponent<SpriteRenderer>() ??
+                   button.GetComponentInChildren<SpriteRenderer>(includeInactive: true);
+    return renderer != null ? (Vector2)renderer.bounds.center : (Vector2)button.transform.position;
+  }
+
   void SetFocus(ButtonEntry entry, bool playMoveSound) {
     if (entry == null) {
       return;
@@ -249,7 +298,9 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
       return;
     }
 
-    if (focusedButton != null && focusedButton.group != entry.group) {
+    if (focusedButton != null &&
+        focusedButton.group != entry.group &&
+        !ShouldPreservePreviousGroupSelection(focusedButton.group, entry.group)) {
       focusedButton.group.SetActiveIndex(-1);
     }
 
@@ -268,7 +319,16 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
     entry.group.SetActiveIndex(entry.groupIndex);
   }
 
+  static bool ShouldPreservePreviousGroupSelection(ButtonGroup previous, ButtonGroup next) {
+    return previous is InventoryButtons && next is ItemButtons;
+  }
+
   void SelectFocusedButton() {
+    if (gearButtons != null && gearButtons.IsChoiceWindowOpen) {
+      gearButtons.TrySelectChoice();
+      return;
+    }
+
     if (topMenuFocused) {
       return;
     }
@@ -286,6 +346,11 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   }
 
   void ClearHover() {
+    if (gearButtons != null && gearButtons.IsChoiceWindowOpen) {
+      gearButtons.ClearChoiceHover();
+      return;
+    }
+
     if (hoveredGroup == null) {
       return;
     }
@@ -299,14 +364,21 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
       return;
     }
 
-    focusedButton.group.SetActiveIndex(-1);
+    if (!(focusedButton.group is InventoryButtons)) {
+      focusedButton.group.SetActiveIndex(-1);
+    }
     focusedButton = null;
   }
 
   public void FocusTopMenu() {
+    TryCancelGearChoice();
     ClearHover();
     ClearFocus();
     SetTopMenuFocused(true);
+  }
+
+  public bool TryCancelGearChoice() {
+    return gearButtons != null && gearButtons.TryCancelChoice();
   }
 
   public bool FocusTopmostButton() {
@@ -384,6 +456,9 @@ public sealed class PauseMenuCharacterButtonsInput : MonoBehaviour {
   GameObject closeAllStatsButton;
 
   void EnsureViewsResolved(bool force = false) {
+    if (force || gearButtons == null) {
+      gearButtons = GetComponentInChildren<GearButtons>(includeInactive: true);
+    }
     if (force || statsView == null) {
       statsView = FindChildRecursive(transform, "StatsView")?.gameObject;
     }

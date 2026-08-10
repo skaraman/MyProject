@@ -7,17 +7,18 @@ public static class IntegerTextCache {
   const int CachedValueLimit = 4096;
   static readonly string[] values = new string[CachedValueLimit + 1];
   static readonly string[] slashPrefixedValues = new string[CachedValueLimit + 1];
+  static int highestWarmedValue = -1;
 
   public static void Warm(int maxInclusive) {
     var warmLimit = Mathf.Clamp(maxInclusive, 0, CachedValueLimit);
-    for (var value = 0; value <= warmLimit; value++) {
+    if (warmLimit <= highestWarmedValue) return;
+
+    for (var value = highestWarmedValue + 1; value <= warmLimit; value++) {
       if (values[value] == null) {
         values[value] = value.ToString();
       }
-      if (slashPrefixedValues[value] == null) {
-        slashPrefixedValues[value] = "/" + values[value];
-      }
     }
+    highestWarmedValue = warmLimit;
   }
 
   public static string Get(int value) {

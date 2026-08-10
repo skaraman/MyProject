@@ -69,6 +69,71 @@ public static class EquippedItems {
     };
   }
 
+  public static bool TryResolveSlot(string formName, string slotName, out string resolvedSlot) {
+    resolvedSlot = null;
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) || string.IsNullOrWhiteSpace(slotName)) {
+      return false;
+    }
+
+    EnsureForm(resolvedForm);
+    if (!AllGearForms.TryGetValue(resolvedForm, out var slots) || slots == null) {
+      return false;
+    }
+
+    resolvedSlot = ResolveSlotKey(slots, slotName);
+    return !string.IsNullOrWhiteSpace(resolvedSlot);
+  }
+
+  public static bool IsDefaultGearSlot(string formName, string slotName) {
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) ||
+        !DefaultGearForms.TryGetValue(resolvedForm, out var defaultSlots) ||
+        defaultSlots == null) {
+      return false;
+    }
+
+    var resolvedSlot = ResolveSlotKey(defaultSlots, slotName);
+    return !string.IsNullOrWhiteSpace(resolvedSlot) && defaultSlots[resolvedSlot] != null;
+  }
+
+  public static bool AreSlotsCompatible(string itemSlot, string targetSlot) {
+    var normalizedItemSlot = NormalizeComparableSlot(itemSlot);
+    var normalizedTargetSlot = NormalizeComparableSlot(targetSlot);
+    return !string.IsNullOrWhiteSpace(normalizedItemSlot) &&
+      string.Equals(normalizedItemSlot, normalizedTargetSlot, StringComparison.OrdinalIgnoreCase);
+  }
+
+  public static bool TrySetGear(
+    string formName,
+    string slotName,
+    GearItem gearItem,
+    out GearItem previousGear
+  ) {
+    previousGear = null;
+    var resolvedForm = EsperanzaForms.ResolveFormKey(formName);
+    if (string.IsNullOrWhiteSpace(resolvedForm) ||
+        !TryResolveSlot(resolvedForm, slotName, out var resolvedSlot)) {
+      return false;
+    }
+
+    if (gearItem == null && IsDefaultGearSlot(resolvedForm, resolvedSlot)) {
+      return false;
+    }
+    if (gearItem != null && !AreSlotsCompatible(gearItem.slot, resolvedSlot)) {
+      return false;
+    }
+
+    var slots = AllGearForms[resolvedForm];
+    previousGear = CloneGearItem(slots[resolvedSlot]);
+    var nextGear = CloneGearItem(gearItem);
+    if (nextGear != null) {
+      nextGear.slot = resolvedSlot;
+    }
+    slots[resolvedSlot] = nextGear;
+    return true;
+  }
+
   public static void ApplySavedGearForms(
     Dictionary<string, Dictionary<string, GearItem>> targetForms,
     Dictionary<string, Dictionary<string, GearItem>> loadedForms
@@ -92,6 +157,9 @@ public static class EquippedItems {
         }
 
         var gearItem = CloneGearItem(loadedSlot.Value);
+        if (gearItem == null && IsDefaultGearSlot(form, slot)) {
+          continue;
+        }
         if (gearItem != null) {
           gearItem.slot = slot;
         }
@@ -220,6 +288,17 @@ public static class EquippedItems {
 
   static string NormalizeToken(string value) {
     return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+  }
+
+  static string NormalizeComparableSlot(string value) {
+    var normalized = NormalizeToken(value);
+    if (normalized.StartsWith("Ring", StringComparison.OrdinalIgnoreCase)) {
+      var suffix = normalized.Substring("Ring".Length);
+      if (suffix.Length == 0 || int.TryParse(suffix, out _)) {
+        return "Ring";
+      }
+    }
+    return normalized;
   }
 
   static string ResolveSlotKey(Dictionary<string, GearItem> targetSlots, string value) {

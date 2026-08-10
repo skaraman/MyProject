@@ -77,20 +77,20 @@ public static partial class ImpData {
     }
   };
 
-  public static Dictionary<string, Dictionary<string, string>> Interrupts { get; } = new() {
-    ["Run"] = new Dictionary<string, string> {
-      [JumpAnimation] = JumpAnimation,
-      ["Hurt"] = "Hurt",
-      ["Death_Base_1"] = "Death_Base_1"
+  public static Dictionary<string, string[]> Interrupts { get; } = new() {
+    ["Run"] = new[] {
+      JumpAnimation,
+      "Hurt",
+      "Death_Base_1"
     },
-    [JumpAnimation] = new Dictionary<string, string> {
-      ["Hurt"] = "Hurt",
-      ["Death_Base_1"] = "Death_Base_1"
+    [JumpAnimation] = new[] {
+      "Hurt",
+      "Death_Base_1"
     },
-    ["Hurt"] = new Dictionary<string, string> {
-      ["Hurt"] = "Hurt",
-      ["Death_Base_1"] = "Death_Base_1"
+    ["Hurt"] = new[] {
+      "Hurt",
+      "Death_Base_1"
     },
-    ["Death_Base_1"] = new Dictionary<string, string>()
+    ["Death_Base_1"] = new string[0]
   };
 }

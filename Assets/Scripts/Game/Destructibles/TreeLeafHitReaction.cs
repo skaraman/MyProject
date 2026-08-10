@@ -19,7 +19,25 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
   const float FoliageRotationSpring = 45f;
   const float FoliageRotationDamping = 7f;
 
-  readonly List<EZSoftBone> softBones = new(8);
+  sealed class LeafCluster {
+    public Transform root;
+    public EZSoftBone softBone;
+    public Vector3 restLocalPosition;
+    public Quaternion restLocalRotation;
+    public Vector2 positionOffset;
+    public Vector2 positionVelocity;
+    public float angle;
+    public float angularVelocity;
+    public float positionSpring;
+    public float positionDamping;
+    public float rotationSpring;
+    public float rotationDamping;
+    public float positionLimit;
+    public float rotationLimit;
+    public float kickScale;
+  }
+
+  readonly List<LeafCluster> leafClusters = new(8);
   readonly HashSet<GameObject> canopySupportPieces = new();
   readonly HashSet<GameObject> launchedCanopyPieces = new();
   readonly Dictionary<GameObject, Pool> fallingLeafPools = new();
@@ -33,8 +51,6 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
   Transform leafs;
   Transform piecesParent;
   Bounds leavesBounds;
-  int fallingLeafSortingLayerId;
-  int fallingLeafSortingOrder;
   int lastReactionFrame = -1;
   ulong lastReactionSourceId;
   Vector3 leavesRestLocalPosition;
@@ -45,6 +61,8 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
   float foliageAngularVelocity;
   bool warnedMissingFallingLeafPrefabs;
   bool canopyRemoved;
+  Transform groundMarker;
+  SpriteRenderer[] canopyRenderers;
 
   void Awake() {
     InitializeFromHierarchy();
@@ -88,8 +106,14 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
     piecesParent = brokenPiecesRoot;
     leavesRestLocalPosition = leaves.localPosition;
     leavesRestLocalRotation = leaves.localRotation;
-    softBones.AddRange(leaves.GetComponentsInChildren<EZSoftBone>(true));
-    CacheFallingLeafSorting();
+    CacheLeafClusters();
+    canopyRenderers = leaves.GetComponentsInChildren<SpriteRenderer>(true);
+
+    var rawPieces = FindDirectChild(transform, "RawPieces");
+    if (rawPieces != null) {
+      groundMarker = FindDirectChild(rawPieces, "zp");
+    }
+
     CacheCanopySupportPieces();
     PrewarmFallingLeafPools();
   }
@@ -115,11 +139,8 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
 
     KickFoliageRoot(awayFromHit);
 
-    for (var i = 0; i < softBones.Count; i++) {
-      var softBone = softBones[i];
-      if (softBone != null && softBone.isActiveAndEnabled) {
-        softBone.AddImpulse(awayFromHit * Random.Range(4.5f, 6.5f));
-      }
+    for (var i = 0; i < leafClusters.Count; i++) {
+      ApplyLeafHit(leafClusters[i], hitSourcePosition, awayFromHit);
     }
 
     var count = Random.Range(MinimumFallingLeavesPerHit, MaximumFallingLeavesPerHit + 1);
@@ -162,6 +183,68 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
 
     leaves.localPosition = leavesRestLocalPosition + new Vector3(foliageOffset.x, foliageOffset.y, 0f);
     leaves.localRotation = leavesRestLocalRotation * Quaternion.Euler(0f, 0f, foliageAngle);
+    UpdateLeafClusters(deltaTime);
+  }
+
+  void ApplyLeafHit(LeafCluster leaf, Vector3 hitSourcePosition, Vector3 fallbackDirection) {
+    if (leaf == null || leaf.root == null) {
+      return;
+    }
+
+    var awayFromHit = leaf.root.position - hitSourcePosition;
+    awayFromHit.y = Mathf.Abs(awayFromHit.y) * 0.35f + 0.15f;
+    if (awayFromHit.sqrMagnitude < 0.0001f) {
+      awayFromHit = fallbackDirection;
+    }
+    awayFromHit.Normalize();
+
+    var impulseDirection = Quaternion.Euler(0f, 0f, Random.Range(-55f, 55f)) * awayFromHit;
+    if (leaf.softBone != null && leaf.softBone.isActiveAndEnabled) {
+      leaf.softBone.AddImpulse(impulseDirection * Random.Range(34f, 54f));
+    }
+
+    var localDirection = leaves.InverseTransformDirection(impulseDirection);
+    localDirection.z = 0f;
+    if (localDirection.sqrMagnitude < 0.0001f) {
+      localDirection = Vector3.up;
+    }
+    localDirection.Normalize();
+
+    var horizontalDirection = Mathf.Sign(localDirection.x);
+    if (Mathf.Approximately(horizontalDirection, 0f)) {
+      horizontalDirection = Random.value < 0.5f ? -1f : 1f;
+    }
+
+    leaf.positionVelocity += new Vector2(
+      horizontalDirection * Random.Range(1.05f, 1.85f),
+      Random.Range(0.4f, 0.95f)
+    ) * leaf.kickScale;
+    leaf.angularVelocity +=
+      -horizontalDirection * Random.Range(45f, 82f) * leaf.kickScale +
+      Random.Range(-18f, 18f);
+  }
+
+  void UpdateLeafClusters(float deltaTime) {
+    for (var i = 0; i < leafClusters.Count; i++) {
+      var leaf = leafClusters[i];
+      if (leaf == null || leaf.root == null) {
+        continue;
+      }
+
+      leaf.positionVelocity -= leaf.positionOffset * (leaf.positionSpring * deltaTime);
+      leaf.positionVelocity *= Mathf.Exp(-leaf.positionDamping * deltaTime);
+      leaf.positionOffset += leaf.positionVelocity * deltaTime;
+      leaf.positionOffset = Vector2.ClampMagnitude(leaf.positionOffset, leaf.positionLimit);
+
+      leaf.angularVelocity -= leaf.angle * (leaf.rotationSpring * deltaTime);
+      leaf.angularVelocity *= Mathf.Exp(-leaf.rotationDamping * deltaTime);
+      leaf.angle += leaf.angularVelocity * deltaTime;
+      leaf.angle = Mathf.Clamp(leaf.angle, -leaf.rotationLimit, leaf.rotationLimit);
+
+      leaf.root.localPosition = leaf.restLocalPosition +
+        new Vector3(leaf.positionOffset.x, leaf.positionOffset.y, 0f);
+      leaf.root.localRotation = leaf.restLocalRotation * Quaternion.Euler(0f, 0f, leaf.angle);
+    }
   }
 
   void KickFoliageRoot(Vector3 awayFromHit) {
@@ -186,6 +269,50 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
     foliageVelocity = Vector2.zero;
     foliageAngle = 0f;
     foliageAngularVelocity = 0f;
+
+    for (var i = 0; i < leafClusters.Count; i++) {
+      var leaf = leafClusters[i];
+      if (leaf == null || leaf.root == null) {
+        continue;
+      }
+
+      leaf.root.localPosition = leaf.restLocalPosition;
+      leaf.root.localRotation = leaf.restLocalRotation;
+      leaf.positionOffset = Vector2.zero;
+      leaf.positionVelocity = Vector2.zero;
+      leaf.angle = 0f;
+      leaf.angularVelocity = 0f;
+    }
+  }
+
+  void CacheLeafClusters() {
+    leafClusters.Clear();
+    for (var i = 0; i < leaves.childCount; i++) {
+      var child = leaves.GetChild(i);
+      if (child == null) {
+        continue;
+      }
+
+      var renderer = child.GetComponentInChildren<SpriteRenderer>(true);
+      var softBone = child.GetComponentInChildren<EZSoftBone>(true);
+      if (renderer == null && softBone == null) {
+        continue;
+      }
+
+      leafClusters.Add(new LeafCluster {
+        root = child,
+        softBone = softBone,
+        restLocalPosition = child.localPosition,
+        restLocalRotation = child.localRotation,
+        positionSpring = Random.Range(28f, 40f),
+        positionDamping = Random.Range(5f, 7.5f),
+        rotationSpring = Random.Range(24f, 36f),
+        rotationDamping = Random.Range(4.5f, 6.5f),
+        positionLimit = Random.Range(0.11f, 0.18f),
+        rotationLimit = Random.Range(7f, 13f),
+        kickScale = Random.Range(0.82f, 1.18f)
+      });
+    }
   }
 
   void InitializeFromHierarchy() {
@@ -258,8 +385,8 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
       return;
     }
 
-    var renderers = leaves.GetComponentsInChildren<SpriteRenderer>(true);
-    if (renderers.Length == 0) {
+    var renderers = canopyRenderers;
+    if (renderers == null || renderers.Length == 0) {
       return;
     }
 
@@ -278,31 +405,26 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
     }
   }
 
-  void CacheFallingLeafSorting() {
-    var sortingGroup = leaves.GetComponent<SortingGroup>();
-    if (sortingGroup != null) {
-      fallingLeafSortingLayerId = sortingGroup.sortingLayerID;
-      fallingLeafSortingOrder = sortingGroup.sortingOrder + 1;
-      return;
-    }
-
-    var renderer = leaves.GetComponentInChildren<SpriteRenderer>(true);
-    if (renderer != null) {
-      fallingLeafSortingLayerId = renderer.sortingLayerID;
-      fallingLeafSortingOrder = renderer.sortingOrder + 1;
-    }
-  }
-
   void SpawnFallingLeaf(Vector3 awayFromHit) {
     var prefab = ChooseFallingLeafPrefab();
     if (prefab == null || leafs == null) {
       return;
     }
 
+    var bounds = new Bounds(leaves.position, Vector3.zero);
+    if (canopyRenderers != null && canopyRenderers.Length > 0) {
+      bounds = canopyRenderers[0].bounds;
+      for (var i = 1; i < canopyRenderers.Length; i++) {
+        if (canopyRenderers[i] != null) {
+          bounds.Encapsulate(canopyRenderers[i].bounds);
+        }
+      }
+    }
+
     var position = new Vector3(
-      Random.Range(leavesBounds.min.x, leavesBounds.max.x),
-      Random.Range(leavesBounds.center.y, leavesBounds.max.y),
-      leavesBounds.center.z
+      Random.Range(bounds.min.x, bounds.max.x),
+      Random.Range(bounds.center.y, bounds.max.y),
+      0f
     );
     var pool = GetFallingLeafPool(prefab);
     var leaf = pool?.Spawn(position, Quaternion.Euler(0f, 0f, Random.Range(0f, 360f)));
@@ -313,11 +435,13 @@ public sealed class TreeLeafHitReaction : MonoBehaviour {
     if (!leaf.TryGetComponent(out TreeFallingLeaf falling)) {
       falling = leaf.AddComponent<TreeFallingLeaf>();
     }
-    var groundY = transform.position.y - Random.Range(0.05f, 0.2f);
+
+    var groundY = groundMarker != null 
+        ? groundMarker.position.y 
+        : transform.position.y - Random.Range(0.05f, 0.2f);
+
     falling.Initialize(
       awayFromHit,
-      fallingLeafSortingLayerId,
-      fallingLeafSortingOrder,
       groundY,
       pool
     );
@@ -434,11 +558,14 @@ public sealed class TreeFallingLeaf : MonoBehaviour {
   float landedAge;
   float angularSpeed;
   bool landed;
+  float flutterPhase;
+  float flutterSpeed;
+  float swayPhase;
+  float swaySpeed;
+  float swayAmplitude;
 
   public void Initialize(
     Vector3 awayFromHit,
-    int sortingLayerId,
-    int sortingOrder,
     float targetGroundY,
     Pool pool
   ) {
@@ -447,15 +574,19 @@ public sealed class TreeFallingLeaf : MonoBehaviour {
     groundY = targetGroundY;
     velocity = awayFromHit * Random.Range(0.8f, 1.35f);
     velocity.y += Random.Range(0.35f, 0.8f);
-    angularSpeed = Random.Range(-240f, 240f);
+    velocity.z = 0f;
+    angularSpeed = Random.Range(-120f, 120f);
     age = 0f;
     landedAge = 0f;
     landed = false;
+    flutterPhase = Random.Range(0f, Mathf.PI * 2f);
+    flutterSpeed = Random.Range(4f, 8f);
+    swayPhase = Random.Range(0f, Mathf.PI * 2f);
+    swaySpeed = Random.Range(1.5f, 3.5f);
+    swayAmplitude = Random.Range(2.5f, 4.5f);
     for (var i = 0; i < renderers.Length; i++) {
       var renderer = renderers[i];
       if (renderer == null) continue;
-      renderer.sortingLayerID = sortingLayerId;
-      renderer.sortingOrder = sortingOrder;
       var color = renderer.color;
       color.a = 1f;
       renderer.color = color;
@@ -463,13 +594,26 @@ public sealed class TreeFallingLeaf : MonoBehaviour {
   }
 
   void Update() {
+    if (renderers == null) return;
+
     var deltaTime = Time.deltaTime;
     age += deltaTime;
 
     if (!landed) {
-      velocity.y -= Gravity * deltaTime;
+      velocity.x = Mathf.Lerp(velocity.x, 0f, deltaTime * 1.5f);
+      var swayForce = Mathf.Sin(age * swaySpeed + swayPhase) * swayAmplitude;
+      velocity.x += swayForce * deltaTime;
+
+      var effectiveGravity = Gravity;
+      var flutter = Mathf.Sin(age * flutterSpeed + flutterPhase);
+      if (flutter > 0f) {
+        effectiveGravity = Mathf.Lerp(Gravity, Gravity * 0.05f, flutter);
+      }
+      velocity.y -= effectiveGravity * deltaTime;
+      velocity.y = Mathf.Max(velocity.y, -3.5f);
+
       transform.position += velocity * deltaTime;
-      transform.Rotate(0f, 0f, angularSpeed * deltaTime);
+      transform.Rotate(0f, 0f, (angularSpeed + velocity.x * -35f) * deltaTime);
 
       if (transform.position.y <= groundY) {
         var position = transform.position;

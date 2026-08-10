@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameplayInput : MonoBehaviour {
   static readonly bool ForceDisableDebugLogsForPerfPass = true;
@@ -88,11 +89,30 @@ public class GameplayInput : MonoBehaviour {
   private PendingSuperAttack pendingSuperAttack1; // attack1 + attack2 -> superattack1
   private PendingSuperAttack pendingSuperAttack2; // attack3 + attack4 -> superattack2
   private float lastAttackStartedAt = float.NegativeInfinity;
+  private float lastAttackActualTime = float.NegativeInfinity;
+  private string expectedNextComboMove = null;
   private int lastAttackGateLogFrame = -1;
   private float nextPlayerReferenceResolveAt = -1f;
   private float nextWallCollisionFilterRefreshAt = -1f;
+  private GameObject wallCollisionFilterPlayerRoot;
+  private Collider2D wallCollisionFilterFootTouch;
+  private readonly List<Collider2D> wallCollisionFilterPlayerColliders = new(16);
+  private readonly List<GameObject> wallCollisionFilterSceneRoots = new(32);
+  private readonly List<Transform> wallCollisionFilterHierarchyStack = new(256);
+  private readonly List<BoxCollider2D> wallCollisionFilterColliderScratch = new(16);
+  private readonly List<BoxCollider2D> wallCollisionFilterWallColliders = new(128);
+  private readonly HashSet<EntityId> wallCollisionFilterWallColliderIds = new(128);
+  private readonly HashSet<ulong> wallCollisionFilterObservedPairIds = new(256);
+  private readonly HashSet<ulong> wallCollisionFilterAppliedPairIds = new(256);
+  private readonly List<ulong> wallCollisionFilterStalePairIds = new(64);
+  private Scene wallCollisionFilterScene;
+  private float nextWallCollisionHierarchyRescanAt = -1f;
+  private bool wallCollisionFilterWallsDirty = true;
 
   void OnEnable() {
+    wallCollisionFilterWallsDirty = true;
+    nextWallCollisionHierarchyRescanAt = -1f;
+    nextWallCollisionFilterRefreshAt = -1f;
     RegisterInputHandlers();
   }
 
@@ -102,6 +122,14 @@ public class GameplayInput : MonoBehaviour {
 
   void RegisterInputHandlers() {
     if (actions.Count > 0) return;
+    actions.Add(MessageBus.On("LocationUpdated", InvalidateWallCollisionFilterWalls));
+    actions.Add(MessageBus.On("LocationLocationChanged", InvalidateWallCollisionFilterWalls));
+    actions.Add(MessageBus.On("gameplay.comboHitLanded", o => {
+      if (o is string nextMove && !string.IsNullOrEmpty(nextMove)) {
+        lastAttackStartedAt = float.NegativeInfinity;
+        expectedNextComboMove = nextMove;
+      }
+    }));
     actions.Add(MessageBus.On("gameplay.attack1", o => { if (_CanProcessCharacterAction(o)) attack1(); }));
     actions.Add(MessageBus.On("gameplay.attack2", o => { if (_CanProcessCharacterAction(o)) attack2(); }));
     actions.Add(MessageBus.On("gameplay.attack3", o => { if (_CanProcessCharacterAction(o)) attack3(); }));
@@ -260,44 +288,172 @@ public class GameplayInput : MonoBehaviour {
   }
 
   void ConfigureWallCollisionFilter(GameObject playerRoot) {
+    nextWallCollisionFilterRefreshAt = Time.unscaledTime + 0.25f;
+
     if (playerRoot == null) {
+      ResetWallCollisionFilterPlayerCache(null);
       return;
     }
 
-    var playerColliders = playerRoot.GetComponentsInChildren<Collider2D>(true);
-    Collider2D footTouch = null;
-    for (var i = 0; i < playerColliders.Length; i++) {
-      var candidate = playerColliders[i];
-      if (candidate != null &&
-          string.Equals(candidate.gameObject.name, "foottouch", StringComparison.OrdinalIgnoreCase)) {
-        footTouch = candidate;
-        break;
-      }
+    if (!ReferenceEquals(wallCollisionFilterPlayerRoot, playerRoot) ||
+        wallCollisionFilterFootTouch == null) {
+      ResetWallCollisionFilterPlayerCache(playerRoot);
+    }
+    else {
+      RefreshWallCollisionFilterPlayerColliders();
     }
 
-    if (footTouch == null) {
+    if (wallCollisionFilterFootTouch == null) {
       return;
     }
 
-    var wallObjects = GameObject.FindGameObjectsWithTag("Wall");
-    for (var i = 0; i < playerColliders.Length; i++) {
-      var playerCollider = playerColliders[i];
-      if (playerCollider == null || playerCollider == footTouch) {
+    CollectActiveSceneWallColliders();
+    wallCollisionFilterObservedPairIds.Clear();
+
+    for (var i = 0; i < wallCollisionFilterPlayerColliders.Count; i++) {
+      var playerCollider = wallCollisionFilterPlayerColliders[i];
+      if (playerCollider == null ||
+          playerCollider == wallCollisionFilterFootTouch ||
+          !playerCollider.isActiveAndEnabled) {
         continue;
       }
 
-      for (var j = 0; j < wallObjects.Length; j++) {
-        var wallColliders = wallObjects[j].GetComponentsInChildren<BoxCollider2D>(true);
-        for (var k = 0; k < wallColliders.Length; k++) {
-          var wallCollider = wallColliders[k];
-          if (wallCollider != null) {
-            Physics2D.IgnoreCollision(playerCollider, wallCollider, true);
-          }
+      for (var j = 0; j < wallCollisionFilterWallColliders.Count; j++) {
+        var wallCollider = wallCollisionFilterWallColliders[j];
+        if (wallCollider == null || !wallCollider.isActiveAndEnabled) {
+          continue;
+        }
+
+        var pairId = BuildWallCollisionPairId(playerCollider, wallCollider);
+        wallCollisionFilterObservedPairIds.Add(pairId);
+        if (wallCollisionFilterAppliedPairIds.Add(pairId) ||
+            !Physics2D.GetIgnoreCollision(playerCollider, wallCollider)) {
+          Physics2D.IgnoreCollision(playerCollider, wallCollider, true);
         }
       }
     }
 
-    nextWallCollisionFilterRefreshAt = Time.unscaledTime + 0.25f;
+    wallCollisionFilterStalePairIds.Clear();
+    foreach (var pairId in wallCollisionFilterAppliedPairIds) {
+      if (!wallCollisionFilterObservedPairIds.Contains(pairId)) {
+        wallCollisionFilterStalePairIds.Add(pairId);
+      }
+    }
+
+    for (var i = 0; i < wallCollisionFilterStalePairIds.Count; i++) {
+      wallCollisionFilterAppliedPairIds.Remove(wallCollisionFilterStalePairIds[i]);
+    }
+  }
+
+  void ResetWallCollisionFilterPlayerCache(GameObject playerRoot) {
+    wallCollisionFilterPlayerRoot = playerRoot;
+    wallCollisionFilterFootTouch = null;
+    wallCollisionFilterPlayerColliders.Clear();
+    wallCollisionFilterObservedPairIds.Clear();
+    wallCollisionFilterAppliedPairIds.Clear();
+    wallCollisionFilterStalePairIds.Clear();
+    wallCollisionFilterSceneRoots.Clear();
+    wallCollisionFilterHierarchyStack.Clear();
+    wallCollisionFilterColliderScratch.Clear();
+    wallCollisionFilterWallColliders.Clear();
+    wallCollisionFilterWallColliderIds.Clear();
+    wallCollisionFilterWallsDirty = true;
+    nextWallCollisionHierarchyRescanAt = -1f;
+
+    if (playerRoot == null) {
+      return;
+    }
+
+    RefreshWallCollisionFilterPlayerColliders();
+  }
+
+  void RefreshWallCollisionFilterPlayerColliders() {
+    wallCollisionFilterPlayerColliders.Clear();
+    wallCollisionFilterFootTouch = null;
+    if (wallCollisionFilterPlayerRoot == null) return;
+
+    wallCollisionFilterPlayerRoot.GetComponentsInChildren<Collider2D>(true, wallCollisionFilterPlayerColliders);
+    for (var i = 0; i < wallCollisionFilterPlayerColliders.Count; i++) {
+      var candidate = wallCollisionFilterPlayerColliders[i];
+      if (candidate != null &&
+          string.Equals(candidate.gameObject.name, "foottouch", StringComparison.OrdinalIgnoreCase)) {
+        wallCollisionFilterFootTouch = candidate;
+        break;
+      }
+    }
+  }
+
+  void CollectActiveSceneWallColliders() {
+    var activeScene = SceneManager.GetActiveScene();
+    if (!activeScene.IsValid() || !activeScene.isLoaded) {
+      wallCollisionFilterWallsDirty = true;
+      wallCollisionFilterScene = default;
+      wallCollisionFilterWallColliders.Clear();
+      wallCollisionFilterWallColliderIds.Clear();
+      return;
+    }
+    if (wallCollisionFilterScene != activeScene) {
+      wallCollisionFilterWallsDirty = true;
+    }
+    if (!wallCollisionFilterWallsDirty && Time.unscaledTime < nextWallCollisionHierarchyRescanAt) {
+      return;
+    }
+
+    wallCollisionFilterSceneRoots.Clear();
+    wallCollisionFilterHierarchyStack.Clear();
+    wallCollisionFilterWallColliders.Clear();
+    wallCollisionFilterWallColliderIds.Clear();
+
+    activeScene.GetRootGameObjects(wallCollisionFilterSceneRoots);
+    for (var i = 0; i < wallCollisionFilterSceneRoots.Count; i++) {
+      var root = wallCollisionFilterSceneRoots[i];
+      if (root != null && root.activeInHierarchy) {
+        wallCollisionFilterHierarchyStack.Add(root.transform);
+      }
+    }
+
+    while (wallCollisionFilterHierarchyStack.Count > 0) {
+      var lastIndex = wallCollisionFilterHierarchyStack.Count - 1;
+      var current = wallCollisionFilterHierarchyStack[lastIndex];
+      wallCollisionFilterHierarchyStack.RemoveAt(lastIndex);
+      if (current == null || !current.gameObject.activeInHierarchy) {
+        continue;
+      }
+
+      var currentObject = current.gameObject;
+      if (currentObject.CompareTag("Wall")) {
+        wallCollisionFilterColliderScratch.Clear();
+        currentObject.GetComponentsInChildren<BoxCollider2D>(true, wallCollisionFilterColliderScratch);
+        for (var i = 0; i < wallCollisionFilterColliderScratch.Count; i++) {
+          var wallCollider = wallCollisionFilterColliderScratch[i];
+          if (wallCollider != null && wallCollisionFilterWallColliderIds.Add(wallCollider.GetEntityId())) {
+            wallCollisionFilterWallColliders.Add(wallCollider);
+          }
+        }
+      }
+
+      for (var i = 0; i < current.childCount; i++) {
+        var child = current.GetChild(i);
+        if (child != null && child.gameObject.activeInHierarchy) {
+          wallCollisionFilterHierarchyStack.Add(child);
+        }
+      }
+    }
+
+    wallCollisionFilterScene = activeScene;
+    wallCollisionFilterWallsDirty = false;
+    nextWallCollisionHierarchyRescanAt = Time.unscaledTime + 5f;
+  }
+
+  void InvalidateWallCollisionFilterWalls(object payload) {
+    wallCollisionFilterWallsDirty = true;
+    nextWallCollisionHierarchyRescanAt = -1f;
+    nextWallCollisionFilterRefreshAt = -1f;
+  }
+
+  static ulong BuildWallCollisionPairId(Collider2D playerCollider, Collider2D wallCollider) {
+    return ((ulong)(uint)playerCollider.GetEntityId().GetHashCode() << 32) |
+           (uint)wallCollider.GetEntityId().GetHashCode();
   }
 
   static GameObject ResolveRootFromComponent(Component component) {
@@ -802,10 +958,49 @@ public class GameplayInput : MonoBehaviour {
                              pendingElapsed <= superAttackWindowSeconds;
     bool isCompletingPair = pendingStillValid && pending.FirstAttackIndex != pressedIndex;
 
+    var mappedAttackAnimation = _ResolveMappedAnimation(pressedIndex == 1 ? "attack1"
+      : pressedIndex == 2 ? "attack2"
+      : pressedIndex == 3 ? "attack3"
+      : pressedIndex == 4 ? "attack4"
+      : null, fallback: null);
+    var superAnimation = expectedNextComboMove != null
+      ? _ResolveMappedAnimation(superActionKey, fallback: null)
+      : null;
+    var expectingThisSuper =
+      expectedNextComboMove != null &&
+      string.Equals(superAnimation, expectedNextComboMove, StringComparison.OrdinalIgnoreCase);
+
+    if (expectedNextComboMove != null) {
+      if (isCompletingPair) {
+        if (!string.Equals(superAnimation, expectedNextComboMove, StringComparison.OrdinalIgnoreCase)) {
+          lastAttackStartedAt = lastAttackActualTime;
+          Debug.Log($"[GameplayInput] Combo dropped! Expected: {expectedNextComboMove}, Pressed: {superAnimation}");
+        } else {
+          Debug.Log($"[GameplayInput] Combo continued! Expected: {expectedNextComboMove}, Pressed: {superAnimation}");
+        }
+      } else {
+        if (expectingThisSuper) {
+          pending.IsActive = true;
+          pending.FirstAttackIndex = pressedIndex;
+          pending.FirstPressTime = now;
+          return;
+        }
+
+        if (!string.Equals(mappedAttackAnimation, expectedNextComboMove, StringComparison.OrdinalIgnoreCase)) {
+          lastAttackStartedAt = lastAttackActualTime;
+          Debug.Log($"[GameplayInput] Combo dropped! Expected: {expectedNextComboMove}, Pressed: {mappedAttackAnimation}");
+        } else {
+          Debug.Log($"[GameplayInput] Combo continued! Expected: {expectedNextComboMove}, Pressed: {mappedAttackAnimation}");
+        }
+      }
+      expectedNextComboMove = null;
+    }
+
     if (isCompletingPair) {
       pending.IsActive = false;
       if (_ExecuteSuperAttackAction(superActionKey, pressedIndex)) {
         lastAttackStartedAt = now;
+        lastAttackActualTime = now;
       }
       return;
     }
@@ -820,6 +1015,7 @@ public class GameplayInput : MonoBehaviour {
         note: "remaining_s=" + cooldownRemaining.ToString("0.###")
       );
       _LogAttackGate("cooldown", gearController != null ? gearController.CurrentAnimation : "", "");
+      Debug.Log($"[GameplayInput] Attack gated by cooldown. Remaining: {cooldownRemaining:F2}s");
       return;
     }
 
@@ -831,6 +1027,7 @@ public class GameplayInput : MonoBehaviour {
     if (!played) return;
 
     lastAttackStartedAt = now;
+    lastAttackActualTime = now;
     pending.IsActive = true;
     pending.FirstAttackIndex = pressedIndex;
     pending.FirstPressTime = now;

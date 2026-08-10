@@ -66,7 +66,7 @@ public class Projectile : MonoBehaviour {
   private float lastAppliedRuntimeSpawnOffsetX;
   private float lastAppliedRuntimeSpawnOffsetY;
   private static readonly Dictionary<string, AnimData> EmptyAnimations = new();
-  private static readonly Dictionary<string, Dictionary<string, string>> EmptyInterrupts = new();
+  private static readonly Dictionary<string, string[]> EmptyInterrupts = new();
   private static readonly Dictionary<string, Dictionary<string, List<HBox>>> EmptyHBoxData = new();
   private readonly GameObject[] spriteTargetObjects = new GameObject[1];
   private readonly GameObject[] hBoxTargetObjects = new GameObject[1];

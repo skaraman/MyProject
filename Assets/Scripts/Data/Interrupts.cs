@@ -1,103 +1,61 @@
 using System.Collections.Generic;
 
 public static class Interrupts {
-  public static Dictionary<string, Dictionary<string, string>> Esperanza { get; } = new Dictionary<string, Dictionary<string, string>> {
-    ["Breathe"] = new Dictionary<string, string> {
-      { "Block", "BreatheToBlock" }, { "Dance", "BreatheToDance" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "PunchRight", "BreatheToPunchRight" }, { "Walk", "BreatheToWalk" }, { "Run", "BreatheToRun" }, { "Sprint", "BreatheToSprint" }
+  public static Dictionary<string, string[]> Esperanza { get; } = new() {
+    ["Breathe"] = new[] {
+      "Block", "Dance", "Dodge", "Jump", "KickLeft", "KickRight", "PunchLeft", "PunchRight", "Walk", "Run", "Sprint"
     },
-    ["BreatheToWalk"] = new Dictionary<string, string> {
-      { "Breathe", "WalkToBreathe" }, { "Run", "WalkToRun" }, { "Sprint", "WalkToSprint" }, { "Block", "WalkToBlock" }, { "Dodge", "WalkToDodge" }, { "Jump", "WalkToJump" }, { "PunchRight", "WalkToPunchRight" }, { "PunchLeft", "WalkToPunchLeft" }, { "KickLeft", "WalkToKickLeft" }, { "KickRight", "WalkToKickRight" },
+    ["Walk"] = new[] {
+      "Breathe", "Run", "Sprint", "PunchRight", "PunchLeft", "KickLeft", "KickRight", "Jump", "Dodge", "Block"
     },
-    ["BreatheToRun"] = new Dictionary<string, string> {
-      { "Breathe", "RunToBreathe" }, { "Walk", "RunToWalk" }, { "Sprint", "RunToSprint" }, { "Block", "RunToBlock" }, { "Dodge", "RunToDodge" }, { "Jump", "RunToJump" }, { "PunchRight", "RunToPunchRight" }, { "PunchLeft", "RunToPunchLeft" }, { "KickLeft", "RunToKickLeft" }, { "KickRight", "RunToKickRight" },
+    ["Run"] = new[] {
+      "Breathe", "Walk", "Sprint", "PunchRight", "PunchLeft", "KickLeft", "KickRight", "Jump", "Dodge", "Block"
     },
-    ["BreatheToSprint"] = new Dictionary<string, string> {
-      { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "Block", "SprintToBlock" }, { "Dodge", "SprintToDodge" }, { "Jump", "SprintToJump" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" },
+    ["Sprint"] = new[] {
+      "Breathe", "Walk", "Run", "PunchRight", "PunchLeft", "KickLeft", "KickRight", "Jump", "Dodge", "Block"
     },
-    ["BreatheToDance"] = new Dictionary<string, string> {
-      { "Block", "DanceToBlock" }, { "Dodge", "DanceToDodge" }, { "Jump", "DanceToJump" }, { "KickLeft", "DanceToKickLeft" }, { "KickRight", "DanceToKickRight" }, { "PunchLeft", "DanceToPunchLeft" }, { "PunchRight", "DanceToPunchRight" }, { "Walk", "DanceToWalk" }, { "Run", "DanceToRun" }, { "Sprint", "DanceToSprint" }
+    ["Dance"] = new[] {
+        "Block", "Dodge", "Jump", "KickRight", "KickLeft", "PunchLeft", "PunchRight", "Run", "Sprint", "Walk"
     },
-    ["Walk"] = new Dictionary<string, string> {
-      { "Breathe", "WalkToBreathe" }, { "Run", "WalkToRun" }, { "Sprint", "WalkToSprint" }, { "PunchRight", "WalkToPunchRight" }, { "PunchLeft", "WalkToPunchLeft" }, { "KickLeft", "WalkToKickLeft" }, { "KickRight", "WalkToKickRight" }, { "Jump", "WalkToJump" }, { "Dodge", "WalkToDodge" }, { "Block", "WalkToBlock" }
+    ["Block"] = new[] {
+      "Stance"
     },
-    ["WalkToBreathe"] = new Dictionary<string, string> {
-      { "Run", "BreatheToRun" }, { "Walk", "BreatheToWalk" }, { "Sprint", "BreatheToSprint" }, { "Block", "BreatheToBlock" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "PunchRight", "BreatheToPunchRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" },
+    ["Dodge"] = new[] {
+      "Stance"
     },
-    ["WalkToRun"] = new Dictionary<string, string> {
-      { "Breathe", "RunToBreathe" }, { "Walk", "RunToWalk" }, { "Sprint", "RunToSprint" }, { "Block", "RunToBlock" }, { "Dodge", "RunToDodge" }, { "Jump", "RunToJump" }, { "PunchRight", "RunToPunchRight" }, { "PunchLeft", "RunToPunchLeft" }, { "KickLeft", "RunToKickLeft" }, { "KickRight", "RunToKickRight" },
+    ["Jump"] = new[] {
+      "JumpDouble", "JumpFalling", "JumpLanding"
     },
-    ["WalkToSprint"] = new Dictionary<string, string> {
-      { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "Block", "SprintToBlock" }, { "Dodge", "SprintToDodge" }, { "Jump", "SprintToJump" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" },
+    ["JumpDouble"] = new[] {
+      "JumpFalling", "JumpLanding"
     },
-    ["Run"] = new Dictionary<string, string> {
-      { "Breathe", "RunToBreathe" }, { "Walk", "RunToWalk" }, { "Sprint", "RunToSprint" }, { "PunchRight", "RunToPunchRight" }, { "PunchLeft", "RunToPunchLeft" }, { "KickLeft", "RunToKickLeft" }, { "KickRight", "RunToKickRight" }, { "Jump", "RunToJump" }, { "Dodge", "RunToDodge" }, { "Block", "RunToBlock" }
+    ["JumpFalling"] = new[] {
+      "JumpLanding"
     },
-    ["RunToBreathe"] = new Dictionary<string, string> {
-      { "Run", "BreatheToRun" }, { "Walk", "BreatheToWalk" }, { "Sprint", "BreatheToSprint" }, { "Block", "BreatheToBlock" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "PunchRight", "BreatheToPunchRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" },
+    ["JumpLanding"] = new[] {
+      "Stance"
     },
-    ["RunToWalk"] = new Dictionary<string, string> {
-      { "Breathe", "WalkToBreathe" }, { "Run", "WalkToRun" }, { "Sprint", "WalkToSprint" }, { "Block", "WalkToBlock" }, { "Dodge", "WalkToDodge" }, { "Jump", "WalkToJump" }, { "PunchRight", "WalkToPunchRight" }, { "PunchLeft", "WalkToPunchLeft" }, { "KickLeft", "WalkToKickLeft" }, { "KickRight", "WalkToKickRight" },
+    ["KickLeft"] = new[] {
+      "KickRight", "PunchLeft", "PunchRight", "Stance"
     },
-    ["RunToSprint"] = new Dictionary<string, string> {
-      { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "Block", "SprintToBlock" }, { "Dodge", "SprintToDodge" }, { "Jump", "SprintToJump" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" },
+    ["KickRight"] = new[] {
+      "KickLeft", "PunchLeft", "PunchRight", "Stance"
     },
-    ["Sprint"] = new Dictionary<string, string> {
-      { "Breathe", "SprintToBreathe" }, { "Walk", "SprintToWalk" }, { "Run", "SprintToRun" }, { "PunchRight", "SprintToPunchRight" }, { "PunchLeft", "SprintToPunchLeft" }, { "KickLeft", "SprintToKickLeft" }, { "KickRight", "SprintToKickRight" }, { "Jump", "SprintToJump" }, { "Dodge", "SprintToDodge" }, { "Block", "SprintToBlock" },
+    ["PunchLeft"] = new[] {
+      "PunchRight", "KickRight", "KickLeft", "Stance"
     },
-    ["SprintToBreathe"] = new Dictionary<string, string> {
-      { "Run", "BreatheToRun" }, { "Walk", "BreatheToWalk" }, { "Sprint", "BreatheToSprint" }, { "Block", "BreatheToBlock" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "PunchRight", "BreatheToPunchRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" },
+    ["PunchRight"] = new[] {
+      "PunchLeft", "KickLeft", "KickRight", "Stance"
     },
-    ["SprintToWalk"] = new Dictionary<string, string> {
-      { "Breathe", "WalkToBreathe" }, { "Run", "WalkToRun" }, { "Sprint", "WalkToSprint" }, { "Block", "WalkToBlock" }, { "Dodge", "WalkToDodge" }, { "Jump", "WalkToJump" }, { "PunchRight", "WalkToPunchRight" }, { "PunchLeft", "WalkToPunchLeft" }, { "KickLeft", "WalkToKickLeft" }, { "KickRight", "WalkToKickRight" },
+    ["Stance"] = new[] {
+      "Walk", "Sprint", "Run", "PunchRight", "PunchLeft", "KickLeft", "KickRight", "Jump", "Dodge", "Breathe", "Block", "Blast"
     },
-    ["SprintToRun"] = new Dictionary<string, string> {
-      { "Breathe", "RunToBreathe" }, { "Walk", "RunToWalk" }, { "Sprint", "RunToSprint" }, { "Block", "RunToBlock" }, { "Dodge", "RunToDodge" }, { "Jump", "RunToJump" }, { "PunchRight", "RunToPunchRight" }, { "PunchLeft", "RunToPunchLeft" }, { "KickLeft", "RunToKickLeft" }, { "KickRight", "RunToKickRight" },
-    },
-    ["Dance"] = new Dictionary<string, string> {
-        { "Block", "DanceToBlock" }, { "Dodge", "DanceToDodge" }, { "Jump", "DanceToJump" }, { "KickRight", "DanceToKickRight" }, { "KickLeft", "DanceToKickLeft" }, { "PunchLeft", "DanceToPunchLeft" }, { "PunchRight", "DanceToPunchRight" }, { "Run", "DanceToRun" }, { "Sprint", "DanceToSprint" }, { "Walk", "DanceToWalk" },
-    },
-    ["DanceToBreathe"] = new Dictionary<string, string> {
-      { "Block", "BreatheToBlock" }, { "Dance", "BreatheToDance" }, { "Dodge", "BreatheToDodge" }, { "Jump", "BreatheToJump" }, { "KickLeft", "BreatheToKickLeft" }, { "KickRight", "BreatheToKickRight" }, { "PunchLeft", "BreatheToPunchLeft" }, { "PunchRight", "BreatheToPunchRight" }, { "Walk", "BreatheToWalk" }, { "Run", "BreatheToRun" }, { "Sprint", "BreatheToSprint" }
-    },
-    ["Block"] = new Dictionary<string, string> {
-      { "Stance","BlockToStance" }
-    },
-    ["Dodge"] = new Dictionary<string, string> {
-      { "Stance", "DodgeToStance" },
-    },
-    ["Jump"] = new Dictionary<string, string> {
-      { "JumpDouble", "JumpToJumpDouble" }, { "JumpFalling", "JumpToJumpFalling" }, { "JumpLanding", "JumpToJumpLanding" },
-    },
-    ["JumpDouble"] = new Dictionary<string, string> {
-      { "JumpFalling", "JumpDoubleToJumpFalling" }, { "JumpLanding", "JumpDoubleToJumpLanding" }
-    },
-    ["JumpFalling"] = new Dictionary<string, string> {
-      { "JumpLanding", "JumpFallingToJumpLanding" }
-    },
-    ["JumpLanding"] = new Dictionary<string, string> {
-      { "Stance", "JumpLandingToStance" },
-    },
-    ["KickLeft"] = new Dictionary<string, string> {
-      { "KickRight", "KickLeftToKickRight" }, { "PunchLeft", "KickLeftToPunchLeft" }, { "PunchRight", "KickLeftToPunchRight" }, { "Stance", "KickLeftToStance" },
-    },
-    ["KickRight"] = new Dictionary<string, string> {
-      { "KickLeft", "KickRightToKickLeft" }, { "PunchLeft", "KickRightToPunchLeft" }, { "PunchRight", "KickRightToPunchRight" }, { "Stance", "KickRightToStance" }
-    },
-    ["PunchLeft"] = new Dictionary<string, string> {
-      { "PunchRight", "PunchLeftToPunchRight" }, { "KickRight", "PunchLeftToKickRight" }, { "KickLeft", "PunchLeftToKickLeft" }, { "Stance", "PunchLeftToStance" }
-    },
-    ["PunchRight"] = new Dictionary<string, string> {
-      { "PunchLeft", "PunchRightToPunchLeft" }, { "KickLeft", "PunchRightToKickLeft" }, { "KickRight", "PunchRightToKickRight" }, { "Stance", "PunchRightToStance" }
-    },
-    ["Stance"] = new Dictionary<string, string> {
-      { "Walk", "StanceToWalk" }, { "Sprint", "StanceToSprint" }, { "Run", "StanceToRun" }, { "PunchRight", "StanceToPunchRight" }, { "PunchLeft", "StanceToPunchLeft" }, { "KickLeft", "StanceToKickLeft" }, { "KickRight", "StanceToKickRight" }, { "Jump", "StanceToJump" }, { "Dodge", "StanceToDodge" }, { "Breathe", "StanceToBreathe" }, { "Block", "StanceToBlock" }, { "Blast", "StanceToBlast" }
-    },
-    ["Blast"] = new Dictionary<string, string> {
-      { "Stance", "BlastToStance" }
+    ["Blast"] = new[] {
+      "Stance"
     }
   };
 
-  public static Dictionary<string, Dictionary<string, Dictionary<string, string>>> Enemies { get; } = new Dictionary<string, Dictionary<string, Dictionary<string, string>>> {
+  public static Dictionary<string, Dictionary<string, string[]>> Enemies { get; } = new() {
     { ImpData.EnemyType, ImpData.Interrupts }
   };
 }

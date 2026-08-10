@@ -13,6 +13,10 @@ using UnityEditor;
 #endif
 
 public static partial class TextureResidencyCache {
+  const int InitialFailureRetryDelayFrames = 15;
+  const int MaxFailureRetryDelayFrames = 600;
+  const int MaxFailureRetryShift = 5;
+
   static void RecordPinStateIfEnabled() {
     if (!SpriteStreamingDiagnostics.Enabled) return;
     SpriteStreamingDiagnostics.RecordPinState(GetPinSnapshot());
@@ -266,10 +270,21 @@ public static partial class TextureResidencyCache {
     }
 
     if (entry.isDone && !entry.isSuccess) {
-      Evict(normalizedAddress, entry);
-      entry = CreateEntry(normalizedAddress);
-      cache[normalizedAddress] = entry;
-      RecordNewEntryForFrame();
+      var contentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+      if (entry.failureContentVersion == contentVersion &&
+          Time.frameCount < entry.retryAfterFrame) {
+        return entry;
+      }
+
+      if (entry.failureContentVersion != contentVersion) {
+        entry.failureCount = 0;
+      }
+      // Keep the same entry so owner-pin leases remain bound across a transient
+      // failure. ReleaseHandle resets its load state and reuses its collections.
+      ReleaseHandle(entry);
+      entry.failureContentVersion = contentVersion;
+      entry.retryAfterFrame = 0;
+      entry.sessionCompletionGeneration = 0;
       return entry;
     }
 
@@ -277,6 +292,22 @@ public static partial class TextureResidencyCache {
       hit = true;
     }
     return entry;
+  }
+
+  static void RecordTerminalLoadFailure(CacheEntry entry) {
+    if (entry == null) return;
+    entry.failureContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
+    entry.failureCount = Math.Min(entry.failureCount + 1, MaxFailureRetryShift + 1);
+    var retryShift = Math.Min(entry.failureCount - 1, MaxFailureRetryShift);
+    var retryDelay = Math.Min(InitialFailureRetryDelayFrames << retryShift, MaxFailureRetryDelayFrames);
+    entry.retryAfterFrame = Time.frameCount + retryDelay;
+  }
+
+  static void ResetTerminalLoadFailure(CacheEntry entry) {
+    if (entry == null) return;
+    entry.failureCount = 0;
+    entry.retryAfterFrame = 0;
+    entry.failureContentVersion = ActiveContentRegistryRuntime.ReloadVersion;
   }
 
   static void RecordLookup(bool hit) {

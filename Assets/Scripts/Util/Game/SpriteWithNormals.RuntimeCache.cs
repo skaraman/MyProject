@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -564,24 +563,22 @@ public partial class SpriteWithNormals {
   SpriteAddressPair StripUnavailableRuntimeNormalAddress(SpriteAddressPair pair, SpriteLookupKey lookupKey) {
     var hasLegacyJpegNormal = IsLegacyJpegNormalAddress(pair.RuntimeNormalAddress);
     if ((hasLegacyJpegNormal || string.IsNullOrWhiteSpace(pair.RuntimeNormalAddress)) &&
-        TryBuildConventionNormalAddress(pair, out var conventionNormalAddress) &&
-        IsConventionAtlasAvailable(conventionNormalAddress)) {
-      var conventionPair = SpriteAddressPair.Create("", conventionNormalAddress);
-      pair.normalAddress = conventionPair.normalAddress;
-      pair.normalAtlasAddress = conventionPair.normalAtlasAddress;
-      pair.normalSpriteName = conventionPair.normalSpriteName;
+        TryBuildConventionNormalAddress(pair, out var conventionNormal) &&
+        IsConventionAtlasAvailable(conventionNormal.sliceAddress)) {
+      pair.normalAddress = conventionNormal.sliceAddress;
+      pair.normalAtlasAddress = conventionNormal.atlasAddress;
+      pair.normalSpriteName = conventionNormal.spriteName;
     }
     else if (hasLegacyJpegNormal) {
       ClearNormalAddress(ref pair);
     }
 
     if (string.IsNullOrWhiteSpace(pair.RuntimeSpecularAddress) &&
-        TryBuildConventionSpecularAddress(pair, out var conventionSpecularAddress) &&
-        IsConventionAtlasAvailable(conventionSpecularAddress)) {
-      var conventionSpecularPair = SpriteAddressPair.Create("", "", conventionSpecularAddress);
-      pair.specularAddress = conventionSpecularPair.specularAddress;
-      pair.specularAtlasAddress = conventionSpecularPair.specularAtlasAddress;
-      pair.specularSpriteName = conventionSpecularPair.specularSpriteName;
+        TryBuildConventionSpecularAddress(pair, out var conventionSpecular) &&
+        IsConventionAtlasAvailable(conventionSpecular.sliceAddress)) {
+      pair.specularAddress = conventionSpecular.sliceAddress;
+      pair.specularAtlasAddress = conventionSpecular.atlasAddress;
+      pair.specularSpriteName = conventionSpecular.spriteName;
     }
 
 #if UNITY_EDITOR
@@ -672,9 +669,9 @@ public partial class SpriteWithNormals {
     s_ConventionSpecularAddressCacheContentReloadVersion = contentReloadVersion;
   }
 
-  static void CacheConventionNormalAddress(ConventionNormalCacheKey cacheKey, string normalAddress) {
+  static void CacheConventionNormalAddress(ConventionNormalCacheKey cacheKey, ConventionRuntimeRef normalRef) {
     if (s_ConventionNormalAddressCache.ContainsKey(cacheKey)) {
-      s_ConventionNormalAddressCache[cacheKey] = normalAddress ?? "";
+      s_ConventionNormalAddressCache[cacheKey] = normalRef;
       return;
     }
 
@@ -685,13 +682,13 @@ public partial class SpriteWithNormals {
     }
 
     if (s_ConventionNormalAddressCache.Count >= MaxConventionNormalAddressCacheEntries) return;
-    s_ConventionNormalAddressCache[cacheKey] = normalAddress ?? "";
+    s_ConventionNormalAddressCache[cacheKey] = normalRef;
     s_ConventionNormalAddressCacheInsertionOrder.Enqueue(cacheKey);
   }
 
-  static void CacheConventionSpecularAddress(ConventionNormalCacheKey cacheKey, string specularAddress) {
+  static void CacheConventionSpecularAddress(ConventionNormalCacheKey cacheKey, ConventionRuntimeRef specularRef) {
     if (s_ConventionSpecularAddressCache.ContainsKey(cacheKey)) {
-      s_ConventionSpecularAddressCache[cacheKey] = specularAddress ?? "";
+      s_ConventionSpecularAddressCache[cacheKey] = specularRef;
       return;
     }
 
@@ -702,7 +699,7 @@ public partial class SpriteWithNormals {
     }
 
     if (s_ConventionSpecularAddressCache.Count >= MaxConventionNormalAddressCacheEntries) return;
-    s_ConventionSpecularAddressCache[cacheKey] = specularAddress ?? "";
+    s_ConventionSpecularAddressCache[cacheKey] = specularRef;
     s_ConventionSpecularAddressCacheInsertionOrder.Enqueue(cacheKey);
   }
 
@@ -794,29 +791,21 @@ public partial class SpriteWithNormals {
   }
 #endif
 
-  static bool TryBuildConventionNormalAddress(SpriteAddressPair pair, out string normalAddress) {
-    normalAddress = "";
+  static bool TryBuildConventionNormalAddress(SpriteAddressPair pair, out ConventionRuntimeRef normalRef) {
+    normalRef = default;
     var colorAtlasAddress = pair.RuntimeColorAddress;
     if (string.IsNullOrWhiteSpace(colorAtlasAddress)) return false;
 
     EnsureConventionNormalAddressCacheVersion();
     var cacheKey = new ConventionNormalCacheKey(colorAtlasAddress, pair.colorSpriteName);
-    if (s_ConventionNormalAddressCache.TryGetValue(cacheKey, out normalAddress)) {
-      return !string.IsNullOrWhiteSpace(normalAddress);
+    if (s_ConventionNormalAddressCache.TryGetValue(cacheKey, out normalRef)) {
+      return normalRef.IsValid;
     }
 
-    if (!string.Equals(Path.GetExtension(colorAtlasAddress), ".png", StringComparison.OrdinalIgnoreCase)) {
-      CacheConventionNormalAddress(cacheKey, "");
+    if (!TryBuildConventionAtlasAddress(colorAtlasAddress, 'N', out var normalAtlasAddress)) {
+      CacheConventionNormalAddress(cacheKey, default);
       return false;
     }
-
-    var colorStem = Path.GetFileNameWithoutExtension(colorAtlasAddress);
-    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal) || colorStem.EndsWith("S", StringComparison.Ordinal)) {
-      CacheConventionNormalAddress(cacheKey, "");
-      return false;
-    }
-
-    var normalAtlasAddress = colorAtlasAddress.Substring(0, colorAtlasAddress.Length - 4) + "N.png";
     var normalSpriteName = pair.colorSpriteName;
 #if UNITY_EDITOR
     if (Application.isEditor && !string.IsNullOrWhiteSpace(normalSpriteName)) {
@@ -830,36 +819,29 @@ public partial class SpriteWithNormals {
       }
     }
 #endif
-    normalAddress = string.IsNullOrWhiteSpace(normalSpriteName)
+    var normalAddress = string.IsNullOrWhiteSpace(normalSpriteName)
       ? normalAtlasAddress
       : SpriteSliceAddressUtility.BuildSliceAddress(normalAtlasAddress, normalSpriteName);
-    CacheConventionNormalAddress(cacheKey, normalAddress);
-    return !string.IsNullOrWhiteSpace(normalAddress);
+    normalRef = new ConventionRuntimeRef(normalAddress, normalAtlasAddress, normalSpriteName);
+    CacheConventionNormalAddress(cacheKey, normalRef);
+    return normalRef.IsValid;
   }
 
-  static bool TryBuildConventionSpecularAddress(SpriteAddressPair pair, out string specularAddress) {
-    specularAddress = "";
+  static bool TryBuildConventionSpecularAddress(SpriteAddressPair pair, out ConventionRuntimeRef specularRef) {
+    specularRef = default;
     var colorAtlasAddress = pair.RuntimeColorAddress;
     if (string.IsNullOrWhiteSpace(colorAtlasAddress)) return false;
 
     EnsureConventionNormalAddressCacheVersion();
     var cacheKey = new ConventionNormalCacheKey(colorAtlasAddress, pair.colorSpriteName);
-    if (s_ConventionSpecularAddressCache.TryGetValue(cacheKey, out specularAddress)) {
-      return !string.IsNullOrWhiteSpace(specularAddress);
+    if (s_ConventionSpecularAddressCache.TryGetValue(cacheKey, out specularRef)) {
+      return specularRef.IsValid;
     }
 
-    if (!string.Equals(Path.GetExtension(colorAtlasAddress), ".png", StringComparison.OrdinalIgnoreCase)) {
-      CacheConventionSpecularAddress(cacheKey, "");
+    if (!TryBuildConventionAtlasAddress(colorAtlasAddress, 'S', out var specularAtlasAddress)) {
+      CacheConventionSpecularAddress(cacheKey, default);
       return false;
     }
-
-    var colorStem = Path.GetFileNameWithoutExtension(colorAtlasAddress);
-    if (string.IsNullOrWhiteSpace(colorStem) || colorStem.EndsWith("N", StringComparison.Ordinal) || colorStem.EndsWith("S", StringComparison.Ordinal)) {
-      CacheConventionSpecularAddress(cacheKey, "");
-      return false;
-    }
-
-    var specularAtlasAddress = colorAtlasAddress.Substring(0, colorAtlasAddress.Length - 4) + "S.png";
     var specularSpriteName = pair.colorSpriteName;
 #if UNITY_EDITOR
     if (Application.isEditor && !string.IsNullOrWhiteSpace(specularSpriteName)) {
@@ -869,11 +851,32 @@ public partial class SpriteWithNormals {
       }
     }
 #endif
-    specularAddress = string.IsNullOrWhiteSpace(specularSpriteName)
+    var specularAddress = string.IsNullOrWhiteSpace(specularSpriteName)
       ? specularAtlasAddress
       : SpriteSliceAddressUtility.BuildSliceAddress(specularAtlasAddress, specularSpriteName);
-    CacheConventionSpecularAddress(cacheKey, specularAddress);
-    return !string.IsNullOrWhiteSpace(specularAddress);
+    specularRef = new ConventionRuntimeRef(specularAddress, specularAtlasAddress, specularSpriteName);
+    CacheConventionSpecularAddress(cacheKey, specularRef);
+    return specularRef.IsValid;
+  }
+
+  static bool TryBuildConventionAtlasAddress(string colorAtlasAddress, char channelSuffix, out string channelAtlasAddress) {
+    channelAtlasAddress = "";
+    if (string.IsNullOrWhiteSpace(colorAtlasAddress) ||
+        !colorAtlasAddress.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) {
+      return false;
+    }
+
+    var stemLength = colorAtlasAddress.Length - 4;
+    var fileNameStart = Math.Max(
+      colorAtlasAddress.LastIndexOf('/') + 1,
+      colorAtlasAddress.LastIndexOf('\\') + 1
+    );
+    if (stemLength <= fileNameStart) return false;
+    var finalStemCharacter = colorAtlasAddress[stemLength - 1];
+    if (finalStemCharacter == 'N' || finalStemCharacter == 'S') return false;
+
+    channelAtlasAddress = colorAtlasAddress.Substring(0, stemLength) + channelSuffix + ".png";
+    return true;
   }
 
   static bool IsConventionAtlasAvailable(string atlasOrSliceAddress) {
@@ -968,8 +971,7 @@ public partial class SpriteWithNormals {
   }
 
   void EnsurePairLookupCacheCapacity() {
-    if (_pairLookupHitCache.Count < MaxPairLookupCacheEntries &&
-        _pairLookupMissCache.Count < MaxPairLookupCacheEntries) return;
+    if (_pairLookupHitCache.Count + _pairLookupMissCache.Count < MaxPairLookupCacheEntries) return;
 
     // A simple bounded cache avoids runaway growth without introducing per-frame eviction overhead.
     _pairLookupHitCache.Clear();

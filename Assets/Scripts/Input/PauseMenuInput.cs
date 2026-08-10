@@ -37,11 +37,13 @@ public class PauseMenuInput : MonoBehaviour {
 
   void Awake() {
     EnsureCharacterButtonNavigation();
+    EnsureInventoryButtonNavigation();
   }
 
   void OnEnable() {
     topMenuFocused = true;
     EnsureCharacterButtonNavigation();
+    EnsureInventoryButtonNavigation();
     EnsureSectionsInitialized();
     SyncSelectedMenuWithVisibleSection();
     ResolveFormsListReference();
@@ -104,6 +106,16 @@ public class PauseMenuInput : MonoBehaviour {
 
     if (CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>() == null) {
       CharacterMenu.AddComponent<PauseMenuCharacterButtonsInput>();
+    }
+  }
+
+  void EnsureInventoryButtonNavigation() {
+    if (InventoryMenu == null) {
+      return;
+    }
+
+    if (InventoryMenu.GetComponent<PauseMenuCharacterButtonsInput>() == null) {
+      InventoryMenu.AddComponent<PauseMenuCharacterButtonsInput>();
     }
   }
 
@@ -227,22 +239,25 @@ public class PauseMenuInput : MonoBehaviour {
   }
 
   void menuLeft() {
+    if (TryCancelGearChoice()) {
+      return;
+    }
     FocusTopMenu();
     MoveTopMenuSelection(-1);
   }
 
   void menuRight() {
+    if (TryCancelGearChoice()) {
+      return;
+    }
     FocusTopMenu();
     MoveTopMenuSelection(1);
   }
 
   void FocusTopMenu() {
     topMenuFocused = true;
-    if (CharacterMenu == null) {
-      return;
-    }
-
-    CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopMenu();
+    CharacterMenu?.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopMenu();
+    InventoryMenu?.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopMenu();
   }
 
   void OnCharacterTopMenuFocusChanged(object payload) {
@@ -285,6 +300,12 @@ public class PauseMenuInput : MonoBehaviour {
         return;
       }
     }
+    if (InventoryMenu != null && InventoryMenu.activeSelf) {
+      var inventoryButtonsInput = InventoryMenu.GetComponent<PauseMenuCharacterButtonsInput>();
+      if (inventoryButtonsInput != null && inventoryButtonsInput.HasFocusedButton) {
+        return;
+      }
+    }
 
     if (activeHoverIndex != -1) {
       SelectMenuIndex(activeHoverIndex);
@@ -304,6 +325,10 @@ public class PauseMenuInput : MonoBehaviour {
   }
 
   void hover(object target) {
+    if (IsGearChoiceOpen()) {
+      return;
+    }
+
     var targetObject = target as GameObject;
 
     if (OptionsMenu != null && OptionsMenu.activeSelf) {
@@ -381,6 +406,10 @@ public class PauseMenuInput : MonoBehaviour {
   }
 
   void click(object target) {
+    if (IsGearChoiceOpen()) {
+      return;
+    }
+
     var targetObject = target as GameObject;
     if (targetObject == null) return;
 
@@ -618,7 +647,24 @@ public class PauseMenuInput : MonoBehaviour {
   }
 
   void cancel() {
+    if (TryCancelGearChoice()) {
+      return;
+    }
     MessageBus.Send("closePauseMenu", null);
+  }
+
+  bool IsGearChoiceOpen() {
+    return CharacterMenu != null && CharacterMenu.activeInHierarchy &&
+      gearButtons != null && gearButtons.IsChoiceWindowOpen;
+  }
+
+  bool TryCancelGearChoice() {
+    if (CharacterMenu == null) {
+      return false;
+    }
+
+    var navigation = CharacterMenu.GetComponent<PauseMenuCharacterButtonsInput>();
+    return navigation != null && navigation.TryCancelGearChoice();
   }
 
   void left() {
@@ -676,6 +722,11 @@ public class PauseMenuInput : MonoBehaviour {
 
     if (AbilityMenu != null && AbilityMenu.activeSelf) {
       AbilityMenu.GetComponent<PauseMenuAbilitiesViewController>()?.FocusSwitch();
+      return;
+    }
+
+    if (InventoryMenu != null && InventoryMenu.activeSelf) {
+      InventoryMenu.GetComponent<PauseMenuCharacterButtonsInput>()?.FocusTopmostButton();
       return;
     }
 

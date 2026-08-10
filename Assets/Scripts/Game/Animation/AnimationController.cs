@@ -19,7 +19,7 @@ public partial class AnimationController {
   static readonly ProfilerMarker SwitchBounceProfilerMarker = new ProfilerMarker("AnimationController.SwitchBounce");
   static readonly ProfilerMarker SwitchEventsProfilerMarker = new ProfilerMarker("AnimationController.SwitchEvents");
   static readonly Dictionary<string, AnimData> EmptyAnimationData = new();
-  static readonly Dictionary<string, Dictionary<string, string>> EmptyInterruptData = new();
+  static readonly Dictionary<string, string[]> EmptyInterruptData = new();
   static readonly Dictionary<string, Dictionary<string, List<BounceFrame>>> EmptyBounceData = new();
   static readonly Dictionary<string, Dictionary<string, List<HBox>>> EmptyHBoxData = new();
 
@@ -53,7 +53,7 @@ public partial class AnimationController {
   private Vector3 baseScale = Vector3.one;
 
   private Dictionary<string, AnimData> animationData = EmptyAnimationData;
-  private Dictionary<string, Dictionary<string, string>> interruptData = EmptyInterruptData;
+  private Dictionary<string, string[]> interruptData = EmptyInterruptData;
   private Dictionary<string, Dictionary<string, List<BounceFrame>>> bounceData = EmptyBounceData;
   private Dictionary<string, Dictionary<string, List<HBox>>> hBoxData = EmptyHBoxData;
 
@@ -159,7 +159,7 @@ public partial class AnimationController {
     IEnumerable<GameObject> bounces,
     IEnumerable<GameObject> hBoxes,
     Dictionary<string, AnimData> animations,
-    Dictionary<string, Dictionary<string, string>> interrupts,
+    Dictionary<string, string[]> interrupts,
     Dictionary<string, Dictionary<string, List<BounceFrame>>> bouncesData,
     Dictionary<string, Dictionary<string, List<HBox>>> hBoxesData,
     string defaultAnim,
@@ -191,7 +191,7 @@ public partial class AnimationController {
 
   public void ConfigureData(
     Dictionary<string, AnimData> animations,
-    Dictionary<string, Dictionary<string, string>> interrupts,
+    Dictionary<string, string[]> interrupts,
     Dictionary<string, Dictionary<string, List<BounceFrame>>> bounces = null,
     Dictionary<string, Dictionary<string, List<HBox>>> hboxes = null
   ) {

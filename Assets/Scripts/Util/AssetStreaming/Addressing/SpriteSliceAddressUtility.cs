@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 
 public static class SpriteSliceAddressUtility {
+  const int MaxParseCacheEntries = 65536;
   public static IComparer<string> NaturalStringComparer { get; } = Comparer<string>.Create(CompareNaturally);
 
   public static bool TryParseSliceAddress(string address, out string atlasAssetPath, out string spriteName) {
@@ -17,11 +18,34 @@ public static class SpriteSliceAddressUtility {
     }
 
     var isValid = TryParseSliceAddressInternal(address, out atlasAssetPath, out spriteName);
-    _parseCache[address] = new ParseResult { IsValid = isValid, Atlas = atlasAssetPath, Sprite = spriteName };
+    var result = new ParseResult { IsValid = isValid, Atlas = atlasAssetPath, Sprite = spriteName };
+    if (_parseCache.TryAdd(address, result)) {
+      System.Threading.Interlocked.Increment(ref _parseCacheEntryCount);
+      _parseCacheInsertionOrder.Enqueue(address);
+      TrimParseCache();
+    }
     return isValid;
   }
 
   static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ParseResult> _parseCache = new();
+  static readonly System.Collections.Concurrent.ConcurrentQueue<string> _parseCacheInsertionOrder = new();
+  static int _parseCacheEntryCount;
+
+  [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
+  static void ResetParseCache() {
+    _parseCache.Clear();
+    while (_parseCacheInsertionOrder.TryDequeue(out _)) { }
+    System.Threading.Volatile.Write(ref _parseCacheEntryCount, 0);
+  }
+
+  static void TrimParseCache() {
+    while (System.Threading.Volatile.Read(ref _parseCacheEntryCount) > MaxParseCacheEntries &&
+           _parseCacheInsertionOrder.TryDequeue(out var oldestAddress)) {
+      if (_parseCache.TryRemove(oldestAddress, out _)) {
+        System.Threading.Interlocked.Decrement(ref _parseCacheEntryCount);
+      }
+    }
+  }
 
   struct ParseResult {
     public bool IsValid;

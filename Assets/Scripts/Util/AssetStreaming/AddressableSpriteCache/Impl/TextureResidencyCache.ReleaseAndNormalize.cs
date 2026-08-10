@@ -13,6 +13,7 @@ using UnityEditor;
 #endif
 
 public static partial class TextureResidencyCache {
+  const int MaxOwnerAddressCacheEntries = 65536;
   static void RegisterTextureContribution(CacheEntry entry) {
     if (entry == null || entry.hasTextureRegistration) return;
     if (!entry.isDone || !entry.isSuccess || entry.primarySprite == null) return;
@@ -471,16 +472,38 @@ public static partial class TextureResidencyCache {
     }
 
     var isValid = TryResolveRequestOwnerAddressInternal(requestedAddress, out ownerAddress, out spriteName, out requestStrategy);
-    _ownerAddressCache[requestedAddress] = new OwnerAddressResult {
+    var result = new OwnerAddressResult {
       IsValid = isValid,
       OwnerAddress = ownerAddress,
       SpriteName = spriteName,
       RequestStrategy = requestStrategy
     };
+    if (_ownerAddressCache.TryAdd(requestedAddress, result)) {
+      System.Threading.Interlocked.Increment(ref _ownerAddressCacheEntryCount);
+      _ownerAddressCacheInsertionOrder.Enqueue(requestedAddress);
+      TrimOwnerAddressCache();
+    }
     return isValid;
   }
 
   static readonly System.Collections.Concurrent.ConcurrentDictionary<string, OwnerAddressResult> _ownerAddressCache = new();
+  static readonly System.Collections.Concurrent.ConcurrentQueue<string> _ownerAddressCacheInsertionOrder = new();
+  static int _ownerAddressCacheEntryCount;
+
+  static void ResetOwnerAddressCache() {
+    _ownerAddressCache.Clear();
+    while (_ownerAddressCacheInsertionOrder.TryDequeue(out _)) { }
+    System.Threading.Volatile.Write(ref _ownerAddressCacheEntryCount, 0);
+  }
+
+  static void TrimOwnerAddressCache() {
+    while (System.Threading.Volatile.Read(ref _ownerAddressCacheEntryCount) > MaxOwnerAddressCacheEntries &&
+           _ownerAddressCacheInsertionOrder.TryDequeue(out var oldestAddress)) {
+      if (_ownerAddressCache.TryRemove(oldestAddress, out _)) {
+        System.Threading.Interlocked.Decrement(ref _ownerAddressCacheEntryCount);
+      }
+    }
+  }
 
   struct OwnerAddressResult {
     public bool IsValid;

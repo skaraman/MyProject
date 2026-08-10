@@ -208,6 +208,8 @@ public class MouseManager : MonoBehaviour {
     switch (currentMap) {
       case "loadMenu":
         return HasAncestorNamed(target.transform, "deleteConfirm");
+      case "pauseMenu":
+        return HasAncestorNamed(target.transform, "GearChoiceWindow");
       default:
         return false;
     }

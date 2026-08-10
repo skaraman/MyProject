@@ -37,6 +37,8 @@ public class CharacterState : MonoBehaviour {
   public static bool DebugUnlockAllForms =>
     runtimeInstance != null && runtimeInstance.debugUnlockAllForms;
 
+  public static CharacterState Current => runtimeInstance;
+
   static bool ShouldLogLoadStateDebug() {
     if (!SpriteStreamingRuntimeSettings.EnableVerboseRuntimeConsoleLogs) {
       return false;
@@ -112,6 +114,7 @@ public class CharacterState : MonoBehaviour {
   void OnDestroy() {
     FlushPendingFormsSave();
     ContentEpisodeProgression.FlushPendingSave();
+    Inventory.TryFlushPendingSave();
     if (runtimeInstance == this) {
       runtimeInstance = null;
     }
@@ -127,12 +130,14 @@ public class CharacterState : MonoBehaviour {
     if (isPaused) {
       FlushPendingFormsSave();
       ContentEpisodeProgression.FlushPendingSave();
+      Inventory.TryFlushPendingSave();
     }
   }
 
   public void LoadState() {
     EnsureRuntimeReferences();
     ResetRuntimeState();
+    Inventory.LoadCurrentSlot();
 
     var loadedForms = SaveSlotManager.Load(SaveKeys.Forms);
     var loadedStats = SaveSlotManager.Load(SaveKeys.Stats);
@@ -168,15 +173,164 @@ public class CharacterState : MonoBehaviour {
   }
 
   void SaveCreatedDefaultGear() {
-    var gearSave = new SaveData();
-    gearSave.SetComplex(SaveKeys.AllGear, EquippedItems.AllGearForms);
-    SaveSlotManager.Save(SaveKeys.EquippedGear, gearSave);
+    TrySaveEquippedGearState("new_game_defaults");
+  }
+
+  public bool TryEquipInventoryGear(
+    string slotName,
+    int inventoryIndex,
+    string source = "runtime"
+  ) {
+    EnsureRuntimeReferences();
+    var formName = EsperanzaForms.GetActive();
+    if (!EquippedItems.TryResolveSlot(formName, slotName, out var resolvedSlot) ||
+        !Inventory.TryGetGear(inventoryIndex, out var selectedGear) ||
+        selectedGear == null ||
+        string.IsNullOrWhiteSpace(selectedGear.gearId) ||
+        !EquippedItems.AreSlotsCompatible(selectedGear.slot, resolvedSlot)) {
+      Debug.LogWarning(
+        "[CharacterState] Refused inventory gear equip" +
+        " form='" + (formName ?? "") + "'" +
+        " slot='" + (slotName ?? "") + "'" +
+        " inventory_index=" + inventoryIndex
+      );
+      return false;
+    }
+
+    EquippedItems.EnsureForm(formName);
+    var previouslyEquipped = EquippedItems.CloneGearItem(
+      EquippedItems.AllGearForms[formName][resolvedSlot]
+    );
+    var inventorySnapshot = Inventory.CreateGearSnapshot();
+
+    if (!Inventory.TryExchangeEquippedGear(inventoryIndex, previouslyEquipped, out selectedGear)) {
+      return false;
+    }
+    if (!EquippedItems.TrySetGear(formName, resolvedSlot, selectedGear, out _)) {
+      Inventory.RestoreGearSnapshot(inventorySnapshot);
+      return false;
+    }
+
+    if (!TryCommitGearChange(formName, resolvedSlot, previouslyEquipped, inventorySnapshot)) {
+      return false;
+    }
+
+    CompleteGearChange(formName, resolvedSlot, source);
+    return true;
+  }
+
+  public bool TryUnequipGear(string slotName, string source = "runtime") {
+    EnsureRuntimeReferences();
+    var formName = EsperanzaForms.GetActive();
+    if (!EquippedItems.TryResolveSlot(formName, slotName, out var resolvedSlot) ||
+        EquippedItems.IsDefaultGearSlot(formName, resolvedSlot)) {
+      return false;
+    }
+
+    EquippedItems.EnsureForm(formName);
+    var previouslyEquipped = EquippedItems.CloneGearItem(
+      EquippedItems.AllGearForms[formName][resolvedSlot]
+    );
+    if (previouslyEquipped == null) {
+      return false;
+    }
+
+    var inventorySnapshot = Inventory.CreateGearSnapshot();
+    if (!Inventory.TryStoreUnequippedGear(previouslyEquipped) ||
+        !EquippedItems.TrySetGear(formName, resolvedSlot, null, out _)) {
+      Inventory.RestoreGearSnapshot(inventorySnapshot);
+      return false;
+    }
+
+    if (!TryCommitGearChange(formName, resolvedSlot, previouslyEquipped, inventorySnapshot)) {
+      return false;
+    }
+
+    CompleteGearChange(formName, resolvedSlot, source);
+    return true;
+  }
+
+  bool TryCommitGearChange(
+    string formName,
+    string resolvedSlot,
+    GearItem previouslyEquipped,
+    List<GearItem> inventorySnapshot
+  ) {
+    if (!Inventory.TryFlushPendingSave()) {
+      RestoreGearTransaction(formName, resolvedSlot, previouslyEquipped, inventorySnapshot);
+      return false;
+    }
+    if (TrySaveEquippedGearState("gear_slot_change")) {
+      return true;
+    }
+
+    RestoreGearTransaction(formName, resolvedSlot, previouslyEquipped, inventorySnapshot);
+    return false;
+  }
+
+  void RestoreGearTransaction(
+    string formName,
+    string resolvedSlot,
+    GearItem previouslyEquipped,
+    List<GearItem> inventorySnapshot
+  ) {
+    var runtimeGearRestored = EquippedItems.TrySetGear(
+      formName,
+      resolvedSlot,
+      previouslyEquipped,
+      out _
+    );
+    Inventory.RestoreGearSnapshot(inventorySnapshot);
+    var inventoryFileRestored = Inventory.TryFlushPendingSave();
+    var equippedFileRestored = TrySaveEquippedGearState("gear_slot_change_rollback");
+    if (!runtimeGearRestored || !inventoryFileRestored || !equippedFileRestored) {
+      Debug.LogError(
+        "[CharacterState] Gear transaction rollback was incomplete" +
+        " form='" + (formName ?? "") + "'" +
+        " slot='" + (resolvedSlot ?? "") + "'" +
+        " runtime=" + (runtimeGearRestored ? 1 : 0) +
+        " inventory_file=" + (inventoryFileRestored ? 1 : 0) +
+        " equipped_file=" + (equippedFileRestored ? 1 : 0)
+      );
+    }
+  }
+
+  bool TrySaveEquippedGearState(string source) {
+    try {
+      var gearSave = new SaveData();
+      gearSave.SetComplex(SaveKeys.AllGear, EquippedItems.AllGearForms);
+      SaveSlotManager.Save(SaveKeys.EquippedGear, gearSave);
+      return true;
+    }
+    catch (Exception exception) {
+      Debug.LogWarning(
+        "[CharacterState] Failed to save equipped gear" +
+        " source='" + (source ?? "") + "': " + exception.Message
+      );
+      return false;
+    }
+  }
+
+  void CompleteGearChange(string formName, string resolvedSlot, string source) {
+    RuntimeContentPackResolver.ConfigureForCurrentRuntimeState(
+      "gear_slot_change:" + (source ?? "runtime")
+    );
+    gearController?.RefreshGear();
+    GatherAllStatValues();
+    MessageBus.Send(CharacterMessageTopics.GearReady, formName);
+    RuntimeLog.Log(
+      "[CharacterState] Gear slot changed" +
+      " form='" + (formName ?? "") + "'" +
+      " slot='" + (resolvedSlot ?? "") + "'" +
+      " source='" + (source ?? "") + "'"
+    );
   }
 
   public void InitializeRuntimeStateForNewGame() {
     using (NewGameResetProfilerMarker.Auto()) {
       EnsureRuntimeReferences();
       ResetRuntimeState();
+      Inventory.InitializeCurrentSlotForNewGame();
       DialogController.SaveState("new_game");
     }
     if (ShouldLogLoadStateDebug()) {

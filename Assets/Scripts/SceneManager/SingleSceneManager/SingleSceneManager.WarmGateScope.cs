@@ -492,6 +492,9 @@ public partial class SingleSceneManager {
     }
 
     if (cachedPlayerGearController == null) {
+      if (lastPlayerResolveTime >= 0f && now - lastPlayerResolveTime < 0.5f) {
+        return null;
+      }
       cachedPlayerGearController = ResolveBestAvailablePlayerController();
       lastPlayerResolveTime = now;
       if (ShouldLogLoadFlowDebug()) {

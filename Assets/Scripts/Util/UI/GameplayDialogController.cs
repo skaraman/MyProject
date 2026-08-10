@@ -687,6 +687,25 @@ public class GameplayDialogController : MonoBehaviour {
     typewriterCharacterProgress = 0f;
     SetDialogVisible(true, source);
 
+    var activeForm = EsperanzaForms.GetActive();
+    for (int i = 0; i < sequenceNodes.Count; i++) {
+      var node = sequenceNodes[i];
+      if (node == null) continue;
+      var emotion = ResolveEmotion(node.emotion);
+      if (TryResolvePortraitPresentation(node, activeForm, out var libraryName, out var labelPrefix)) {
+        var widgets = node.speaker == DialogSpeakerSide.Esperanza ? playerWidgets : otherWidgets;
+        if (widgets != null && widgets.portrait != null) {
+          var originalLibrary = widgets.portrait.libraryName;
+          var originalPrefix = widgets.portrait.labelPrefix;
+          widgets.portrait.SetLibraryName(libraryName);
+          widgets.portrait.SetLabelPrefix(labelPrefix);
+          widgets.portrait.PrimeAnimationWindow(emotion, 1, 1, 0);
+          widgets.portrait.SetLibraryName(originalLibrary);
+          widgets.portrait.SetLabelPrefix(originalPrefix);
+        }
+      }
+    }
+
     if (ShouldLogDialogDebug()) {
       RuntimeLog.Log(
         "[GameplayDialogController] Dialog started source='" + (source ?? "") +

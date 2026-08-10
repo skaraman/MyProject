@@ -75,6 +75,7 @@ public class AutoSaver : MonoBehaviour {
     characterState ??= SingleSceneManager.ResolveGameplayCharacterState();
     characterState?.FlushPendingProgressSave();
     ContentEpisodeProgression.FlushPendingSave();
+    Inventory.TryFlushPendingSave();
     gameData["playtimeHours"] = playtimeHours;
     gameData["playtimeMinutes"] = playtimeMinutes;
     gameData["playtimeSeconds"] = playtimeSeconds;

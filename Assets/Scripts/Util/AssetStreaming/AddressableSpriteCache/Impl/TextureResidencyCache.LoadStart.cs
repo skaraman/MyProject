@@ -31,12 +31,6 @@ public static partial class TextureResidencyCache {
   static void EnsureLoadCollections(CacheEntry entry) {
     if (entry == null) return;
 
-    if (entry.pendingAssetLoadLocations == null) {
-      entry.pendingAssetLoadLocations = new List<IResourceLocation>(4);
-    }
-    if (entry.activeAssetLoadLocations == null) {
-      entry.activeAssetLoadLocations = new List<IResourceLocation>(4);
-    }
     if (entry.spritesByName == null) {
       entry.spritesByName = new Dictionary<string, Sprite>(StringComparer.Ordinal);
     }
@@ -82,7 +76,7 @@ public static partial class TextureResidencyCache {
       entry.failedExactSliceSupplementAddresses.Clear();
     }
     entry.editorAtlasSupplementAttempted = false;
-    entry.activeAssetLoadLocations.Clear();
+    entry.activeAssetLoadLocations?.Clear();
     entry.lastAccessTicks = DateTime.UtcNow.Ticks;
     entry.atlasFallbackToDirect = false;
     entry.atlasDirectFallbackAttempted = false;
@@ -174,6 +168,8 @@ public static partial class TextureResidencyCache {
     int expectedSiblingSliceCount
   ) {
     if (entry == null || entry.isEvicted) return;
+    entry.pendingAssetLoadLocations ??= new List<IResourceLocation>(4);
+    entry.activeAssetLoadLocations ??= new List<IResourceLocation>(4);
     entry.pendingAssetLoadLocations.Clear();
     if (resourceLocations != null) {
       for (var i = 0; i < resourceLocations.Count; i++) {

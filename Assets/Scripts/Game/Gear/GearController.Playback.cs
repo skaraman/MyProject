@@ -67,7 +67,7 @@ public partial class GearController {
       null,
       null,
       effectAnimations,
-      new Dictionary<string, Dictionary<string, string>>(),
+      new Dictionary<string, string[]>(),
       null,
       new Dictionary<string, Dictionary<string, List<HBox>>>(),
       "",

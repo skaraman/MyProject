@@ -188,10 +188,10 @@ public partial class SpriteWithNormals : MonoBehaviour {
   static readonly HashSet<SpriteLookupKey> s_ReportedResolveErrorKeys = new();
   static readonly Dictionary<AnimationAtlasCacheKey, string[]> s_AnimationAtlasAddressCache = new();
   static int s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
-  static readonly Dictionary<ConventionNormalCacheKey, string> s_ConventionNormalAddressCache =
+  static readonly Dictionary<ConventionNormalCacheKey, ConventionRuntimeRef> s_ConventionNormalAddressCache =
     new(MaxConventionNormalAddressCacheEntries);
   static int s_ConventionNormalAddressCacheContentReloadVersion = int.MinValue;
-  static readonly Dictionary<ConventionNormalCacheKey, string> s_ConventionSpecularAddressCache =
+  static readonly Dictionary<ConventionNormalCacheKey, ConventionRuntimeRef> s_ConventionSpecularAddressCache =
     new(MaxConventionNormalAddressCacheEntries);
   static int s_ConventionSpecularAddressCacheContentReloadVersion = int.MinValue;
   int _activeListIndex = -1;
@@ -259,9 +259,31 @@ public partial class SpriteWithNormals : MonoBehaviour {
     s_AnimationAtlasAddressCache.Clear();
     s_AnimationAtlasCacheContentReloadVersion = int.MinValue;
     s_ConventionNormalAddressCache.Clear();
+    s_ConventionNormalAddressCacheInsertionOrder.Clear();
     s_ConventionNormalAddressCacheContentReloadVersion = int.MinValue;
     s_ConventionSpecularAddressCache.Clear();
+    s_ConventionSpecularAddressCacheInsertionOrder.Clear();
     s_ConventionSpecularAddressCacheContentReloadVersion = int.MinValue;
+    warmupBudgetFrame = -1;
+    warmupRequestsIssuedThisFrame = 0;
+    warmupThrottleFrame = -1;
+    warmupThrottleActive = false;
+    warmupAddressesRequestedThisFrame.Clear();
+    pendingRuntimeEnableRefreshQueue.Clear();
+    pendingRuntimeEnableRefreshSet.Clear();
+    pendingRuntimeEnableRefreshFrame = -1;
+    cachedUiLayer = int.MinValue;
+    uiSortingLayerCacheInitialized = false;
+    cachedMyUiSortingLayerId = int.MinValue;
+    cachedMyUi2SortingLayerId = int.MinValue;
+#if UNITY_EDITOR
+    pendingEditorPreviewRefreshTargets.Clear();
+    pendingEditorPreviewRefreshQueued = false;
+    editorRuntimeAtlasAddressIndex.Clear();
+    editorRuntimeAtlasAddressIndexBuilt = false;
+    s_ConventionNormalAtlasSpriteMetadata.Clear();
+    s_ConventionSpecularAtlasSpriteMetadata.Clear();
+#endif
     s_ManagedUpdateCursor = 0;
     s_UpdateRegistered = false;
   }

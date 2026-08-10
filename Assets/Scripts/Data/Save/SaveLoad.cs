@@ -460,6 +460,13 @@ public static class SaveKeys {
   public const string FormStats = "formStats";
   public const string EquippedGear = "equippedGear";
   public const string AllGear = "allGear";
+  public const string Inventory = "inventory";
+  public const string InventoryVersion = "inventoryVersion";
+  public const string InventoryGear = "gear";
+  public const string InventoryGems = "gems";
+  public const string InventoryConsumables = "consumables";
+  public const string InventoryQuest = "quest";
+  public const string InventoryGold = "gold";
 }
 
 public static class SaveSlotManager {
@@ -480,9 +487,10 @@ public static class SaveSlotManager {
 
       var formsFlushed = CharacterState.FlushPendingProgressBeforeSlotChange();
       var episodeFlushed = ContentEpisodeProgression.FlushPendingSave();
-      if (!formsFlushed || !episodeFlushed) {
+      var inventoryFlushed = Inventory.TryFlushPendingSave();
+      if (!formsFlushed || !episodeFlushed || !inventoryFlushed) {
         Debug.LogWarning(
-          "[SaveSlotManager] Refused slot change because pending progress could not be saved." +
+          "[SaveSlotManager] Refused slot change because pending state could not be saved." +
           " current_slot=" + _slot +
           " requested_slot=" + value
         );

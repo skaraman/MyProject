@@ -122,17 +122,24 @@ public static class RuntimeAssetCache {
   static readonly Queue<string> highPriorityQueue = new();
   static readonly Queue<string> normalPriorityQueue = new();
   static readonly HashSet<string> unsupportedSourceWarnings = new(StringComparer.OrdinalIgnoreCase);
+  static readonly List<string> clearSessionKeysScratch = new(64);
   static RuntimeAssetCacheRunner runner;
   static int nextTrackedWarmId = 1;
   static int activeResolveCount;
 
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
+    foreach (var pair in entriesByKey) {
+      var entry = pair.Value;
+      if (entry == null || entry.isLoading) continue;
+      ReleaseEntry(entry, reason: "subsystem_reset");
+    }
     entriesByKey.Clear();
     trackedRequests.Clear();
     highPriorityQueue.Clear();
     normalPriorityQueue.Clear();
     unsupportedSourceWarnings.Clear();
+    clearSessionKeysScratch.Clear();
     runner = null;
     nextTrackedWarmId = 1;
     activeResolveCount = 0;
@@ -229,7 +236,8 @@ public static class RuntimeAssetCache {
 
   public static void ClearSessionScope(string reason = "") {
     if (entriesByKey.Count <= 0) return;
-    var keysToRemove = new List<string>();
+    var keysToRemove = clearSessionKeysScratch;
+    keysToRemove.Clear();
     foreach (var pair in entriesByKey) {
       var entry = pair.Value;
       if (entry == null || entry.scope != RuntimeAssetResidencyScope.Session) continue;
@@ -248,12 +256,14 @@ public static class RuntimeAssetCache {
       entriesByKey.Remove(keysToRemove[i]);
     }
 
-    if (!ShouldLogDebug() || keysToRemove.Count <= 0) return;
-    RuntimeLog.Log(
-      "[RuntimeAssetCache] Cleared session scope" +
-      " released=" + keysToRemove.Count +
-      " reason='" + (reason ?? "") + "'"
-    );
+    if (ShouldLogDebug() && keysToRemove.Count > 0) {
+      RuntimeLog.Log(
+        "[RuntimeAssetCache] Cleared session scope" +
+        " released=" + keysToRemove.Count +
+        " reason='" + (reason ?? "") + "'"
+      );
+    }
+    keysToRemove.Clear();
   }
 
   public static bool TryGetLoaded<T>(string address, out T asset) where T : UnityEngine.Object {
@@ -667,13 +677,12 @@ public static class RuntimeAssetCache {
     bool markCritical,
     TrackedWarmRequest tracker
   ) {
+    var key = BuildEntryKey(address, assetType);
     if (tracker != null) {
-      var trackedKey = BuildEntryKey(address, assetType);
-      tracker.allKeys.Add(trackedKey);
-      if (markCritical) tracker.criticalKeys.Add(trackedKey);
+      tracker.allKeys.Add(key);
+      if (markCritical) tracker.criticalKeys.Add(key);
     }
 
-    var key = BuildEntryKey(address, assetType);
     if (!entriesByKey.TryGetValue(key, out var entry) || entry == null) {
       entry = new CacheEntry(key, address, assetType, scope);
       entriesByKey[key] = entry;

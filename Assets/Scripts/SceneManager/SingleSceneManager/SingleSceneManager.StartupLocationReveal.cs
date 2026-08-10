@@ -446,7 +446,6 @@ public partial class SingleSceneManager {
   void RememberGameplayLocation(string locationId, string source) {
     var normalized = LocationEnemyData.NormalizeLocationId(locationId);
     if (!IsGameplayLocation(normalized)) return;
-    TrackEnvironmentHotCacheLocation(normalized, source);
     UpdateActiveGameplayLoadTargetLocation(normalized);
     if (string.Equals(lastKnownGameplayLocationId, normalized, StringComparison.OrdinalIgnoreCase)) return;
 

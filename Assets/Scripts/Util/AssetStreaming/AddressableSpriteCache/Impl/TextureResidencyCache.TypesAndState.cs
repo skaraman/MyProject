@@ -64,6 +64,9 @@ public static partial class TextureResidencyCache {
     public bool isDone;
     public bool isSuccess;
     public bool isEvicted;
+    public int failureCount;
+    public int retryAfterFrame;
+    public int failureContentVersion;
     public long lastAccessTicks;
     public bool hasTextureRegistration;
     public bool loadStarted;

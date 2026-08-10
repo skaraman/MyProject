@@ -15,6 +15,11 @@ using UnityEditor;
 public static partial class TextureResidencyCache {
   [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
   static void ResetOnDomainReload() {
+    // Release live Addressables handles and owner leases before clearing the
+    // collections that own them. This also returns released leases to the pool,
+    // which is intentionally cleared below for a clean subsystem lifetime.
+    PurgeAll();
+
     settingsLoaded = false;
     settings = default;
     residentBytes = 0;
@@ -69,6 +74,7 @@ public static partial class TextureResidencyCache {
     sessionTotalCompleted = 0;
     sessionExpectedTotal = 0;
     sessionGeneration = 0;
+    frameAccessTicks = 0;
     textureRefCounts.Clear();
     textureBytesById.Clear();
     immediateQueue.Clear();
@@ -82,6 +88,7 @@ public static partial class TextureResidencyCache {
 #if UNITY_EDITOR
     pendingEditorAtlasSupplementQueue.Clear();
     editorAtlasSupplementWarnings.Clear();
+    editorOffsetMetadataFallbackLogs.Clear();
     editorImportedAtlasSpriteCache.Clear();
 #endif
     incompleteAtlasLoadWarnings.Clear();
@@ -92,15 +99,21 @@ public static partial class TextureResidencyCache {
     deferredWarmupQueue.Clear();
     deferredBackgroundQueue.Clear();
     ownerPins.Clear();
+    desiredOwnerAddressScratch.Clear();
+    desiredOwnerRequestScratch.Clear();
+    ownerReleaseAddressScratch.Clear();
+    ResetOwnerAddressCache();
     expandedAtlasKeys.Clear();
     atlasExpansionRetryFrames.Clear();
     gameplayColdMissAtlasKeys.Clear();
     unsupportedSpriteAddressWarnings.Clear();
     atlasSiblingAddressScratch.Clear();
+    atlasSiblingSpriteNameScratch.Clear();
+    requestDiagTopSourcesScratch.Clear();
+    requestDiagTopSourcesBuilder.Clear();
     ownerDemoteScratch.Clear();
     enableLoadStartDiagnostics = true;
     loadStartSlowThresholdMs = 25f;
-    PurgeAll();
   }
 
   public static int LoadedEntryCount => cache.Count;
